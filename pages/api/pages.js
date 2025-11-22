@@ -20,7 +20,8 @@ export default async function handler(req, res) {
         where.status = 'PUBLISHED'
       }
 
-      const pages = await prisma.page.findMany({ where, orderBy: { createdAt: 'desc' } })
+      // Return pages without forcing an order — preserve stored order where possible
+      const pages = await prisma.page.findMany({ where })
       return res.status(200).json(pages)
     }
 
@@ -31,8 +32,39 @@ export default async function handler(req, res) {
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
         const results = []
-        for (const p of body) {
-          if (!p.slug) continue
+
+        // helper: collect all slugs present in the provided tree (including children)
+        const collectSlugs = (nodes) => {
+          const s = new Set()
+          const walk = (arr) => {
+            for (const n of arr || []) {
+              if (n && n.slug) s.add(String(n.slug))
+              if (n && n.children && Array.isArray(n.children)) walk(n.children)
+            }
+          }
+          walk(nodes)
+          return s
+        }
+
+        const providedSlugs = collectSlugs(body)
+
+        // Flatten provided tree so we upsert every node (top-level and children)
+        const flattenNodes = (nodes) => {
+          const out = []
+          const walk = (arr) => {
+            for (const n of arr || []) {
+              out.push(n)
+              if (n.children && Array.isArray(n.children)) walk(n.children)
+            }
+          }
+          walk(nodes)
+          return out
+        }
+
+        const allNodes = flattenNodes(body)
+
+        for (const p of allNodes) {
+          if (!p || !p.slug) continue
           const up = await prisma.page.upsert({
             where: { slug: String(p.slug) },
             create: {
@@ -57,6 +89,7 @@ export default async function handler(req, res) {
           })
           results.push(up)
         }
+
         // create revisions for each upserted page
         for (const up of results) {
           try {
@@ -72,12 +105,43 @@ export default async function handler(req, res) {
               }
             } })
           } catch (e) {
-            // non-fatal
             console.error('Revision create failed', e)
           }
         }
+
+        // Remove pages that are no longer present in the provided tree
+        try {
+          const allPages = await prisma.page.findMany()
+          const existingSlugs = allPages.map(p => p.slug)
+          // Visible debug output
+          console.log('DEBUG /api/pages POST providedSlugs:', Array.from(providedSlugs))
+          console.log('DEBUG /api/pages POST existingSlugs:', existingSlugs)
+          const toDelete = existingSlugs.filter(s => !providedSlugs.has(s))
+          console.log('DEBUG /api/pages POST toDelete:', toDelete)
+
+          if (toDelete.length > 0) {
+            // Find matching DB entries for the toDelete slugs
+            const pagesToDelete = await prisma.page.findMany({ where: { slug: { in: toDelete } } })
+            const slugsFound = pagesToDelete.map(p => p.slug)
+            if (slugsFound.length > 0) {
+              // Bulk delete for efficiency
+              const delRes = await prisma.page.deleteMany({ where: { slug: { in: slugsFound } } })
+              console.log('DEBUG /api/pages POST deleteMany count:', delRes.count)
+              // Create audit logs per deleted page
+              for (const pd of pagesToDelete) {
+                try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: null, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
+                console.log('DEBUG /api/pages POST deleted and audited:', pd.slug)
+              }
+            } else {
+              console.log('DEBUG /api/pages POST no matching pages found to delete for slugs:', toDelete)
+            }
+          }
+        } catch (e) {
+          console.error('Failed to clean up removed pages:', e)
+        }
+
         console.log('DEBUG /api/pages POST upsert results:', results.map(r => ({ id: r.id, slug: r.slug, status: r.status })));
-        // audit logs
+        // audit logs for upserts
         for (const up of results) {
           try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
         }
