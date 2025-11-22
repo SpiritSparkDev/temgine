@@ -1,0 +1,16 @@
+<nav class="main-nav">
+  <ul>
+    {{#pages}}
+      <li>
+        <a href="/{{slug}}">{{title}}</a>
+        {{#children}}
+          <ul>
+            {{#.}}
+              <li><a href="/{{slug}}">{{title}}</a></li>
+            {{/.}}
+          </ul>
+        {{/children}}
+      </li>
+    {{/pages}}
+  </ul>
+</nav>

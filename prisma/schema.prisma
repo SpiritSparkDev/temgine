@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String           @id @default(cuid())
+  email       String           @unique
+  name        String?
+  image       String?
+  role        UserRole         @default(EDITOR)
+  password    String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  invitations UserInvitation[]
+}
+
+enum UserRole {
+  ADMIN
+  MODERATOR
+  EDITOR
+}
+
+model UserInvitation {
+  id        String    @id @default(cuid())
+  name      String?
+  role      UserRole  @default(EDITOR)
+  token     String    @unique
+  used      Boolean   @default(false)
+  expiresAt DateTime
+  createdBy String
+  creator   User      @relation(fields: [createdBy], references: [id])
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+  usedBy    String?
+}
+
+model Page {
+  id        String         @id @default(cuid())
+  slug      String         @unique
+  title     String
+  blocks    Json           @default("[]")
+  children  Json           @default("[]")
+  revisions PageRevision[]
+  status    PageStatus     @default(DRAFT)
+  publishAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+model PageRevision {
+  id        String   @id @default(cuid())
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  data      Json
+  note      String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model Template {
+  id        String             @id @default(cuid())
+  name      String             @unique
+  code      String
+  revisions TemplateRevision[]
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+}
+
+model TemplateRevision {
+  id         String   @id @default(cuid())
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  data       Json
+  note       String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  resource   String
+  resourceId String?
+  userId     String?
+  details    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([resource, resourceId])
+}
+
+model Snippet {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContentType {
+  id        String         @id @default(cuid())
+  name      String
+  slug      String         @unique
+  description String?
+  fields    ContentField[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model ContentField {
+  id          String   @id @default(cuid())
+  contentTypeId String
+  contentType ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+  name        String
+  key         String
+  type        String
+  options     Json?
+  required    Boolean  @default(false)
+  sortOrder    Int      @default(0)
+}

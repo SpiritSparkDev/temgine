@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Titel",
+    "snippet": "{{title}}"
+  },
+  {
+    "label": "Slug",
+    "snippet": "{{slug}}"
+  },
+  {
+    "label": "Text",
+    "snippet": "{{text}}"
+  },
+  {
+    "label": "Blocks",
+    "snippet": "{{blocks}}"
+  },
+  {
+    "label": "Image",
+    "snippet": "<img src={{imgUrl}} alt={{alt_text}}/>"
+  }
+]

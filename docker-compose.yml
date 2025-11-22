@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: temphelix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-temphelix}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-temphelix_dev}
+      POSTGRES_DB: ${DATABASE_NAME:-temphelix}
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

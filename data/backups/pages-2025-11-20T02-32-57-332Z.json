@@ -1,0 +1,97 @@
+[
+  {
+    "id": "demo-home",
+    "slug": "home",
+    "title": "Startseite",
+    "template": "Hero Section",
+    "blocks": [
+      {
+        "type": "text",
+        "props": {
+          "title": "Willkommen auf unserer Website!",
+          "text": "Das scheint wieder zu funktionierne",
+          "url": "",
+          "label": "",
+          "button": "",
+          "content": "Entdecken Sie unsere großartige Plattform mit modernen Templates und flexiblen Blöcken."
+        },
+        "template": "Text"
+      },
+      {
+        "type": "content",
+        "template": "Hero Section",
+        "props": {
+          "title": "Das ist eine Hero Section",
+          "text": "Gerrrrr!",
+          "button": {
+            "url": "",
+            "label": ""
+          }
+        }
+      }
+    ],
+    "data": {
+      "button": {
+        "label": "Jetzt starten",
+        "url": "/features"
+      }
+    },
+    "children": []
+  },
+  {
+    "id": "demo-features",
+    "slug": "features",
+    "title": "Features",
+    "template": "Feature Cards",
+    "blocks": [
+      {
+        "type": "text",
+        "props": {
+          "title": "Das funktioniert!",
+          "icon": "",
+          "content": "Blaa",
+          "text": "\"Ich\" hab ein CMS gebaut",
+          "button": "",
+          "price": 0,
+          "description": "Dasd",
+          "link": "",
+          "buttonText": "adasdasd",
+          "blocks": "Block",
+          "featured": "",
+          "features": [],
+          "avatar": "",
+          "author": "",
+          "role": "",
+          "image": "",
+          "date": "",
+          "category": "",
+          "excerpt": "",
+          "url": "",
+          "label": ""
+        },
+        "template": "Feature Cards"
+      },
+      {
+        "type": "content",
+        "template": "Text",
+        "props": {
+          "title": "Ein Titel",
+          "text": "Mit Kontenttt"
+        }
+      },
+      {
+        "type": "content",
+        "template": "Text",
+        "props": {
+          "title": "Nch ein Tttl",
+          "text": "dakjshdaksd"
+        }
+      }
+    ],
+    "children": [],
+    "data": {
+      "title": "Seiteaaa",
+      "content": "Das ist Content"
+    }
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Text",
+    "code": "<section class=\"section text\">\n  <article class=\"article\">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </article>\n</section>"
+  },
+  {
+    "name": "Seiten",
+    "code": "{{navigation:main}}\n<section class=\"page-wrapper\">\n  <div class=\"container\">\n    <h1>{{title}}</h1>\n    <p class=\"subtitle\">{{text}}</p>\n    \n    <div class=\"page-content\">\n      {{{blocks}}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Multitext",
+    "code": "<section class=\"my-section\">\n  <div class=\"container\">\n    <h1>{{title}}</h1>\n    <div>{{Text}}</div>\n\n    <p>{{textB}}</p>\n    <p>{{textC}}</p>\n  </div>\n</section>"
+  },
+  {
+    "name": "Text /w Img",
+    "code": "<section class=\"my-section\">\n  <div class=\"container\">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n    <div>\n      <img src={{imgurl}}/>\n    </div>\n  </div> \n</section>"
+  }
+]

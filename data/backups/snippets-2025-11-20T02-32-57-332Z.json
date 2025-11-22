@@ -1,0 +1,82 @@
+[
+  {
+    "label": "Titel",
+    "snippet": "{{title}}"
+  },
+  {
+    "label": "Slug",
+    "snippet": "{{slug}}"
+  },
+  {
+    "label": "Text",
+    "snippet": "{{text}}"
+  },
+  {
+    "label": "Blocks (Loop)",
+    "snippet": "{{#blocks}}\n  <!-- Block: {{type}} -->\n{{/blocks}}"
+  },
+  {
+    "label": "Text-Block (if)",
+    "snippet": "{{#isText}}\n  <h2>{{title}}</h2>\n  <p>{{content}}</p>\n{{/isText}}"
+  },
+  {
+    "label": "Gallery-Block (if)",
+    "snippet": "{{#isGallery}}\n  <div class=\"gallery\">\n    {{#images}}\n      <img src=\"{{src}}\" alt=\"{{alt}}\" />\n    {{/images}}\n  </div>\n{{/isGallery}}"
+  },
+  {
+    "label": "Bild",
+    "snippet": "{{#images}}<img src=\"{{src}}\" alt=\"{{alt}}\" />{{/images}}"
+  },
+  {
+    "label": "Block-Typ",
+    "snippet": "{{type}}"
+  },
+  {
+    "label": "Block-Title",
+    "snippet": "{{title}}"
+  },
+  {
+    "label": "Block-Content",
+    "snippet": "{{content}}"
+  },
+  {
+    "label": "Link",
+    "snippet": "<a href=\"{{url}}\">{{label}}</a>"
+  },
+  {
+    "label": "Button",
+    "snippet": "<button>{{label}}</button>"
+  },
+  {
+    "label": "Liste (Items)",
+    "snippet": "<ul>\n{{#items}}\n  <li>{{.}}</li>\n{{/items}}\n</ul>"
+  },
+  {
+    "label": "Conditional (if)",
+    "snippet": "{{#variable}}\n  <!-- Inhalt wenn true -->\n{{/variable}}"
+  },
+  {
+    "label": "Conditional (unless)",
+    "snippet": "{{^variable}}\n  <!-- Inhalt wenn false -->\n{{/variable}}"
+  },
+  {
+    "label": "Variable ausgeben",
+    "snippet": "{{variableName}}"
+  },
+  {
+    "label": "HTML unescaped",
+    "snippet": "{{{htmlContent}}}"
+  },
+  {
+    "label": "Section Start",
+    "snippet": "<section class=\"{{className}}\">\n  \n</section>"
+  },
+  {
+    "label": "Container",
+    "snippet": "<div class=\"container\">\n  \n</div>"
+  },
+  {
+    "label": "Comment",
+    "snippet": "{{! Dies ist ein Kommentar }}"
+  }
+]

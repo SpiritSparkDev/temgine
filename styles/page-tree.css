@@ -1,0 +1,74 @@
+/* Page tree styles */
+.page-tree {
+  padding: 16px;
+}
+.page-tree h2 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+}
+.page-tree .controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.page-tree .controls input[type="text"] {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.page-tree .node-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-tree .node-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-tree .page-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.page-tree .badge-404 {
+  background: #fee;
+  color: #c00;
+}
+.page-tree .badge-503 {
+  background: #fff3cd;
+  color: #856404;
+}
+.page-tree .badge-home {
+  background: #d4edda;
+  color: #155724;
+}
+.page-tree .node-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-tree .btn-group {
+  display: flex;
+  gap: 4px;
+}
+.page-tree .children { margin-left: 16px; }
+
+.page-tree .inline-template-select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: white;
+  font-size: 12px;
+  color: #666;
+  cursor: pointer;
+  max-width: 150px;
+}
+.page-tree .inline-template-select:hover {
+  border-color: #999;
+}

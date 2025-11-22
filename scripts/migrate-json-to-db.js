@@ -1,0 +1,105 @@
+// Migriere JSON-Daten in die PostgreSQL-Datenbank
+const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const path = require('path');
+
+const prisma = new PrismaClient();
+
+async function migrateData() {
+  console.log('📦 Starte Datenmigration von JSON zu PostgreSQL...\n');
+
+  try {
+    // JSON-Dateien laden
+    const dataDir = path.join(__dirname, 'data');
+    
+    const pagesData = JSON.parse(fs.readFileSync(path.join(dataDir, 'pages.json'), 'utf-8'));
+    const templatesData = JSON.parse(fs.readFileSync(path.join(dataDir, 'templates.json'), 'utf-8'));
+    const snippetsData = JSON.parse(fs.readFileSync(path.join(dataDir, 'snippets.json'), 'utf-8'));
+    
+    console.log(`📄 Geladen: ${pagesData.length} Seiten`);
+    console.log(`📝 Geladen: ${templatesData.length} Templates`);
+    console.log(`✂️ Geladen: ${snippetsData.length} Snippets\n`);
+
+    // Templates migrieren
+    console.log('📝 Migriere Templates...');
+    for (const template of templatesData) {
+      await prisma.template.upsert({
+        where: { name: template.name },
+        update: {
+          code: template.code
+        },
+        create: {
+          name: template.name,
+          code: template.code
+        }
+      });
+      console.log(`  ✓ ${template.name}`);
+    }
+
+    // Snippets migrieren
+    console.log('\n✂️ Migriere Snippets...');
+    for (const snippet of snippetsData) {
+      const key = snippet.label.toLowerCase().replace(/\s+/g, '_');
+      await prisma.snippet.upsert({
+        where: { key: key },
+        update: {
+          value: snippet.snippet
+        },
+        create: {
+          key: key,
+          value: snippet.snippet
+        }
+      });
+      console.log(`  ✓ ${snippet.label} (${key})`);
+    }
+
+    // Pages migrieren
+    console.log('\n📄 Migriere Pages...');
+    for (const page of pagesData) {
+      // Slug generieren falls nicht vorhanden
+      if (!page.slug) {
+        page.slug = page.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        console.log(`  ⚠️ Generiere Slug für "${page.title}": ${page.slug}`);
+      }
+
+      await prisma.page.upsert({
+        where: { slug: page.slug },
+        update: {
+          title: page.title,
+          blocks: page.blocks || [],
+          children: page.children || []
+        },
+        create: {
+          slug: page.slug,
+          title: page.title,
+          blocks: page.blocks || [],
+          children: page.children || []
+        }
+      });
+      console.log(`  ✓ ${page.title} (/${page.slug})`);
+    }
+
+    // Finale Statistik
+    console.log('\n✅ Migration abgeschlossen!\n');
+    const stats = {
+      users: await prisma.user.count(),
+      pages: await prisma.page.count(),
+      templates: await prisma.template.count(),
+      snippets: await prisma.snippet.count()
+    };
+    
+    console.log('📊 Datenbank-Status:');
+    console.log(`   👥 Benutzer: ${stats.users}`);
+    console.log(`   📄 Seiten: ${stats.pages}`);
+    console.log(`   📝 Templates: ${stats.templates}`);
+    console.log(`   ✂️ Snippets: ${stats.snippets}`);
+
+  } catch (error) {
+    console.error('\n❌ Fehler bei Migration:', error.message);
+    console.error(error.stack);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+migrateData();

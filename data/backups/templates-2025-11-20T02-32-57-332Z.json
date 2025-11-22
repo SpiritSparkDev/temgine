@@ -1,0 +1,46 @@
+[
+  {
+    "name": "Hero Section",
+    "code": "<section class=\"hero\">\n  <div class=\"container\">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n    {{#button}}\n      <a href=\"{{url}}\">{{label}}</a>\n    {{/button}}\n  </div>\n</section>"
+  },
+  {
+    "name": "Feature Cards",
+    "code": "<section class=\"features\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#blocks}}\n        <div class=\"card\">\n          {{#icon}}<div>{{icon}}</div>{{/icon}}\n          <h3>{{title}}</h3>\n          <p>{{content}}</p>\n        </div>\n      {{/blocks}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Image Gallery Grid",
+    "code": "<section class=\"gallery\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#images}}\n        <div>\n          <img src=\"{{src}}\" alt=\"{{alt}}\">\n        </div>\n      {{/images}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Testimonials",
+    "code": "<section class=\"testimonials\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#blocks}}\n        <div>\n          <p>\"{{content}}\"</p>\n          <div>\n            {{#avatar}}<img src=\"{{avatar}}\" alt=\"{{author}}\">{{/avatar}}\n            <div>\n              <div>{{author}}</div>\n              {{#role}}<div>{{role}}</div>{{/role}}\n            </div>\n          </div>\n        </div>\n      {{/blocks}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Pricing Table",
+    "code": "<section class=\"pricing\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#blocks}}\n        <div{{#featured}} class=\"featured\"{{/featured}}>\n          <h3>{{title}}</h3>\n          <div>{{price}}</div>\n          <p>{{description}}</p>\n          <ul>\n            {{#features}}\n              <li>✓ {{.}}</li>\n            {{/features}}\n          </ul>\n          <a href=\"{{link}}\">{{buttonText}}</a>\n        </div>\n      {{/blocks}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Contact Form",
+    "code": "<section class=\"contact\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <p>{{text}}</p>\n    <form>\n      <div>\n        <label>Name</label>\n        <input type=\"text\" placeholder=\"Ihr Name\">\n      </div>\n      <div>\n        <label>E-Mail</label>\n        <input type=\"email\" placeholder=\"ihre@email.de\">\n      </div>\n      <div>\n        <label>Nachricht</label>\n        <textarea placeholder=\"Ihre Nachricht\" rows=\"5\"></textarea>\n      </div>\n      <button type=\"submit\">Absenden</button>\n    </form>\n  </div>\n</section>"
+  },
+  {
+    "name": "Team Members",
+    "code": "<section class=\"team\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#blocks}}\n        <div>\n          <img src=\"{{image}}\" alt=\"{{name}}\">\n          <h3>{{name}}</h3>\n          <p>{{position}}</p>\n          <p>{{bio}}</p>\n        </div>\n      {{/blocks}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Footer",
+    "code": "<footer>\n  <div class=\"container\">\n    <div>\n      <div>\n        <h3>{{companyName}}</h3>\n        <p>{{description}}</p>\n      </div>\n      {{#columns}}\n        <div>\n          <h4>{{title}}</h4>\n          <ul>\n            {{#links}}\n              <li><a href=\"{{url}}\">{{label}}</a></li>\n            {{/links}}\n          </ul>\n        </div>\n      {{/columns}}\n    </div>\n    <div>\n      <p>© {{year}} {{companyName}}. Alle Rechte vorbehalten.</p>\n    </div>\n  </div>\n</footer>"
+  },
+  {
+    "name": "Blog Post List",
+    "code": "<section class=\"blog\">\n  <div class=\"container\">\n    <h2>{{title}}</h2>\n    <div>\n      {{#blocks}}\n        <article>\n          {{#image}}<img src=\"{{image}}\" alt=\"{{title}}\">{{/image}}\n          <div>\n            <div>{{date}} · {{category}}</div>\n            <h3>{{title}}</h3>\n            <p>{{excerpt}}</p>\n            <a href=\"{{url}}\">Weiterlesen →</a>\n          </div>\n        </article>\n      {{/blocks}}\n    </div>\n  </div>\n</section>"
+  },
+  {
+    "name": "Full Page Template",
+    "code": "<!DOCTYPE html>\n<html lang=\"de\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>{{title}}</title>\n  <link rel=\"stylesheet\" href=\"/styles/templates.css\">\n</head>\n<body class=\"full-page-template\">\n  <header>\n    <nav>\n      <div>{{siteName}}</div>\n      <ul>\n        {{#navItems}}\n          <li><a href=\"{{url}}\">{{label}}</a></li>\n        {{/navItems}}\n      </ul>\n    </nav>\n  </header>\n\n  <main>\n    {{#blocks}}\n      {{#isText}}\n        <section>\n          <div>\n            <h2>{{title}}</h2>\n            <p>{{content}}</p>\n          </div>\n        </section>\n      {{/isText}}\n      {{#isGallery}}\n        <section class=\"gallery-section\">\n          <div>\n            <div>\n              {{#images}}\n                <img src=\"{{src}}\" alt=\"{{alt}}\">\n              {{/images}}\n            </div>\n          </div>\n        </section>\n      {{/isGallery}}\n    {{/blocks}}\n  </main>\n\n  <footer class=\"simple-footer\">\n    <p>© {{year}} {{siteName}}. Alle Rechte vorbehalten.</p>\n  </footer>\n</body>\n</html>"
+  },
+  {
+    "name": "Text",
+    "code": "<section class=\"container\">\n  <h1>{{title}}</h1>\n  {{text}}\n</section>"
+  }
+]
