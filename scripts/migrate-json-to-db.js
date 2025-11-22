@@ -10,11 +10,25 @@ async function migrateData() {
 
   try {
     // JSON-Dateien laden
-    const dataDir = path.join(__dirname, 'data');
-    
-    const pagesData = JSON.parse(fs.readFileSync(path.join(dataDir, 'pages.json'), 'utf-8'));
-    const templatesData = JSON.parse(fs.readFileSync(path.join(dataDir, 'templates.json'), 'utf-8'));
-    const snippetsData = JSON.parse(fs.readFileSync(path.join(dataDir, 'snippets.json'), 'utf-8'));
+    // Project layout stores data in the repository root `data/` folder.
+    // Resolve the repo root relative to this script (scripts/..)
+    const dataDir = path.join(__dirname, '..', 'data');
+
+    const pagesPath = path.join(dataDir, 'pages.json');
+    const templatesPath = path.join(dataDir, 'templates.json');
+    const snippetsPath = path.join(dataDir, 'snippets.json');
+
+    if (!fs.existsSync(pagesPath) || !fs.existsSync(templatesPath) || !fs.existsSync(snippetsPath)) {
+      console.error('❌ Migration: Eine oder mehrere JSON-Quelldateien fehlen unter:', dataDir);
+      console.error('Erwartet:', pagesPath);
+      console.error('Erwartet:', templatesPath);
+      console.error('Erwartet:', snippetsPath);
+      throw new Error('Migration abgebrochen: fehlende JSON-Dateien im data-Verzeichnis.');
+    }
+
+    const pagesData = JSON.parse(fs.readFileSync(pagesPath, 'utf-8'));
+    const templatesData = JSON.parse(fs.readFileSync(templatesPath, 'utf-8'));
+    const snippetsData = JSON.parse(fs.readFileSync(snippetsPath, 'utf-8'));
     
     console.log(`📄 Geladen: ${pagesData.length} Seiten`);
     console.log(`📝 Geladen: ${templatesData.length} Templates`);

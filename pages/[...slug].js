@@ -2,54 +2,46 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { renderPage } from '../lib/templateEngine'
 
-export default function Page() {
+export default function PageCatchAll() {
   const { query } = useRouter()
   const [page, setPage] = useState(null)
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!query.slug) return
+    const raw = query.slug
+    if (raw === undefined) return
 
     setLoading(true)
-    
-    // Lade Seiten-Daten (mit Cache-Buster)
-    // In development (localhost) include drafts so we can preview saved drafts
+
+    const segments = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : [])
+
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
+
     fetch(pagesUrl)
       .then(r => r.json())
       .then(async pages => {
-        console.log('Geladene Seiten:', pages)
-        console.log('Ist Array?', Array.isArray(pages))
-        console.log('Seiten Anzahl:', pages?.length)
-        console.log('Suche nach Slug:', query.slug)
-        
-        // Prüfe ob pages ein Array ist
         if (!Array.isArray(pages)) {
-          console.error('Pages ist kein Array!')
           setPage(null)
           setLoading(false)
           return
         }
-        
-        // Rekursive Suche durch Seiten-Hierarchie
-        const findPageBySlug = (nodes, targetSlug) => {
-          for (const node of nodes) {
-            console.log('Prüfe Seite:', node.slug, 'gegen', targetSlug)
-            if (node.slug === targetSlug) return node
-            if (node.children && node.children.length > 0) {
-              const found = findPageBySlug(node.children, targetSlug)
-              if (found) return found
-            }
+
+        const findPageByPath = (nodes, segs) => {
+          if (!segs || segs.length === 0) return null
+          let currentNodes = nodes
+          let found = null
+          for (const s of segs) {
+            found = currentNodes.find(n => n.slug === s)
+            if (!found) return null
+            currentNodes = found.children || []
           }
-          return null
+          return found
         }
-        
-        let foundPage = findPageBySlug(pages, query.slug)
-        console.log('Gefundene Seite:', foundPage)
+
+        let foundPage = findPageByPath(pages, segments)
         if (!foundPage) {
-          // Suche nach 404-Seite
           const find404Page = (nodes) => {
             for (const node of nodes) {
               if (node.redirectType === '404') return node
@@ -67,10 +59,9 @@ export default function Page() {
             return
           }
         }
-        
+
         setPage(foundPage)
 
-        // Prüfe auf externe Weiterleitung
         if (foundPage.redirectType === 'external' && foundPage.redirectUrl) {
           window.location.href = foundPage.redirectUrl
           setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
@@ -78,25 +69,19 @@ export default function Page() {
           return
         }
 
-        // 404 und 503 werden als normale Seiten mit Blöcken gerendert
-        // Die redirectType Information wird nur für die Anzeige verwendet
-
-        // Sammle alle Block-Templates
         const templatesToLoad = new Set()
         if (foundPage.blocks) {
           foundPage.blocks.forEach(block => {
-            // prefer explicit block.template, fallback to block.type
             const tname = block.template || block.type
             if (tname) templatesToLoad.add(tname)
           })
         }
-        
-        // Füge Seiten-Template hinzu wenn vorhanden
-        if (foundPage.template) {
-          templatesToLoad.add(foundPage.template)
-        }
+        if (foundPage.template) templatesToLoad.add(foundPage.template)
 
-        // Lade alle Templates parallel
+        // Debug: show which templates we will try to load for this page
+        // eslint-disable-next-line no-console
+        console.debug('catchall: templatesToLoad ->', Array.from(templatesToLoad))
+
         const templateCodes = {}
         await Promise.all(
           Array.from(templatesToLoad).map(async templateName => {
@@ -112,7 +97,6 @@ export default function Page() {
           })
         )
 
-        // Lade Navigations-Templates
         const navigationTemplates = {}
         try {
           const navRes = await fetch(`/api/navigations?_t=${Date.now()}`)
@@ -130,14 +114,7 @@ export default function Page() {
         } catch (e) {
           console.error('Fehler beim Laden der Navigationen:', e)
         }
-        // Debug: show loaded navigation templates
-        console.log('Loaded navigationTemplates keys:', Object.keys(navigationTemplates))
-        for (const k of Object.keys(navigationTemplates)) {
-          try { console.log(`nav:${k} length=${navigationTemplates[k]?.length}`) } catch (e) {}
-        }
-        console.log('Geladene Navigation-Templates:', Object.keys(navigationTemplates))
 
-        // Rendere Seite mit optionalem Seiten-Template
         const pageTemplateCode = foundPage.template ? templateCodes[foundPage.template] : null
         const html = renderPage(foundPage, templateCodes, pageTemplateCode, pages, navigationTemplates, templateCodes)
         setHtml(html)
@@ -148,8 +125,6 @@ export default function Page() {
         setLoading(false)
       })
   }, [query.slug])
-
-  console.log('Render State - Loading:', loading, 'Page:', page, 'HTML length:', html?.length)
 
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
   if (!page) return <div style={{ padding: 20 }}>Seite nicht gefunden</div>

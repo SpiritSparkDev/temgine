@@ -5,7 +5,8 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const name = req.query && req.query.name
       if (name) {
-        const t = await prisma.template.findUnique({ where: { name: String(name) } })
+        // Case-insensitive lookup so client casing differences don't break rendering
+        const t = await prisma.template.findFirst({ where: { name: { equals: String(name), mode: 'insensitive' } } })
         if (!t) return res.status(404).json({ error: 'Template nicht gefunden' })
         return res.status(200).json({ name: t.name, code: t.code, type: t.type })
       }

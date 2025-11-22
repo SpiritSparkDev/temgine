@@ -44,7 +44,8 @@ export default function Home() {
         const templatesToLoad = new Set()
         if (homePage.blocks) {
           homePage.blocks.forEach(block => {
-            if (block.template) templatesToLoad.add(block.template)
+            const tname = block.template || block.type
+            if (tname) templatesToLoad.add(tname)
           })
         }
         if (homePage.template) templatesToLoad.add(homePage.template)
@@ -85,6 +86,9 @@ export default function Home() {
         }
 
         // Rendere Seite
+        // Debug: welche Templates wurden geladen
+        // eslint-disable-next-line no-console
+        console.log('index: templatesToLoad ->', Array.from(templatesToLoad))
         const pageTemplateCode = homePage.template ? templateCodes[homePage.template] : null
         const html = renderPage(homePage, templateCodes, pageTemplateCode, pages, navigationTemplates)
         setHtml(html)
