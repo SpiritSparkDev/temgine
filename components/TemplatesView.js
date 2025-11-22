@@ -244,16 +244,19 @@ export default function TemplatesView({
               <label>Templates einfügen</label>
               <div className="template-snippet-buttons">
                 {allTemplates
-                  .filter(tmpl => tmpl !== templateName) // Verhindere Selbstreferenz
-                  .map(tmpl => (
-                    <button 
-                      key={tmpl} 
-                      className="template-snippet-btn template-snippet"
-                      {...createButtonHandlers(`{{template:${tmpl}}}`, () => setTemplateCode(c => c + `{{template:${tmpl}}}`))}
-                    >
-                      🧩 {tmpl}
-                    </button>
-                  ))}
+                  .filter(t => (t && t.name ? t.name : t) !== templateName) // Verhindere Selbstreferenz
+                  .map(t => {
+                    const name = t && t.name ? t.name : t;
+                    return (
+                      <button 
+                        key={name} 
+                        className="template-snippet-btn template-snippet"
+                        {...createButtonHandlers(`{{template:${name}}}`, () => setTemplateCode(c => c + `{{template:${name}}}`))}
+                      >
+                        🧩 {name}
+                      </button>
+                    )
+                  })}
               </div>
             </div>
           )}

@@ -20,6 +20,13 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
       .catch(err => console.error('Templates laden fehlgeschlagen:', err));
   }, []);
 
+  // Normalisiere Template-Liste (unterstütze alte string-Listen und neue Objekt-Listen)
+  const templateObjs = Array.isArray(templates) ? templates : [];
+  const normalizedTemplates = templateObjs.map(t => (typeof t === 'string' ? { name: t, type: 'SITE' } : t));
+  const siteTemplateNames = normalizedTemplates
+    .filter(t => String(t.type || 'SITE').toUpperCase() === 'SITE')
+    .map(t => t.name);
+
   function handleAdd(parentId = null) {
     const id = Math.random().toString(36).substr(2, 9);
     const makeSlug = (text) => {
@@ -147,9 +154,9 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
               title="Seiten-Template"
             >
               <option value="">Kein Template</option>
-              {templates.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
+                {siteTemplateNames.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
             </select>
             <div className="btn-group">
               <button
