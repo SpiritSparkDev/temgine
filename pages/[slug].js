@@ -85,9 +85,9 @@ export default function Page() {
         const templatesToLoad = new Set()
         if (foundPage.blocks) {
           foundPage.blocks.forEach(block => {
-            if (block.template) {
-              templatesToLoad.add(block.template)
-            }
+            // prefer explicit block.template, fallback to block.type
+            const tname = block.template || block.type
+            if (tname) templatesToLoad.add(tname)
           })
         }
         
@@ -130,6 +130,12 @@ export default function Page() {
         } catch (e) {
           console.error('Fehler beim Laden der Navigationen:', e)
         }
+        // Debug: show loaded navigation templates
+        console.log('Loaded navigationTemplates keys:', Object.keys(navigationTemplates))
+        for (const k of Object.keys(navigationTemplates)) {
+          try { console.log(`nav:${k} length=${navigationTemplates[k]?.length}`) } catch (e) {}
+        }
+        console.log('Geladene Navigation-Templates:', Object.keys(navigationTemplates))
 
         // Rendere Seite mit optionalem Seiten-Template
         const pageTemplateCode = foundPage.template ? templateCodes[foundPage.template] : null

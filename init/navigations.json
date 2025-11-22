@@ -1,0 +1,6 @@
+[
+  {
+    "name": "main",
+    "code": "<nav class=\"main-nav\">\n  <ul>\n    {{#pages}}\n      <li><a href=\"/{{slug}}\">{{title}}</a></li>\n    {{/pages}}\n  </ul>\n</nav>"
+  }
+]

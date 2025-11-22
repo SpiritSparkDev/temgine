@@ -1,0 +1,22 @@
+[
+  {
+    "name": "default",
+    "code": "<section class=\"container\">\n  <header><h1>{{title}}</h1></header>\n  <main>\n    {{{blocks}}}\n  </main>\n</section>"
+  },
+  {
+    "name": "text",
+    "code": "<section class=\"block block-text\">\n  {{#title}}<h2>{{title}}</h2>{{/title}}\n  <div class=\"text-content\">{{{content}}}</div>\n</section>"
+  },
+  {
+    "name": "content",
+    "code": "<section class=\"block block-content\">\n  {{#title}}<h3>{{title}}</h3>{{/title}}\n  <div class=\"content-body\">{{{content}}}</div>\n</section>"
+  },
+  {
+    "name": "blog-list",
+    "code": "<section class=\"container blog-list\">\n  <h1>{{title}}</h1>\n  <ul>\n    {{#children}}\n      <li><a href=\"/{{slug}}\">{{title}}</a> — {{data.excerpt}}</li>\n    {{/children}}\n  </ul>\n</section>"
+  },
+  {
+    "name": "blog-post",
+    "code": "<article class=\"container blog-post\">\n  <h1>{{title}}</h1>\n  <div class=\"meta\">{{data.publishedAt}}</div>\n  <div class=\"content\">{{{data.body}}}</div>\n</article>"
+  }
+]

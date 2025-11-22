@@ -41,14 +41,18 @@ export default async function handler(req, res) {
               blocks: p.blocks || [],
               children: p.children || [],
               status: p.status || 'DRAFT',
-              publishAt: p.publishAt || null
+              publishAt: p.publishAt || null,
+              template: p.template || null,
+              data: p.data || {}
             },
             update: {
               title: p.title || undefined,
               blocks: p.blocks || undefined,
               children: p.children || undefined,
               status: p.status || undefined,
-              publishAt: p.publishAt || undefined
+              publishAt: p.publishAt || undefined,
+              template: p.template || undefined,
+              data: p.data || undefined
             }
           })
           results.push(up)
@@ -89,12 +93,16 @@ export default async function handler(req, res) {
           slug: String(p.slug),
           title: p.title || '',
           blocks: p.blocks || [],
-          children: p.children || []
+          children: p.children || [],
+          template: p.template || null,
+          data: p.data || {}
         },
         update: {
           title: p.title || undefined,
           blocks: p.blocks || undefined,
-          children: p.children || undefined
+          children: p.children || undefined,
+          template: p.template || undefined,
+          data: p.data || undefined
         }
       })
       // create a revision for this upsert
@@ -107,7 +115,9 @@ export default async function handler(req, res) {
             blocks: up.blocks,
             children: up.children,
             status: up.status,
-            publishAt: up.publishAt
+            publishAt: up.publishAt,
+            template: up.template,
+            data: up.data
           }
         } })
       } catch (e) {

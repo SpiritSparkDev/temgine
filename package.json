@@ -7,7 +7,8 @@
     "test": "jest --color",
     "build": "next build",
     "start": "next start",
-    "publish-scheduled": "node ./scripts/publish-scheduled.js"
+    "publish-scheduled": "node ./scripts/publish-scheduled.js",
+    "import-init": "node ./scripts/import-init.js"
   },
   "dependencies": {
     "dotenv": "^16.0.0",

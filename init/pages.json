@@ -1,0 +1,50 @@
+[
+  {
+    "id": "home",
+    "slug": "home",
+    "title": "Startseite",
+    "template": "default",
+    "blocks": [
+      { "type": "text", "template": "", "props": { "title": "Willkommen", "content": "Willkommen auf unserer Beispielseite. Hier findest du Informationen über uns." } },
+      { "type": "content", "template": "", "props": { "title": "Neuigkeiten", "content": "Aktuelle Neuigkeiten werden hier angezeigt." } }
+    ],
+    "children": [
+      {
+        "id": "about",
+        "slug": "about",
+        "title": "Über uns",
+        "template": "default",
+        "blocks": [
+          { "type": "text", "template": "", "props": { "title": "Unsere Mission", "content": "Wir bauen großartige Websites und Tools, die Menschen lieben." } }
+        ],
+        "children": [],
+        "status": "PUBLISHED"
+      },
+      {
+        "id": "blog",
+        "slug": "blog",
+        "title": "Blog",
+        "template": "blog-list",
+        "blocks": [
+          { "type": "text", "template": "", "props": { "title": "Blog Übersicht", "content": "Lesen Sie unsere neuesten Beiträge." } }
+        ],
+        "children": [
+          {
+            "id": "blog-post-1",
+            "slug": "hello-world",
+            "title": "Hello World",
+            "template": "blog-post",
+            "blocks": [
+              { "type": "text", "template": "", "props": { "title": "Einführung", "content": "Dies ist der erste Beispiel-Beitrag. Viel Spaß beim Lesen!" } }
+            ],
+            "children": [],
+            "status": "PUBLISHED",
+            "data": { "excerpt": "Erster Beitrag", "publishedAt": "2025-11-01T10:00:00.000Z", "body": "<p>Dies ist der Body des Beispielbeitrags. Er enthält HTML-Inhalt.</p>" }
+          }
+        ],
+        "status": "PUBLISHED"
+      }
+    ],
+    "status": "PUBLISHED"
+  }
+]

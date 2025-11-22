@@ -1,0 +1,15 @@
+[
+  {
+    "id": "ct-blogpost",
+    "name": "BlogPost",
+    "slug": "blog-post",
+    "description": "Ein einfacher Blog‑Beitrag",
+    "fields": [
+      { "id": "f1", "name": "Title", "key": "title", "type": "text", "required": true },
+      { "id": "f2", "name": "Slug", "key": "slug", "type": "slug", "required": true },
+      { "id": "f3", "name": "Excerpt", "key": "excerpt", "type": "textarea", "required": false },
+      { "id": "f4", "name": "Body", "key": "body", "type": "richtext", "required": false },
+      { "id": "f5", "name": "Published At", "key": "publishedAt", "type": "date", "required": false }
+    ]
+  }
+]

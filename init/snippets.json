@@ -1,0 +1,6 @@
+[
+  { "label": "Titel", "snippet": "{{title}}" },
+  { "label": "Text", "snippet": "{{text}}" },
+  { "label": "Bild (erstes)", "snippet": "{{images.0}}" },
+  { "label": "Excerpt", "snippet": "{{data.excerpt}}" }
+]

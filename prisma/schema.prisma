@@ -47,6 +47,8 @@ model Page {
   slug      String         @unique
   title     String
   blocks    Json           @default("[]")
+  template  String?
+  data      Json           @default("{}")
   children  Json           @default("[]")
   revisions PageRevision[]
   status    PageStatus     @default(DRAFT)
