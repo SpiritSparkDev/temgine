@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createButtonHandlers } from '../lib/insertHelper'
 import dynamic from 'next/dynamic';
 import { Save, Eye, FileText, Plus, Trash2 } from 'lucide-react';
 
@@ -134,23 +135,23 @@ export default function NavigationView({ showToast }) {
 
         <div className="sidebar-section">
           <h4>Verfügbare Variablen</h4>
-          <div className="snippets-grid">
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{#each pages}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{#each pages}}'); } }}>
+            <div className="snippets-grid">
+            <button className="snippet-btn" {...createButtonHandlers('{{#each pages}}', () => setNavCode(c => c + '{{#each pages}}'))}>
               #each pages
             </button>
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{/each}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{/each}}'); } }}>
+            <button className="snippet-btn" {...createButtonHandlers('{{/each}}', () => setNavCode(c => c + '{{/each}}'))}>
               /each
             </button>
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{title}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{title}}'); } }}>
+            <button className="snippet-btn" {...createButtonHandlers('{{title}}', () => setNavCode(c => c + '{{title}}'))}>
               title
             </button>
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{slug}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{slug}}'); } }}>
+            <button className="snippet-btn" {...createButtonHandlers('{{slug}}', () => setNavCode(c => c + '{{slug}}'))}>
               slug
             </button>
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{#if children}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{#if children}}'); } }}>
+            <button className="snippet-btn" {...createButtonHandlers('{{#if children}}', () => setNavCode(c => c + '{{#if children}}'))}>
               #if children
             </button>
-            <button className="snippet-btn" onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{/if}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{/if}}'); } }}>
+            <button className="snippet-btn" {...createButtonHandlers('{{/if}}', () => setNavCode(c => c + '{{/if}}'))}>
               /if
             </button>
           </div>

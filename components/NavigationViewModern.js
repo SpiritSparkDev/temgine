@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Menu } from 'lucide-react';
+import { createButtonHandlers, insertText } from '../lib/insertHelper'
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -10,8 +11,7 @@ export default function NavigationViewModern({ showToast }) {
   const [navName, setNavName] = useState('');
   const [navCode, setNavCode] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  // Per-editor inserter ref (allows inserting text at the editor cursor)
-  const inserterRef = useRef(null);
+  // editor registers centrally via registerEditorApi
   
 
   useEffect(() => {
@@ -82,22 +82,7 @@ export default function NavigationViewModern({ showToast }) {
   }
 
   async function insertSnippet(text) {
-    try {
-      const api = inserterRef.current || window.__temphelix_editor_api || window.__temphelix_active_editor;
-      if (api) {
-        try { if (typeof api.focus === 'function') api.focus(); } catch (e) {}
-        await new Promise(r => setTimeout(r, 60));
-        if (typeof api.insertAsync === 'function') {
-          try { const ok = await api.insertAsync(text); if (ok) return; } catch (e) {}
-        } else if (typeof api.insert === 'function') {
-          try { const ok = api.insert(text); if (ok) return; } catch (e) {}
-          await new Promise(r => setTimeout(r, 50));
-          try { api.insert(text); return; } catch (e) {}
-        }
-      }
-    } catch (e) {}
-    // Fallback: append to the content
-    setNavCode(c => c + text);
+    await insertText(text, () => setNavCode(c => c + text))
   }
 
   return (
@@ -170,7 +155,6 @@ export default function NavigationViewModern({ showToast }) {
                     value={navCode}
                     onChange={value => setNavCode(value || '')}
                     options={{}}
-                    registerInserter={(fn) => { inserterRef.current = fn }}
                   />
                 </div>
               </div>
@@ -178,18 +162,10 @@ export default function NavigationViewModern({ showToast }) {
               <div className="editor-snippets-panel">
               <h4>Mustache Variablen</h4>
               <div className="snippet-buttons">
-                <button onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{#pages}}\n  \n{{/pages}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{#pages}}\n  \n{{/pages}}'); } }} className="template-snippet-btn">
-                  {'{{#pages}}'}
-                </button>
-                <button onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{slug}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{slug}}'); } }} className="template-snippet-btn">
-                  {'{{slug}}'}
-                </button>
-                <button onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{title}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{title}}'); } }} className="template-snippet-btn">
-                  {'{{title}}'}
-                </button>
-                <button onMouseDown={(e) => { e.preventDefault(); insertSnippet('{{#children}}\n  \n{{/children}}'); }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet('{{#children}}\n  \n{{/children}}'); } }} className="template-snippet-btn">
-                  {'{{#children}}'}
-                </button>
+                <button className="template-snippet-btn" {...createButtonHandlers('{{#pages}}\n  \n{{/pages}}', () => setNavCode(c => c + '{{#pages}}\n  \n{{/pages}}'))}>{'{{#pages}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('{{slug}}', () => setNavCode(c => c + '{{slug}}'))}>{'{{slug}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => setNavCode(c => c + '{{title}}'))}>{'{{title}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('{{#children}}\n  \n{{/children}}', () => setNavCode(c => c + '{{#children}}\n  \n{{/children}}'))}>{'{{#children}}'}</button>
               </div>
               </div>
             </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { createButtonHandlers } from '../lib/insertHelper'
 import dynamic from 'next/dynamic';
 import { GripVertical, Plus, Trash2, Download } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
@@ -200,17 +201,16 @@ export default function TemplatesView({
           <div className="template-snippet-section">
             <label>Snippets einfügen</label>
             <div className="template-snippet-buttons">
-              {snippets.map(s => (
-                <button 
-                  key={s.label} 
-                  onMouseDown={(e) => { e.preventDefault(); insertKeyword(s.snippet); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertKeyword(s.snippet); } }}
-                  className="template-snippet-btn"
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+                {snippets.map(s => (
+                  <button 
+                    key={s.label} 
+                    className="template-snippet-btn"
+                    {...createButtonHandlers(s.snippet, () => setTemplateCode(c => c + s.snippet))}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
           </div>
 
           {/* Navigation Snippets */}
@@ -221,9 +221,8 @@ export default function TemplatesView({
                 {navigations.map(nav => (
                   <button 
                     key={nav} 
-                    onMouseDown={(e) => { e.preventDefault(); insertKeyword(`{{navigation:${nav}}}`); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertKeyword(`{{navigation:${nav}}}`); } }}
                     className="template-snippet-btn navigation-snippet"
+                    {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
                   >
                     📍 {nav}
                   </button>
@@ -242,9 +241,8 @@ export default function TemplatesView({
                   .map(tmpl => (
                     <button 
                       key={tmpl} 
-                      onMouseDown={(e) => { e.preventDefault(); insertKeyword(`{{template:${tmpl}}}`); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertKeyword(`{{template:${tmpl}}}`); } }}
                       className="template-snippet-btn template-snippet"
+                      {...createButtonHandlers(`{{template:${tmpl}}}`, () => setTemplateCode(c => c + `{{template:${tmpl}}}`))}
                     >
                       🧩 {tmpl}
                     </button>

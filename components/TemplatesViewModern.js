@@ -1,13 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Layout, Download, GripVertical } from 'lucide-react';
+import { createButtonHandlers, insertText } from '../lib/insertHelper'
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
 export default function TemplatesViewModern({ showToast }) {
   const [templates, setTemplates] = useState([]);
-  // Ref to receive the inserter function from CodeEditor
-  const inserterRef = useRef(null);
+  // inserterRef no longer required; editor registers centrally
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
@@ -101,22 +101,7 @@ export default function TemplatesViewModern({ showToast }) {
   }
 
   async function insertSnippet(text) {
-    try {
-      const api = inserterRef.current || window.__temphelix_editor_api || window.__temphelix_active_editor;
-      if (api) {
-        try { if (typeof api.focus === 'function') api.focus(); } catch (e) {}
-        await new Promise(r => setTimeout(r, 60));
-        if (typeof api.insertAsync === 'function') {
-          try { const ok = await api.insertAsync(text); if (ok) return; } catch (e) {}
-        } else if (typeof api.insert === 'function') {
-          try { const ok = api.insert(text); if (ok) return; } catch (e) {}
-          await new Promise(r => setTimeout(r, 50));
-          try { api.insert(text); return; } catch (e) {}
-        }
-      }
-    } catch (e) {}
-    // Fallback: append to the content
-    setTemplateCode(c => c + text);
+    await insertText(text, () => setTemplateCode(c => c + text))
   }
 
   return (
@@ -189,7 +174,6 @@ export default function TemplatesViewModern({ showToast }) {
                     value={templateCode}
                     onChange={value => setTemplateCode(value || '')}
                     options={{}}
-                    registerInserter={(fn) => { inserterRef.current = fn }}
                   />
                 </div>
               </div>
@@ -200,9 +184,8 @@ export default function TemplatesViewModern({ showToast }) {
                 {snippets.map(s => (
                   <button 
                     key={s.label} 
-                    onMouseDown={(e) => { e.preventDefault(); insertSnippet(s.snippet); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet(s.snippet); } }}
                     className="template-snippet-btn"
+                    {...createButtonHandlers(s.snippet, () => setTemplateCode(c => c + s.snippet))}
                   >
                     {s.label}
                   </button>
@@ -210,9 +193,8 @@ export default function TemplatesViewModern({ showToast }) {
                 {navigations.map(nav => (
                   <button 
                     key={nav} 
-                    onMouseDown={(e) => { e.preventDefault(); insertSnippet(`{{navigation:${nav}}}`); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet(`{{navigation:${nav}}}`); } }}
                     className="template-snippet-btn navigation-snippet"
+                    {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
                   >
                     📍 {nav}
                   </button>
@@ -222,9 +204,8 @@ export default function TemplatesViewModern({ showToast }) {
                   .map(tmpl => (
                     <button 
                       key={tmpl} 
-                      onMouseDown={(e) => { e.preventDefault(); insertSnippet(`{{template:${tmpl}}}`); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); insertSnippet(`{{template:${tmpl}}}`); } }}
                       className="template-snippet-btn template-snippet"
+                      {...createButtonHandlers(`{{template:${tmpl}}}`, () => setTemplateCode(c => c + `{{template:${tmpl}}}`))}
                     >
                       🧩 {tmpl}
                     </button>

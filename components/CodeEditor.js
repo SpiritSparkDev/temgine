@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { registerEditorApi } from '../lib/insertHelper'
 import Editor from 'react-simple-code-editor'
 import Highlight, { defaultProps } from 'prism-react-renderer'
 import theme from 'prism-react-renderer/themes/github'
@@ -27,8 +28,6 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
   const apiRef = useRef(null)
 
   useEffect(() => {
-    if (!registerInserter) return
-
     const api = {
       insert(text) {
         try {
@@ -47,8 +46,8 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
       async insertAsync(text) { return api.insert(text) },
       focus() { try { textareaRef.current && textareaRef.current.focus() } catch (e) {} }
     }
-    registerInserter(api)
-    try { window.__temphelix_editor_api = api } catch (e) {}
+    try { if (typeof registerInserter === 'function') registerInserter(api) } catch (e) {}
+    try { registerEditorApi(api) } catch (e) {}
     apiRef.current = api
   }, [registerInserter, onChange])
 
