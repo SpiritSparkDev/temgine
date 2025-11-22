@@ -14,7 +14,10 @@ export default function Page() {
     setLoading(true)
     
     // Lade Seiten-Daten (mit Cache-Buster)
-    fetch(`/api/pages?_t=${Date.now()}`)
+    // In development (localhost) include drafts so we can preview saved drafts
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
+    fetch(pagesUrl)
       .then(r => r.json())
       .then(async pages => {
         console.log('Geladene Seiten:', pages)

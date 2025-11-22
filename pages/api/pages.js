@@ -27,6 +27,7 @@ export default async function handler(req, res) {
     // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
     if (req.method === 'POST') {
       const body = req.body
+      console.log('DEBUG /api/pages POST body:', JSON.stringify(body, null, 2));
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
         const results = []
@@ -71,6 +72,7 @@ export default async function handler(req, res) {
             console.error('Revision create failed', e)
           }
         }
+        console.log('DEBUG /api/pages POST upsert results:', results.map(r => ({ id: r.id, slug: r.slug, status: r.status })));
         // audit logs
         for (const up of results) {
           try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
@@ -111,6 +113,7 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Revision create failed', e)
       }
+      console.log('DEBUG /api/pages POST single upsert result:', { id: up.id, slug: up.slug, status: up.status });
       try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
       return res.status(200).json(up)
     }

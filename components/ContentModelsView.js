@@ -43,8 +43,8 @@ export default function ContentModelsView() {
       <h2>Content Types</h2>
       {loading ? <div>Loading...</div> : (
         <ul>
-          {(Array.isArray(types) ? types : []).map(t => (
-            <li key={t.id}>
+          {(Array.isArray(types) ? types : []).map((t, i) => (
+            <li key={t.id || t.slug || i}>
               <strong>{t.name}</strong> ({t.slug}) — fields: {t.fields?.length || 0}{' '}
               <button onClick={() => del(t.id)}>Delete</button>
             </li>

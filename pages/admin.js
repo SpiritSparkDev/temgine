@@ -119,7 +119,8 @@ export default function Admin() {
         ]);
       } catch (e) { setSnippets([]); }
       try {
-        const p = await fetch('/api/pages').then(r => r.json()).catch(() => []);
+        // Admin should see drafts as well
+        const p = await fetch('/api/pages?includeDrafts=true').then(r => r.json()).catch(() => []);
         setPages(Array.isArray(p) ? p : (p.pages || []));
       } catch (e) { setPages([]); }
     })();

@@ -22,7 +22,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
 
   function handleAdd(parentId = null) {
     const id = Math.random().toString(36).substr(2, 9);
-    const newPage = { id, title: newTitle || 'Neue Seite', children: [] };
+    const makeSlug = (text) => {
+      return String(text || 'neue-seite')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-');
+    };
+    const title = newTitle || 'Neue Seite';
+    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT' };
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
