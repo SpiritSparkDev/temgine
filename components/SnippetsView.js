@@ -30,6 +30,8 @@ export default function SnippetsView({ showToast }) {
     setSelectedSnippet(null);
     setEditLabel('');
     setEditContent('');
+    setEditType('free');
+    setEditHandler('');
     setIsEditing(true);
   }
 
@@ -37,12 +39,27 @@ export default function SnippetsView({ showToast }) {
     setSelectedSnippet(index);
     setEditLabel(snippet.label);
     setEditContent(snippet.snippet);
+    setEditType(snippet.type || 'free');
+    setEditHandler(snippet.handler || '');
     setIsEditing(true);
   }
 
+  const [editType, setEditType] = useState('free');
+  const [editHandler, setEditHandler] = useState('');
+
   function handleSave() {
     const newSnippets = [...snippets];
-    const snippetData = { label: editLabel, snippet: editContent };
+    let snippetValue = editContent;
+    if (editType === 'bound') {
+      // ensure bound snippets use the #token form; if user left content empty, derive from label
+      if (!snippetValue || !snippetValue.startsWith('#')) {
+        const token = String(editContent || editLabel || '').trim() || ''
+        const sanitized = token.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\.-]/g, '').toLowerCase()
+        snippetValue = '#' + (sanitized || 'value')
+      }
+    }
+    const snippetData = { label: editLabel, snippet: snippetValue, type: editType };
+    if (editHandler) snippetData.handler = editHandler;
     
     if (selectedSnippet !== null) {
       newSnippets[selectedSnippet] = snippetData;
@@ -143,6 +160,14 @@ export default function SnippetsView({ showToast }) {
                 value={editLabel} 
                 onChange={e => setEditLabel(e.target.value)}
               />
+              <select value={editType} onChange={e => setEditType(e.target.value)} style={{ marginLeft: 8 }}>
+                <option value="free">Free (editable)</option>
+                <option value="bound">Bound (#name) — auto-filled from DB</option>
+                <option value="defined">Defined (special handler)</option>
+              </select>
+              {editType === 'defined' && (
+                <input type="text" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} style={{ marginLeft: 8 }} />
+              )}
               <div className="editor-actions">
                 <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
                 <button className="btn-primary" onClick={handleSave}>Speichern</button>

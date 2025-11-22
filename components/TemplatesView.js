@@ -211,12 +211,30 @@ export default function TemplatesView({
                 {snippets.map(s => (
                   <button 
                     key={s.label} 
-                    className="template-snippet-btn"
-                    {...createButtonHandlers(s.snippet, () => setTemplateCode(c => c + s.snippet))}
+                    className={`template-snippet-btn ${s.type === 'bound' ? 'bound-snippet' : (s.type === 'defined' ? 'defined-snippet' : '')}`}
+                    {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}
                   >
-                    {s.label}
+                    {s.label}{s.type === 'bound' ? ' (bound)' : s.type === 'defined' ? ' (defined)' : ''}
                   </button>
                 ))}
+              </div>
+              {/* Bound snippets list */}
+              <div style={{ marginTop: 8 }}>
+                <label>Gebundene Snippets</label>
+                <div className="template-snippet-buttons">
+                  {snippets.filter(s => s.type === 'bound').map(s => (
+                    <button key={s.label} className="template-snippet-btn bound-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
+                  ))}
+                </div>
+              </div>
+              {/* Defined snippets list */}
+              <div style={{ marginTop: 8 }}>
+                <label>Definierte Snippets</label>
+                <div className="template-snippet-buttons">
+                  {snippets.filter(s => s.type === 'defined').map(s => (
+                    <button key={s.label} className="template-snippet-btn defined-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` — ${s.handler}` : ''}</button>
+                  ))}
+                </div>
               </div>
           </div>
 

@@ -5,7 +5,16 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const snippets = await prisma.snippet.findMany({ orderBy: { createdAt: 'asc' } })
       // Map DB shape (key/value) to previous JSON shape (label/snippet)
-      const out = snippets.map(s => ({ label: s.key, snippet: s.value }))
+      const out = snippets.map(s => {
+        const raw = s.value || ''
+        try {
+          const obj = JSON.parse(raw)
+          // Expected shape: { snippet, type, handler }
+          return { label: s.key, snippet: obj.snippet || '', type: obj.type || 'free', handler: obj.handler || '' }
+        } catch (e) {
+          return { label: s.key, snippet: raw || '', type: 'free' }
+        }
+      })
       return res.status(200).json(out)
     }
 
@@ -19,7 +28,11 @@ export default async function handler(req, res) {
           if (!item.label) continue
           const key = String(item.label)
           keys.push(key)
-          const value = String(item.snippet || '')
+          // If item has type/handler, store a JSON-encoded value to preserve metadata
+          let value = String(item.snippet || '')
+          if (item.type || item.handler) {
+            value = JSON.stringify({ snippet: item.snippet || '', type: item.type || 'free', handler: item.handler || '' })
+          }
           const up = await prisma.snippet.upsert({
             where: { key },
             create: { key, value },
@@ -36,9 +49,12 @@ export default async function handler(req, res) {
 
       // Single
       const label = body.label || body.key
-      const value = body.snippet || body.value || ''
       if (!label) return res.status(400).json({ error: 'Label/Key erforderlich' })
       const key = String(label)
+      let value = body.snippet || body.value || ''
+      if (body.type || body.handler) {
+        value = JSON.stringify({ snippet: body.snippet || '', type: body.type || 'free', handler: body.handler || '' })
+      }
       const up = await prisma.snippet.upsert({ where: { key }, create: { key, value }, update: { value } })
       return res.status(200).json(up)
     }

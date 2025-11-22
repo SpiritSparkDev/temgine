@@ -202,14 +202,26 @@ export default function TemplatesViewModern({ showToast }) {
               <h4>Snippets einfügen</h4>
               <div className="snippet-buttons">
                 {snippets.map(s => (
-                  <button 
-                    key={s.label} 
-                    className="template-snippet-btn"
-                    {...createButtonHandlers(s.snippet, () => setTemplateCode(c => c + s.snippet))}
-                  >
-                    {s.label}
-                  </button>
+                  <button key={s.label} className={`template-snippet-btn ${s.type === 'bound' ? 'bound-snippet' : (s.type === 'defined' ? 'defined-snippet' : '')}`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.type === 'bound' ? ' (bound)' : s.type === 'defined' ? ' (defined)' : ''}</button>
                 ))}
+                {/* Bound snippets */}
+                <div style={{ marginTop: 8 }}>
+                  <strong>Gebundene Snippets</strong>
+                  <div className="snippet-buttons" style={{ marginTop: 6 }}>
+                    {snippets.filter(s => s.type === 'bound').map(s => (
+                      <button key={s.label} className="template-snippet-btn bound-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
+                    ))}
+                  </div>
+                </div>
+                {/* Defined snippets */}
+                <div style={{ marginTop: 8 }}>
+                  <strong>Definierte Snippets</strong>
+                  <div className="snippet-buttons" style={{ marginTop: 6 }}>
+                    {snippets.filter(s => s.type === 'defined').map(s => (
+                      <button key={s.label} className="template-snippet-btn defined-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` — ${s.handler}` : ''}</button>
+                    ))}
+                  </div>
+                </div>
                 {navigations.map(nav => (
                   <button 
                     key={nav} 

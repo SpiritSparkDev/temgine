@@ -1,48 +1,63 @@
 [
   {
     "label": "Titel",
-    "snippet": "{{title}}"
+    "snippet": "#title",
+    "type": "bound"
   },
   {
     "label": "Slug",
-    "snippet": "{{slug}}"
+    "snippet": "#slug",
+    "type": "bound"
   },
   {
     "label": "Text",
-    "snippet": "{{text}}"
+    "snippet": "{{text}}",
+    "type": "free"
   },
   {
     "label": "Blocks",
-    "snippet": "{{blocks}}"
+    "snippet": "#blocks",
+    "type": "bound"
   },
   {
     "label": "Image",
-    "snippet": "<img src={{imgUrl}} alt={{alt_text}}/>"
-  }
-  ,
+    "snippet": "<img src={{imgUrl}} alt={{alt_text}}/>",
+    "type": "free"
+  },
   {
     "label": "Heading H1",
-    "snippet": "<h1>{{text}}</h1>",
-    "category": "heading"
+    "snippet": "#heading",
+    "type": "defined",
+    "handler": "heading"
   },
   {
     "label": "Heading H2",
-    "snippet": "<h2>{{text}}</h2>",
-    "category": "heading"
+    "snippet": "#heading",
+    "type": "defined",
+    "handler": "heading"
   },
   {
     "label": "Heading H3",
-    "snippet": "<h3>{{text}}</h3>",
-    "category": "heading"
+    "snippet": "#heading",
+    "type": "defined",
+    "handler": "heading"
   },
   {
     "label": "Heading H4",
-    "snippet": "<h4>{{text}}</h4>",
-    "category": "heading"
+    "snippet": "#heading",
+    "type": "defined",
+    "handler": "heading"
   },
   {
     "label": "Heading H5",
-    "snippet": "<h5>{{text}}</h5>",
-    "category": "heading"
+    "snippet": "#heading",
+    "type": "defined",
+    "handler": "heading"
+  },
+  {
+    "label": "File URL",
+    "snippet": "#url",
+    "type": "defined",
+    "handler": "url"
   }
 ]

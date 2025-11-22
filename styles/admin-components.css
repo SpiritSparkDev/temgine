@@ -5,6 +5,8 @@
   color: var(--text-primary);
   padding: 20px;
   transition: all 0.3s;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
 }
 
 .page-editor h2,
@@ -14,6 +16,7 @@
 
 .field-group {
   margin-bottom: 20px;
+  max-width: 90%;
 }
 
 .field-label {
@@ -180,6 +183,7 @@
 
 .template-select-group {
   margin-bottom: 15px;
+  display: flex;
 }
 
 .gallery-images {
