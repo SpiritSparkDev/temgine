@@ -78,6 +78,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return /url/i.test(varName);
   };
 
+  // Entfernt HTML-Tags aus einem String
+  const stripTags = (s) => {
+    if (!s) return '';
+    try {
+      return String(s).replace(/<[^>]*>/g, '');
+    } catch (e) {
+      return String(s);
+    }
+  };
+
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
     setShowFileModal(true);
@@ -567,6 +577,53 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           >
                             📁 Datei wählen
                           </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  // Special handling for heading variables: provide level select (h1-h5) and text input
+                  if (varName.toLowerCase() === 'heading' || varName.toLowerCase().endsWith('heading')) {
+                    // Prefer explicit stored text (e.g. headingText). If missing, strip tags from any existing HTML value.
+                    const textValue = block.props[`${varName}Text`] || (block.props[varName] ? stripTags(block.props[varName]) : '');
+                    const levelValue = block.props[`${varName}Level`] || 'h2';
+
+                    const applyHeading = (newText, newLevel) => {
+                      const updatedProps = { ...block.props };
+                      const lv = newLevel || levelValue;
+                      // If newText provided, use it; otherwise use existing stored text (cleaned)
+                      const rawText = newText !== undefined ? newText : textValue;
+                      const tx = stripTags(rawText);
+                      updatedProps[`${varName}Text`] = tx;
+                      updatedProps[`${varName}Level`] = lv;
+                      // store final HTML in the variable name (constructed from clean text) so templates using {{heading}} receive ready HTML
+                      updatedProps[varName] = `<${lv}>${tx}</${lv}>`;
+                      handleUpdateBlock(idx, updatedProps);
+                    };
+
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{varName} (Heading)</label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <select
+                            value={levelValue}
+                            onChange={e => applyHeading(undefined, e.target.value)}
+                            className="input-field-small"
+                            style={{ width: 100 }}
+                          >
+                            <option value="h1">H1</option>
+                            <option value="h2">H2</option>
+                            <option value="h3">H3</option>
+                            <option value="h4">H4</option>
+                            <option value="h5">H5</option>
+                          </select>
+                          <input
+                            type="text"
+                            placeholder="Heading text"
+                            value={textValue}
+                            onChange={e => applyHeading(e.target.value, undefined)}
+                            className="input-field-small"
+                            style={{ flex: 1 }}
+                          />
                         </div>
                       </div>
                     );

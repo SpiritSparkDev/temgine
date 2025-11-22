@@ -19,4 +19,30 @@
     "label": "Image",
     "snippet": "<img src={{imgUrl}} alt={{alt_text}}/>"
   }
+  ,
+  {
+    "label": "Heading H1",
+    "snippet": "<h1>{{text}}</h1>",
+    "category": "heading"
+  },
+  {
+    "label": "Heading H2",
+    "snippet": "<h2>{{text}}</h2>",
+    "category": "heading"
+  },
+  {
+    "label": "Heading H3",
+    "snippet": "<h3>{{text}}</h3>",
+    "category": "heading"
+  },
+  {
+    "label": "Heading H4",
+    "snippet": "<h4>{{text}}</h4>",
+    "category": "heading"
+  },
+  {
+    "label": "Heading H5",
+    "snippet": "<h5>{{text}}</h5>",
+    "category": "heading"
+  }
 ]
