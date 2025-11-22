@@ -5,11 +5,13 @@
   },
   {
     "name": "text",
-    "code": "<section class=\"block block-text\">\n  {{#title}}<h2>{{title}}</h2>{{/title}}\n  <div class=\"text-content\">{{{content}}}</div>\n</section>"
+    "code": "<section class=\"block block-text\">\n  {{#title}}<h2>{{title}}</h2>{{/title}}\n  <div class=\"text-content\">{{{content}}}</div>\n</section>",
+    "type": "BLOCK"
   },
   {
     "name": "content",
-    "code": "<section class=\"block block-content\">\n  {{#title}}<h3>{{title}}</h3>{{/title}}\n  <div class=\"content-body\">{{{content}}}</div>\n</section>"
+    "code": "<section class=\"block block-content\">\n  {{#title}}<h3>{{title}}</h3>{{/title}}\n  <div class=\"content-body\">{{{content}}}</div>\n</section>",
+    "type": "BLOCK"
   },
   {
     "name": "blog-list",

@@ -41,8 +41,12 @@ export default function TemplatesView({
     try {
       const res = await fetch('/api/templates');
       const data = await res.json();
-      console.log('Geladene Templates:', data);
-      setAllTemplates(data || []);
+      let list = Array.isArray(data) ? data : [];
+      if (list.length > 0 && typeof list[0] === 'string') {
+        list = list.map(n => ({ name: n, type: 'SITE' }));
+      }
+      console.log('Geladene Templates:', list);
+      setAllTemplates(list || []);
     } catch (error) {
       console.error('Fehler beim Laden der Templates:', error);
     }
@@ -102,8 +106,11 @@ export default function TemplatesView({
   const exportAllTemplates = async () => {
     try {
       const res = await fetch('/api/templates');
-      const names = await res.json();
-      
+      const list = await res.json();
+      let names = Array.isArray(list) ? list : [];
+      if (names.length > 0 && typeof names[0] !== 'string') {
+        names = names.map(n => n.name);
+      }
       const templates = [];
       for (const name of names) {
         const templateRes = await fetch(`/api/templates?name=${encodeURIComponent(name)}`);
@@ -144,9 +151,9 @@ export default function TemplatesView({
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Keine Templates vorhanden</p>
             ) : (
               <ul className="template-list">
-                {templateList.map((tmpl, index) => (
+                {templateList.map((tmplObj, index) => (
                   <li 
-                    key={tmpl}
+                    key={tmplObj && tmplObj.name ? tmplObj.name : String(tmplObj)}
                     draggable
                     onDragStart={(e) => e.dataTransfer.setData('templateIndex', index)}
                     onDragOver={(e) => e.preventDefault()}
@@ -163,17 +170,17 @@ export default function TemplatesView({
                       }
                     }}
                   >
-                    <div 
-                      className={`template-list-item ${templateName === tmpl ? 'active' : ''}`}
+                      <div 
+                      className={`template-list-item ${templateName === (tmplObj && tmplObj.name ? tmplObj.name : tmplObj) ? 'active' : ''}`}
                       onDragEnter={(e) => e.currentTarget.style.borderColor = 'var(--accent-primary)'}
                       onDragLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
                     >
                       <GripVertical size={14} style={{ color: 'var(--text-tertiary)' }} />
                       <button
-                        onClick={() => loadTemplate(tmpl)}
+                        onClick={() => loadTemplate(tmplObj && tmplObj.name ? tmplObj.name : tmplObj)}
                         className="template-list-item-btn"
                       >
-                        {tmpl}
+                        {tmplObj && tmplObj.name ? tmplObj.name : tmplObj}
                       </button>
                     </div>
                   </li>

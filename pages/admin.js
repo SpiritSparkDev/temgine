@@ -108,7 +108,12 @@ export default function Admin() {
     (async () => {
       try {
         const t = await fetch('/api/templates').then(r => r.json()).catch(() => []);
-        setTemplateList(Array.isArray(t) ? t : (t.templates || []));
+        let list = Array.isArray(t) ? t : [];
+        if (list.length > 0 && typeof list[0] === 'string') {
+          // older format: array of names
+          list = list.map(n => ({ name: n, type: 'SITE' }));
+        }
+        setTemplateList(list);
       } catch (e) { setTemplateList([]); }
       try {
         const s = await fetch('/api/snippets').then(r => r.json()).catch(() => []);

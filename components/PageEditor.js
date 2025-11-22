@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GripVertical, X } from 'lucide-react';
+import { GripVertical, X, Layout, Grid } from 'lucide-react';
 import { extractTemplateVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
 
@@ -17,6 +17,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  // templates is expected to be an array of objects { name, type }
+  const templateObjs = Array.isArray(templates) ? templates : [];
+  const templateNames = templateObjs.map(t => t.name);
+  const siteTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'SITE').map(t => t.name);
+  const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
+
   useEffect(() => {
     if (page) {
       setTitle(page.title || '');
@@ -33,12 +39,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     // Lade Template-Codes für alle Templates
     const loadTemplateCodes = async () => {
       const codes = {};
-      for (const templateName of templates) {
+      for (const tmplName of templateNames) {
         try {
-          const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}`);
+          const res = await fetch(`/api/templates?name=${encodeURIComponent(tmplName)}`);
           if (res.ok) {
             const data = await res.json();
-            codes[templateName] = data.code;
+            codes[tmplName] = data.code;
           }
         } catch (e) {
           console.error('Template laden fehlgeschlagen:', e);
@@ -46,7 +52,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
       setTemplateCodes(codes);
     };
-    if (templates.length > 0) {
+    if (templateNames.length > 0) {
       loadTemplateCodes();
     }
   }, [templates]);
@@ -318,10 +324,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           className="input-field"
         >
           <option value="">-- Kein Template (nur Blöcke) --</option>
-          {templates.map(t => (
-            <option key={t} value={t}>{t}</option>
-          ))}
+            {siteTemplateNames.map(tn => (
+              <option key={tn} value={tn}>{tn}</option>
+            ))}
         </select>
+        {template ? (
+          <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {siteTemplateNames.includes(template) ? <Layout size={14} /> : <Grid size={14} />}
+            <small style={{ color: 'var(--text-secondary)' }}>{siteTemplateNames.includes(template) ? 'Site' : 'Block'}</small>
+          </span>
+        ) : null}
         <small className="url-hint">
           Wähle ein Template für das Gesamtlayout der Seite. Blöcke werden an {'{{blocks}}'} eingefügt.
         </small>
@@ -510,15 +522,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               {/* Linke Spalte: Eingabefelder */}
               <div>
                 <div className="template-select-group">
-                  <label className="preview-label">Block-Template</label>
+                  <label className="preview-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Grid size={14} />
+                    Block-Template
+                  </label>
                   <select 
                     value={block.template || ''} 
                     onChange={e => handleUpdateBlockTemplate(idx, e.target.value)}
                     className="input-field-small"
                   >
                     <option value="">-- Kein Template --</option>
-                    {templates.map(t => (
-                      <option key={t} value={t}>{t}</option>
+                    {blockTemplateNames.map(tn => (
+                      <option key={tn} value={tn}>{tn}</option>
                     ))}
                   </select>
                 </div>

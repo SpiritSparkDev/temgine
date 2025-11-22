@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, Layout, Download, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
 import { createButtonHandlers, insertText } from '../lib/insertHelper'
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -11,6 +11,7 @@ export default function TemplatesViewModern({ showToast }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
+  const [templateType, setTemplateType] = useState('SITE');
   const [snippets, setSnippets] = useState([]);
   const [navigations, setNavigations] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -25,7 +26,13 @@ export default function TemplatesViewModern({ showToast }) {
   function loadTemplates() {
     fetch('/api/templates')
       .then(r => r.json())
-      .then(data => setTemplates(data || []))
+      .then(data => {
+        let list = Array.isArray(data) ? data : [];
+        if (list.length > 0 && typeof list[0] === 'string') {
+          list = list.map(n => ({ name: n, type: 'SITE' }));
+        }
+        setTemplates(list);
+      })
       .catch(() => setTemplates([]));
   }
 
@@ -57,6 +64,7 @@ export default function TemplatesViewModern({ showToast }) {
         setSelectedTemplate(index);
         setTemplateName(data.name);
         setTemplateCode(data.code);
+        setTemplateType(data.type || 'SITE');
         setIsEditing(true);
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
@@ -71,7 +79,7 @@ export default function TemplatesViewModern({ showToast }) {
     fetch('/api/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: templateName, code: templateCode })
+      body: JSON.stringify({ name: templateName, code: templateCode, type: templateType })
     })
       .then(r => r.json())
       .then(() => {
@@ -118,25 +126,28 @@ export default function TemplatesViewModern({ showToast }) {
           {templates.length === 0 ? (
             <div className="empty-list-state">Keine Templates vorhanden</div>
           ) : (
-            templates.map((name, index) => (
+            templates.map((t, index) => (
               <div 
-                key={name} 
+                key={t.name} 
                 className={`editor-list-item ${selectedTemplate === index ? 'active' : ''}`}
               >
-                <div className="editor-item-info" onClick={() => handleEdit(name, index)}>
-                  <div className="editor-item-label">{name}</div>
+                <div className="editor-item-info" onClick={() => handleEdit(t.name, index)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {t.type === 'BLOCK' ? <Grid size={14} /> : <Layout size={14} />}
+                    <div className="editor-item-label">{t.name}</div>
+                  </div>
                 </div>
                 <div className="editor-item-actions">
                   <button 
                     className="icon-btn-small" 
-                    onClick={(e) => { e.stopPropagation(); handleEdit(name, index); }}
+                    onClick={(e) => { e.stopPropagation(); handleEdit(t.name, index); }}
                     title="Bearbeiten"
                   >
                     <Edit2 size={14} />
                   </button>
                   <button 
                     className="icon-btn-small delete" 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(name, index); }}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(t.name, index); }}
                     title="Löschen"
                   >
                     <Trash2 size={14} />
@@ -159,6 +170,15 @@ export default function TemplatesViewModern({ showToast }) {
                 value={templateName} 
                 onChange={e => setTemplateName(e.target.value)}
               />
+              <select
+                value={templateType}
+                onChange={e => setTemplateType(e.target.value)}
+                style={{ marginLeft: 8, padding: '6px 8px', borderRadius: 4 }}
+                title="Template Type"
+              >
+                <option value="SITE">Site Template</option>
+                <option value="BLOCK">Block Template</option>
+              </select>
               <div className="editor-toolbar-actions">
                 <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
                 <button className="btn-primary" onClick={handleSave}>Speichern</button>
@@ -200,14 +220,14 @@ export default function TemplatesViewModern({ showToast }) {
                   </button>
                 ))}
                 {templates
-                  .filter(tmpl => tmpl !== templateName) // Verhindere Selbstreferenz
-                  .map(tmpl => (
+                  .filter(t => t.name !== templateName) // Verhindere Selbstreferenz
+                  .map(t => (
                     <button 
-                      key={tmpl} 
+                      key={t.name} 
                       className="template-snippet-btn template-snippet"
-                      {...createButtonHandlers(`{{template:${tmpl}}}`, () => setTemplateCode(c => c + `{{template:${tmpl}}}`))}
+                      {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
                     >
-                      🧩 {tmpl}
+                      🧩 {t.name}
                     </button>
                   ))}
               </div>

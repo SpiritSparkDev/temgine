@@ -7,22 +7,25 @@ export default async function handler(req, res) {
       if (name) {
         const t = await prisma.template.findUnique({ where: { name: String(name) } })
         if (!t) return res.status(404).json({ error: 'Template nicht gefunden' })
-        return res.status(200).json({ name: t.name, code: t.code })
+        return res.status(200).json({ name: t.name, code: t.code, type: t.type })
       }
 
-      // List template names. If you need ordering, you can implement an Order model later.
-      const templates = await prisma.template.findMany({ orderBy: { createdAt: 'asc' } })
-      const names = templates.map(t => t.name)
-      return res.status(200).json(names)
+      // List template names (keeps compatibility) — return array of names
+        // List templates with type information
+        const templates = await prisma.template.findMany({ orderBy: { createdAt: 'asc' } })
+        const list = templates.map(t => ({ name: t.name, type: t.type }))
+        return res.status(200).json(list)
     }
 
     if (req.method === 'POST') {
-      const { name, code } = req.body || {}
+      const { name, code, type } = req.body || {}
       if (!name || !code) return res.status(400).json({ error: 'Name und Code erforderlich' })
+      // normalize type
+      const ttype = (type && String(type).toUpperCase()) === 'BLOCK' ? 'BLOCK' : 'SITE'
       const up = await prisma.template.upsert({
         where: { name: String(name) },
-        create: { name: String(name), code: String(code) },
-        update: { code: String(code) }
+        create: { name: String(name), code: String(code), type: ttype },
+        update: { code: String(code), type: ttype }
       })
       return res.status(200).json({ ok: true, id: up.id })
     }
