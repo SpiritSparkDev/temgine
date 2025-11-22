@@ -48,22 +48,8 @@ export default async function handler(req, res) {
 
         const providedSlugs = collectSlugs(body)
 
-        // Flatten provided tree so we upsert every node (top-level and children)
-        const flattenNodes = (nodes) => {
-          const out = []
-          const walk = (arr) => {
-            for (const n of arr || []) {
-              out.push(n)
-              if (n.children && Array.isArray(n.children)) walk(n.children)
-            }
-          }
-          walk(nodes)
-          return out
-        }
-
-        const allNodes = flattenNodes(body)
-
-        for (const p of allNodes) {
+        // Only upsert top-level nodes; children are stored in the parent's `children` JSON
+        for (const p of body) {
           if (!p || !p.slug) continue
           const up = await prisma.page.upsert({
             where: { slug: String(p.slug) },
