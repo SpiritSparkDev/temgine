@@ -1,7 +1,7 @@
-<nav class="main-nav">
+<nav class="anchor-nav">
   <ul>
-    {{#children}}
-      <li><a href="/{{children}}">{{title}}</a></li>
-    {{/children}}
+      {{#anchors}}
+        <li><a href="/{{slug}}#{{anchorId}}">{{title}}</a></li>
+      {{/anchors}}
   </ul>
 </nav>

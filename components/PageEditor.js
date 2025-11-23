@@ -557,6 +557,45 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <div>
                 <div>
 
+                  {/* Anchor ID field for anchor-navigation: optional per-block */}
+                  <div style={{ marginBottom: 8 }}>
+                    <label className="field-label-xs">Anchor ID (optional)</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        placeholder="z. B. section-intro"
+                        value={block.props && block.props.anchorId ? block.props.anchorId : ''}
+                        onChange={e => handleUpdateBlock(idx, { anchorId: e.target.value })}
+                        className="input-field-small"
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          // generate from headingText, title or first hN
+                          let gen = '';
+                          if (block.props && block.props.headingText) gen = block.props.headingText;
+                          else if (block.props && block.props.title) gen = block.props.title;
+                          else {
+                            for (let i = 1; i <= 5; i++) {
+                              if (block.props && block.props[`h${i}`]) { gen = block.props[`h${i}`]; break; }
+                            }
+                          }
+                          if (gen) {
+                            // simple slugify: lower, replace non-alnum with '-'
+                            const id = String(gen).toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '')
+                            handleUpdateBlock(idx, { anchorId: id });
+                          } else {
+                            alert('Kein geeigneter Text zum Generieren gefunden (heading/title)');
+                          }
+                        }}
+                      >
+                        Generieren
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Dynamische Felder basierend auf Template */}
                   {block.template && templateCodes[block.template] && (
                     <div>

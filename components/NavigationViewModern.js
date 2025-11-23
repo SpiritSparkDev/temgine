@@ -11,6 +11,7 @@ export default function NavigationViewModern({ showToast }) {
   const [navName, setNavName] = useState('');
   const [navCode, setNavCode] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [pageAnchors, setPageAnchors] = useState([]);
   // editor registers centrally via registerEditorApi
   
 
@@ -43,6 +44,58 @@ export default function NavigationViewModern({ showToast }) {
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
   }
+
+  // Load pages and compute anchors for preview/insertion
+  useEffect(() => {
+    async function loadPagesAnchors() {
+      try {
+        const res = await fetch(`/api/pages?includeDrafts=true&_t=${Date.now()}`);
+        if (!res.ok) return setPageAnchors([]);
+        const pages = await res.json();
+        if (!Array.isArray(pages)) return setPageAnchors([]);
+
+        const slugify = (s) => {
+          if (!s) return '';
+          return String(s).toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '');
+        }
+
+        const anchorsForPages = pages.map(p => {
+          const anchors = [];
+          const seen = new Set();
+          const blkList = Array.isArray(p.blocks) ? p.blocks : [];
+          for (const b of blkList) {
+            if (!b || !b.props) continue;
+            const candidate = b.props.anchorId || b.props.id || null;
+            let label = null;
+            if (b.props.headingText) label = String(b.props.headingText).trim();
+            else if (b.props.title) label = String(b.props.title).trim();
+            else {
+              for (let i = 1; i <= 5; i++) {
+                if (b.props[`h${i}`]) { label = String(b.props[`h${i}`]).trim(); break; }
+              }
+            }
+            if (!label && b.props.content) label = String(b.props.content).replace(/<[^>]*>/g, '').trim();
+            if (!label && b.props.text) label = String(b.props.text).replace(/<[^>]*>/g, '').trim();
+            if (!candidate && !label) continue;
+            let id = candidate ? String(candidate).trim() : slugify(label || '');
+            id = slugify(id);
+            if (!id) continue;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            anchors.push({ id, title: label || '' });
+          }
+          return { slug: String(p.slug || ''), title: String(p.title || ''), anchors };
+        }).filter(pg => (pg.anchors && pg.anchors.length > 0));
+
+        setPageAnchors(anchorsForPages);
+      } catch (e) {
+        console.error('loadPagesAnchors failed', e);
+        setPageAnchors([]);
+      }
+    }
+
+    loadPagesAnchors();
+  }, []);
 
   function handleSave() {
     if (!navName.trim()) {
@@ -165,7 +218,36 @@ export default function NavigationViewModern({ showToast }) {
                 <button className="template-snippet-btn" {...createButtonHandlers('{{#pages}}\n  \n{{/pages}}', () => setNavCode(c => c + '{{#pages}}\n  \n{{/pages}}'))}>{'{{#pages}}'}</button>
                 <button className="template-snippet-btn" {...createButtonHandlers('{{slug}}', () => setNavCode(c => c + '{{slug}}'))}>{'{{slug}}'}</button>
                 <button className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => setNavCode(c => c + '{{title}}'))}>{'{{title}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('{{#anchors}}\n  \n{{/anchors}}', () => setNavCode(c => c + '{{#anchors}}\n  \n{{/anchors}}'))}>{'{{#anchors}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('/{{slug}}#{{id}}', () => setNavCode(c => c + '/{{slug}}#{{id}}'))}>{'/{{slug}}#{{id}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('#{{id}}', () => setNavCode(c => c + '#{{id}}'))}>{'#{{id}}'}</button>
+                <button className="template-snippet-btn" {...createButtonHandlers('<a href="/{{slug}}#{{id}}">{{title}}</a>', () => setNavCode(c => c + '<a href="/{{slug}}#{{id}}">{{title}}</a>'))}>{'<a href="/{{slug}}#{{id}}">title</a>'}</button>
                 <button className="template-snippet-btn" {...createButtonHandlers('{{#children}}\n  \n{{/children}}', () => setNavCode(c => c + '{{#children}}\n  \n{{/children}}'))}>{'{{#children}}'}</button>
+              </div>
+              {/* Anchor preview + quick-insert */}
+              <div style={{ marginTop: 12 }}>
+                <h4>Gefundene Anchors</h4>
+                {pageAnchors.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)' }}>Keine Anchors gefunden</div>
+                ) : (
+                  pageAnchors.slice(0, 20).map(pg => (
+                    <div key={pg.slug} style={{ marginBottom: 8, borderBottom: '1px dashed #eee', paddingBottom: 6 }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: '600' }}>{pg.title || pg.slug}</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                        {pg.anchors.map(a => (
+                          <button
+                            key={a.id}
+                            className="template-snippet-btn"
+                            onClick={() => insertSnippet(`/${pg.slug}#${a.id}`)}
+                            title={`Insert /${pg.slug}#${a.id}`}
+                          >
+                            /{pg.slug}#{a.id}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
               </div>
             </div>
