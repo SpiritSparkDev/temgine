@@ -229,7 +229,112 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }
 
   function handleDeleteBlock(index) {
+    // support both numeric index (top-level) and path strings like '2.1.0'
+    if (typeof index === 'string') {
+      const parts = index.split('.').map(p => parseInt(p, 10));
+      const copy = JSON.parse(JSON.stringify(blocks || []));
+      if (parts.length === 1) {
+        copy.splice(parts[0], 1);
+        setBlocks(copy);
+        return;
+      }
+      let cur = copy;
+      for (let i = 0; i < parts.length - 1; i++) {
+        cur = cur[parts[i]].children = cur[parts[i]].children || [];
+      }
+      cur.splice(parts[parts.length - 1], 1);
+      setBlocks(copy);
+      return;
+    }
     setBlocks(blocks.filter((_, i) => i !== index));
+  }
+
+  // Nested block helpers: operate on nested `blocks` structure by path (e.g. '0', '1.2')
+  const addNestedBlock = (path, type = 'content', asChild = false) => {
+    const newBlock = {
+      type,
+      template: '',
+      props: type === 'text' ? { title: '', content: '' } : {}
+    };
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    if (!path) {
+      copy.push(newBlock);
+      setBlocks(copy);
+      return;
+    }
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        if (asChild) {
+          cur[idx].children = cur[idx].children || [];
+          cur[idx].children.push(newBlock);
+        } else {
+          // insert sibling after
+          cur.splice(idx + 1, 0, newBlock);
+        }
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
+  }
+
+  const updateNestedBlock = (path, updates) => {
+    // Avoid updating state if props would be unchanged (prevents render loops)
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        const existing = cur[idx].props || {};
+        const merged = { ...(existing || {}), ...updates };
+        // shallow compare keys in updates — if nothing would change, skip setBlocks
+        let changed = false;
+        for (const k of Object.keys(updates || {})) {
+          const a = existing ? existing[k] : undefined;
+          const b = merged[k];
+          if (a === undefined && b !== undefined) { changed = true; break }
+          // simple equality check for primitive/string/number; for objects/arrays do JSON compare
+          if (typeof a === 'object' || typeof b === 'object') {
+            try {
+              if (JSON.stringify(a) !== JSON.stringify(b)) { changed = true; break }
+            } catch (e) { changed = true; break }
+          } else if (a !== b) { changed = true; break }
+        }
+        if (!changed) return;
+        cur[idx].props = merged;
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
+  }
+
+  // Update template for a nested block (set template and merge default props)
+  const updateNestedBlockTemplate = (path, templateName) => {
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        cur[idx].template = templateName || '';
+        if (templateName && templateCodes && templateCodes[templateName]) {
+          try {
+            const defaultProps = generateDefaultProps(templateCodes[templateName]);
+            cur[idx].props = { ...defaultProps, ...(cur[idx].props || {}) };
+          } catch (e) {
+            // ignore default prop generation errors
+          }
+        }
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
   }
 
   function handleSave(options = {}) {
@@ -271,6 +376,204 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   function handleSaveAndView() {
     handleSave({ view: true });
+  }
+
+  // Render helpers for nested block editor
+  const renderBlockEditor = (block, path, depth = 0) => {
+    const isTop = depth === 0;
+    const idx = path;
+    const previewHtml = (block.template && templateCodes[block.template]) ? (() => { try { return renderTemplate(templateCodes[block.template], block.props) } catch (e) { return '<div style="color: #d32f2f; padding: 10px;">Vorschau-Fehler</div>' } })() : '';
+
+    const containerProps = isTop ? {
+      draggable: true,
+      onDragStart: (e) => { e.dataTransfer.setData('blockPath', String(path)); e.currentTarget.style.opacity = '0.4'; },
+      onDragEnd: (e) => { e.currentTarget.style.opacity = '1'; },
+      onDragOver: (e) => e.preventDefault(),
+      onDragEnter: (e) => { e.currentTarget.style.borderColor = '#667eea'; },
+      onDragLeave: (e) => { e.currentTarget.style.borderColor = 'transparent'; },
+      onDrop: (e) => {
+        e.preventDefault();
+        e.currentTarget.style.borderColor = 'transparent';
+        const fromPath = e.dataTransfer.getData('blockPath');
+        const toPath = path;
+        if (!fromPath) return;
+        // Only support top-level move via drag-drop (both should be single-index paths)
+        if (fromPath.indexOf('.') === -1 && String(toPath).indexOf('.') === -1) {
+          const fromIndex = parseInt(fromPath, 10);
+          const toIndex = parseInt(toPath, 10);
+          if (!isNaN(fromIndex) && !isNaN(toIndex) && fromIndex !== toIndex) {
+            const newBlocks = [...blocks];
+            const [moved] = newBlocks.splice(fromIndex, 1);
+            newBlocks.splice(toIndex, 0, moved);
+            setBlocks(newBlocks);
+          }
+        }
+      }
+    } : {};
+
+    return (
+      <div key={path} className="block-item" style={{ cursor: isTop ? 'move' : 'default', border: '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16 }} {...containerProps}>
+        <div className="block-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isTop ? <GripVertical size={16} style={{ color: '#999' }} /> : null}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Grid size={14} />
+              <select
+                value={block.template || ''}
+                onChange={e => updateNestedBlockTemplate(path, e.target.value)}
+                className="input-field-small"
+                style={{ fontSize: '0.95rem' }}
+              >
+                <option value="">-- Kein Template --</option>
+                {blockTemplateNames.map(tn => (
+                  <option key={tn} value={tn}>{tn}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn-secondary" onClick={() => addNestedBlock(path, 'content', true)}>Add Child</button>
+            <button className="btn-secondary" onClick={() => addNestedBlock(path, 'content', false)}>Add Sibling</button>
+            <button className="icon-btn delete" onClick={() => handleDeleteBlock(path)}><X size={14} /></button>
+          </div>
+        </div>
+
+        <div style={{ padding: '8px 0' }}>
+          {/* Anchor ID field */}
+          <div style={{ marginBottom: 8 }}>
+            <label className="field-label-xs">Anchor ID (optional)</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="text" placeholder="z. B. section-intro" value={block.props && block.props.anchorId ? block.props.anchorId : ''} onChange={e => updateNestedBlock(path, { anchorId: e.target.value })} className="input-field-small" style={{ flex: 1 }} />
+              <button type="button" className="btn-secondary" onClick={() => {
+                let gen = '';
+                if (block.props && block.props.headingText) gen = block.props.headingText;
+                else if (block.props && block.props.title) gen = block.props.title;
+                else {
+                  for (let i = 1; i <= 5; i++) {
+                    if (block.props && block.props[`h${i}`]) { gen = block.props[`h${i}`]; break; }
+                  }
+                }
+                if (gen) {
+                  const id = String(gen).toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '')
+                  updateNestedBlock(path, { anchorId: id });
+                } else {
+                  alert('Kein geeigneter Text zum Generieren gefunden (heading/title)');
+                }
+              }}>Generieren</button>
+            </div>
+          </div>
+
+          {/* Template specific fields (reuse existing logic) */}
+          {block.template && templateCodes[block.template] && (
+            <div>
+              {extractTemplateVariables(templateCodes[block.template]).map(varName => {
+                const inputType = guessInputType(varName);
+                const value = block.props[varName] || '';
+                if (isUrlVariable(varName)) {
+                  return (
+                    <div key={varName} className="field-item">
+                      <label className="field-label-xs">{varName}</label>
+                      <div style={{ display: 'flex', gap: '5px' }}>
+                        <input type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1 }} />
+                        <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-secondary" style={{ padding: '0.5rem 1rem', whiteSpace: 'nowrap' }}>📁 Datei wählen</button>
+                      </div>
+                    </div>
+                  )
+                }
+                  // Special handling for heading variables: provide level select (h1-h5) and text input
+                  if (varName.toLowerCase() === 'heading' || varName.toLowerCase().endsWith('heading')) {
+                    // Prefer explicit stored text (e.g. headingText). If missing, strip tags from any existing HTML value.
+                    const textValue = block.props[`${varName}Text`] || (block.props[varName] ? stripTags(block.props[varName]) : '');
+                    const levelValue = block.props[`${varName}Level`] || 'h2';
+
+                    const applyHeading = (newText, newLevel) => {
+                      const lv = newLevel || levelValue;
+                      const rawText = newText !== undefined ? newText : textValue;
+                      const tx = stripTags(rawText);
+                      const updatedProps = { ...(block.props || {}) };
+                      updatedProps[`${varName}Text`] = tx;
+                      updatedProps[`${varName}Level`] = lv;
+                      updatedProps[varName] = `<${lv}>${tx}</${lv}>`;
+                      updateNestedBlock(path, updatedProps);
+                    };
+
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{varName} (Heading)</label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <select value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: 100 }}>
+                            <option value="h1">H1</option>
+                            <option value="h2">H2</option>
+                            <option value="h3">H3</option>
+                            <option value="h4">H4</option>
+                            <option value="h5">H5</option>
+                          </select>
+                          <input type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ flex: 1 }} />
+                        </div>
+                      </div>
+                    )
+                  }
+                if (inputType === 'textarea') {
+                  return (
+                    <div key={varName} className="field-item">
+                      <label className="field-label-xs">{varName}</label>
+                      <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
+                        <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
+                      </div>
+                    </div>
+                  )
+                }
+                if (inputType === 'array') {
+                  return (
+                    <div key={varName} className="field-item">
+                      <label className="field-label-xs">{varName} (Array - ein Wert pro Zeile)</label>
+                      <textarea placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={3} className="textarea-field" />
+                    </div>
+                  )
+                }
+                return (
+                  <div key={varName} className="field-item">
+                    <label className="field-label-xs">{varName}</label>
+                    <input type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" />
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Fallback simple text/gallery editors when no template */}
+          {!block.template && block.type === 'text' && (
+            <>
+              <input type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8 }} />
+              <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
+                <ReactQuill value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} theme="snow" />
+              </div>
+            </>
+          )}
+
+          {!block.template && block.type === 'gallery' && (
+            <div>
+              <button className="primary" onClick={() => {
+                const url = prompt('Bild-URL:'); if (url) { const images = [...(block.props.images || []), { src: url, alt: 'Bild' }]; updateNestedBlock(path, { images }); }
+              }} style={{ marginBottom: 10 }}>+ Bild hinzufügen</button>
+              <div className="gallery-images">{(block.props.images || []).map((img, imgIdx) => (
+                <div key={imgIdx} className="gallery-image-wrapper">
+                  <img src={img.src} alt={img.alt} className="gallery-image" />
+                  <button onClick={() => { const images = block.props.images.filter((_, i) => i !== imgIdx); updateNestedBlock(path, { images }); }} className="gallery-delete-btn">✖</button>
+                </div>
+              ))}</div>
+            </div>
+          )}
+
+          {/* Render children editors recursively */}
+          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderBlocksList = () => {
+    return (blocks || []).map((b, i) => renderBlockEditor(b, String(i), 0))
   }
 
   return (
@@ -483,308 +786,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       <div className="blocks-container">
         <h3 className="blocks-title">Blöcke (Drag & Drop zum Sortieren)</h3>
-
-
-        {blocks.map((block, idx) => {
-          // Rendere Preview
-          let previewHtml = '';
-          if (block.template && templateCodes[block.template]) {
-            try {
-              previewHtml = renderTemplate(templateCodes[block.template], block.props);
-            } catch (e) {
-              previewHtml = '<div style="color: #d32f2f; padding: 10px;">Vorschau-Fehler</div>';
-            }
-          }
-
-          return (
-            <div
-              key={idx}
-              className="block-item"
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('blockIndex', idx);
-                e.currentTarget.style.opacity = '0.4';
-              }}
-              onDragEnd={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}
-              onDragOver={(e) => e.preventDefault()}
-              onDragEnter={(e) => {
-                e.currentTarget.style.borderColor = '#667eea';
-              }}
-              onDragLeave={(e) => {
-                e.currentTarget.style.borderColor = 'transparent';
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.currentTarget.style.borderColor = 'transparent';
-                const fromIndex = parseInt(e.dataTransfer.getData('blockIndex'));
-                const toIndex = idx;
-                if (fromIndex !== toIndex) {
-                  const newBlocks = [...blocks];
-                  const [moved] = newBlocks.splice(fromIndex, 1);
-                  newBlocks.splice(toIndex, 0, moved);
-                  setBlocks(newBlocks);
-                }
-              }}
-              style={{ cursor: 'move', border: '2px solid transparent', transition: 'all 0.2s' }}
-            >
-              <div className="block-header" >
-                <div className="grip-template-select" style={{display: 'flex'}}>
-                  <GripVertical size={16} style={{ color: '#999', marginRight: '0.5rem'}} />
-                  <div className="template-select-group">
-                    <label className="preview-label" style={{ display: 'flex', alignItems: 'center', gap: 8, width: '25ch' }}>
-                      <Grid size={14} />
-                      Block-Template
-                    </label>
-                    <select
-                      value={block.template || ''}
-                      onChange={e => handleUpdateBlockTemplate(idx, e.target.value)}
-                      className="input-field-small"
-                    >
-                      <option value="">-- Kein Template --</option>
-                      {blockTemplateNames.map(tn => (
-                        <option key={tn} value={tn}>{tn}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <button className="icon-btn delete" onClick={() => handleDeleteBlock(idx)}>
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div>
-                <div>
-
-                  {/* Anchor ID field for anchor-navigation: optional per-block */}
-                  <div style={{ marginBottom: 8 }}>
-                    <label className="field-label-xs">Anchor ID (optional)</label>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <input
-                        type="text"
-                        placeholder="z. B. section-intro"
-                        value={block.props && block.props.anchorId ? block.props.anchorId : ''}
-                        onChange={e => handleUpdateBlock(idx, { anchorId: e.target.value })}
-                        className="input-field-small"
-                        style={{ flex: 1 }}
-                      />
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => {
-                          // generate from headingText, title or first hN
-                          let gen = '';
-                          if (block.props && block.props.headingText) gen = block.props.headingText;
-                          else if (block.props && block.props.title) gen = block.props.title;
-                          else {
-                            for (let i = 1; i <= 5; i++) {
-                              if (block.props && block.props[`h${i}`]) { gen = block.props[`h${i}`]; break; }
-                            }
-                          }
-                          if (gen) {
-                            // simple slugify: lower, replace non-alnum with '-'
-                            const id = String(gen).toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '')
-                            handleUpdateBlock(idx, { anchorId: id });
-                          } else {
-                            alert('Kein geeigneter Text zum Generieren gefunden (heading/title)');
-                          }
-                        }}
-                      >
-                        Generieren
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Dynamische Felder basierend auf Template */}
-                  {block.template && templateCodes[block.template] && (
-                    <div>
-                      {extractTemplateVariables(templateCodes[block.template]).map(varName => {
-                        const inputType = guessInputType(varName);
-                        const value = block.props[varName] || '';
-
-                        // URL-Felder: Zeige Dateiauswahl
-                        if (isUrlVariable(varName)) {
-                          return (
-                            <div key={varName} className="field-item">
-                              <label className="field-label-xs">{varName}</label>
-                              <div style={{ display: 'flex', gap: '5px' }}>
-                                <input
-                                  type="text"
-                                  placeholder="URL oder Dateipfad"
-                                  value={value}
-                                  onChange={e => handleUpdateBlock(idx, { [varName]: e.target.value })}
-                                  className="input-field-small"
-                                  style={{ flex: 1 }}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => openFileModal((url) => handleUpdateBlock(idx, { [varName]: url }))}
-                                  className="btn-secondary"
-                                  style={{ padding: '0.5rem 1rem', whiteSpace: 'nowrap' }}
-                                >
-                                  📁 Datei wählen
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        }
-                        // Special handling for heading variables: provide level select (h1-h5) and text input
-                        if (varName.toLowerCase() === 'heading' || varName.toLowerCase().endsWith('heading')) {
-                          // Prefer explicit stored text (e.g. headingText). If missing, strip tags from any existing HTML value.
-                          const textValue = block.props[`${varName}Text`] || (block.props[varName] ? stripTags(block.props[varName]) : '');
-                          const levelValue = block.props[`${varName}Level`] || 'h2';
-
-                          const applyHeading = (newText, newLevel) => {
-                            const updatedProps = { ...block.props };
-                            const lv = newLevel || levelValue;
-                            // If newText provided, use it; otherwise use existing stored text (cleaned)
-                            const rawText = newText !== undefined ? newText : textValue;
-                            const tx = stripTags(rawText);
-                            updatedProps[`${varName}Text`] = tx;
-                            updatedProps[`${varName}Level`] = lv;
-                            // store final HTML in the variable name (constructed from clean text) so templates using {{heading}} receive ready HTML
-                            updatedProps[varName] = `<${lv}>${tx}</${lv}>`;
-                            handleUpdateBlock(idx, updatedProps);
-                          };
-
-                          return (
-                            <div key={varName} className="field-item">
-                              <label className="field-label-xs">{varName} (Heading)</label>
-                              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                <select
-                                  value={levelValue}
-                                  onChange={e => applyHeading(undefined, e.target.value)}
-                                  className="input-field-small"
-                                  style={{ width: 100 }}
-                                >
-                                  <option value="h1">H1</option>
-                                  <option value="h2">H2</option>
-                                  <option value="h3">H3</option>
-                                  <option value="h4">H4</option>
-                                  <option value="h5">H5</option>
-                                </select>
-                                <input
-                                  type="text"
-                                  placeholder="Heading text"
-                                  value={textValue}
-                                  onChange={e => applyHeading(e.target.value, undefined)}
-                                  className="input-field-small"
-                                  style={{ flex: 1 }}
-                                />
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (inputType === 'textarea') {
-                          return (
-                            <div key={varName} className="field-item">
-                              <label className="field-label-xs">{varName}</label>
-                              <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
-                                <ReactQuill
-                                  value={value || ''}
-                                  onChange={(val) => handleUpdateBlock(idx, { [varName]: val })}
-                                  theme="snow"
-                                />
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (inputType === 'array') {
-                          return (
-                            <div key={varName} className="field-item">
-                              <label className="field-label-xs">{varName} (Array - ein Wert pro Zeile)</label>
-                              <textarea
-                                placeholder="Ein Wert pro Zeile"
-                                value={Array.isArray(value) ? value.join('\n') : ''}
-                                onChange={e => handleUpdateBlock(idx, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })}
-                                rows={3}
-                                className="textarea-field"
-                              />
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div key={varName} className="field-item">
-                            <label className="field-label-xs">{varName}</label>
-                            <input
-                              type={inputType === 'number' ? 'number' : 'text'}
-                              placeholder={varName}
-                              value={value}
-                              onChange={e => handleUpdateBlock(idx, { [varName]: e.target.value })}
-                              className="input-field-small"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Fallback: Standard-Felder wenn kein Template */}
-                  {!block.template && block.type === 'text' && (
-                    <>
-                      <input
-                        type="text"
-                        placeholder="Titel"
-                        value={block.props.title || ''}
-                        onChange={e => handleUpdateBlock(idx, { title: e.target.value })}
-                        className="input-field-small"
-                        style={{ marginBottom: 8 }}
-                      />
-                      <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
-                        <ReactQuill
-                          value={block.props.content || ''}
-                          onChange={(val) => handleUpdateBlock(idx, { content: val })}
-                          theme="snow"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {!block.template && block.type === 'gallery' && (
-                    <div>
-                      <button
-                        className="primary"
-                        onClick={() => {
-                          const url = prompt('Bild-URL:');
-                          if (url) {
-                            const images = [...(block.props.images || []), { src: url, alt: 'Bild' }];
-                            handleUpdateBlock(idx, { images });
-                          }
-                        }}
-                        style={{ marginBottom: 10 }}
-                      >
-                        + Bild hinzufügen
-                      </button>
-                      <div className="gallery-images">
-                        {(block.props.images || []).map((img, imgIdx) => (
-                          <div key={imgIdx} className="gallery-image-wrapper">
-                            <img src={img.src} alt={img.alt} className="gallery-image" />
-                            <button
-                              onClick={() => {
-                                const images = block.props.images.filter((_, i) => i !== imgIdx);
-                                handleUpdateBlock(idx, { images });
-                              }}
-                              className="gallery-delete-btn"
-                            >
-                              ✖
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Rechte Spalte: Live-Vorschau */}
-
-              </div>
-            </div>
-          );
-        })}
+        {renderBlocksList()}
       </div>
 
       {/* Fixierte untere Aktionsleiste */}

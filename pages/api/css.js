@@ -19,9 +19,18 @@ if (!fs.existsSync(CSS_DIR)) {
   fs.mkdirSync(CSS_DIR, { recursive: true });
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   // If multipart/form-data, use formidable to handle file upload
   const contentType = (req.headers['content-type'] || '').toLowerCase();
+  // Helper to read raw request body when Next's bodyParser is disabled
+  const readRawBody = () => new Promise((resolve, reject) => {
+    try {
+      let data = ''
+      req.on('data', chunk => data += chunk)
+      req.on('end', () => resolve(data))
+      req.on('error', err => reject(err))
+    } catch (e) { reject(e) }
+  })
   if (req.method === 'POST' && contentType.includes('multipart/form-data')) {
     const form = formidable({ multiples: false });
     form.parse(req, (err, fields, files) => {
@@ -49,6 +58,20 @@ export default function handler(req, res) {
       }
     });
     return;
+  }
+  // If the request has a JSON body (editor save/upload sends JSON) we need to
+  // parse it manually because `bodyParser` is disabled for formidable.
+  let parsedBody = null
+  if (req.method === 'POST' || req.method === 'DELETE') {
+    try {
+      if (contentType.includes('application/json')) {
+        const raw = await readRawBody()
+        parsedBody = raw ? JSON.parse(raw) : {}
+      }
+    } catch (e) {
+      // ignore parsing errors here; handlers below will validate fields
+      parsedBody = null
+    }
   }
   if (req.method === 'GET') {
     // Liste aller CSS-Dateien oder Inhalt einer spezifischen Datei
@@ -106,9 +129,10 @@ export default function handler(req, res) {
       }
     }
   } else if (req.method === 'POST') {
-    // CSS-Datei speichern
+    // CSS-Datei speichern (or upload via JSON payload)
     try {
-      const { filename, content } = req.body;
+      const payload = parsedBody || req.body || {}
+      const { filename, content } = payload;
 
       if (!filename || !filename.endsWith('.css')) {
         return res.status(400).json({ error: 'Dateiname muss mit .css enden' });
@@ -127,7 +151,7 @@ export default function handler(req, res) {
   } else if (req.method === 'DELETE') {
     // CSS-Datei löschen
     try {
-      const { filename } = req.body;
+      const { filename } = parsedBody || req.body || {};
 
       if (!filename) {
         return res.status(400).json({ error: 'Dateiname erforderlich' });
