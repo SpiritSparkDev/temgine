@@ -29,6 +29,34 @@ export default function CSSManagerViewModern({ showToast }) {
     setIsEditing(true);
   }
 
+  function handleUploadFile(ev) {
+    const f = ev.target.files && ev.target.files[0];
+    if (!f) return;
+    if (!f.name || !f.name.toLowerCase().endsWith('.css')) {
+      showToast('Bitte eine .css Datei auswählen', 'error');
+      return;
+    }
+
+    const fd = new FormData();
+    fd.append('file', f);
+
+    fetch('/api/css', {
+      method: 'POST',
+      body: fd
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) {
+          showToast('CSS-Datei hochgeladen', 'success');
+          loadCSSFiles();
+        } else {
+          showToast(data.error || 'Fehler beim Hochladen', 'error');
+        }
+      })
+      .catch(err => showToast('Fehler: ' + err.message, 'error'))
+      .finally(() => { ev.target.value = ''; });
+  }
+
   function handleEdit(file, index) {
     fetch(`/api/css?file=${encodeURIComponent(file)}`)
       .then(r => r.json())
@@ -109,9 +137,15 @@ export default function CSSManagerViewModern({ showToast }) {
       <div className="editor-sidebar">
         <div className="editor-header">
           <h2><FileCode size={18} /> CSS Manager</h2>
-          <button className="icon-btn" onClick={handleNew} title="Neue CSS-Datei">
-            <Plus size={18} />
-          </button>
+          <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+            <label className="icon-btn" title="CSS hochladen" style={{cursor: 'pointer'}}>
+              <input type="file" accept=".css" style={{display: 'none'}} onChange={handleUploadFile} />
+              <Plus size={18} />
+            </label>
+            <button className="icon-btn" onClick={handleNew} title="Neue CSS-Datei">
+              <FileCode size={16} />
+            </button>
+          </div>
         </div>
         
         <div className="editor-list">

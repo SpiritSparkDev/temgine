@@ -1,6 +1,16 @@
 import fs from 'fs';
 import path from 'path';
 
+// For multipart parsing
+import formidable from 'formidable';
+
+// Disable Next's default body parsing for this route so formidable can parse multipart
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 const CSS_DIR = path.join(process.cwd(), 'public', 'extern_css');
 const ORDER_FILE = path.join(CSS_DIR, '.order.json');
 
@@ -10,6 +20,36 @@ if (!fs.existsSync(CSS_DIR)) {
 }
 
 export default function handler(req, res) {
+  // If multipart/form-data, use formidable to handle file upload
+  const contentType = (req.headers['content-type'] || '').toLowerCase();
+  if (req.method === 'POST' && contentType.includes('multipart/form-data')) {
+    const form = formidable({ multiples: false });
+    form.parse(req, (err, fields, files) => {
+      if (err) {
+        return res.status(500).json({ error: 'Fehler beim Parsen der Datei' });
+      }
+      try {
+        const uploaded = files && files.file;
+        if (!uploaded) return res.status(400).json({ error: 'Keine Datei empfangen' });
+
+        // formidable may return a single file or an array
+        const fileObj = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+        const originalName = fileObj.originalFilename || fileObj.name || 'upload.css';
+        const safeName = originalName.endsWith('.css') ? originalName : originalName + '.css';
+        const destPath = path.join(CSS_DIR, safeName);
+        if (!destPath.startsWith(CSS_DIR)) return res.status(400).json({ error: 'Ungültiger Dateipfad' });
+
+        // Move or copy the uploaded file to CSS_DIR
+        const data = fs.readFileSync(fileObj.filepath || fileObj.path);
+        fs.writeFileSync(destPath, data);
+
+        return res.status(200).json({ success: true, file: safeName });
+      } catch (e) {
+        return res.status(500).json({ error: 'Fehler beim Speichern der hochgeladenen Datei' });
+      }
+    });
+    return;
+  }
   if (req.method === 'GET') {
     // Liste aller CSS-Dateien oder Inhalt einer spezifischen Datei
     const { file } = req.query;
