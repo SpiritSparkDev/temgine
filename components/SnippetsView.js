@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Code } from 'lucide-react';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
-import { createButtonHandlers } from '../lib/insertHelper'
+import { createButtonHandlers, insertText } from '../lib/insertHelper'
 
 export default function SnippetsView({ showToast }) {
   const [snippets, setSnippets] = useState([]);
@@ -84,6 +84,18 @@ export default function SnippetsView({ showToast }) {
 
   // Use centralized insert helper
   function fallbackAppend(text) { setEditContent(c => c + text) }
+
+  async function insertHeadingToken(token, level) {
+    const lvl = parseInt(level, 10)
+    if (!lvl || lvl < 1 || lvl > 6) return
+    const text = `<h${lvl}>${token}</h${lvl}>`
+    try {
+      // try to insert via editor API
+      await insertText(text, () => setEditContent(c => c + text))
+    } catch (e) {
+      setEditContent(c => c + text)
+    }
+  }
 
   function handleDelete(index) {
     // Bestätigung wird durch UI-Interaktion impliziert
@@ -207,8 +219,19 @@ export default function SnippetsView({ showToast }) {
 
               <div className="editor-snippets-panel">
                 <h4>Einfügehilfen</h4>
-                <div className="snippet-buttons">
-                  <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => fallbackAppend('{{title}}'))}>{'{{title}}'}</button>
+                <div className="snippet-buttons" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => fallbackAppend('{{title}}'))}>{'{{title}}'}</button>
+                    <select className="heading-select" defaultValue="" onChange={e => { if (e.target.value) { insertHeadingToken('{{title}}', e.target.value); e.target.value = '' } }} title="Als Heading einfügen">
+                      <option value="">H</option>
+                      <option value="1">H1</option>
+                      <option value="2">H2</option>
+                      <option value="3">H3</option>
+                      <option value="4">H4</option>
+                      <option value="5">H5</option>
+                      <option value="6">H6</option>
+                    </select>
+                  </div>
                   <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{text}}', () => fallbackAppend('{{text}}'))}>{'{{text}}'}</button>
                   <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{images.0}}', () => fallbackAppend('{{images.0}}'))}>{'{{images.0}}'}</button>
                   <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{author}}', () => fallbackAppend('{{author}}'))}>{'{{author}}'}</button>
