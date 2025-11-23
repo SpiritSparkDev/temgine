@@ -11,9 +11,12 @@ import '../styles/users.css'
 /* toolbar.css removed — floating toolbar removed; snippets live in TemplatesViewModern */
 import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 
 export default function App({ Component, pageProps: { session, ...pageProps } }) {
+  const router = useRouter();
+
   useEffect(() => {
     // Lade externe CSS-Dateien dynamisch in der richtigen Reihenfolge
     const loadExternalCSS = async () => {
@@ -38,8 +41,18 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       }
     };
 
-    loadExternalCSS();
-  }, []);
+    // Don't load editor-managed external CSS on admin or backend routes
+    const path = router && router.pathname ? router.pathname : '';
+    const isBackend = path.startsWith('/admin') || path.startsWith('/api') || path.startsWith('/invite') || path.startsWith('/_next') || path.startsWith('/auth');
+
+    // Allow per-page/component opt-out via `Component.noExternCss` or `pageProps.noExternCss`
+    const componentOptOut = !!(Component && Component.noExternCss);
+    const propsOptOut = !!(pageProps && pageProps.noExternCss);
+
+    if (!isBackend && !componentOptOut && !propsOptOut) {
+      loadExternalCSS();
+    }
+  }, [router && router.pathname, Component, pageProps]);
 
   return (
     <SessionProvider session={session}>
