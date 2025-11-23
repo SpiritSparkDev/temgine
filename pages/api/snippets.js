@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { sanitizeHtmlString } from '../../lib/htmlSanitize'
 
 export default async function handler(req, res) {
   try {
@@ -30,6 +31,8 @@ export default async function handler(req, res) {
           keys.push(key)
           // If item has type/handler, store a JSON-encoded value to preserve metadata
           let value = String(item.snippet || '')
+          // sanitize snippet HTML if present
+          try { value = sanitizeHtmlString(value) } catch (e) { console.warn('Failed to sanitize snippet', e) }
           if (item.type || item.handler) {
             value = JSON.stringify({ snippet: item.snippet || '', type: item.type || 'free', handler: item.handler || '' })
           }
@@ -52,6 +55,7 @@ export default async function handler(req, res) {
       if (!label) return res.status(400).json({ error: 'Label/Key erforderlich' })
       const key = String(label)
       let value = body.snippet || body.value || ''
+      try { value = sanitizeHtmlString(String(value)) } catch (e) { console.warn('Failed to sanitize snippet single', e) }
       if (body.type || body.handler) {
         value = JSON.stringify({ snippet: body.snippet || '', type: body.type || 'free', handler: body.handler || '' })
       }

@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
+import { sanitizeRecursive } from '../../lib/htmlSanitize'
 
 // API-Route für Seiten: Daten kommen jetzt ausschließlich aus der Datenbank
 export default async function handler(req, res) {
@@ -50,6 +51,18 @@ export default async function handler(req, res) {
 
         // Only upsert top-level nodes; children are stored in the parent's `children` JSON
         for (const p of body) {
+          // sanitize incoming page content (blocks.props, data)
+          try {
+            if (p && p.data) p.data = sanitizeRecursive(p.data)
+            if (p && p.blocks && Array.isArray(p.blocks)) {
+              p.blocks = p.blocks.map(b => {
+                if (!b || !b.props) return b
+                return { ...b, props: sanitizeRecursive(b.props) }
+              })
+            }
+          } catch (e) {
+            console.warn('Failed to sanitize incoming page payload', e)
+          }
           if (!p || !p.slug) continue
           const up = await prisma.page.upsert({
             where: { slug: String(p.slug) },
@@ -136,6 +149,18 @@ export default async function handler(req, res) {
 
       // Single page upsert
       const p = body || {}
+      // sanitize single payload
+      try {
+        if (p && p.data) p.data = sanitizeRecursive(p.data)
+        if (p && p.blocks && Array.isArray(p.blocks)) {
+          p.blocks = p.blocks.map(b => {
+            if (!b || !b.props) return b
+            return { ...b, props: sanitizeRecursive(b.props) }
+          })
+        }
+      } catch (e) {
+        console.warn('Failed to sanitize incoming single page payload', e)
+      }
       if (!p.slug) return res.status(400).json({ error: 'Slug erforderlich' })
       const up = await prisma.page.upsert({
         where: { slug: String(p.slug) },

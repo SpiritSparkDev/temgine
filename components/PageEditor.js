@@ -1,4 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+import 'react-quill/dist/quill.snow.css';
+
+const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, X, Layout, Grid } from 'lucide-react';
 import { extractTemplateVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
@@ -432,13 +436,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   return (
                     <div key={varName} style={{ marginBottom: 10 }}>
                       <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
-                      <textarea
-                        placeholder={varName}
-                        value={value}
-                        onChange={e => handleNestedUpdate(e.target.value)}
-                        rows={3}
-                        style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, resize: 'vertical', fontSize: '0.9rem' }}
-                      />
+                      <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
+                        <ReactQuill
+                          value={value || ''}
+                          onChange={(val) => handleNestedUpdate(val)}
+                          theme="snow"
+                        />
+                      </div>
                     </div>
                   );
                 }
@@ -638,13 +642,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           return (
                             <div key={varName} className="field-item">
                               <label className="field-label-xs">{varName}</label>
-                              <textarea
-                                placeholder={varName}
-                                value={value}
-                                onChange={e => handleUpdateBlock(idx, { [varName]: e.target.value })}
-                                rows={3}
-                                className="textarea-field"
-                              />
+                              <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
+                                <ReactQuill
+                                  value={value || ''}
+                                  onChange={(val) => handleUpdateBlock(idx, { [varName]: val })}
+                                  theme="snow"
+                                />
+                              </div>
                             </div>
                           );
                         }
@@ -691,13 +695,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         className="input-field-small"
                         style={{ marginBottom: 8 }}
                       />
-                      <textarea
-                        placeholder="Inhalt"
-                        value={block.props.content || ''}
-                        onChange={e => handleUpdateBlock(idx, { content: e.target.value })}
-                        rows={4}
-                        className="textarea-field"
-                      />
+                      <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
+                        <ReactQuill
+                          value={block.props.content || ''}
+                          onChange={(val) => handleUpdateBlock(idx, { content: val })}
+                          theme="snow"
+                        />
+                      </div>
                     </>
                   )}
 
