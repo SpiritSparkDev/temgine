@@ -46,6 +46,7 @@ export default function SnippetsView({ showToast }) {
 
   const [editType, setEditType] = useState('free');
   const [editHandler, setEditHandler] = useState('');
+  const [activeTab, setActiveTab] = useState('content');
 
   function handleSave() {
     const newSnippets = [...snippets];
@@ -153,37 +154,54 @@ export default function SnippetsView({ showToast }) {
         {isEditing ? (
           <>
             <div className="editor-header">
-              <input 
-                type="text" 
-                className="snippet-label-input" 
-                placeholder="Snippet Name" 
-                value={editLabel} 
-                onChange={e => setEditLabel(e.target.value)}
-              />
-              <select value={editType} onChange={e => setEditType(e.target.value)} style={{ marginLeft: 8 }}>
-                <option value="free">Free (editable)</option>
-                <option value="bound">Bound (#name) — auto-filled from DB</option>
-                <option value="defined">Defined (special handler)</option>
-              </select>
-              {editType === 'defined' && (
-                <input type="text" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} style={{ marginLeft: 8 }} />
-              )}
-              <div className="editor-actions">
-                <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
-                <button className="btn-primary" onClick={handleSave}>Speichern</button>
+              <div className="snippet-tabs" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className={`tab-btn ${activeTab === 'content' ? 'active' : ''}`} onClick={() => setActiveTab('content')}>Inhalt</button>
+                <button className={`tab-btn ${activeTab === 'meta' ? 'active' : ''}`} onClick={() => setActiveTab('meta')}>Metadaten</button>
+              </div>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div className="editor-actions">
+                  <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
+                  <button className="btn-primary" onClick={handleSave}>Speichern</button>
+                </div>
               </div>
             </div>
-            
+
             <div className="templates-editor-columns">
-              <div className="templates-editor-wrapper">
+              <div className="templates-editor-wrapper" style={{ flex: 1 }}>
                 <div className="editor-wrapper">
-                  <CodeEditor
-                    height="600px"
-                    language="html"
-                    value={editContent}
-                    onChange={v => setEditContent(v || '')}
-                    options={{}}
-                  />
+                  {activeTab === 'content' ? (
+                    <CodeEditor
+                      height="600px"
+                      language="html"
+                      value={editContent}
+                      onChange={v => setEditContent(v || '')}
+                      options={{}}
+                    />
+                  ) : (
+                    <div style={{ padding: 12 }}>
+                      <label>Label</label>
+                      <input
+                        type="text"
+                        className="snippet-label-input"
+                        placeholder="Snippet Name"
+                        value={editLabel}
+                        onChange={e => setEditLabel(e.target.value)}
+                        style={{ width: '100%', marginBottom: 8 }}
+                      />
+                      <label>Typ</label>
+                      <select value={editType} onChange={e => setEditType(e.target.value)} style={{ width: '100%', marginBottom: 8 }}>
+                        <option value="free">Free (editable)</option>
+                        <option value="bound">Bound (#name) — auto-filled from DB</option>
+                        <option value="defined">Defined (special handler)</option>
+                      </select>
+                      {editType === 'defined' && (
+                        <>
+                          <label>Handler</label>
+                          <input type="text" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} style={{ width: '100%' }} />
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

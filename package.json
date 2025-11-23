@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "npm run test && next dev",
     "test": "jest --color",
     "build": "next build",
     "start": "next start",

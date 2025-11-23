@@ -53,16 +53,17 @@ async function migrateData() {
     // Snippets migrieren
     console.log('\n✂️ Migriere Snippets...');
     for (const snippet of snippetsData) {
-      const key = snippet.label.toLowerCase().replace(/\s+/g, '_');
+      // Use the label directly as the DB key so the admin UI maps keys to labels consistently.
+      const key = String(snippet.label || '').trim();
+      // Preserve metadata (type/handler) by JSON-encoding the value when present — aligns with pages/api/snippets.js
+      let value = String(snippet.snippet || '');
+      if (snippet.type || snippet.handler) {
+        value = JSON.stringify({ snippet: snippet.snippet || '', type: snippet.type || 'free', handler: snippet.handler || '' });
+      }
       await prisma.snippet.upsert({
         where: { key: key },
-        update: {
-          value: snippet.snippet
-        },
-        create: {
-          key: key,
-          value: snippet.snippet
-        }
+        update: { value },
+        create: { key: key, value }
       });
       console.log(`  ✓ ${snippet.label} (${key})`);
     }
