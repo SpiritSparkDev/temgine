@@ -89,7 +89,9 @@ export default function PageCatchAll() {
               const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}&_t=${Date.now()}`)
               if (res.ok) {
                 const data = await res.json()
+                // Map both the requested name and the canonical DB name to the template code
                 templateCodes[templateName] = data.code
+                if (data.name && data.name !== templateName) templateCodes[data.name] = data.code
               }
             } catch (e) {
               console.error(`Fehler beim Laden von Template "${templateName}":`, e)
@@ -117,6 +119,13 @@ export default function PageCatchAll() {
 
         const pageTemplateCode = foundPage.template ? templateCodes[foundPage.template] : null
         const html = renderPage(foundPage, templateCodes, pageTemplateCode, pages, navigationTemplates, templateCodes)
+        // Debug: log length and preview on the client so we can verify insertion
+        try {
+          // eslint-disable-next-line no-console
+          console.debug('catchall: rendered html length ->', html ? String(html.length) : '0')
+          // eslint-disable-next-line no-console
+          console.debug('catchall: rendered html preview ->', html ? String(html).slice(0, 500) : '')
+        } catch (e) {}
         setHtml(html)
         setLoading(false)
       })
@@ -126,8 +135,21 @@ export default function PageCatchAll() {
       })
   }, [query.slug])
 
+  const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
+  const showDebug = params && params.get('debug') === '1'
+
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
   if (!page) return <div style={{ padding: 20 }}>Seite nicht gefunden</div>
 
-  return <div dangerouslySetInnerHTML={{ __html: html }} />
+  return (
+    <div>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+      {showDebug && (
+        <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
+          <strong>Debug: rendered HTML (first 2000 chars)</strong>
+          <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{String(html || '').slice(0, 2000)}</pre>
+        </div>
+      )}
+    </div>
+  )
 }

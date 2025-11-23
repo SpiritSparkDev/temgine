@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
-export default function DashboardView({ templateList, pages, snippets, setView }) {
+export default function DashboardView({ templateList, pages, snippets, setView, showToast }) {
     const [dbHealth, setDbHealth] = useState(null);
     const [dbLoading, setDbLoading] = useState(true);
 
@@ -23,6 +23,46 @@ export default function DashboardView({ templateList, pages, snippets, setView }
             setDbLoading(false);
         }
     };
+
+    // Export DB as JSON and trigger a download
+    async function exportDatabase() {
+        try {
+            const res = await fetch('/api/admin/export')
+            if (!res.ok) throw new Error('Export fehlgeschlagen')
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `temphelix-export-${new Date().toISOString()}.json`
+            a.click()
+            URL.revokeObjectURL(url)
+            if (typeof showToast === 'function') showToast('Export erfolgreich', 'success')
+        } catch (e) {
+            console.error(e)
+            if (typeof showToast === 'function') showToast('Export fehlgeschlagen', 'error')
+        }
+    }
+
+    // Handle file selected from import input
+    async function handleImportFile(e) {
+        const f = e.target.files && e.target.files[0]
+        if (!f) return
+        try {
+            const text = await f.text()
+            const json = JSON.parse(text)
+            const res = await fetch('/api/admin/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) })
+            if (!res.ok) throw new Error('Import fehlgeschlagen')
+            if (typeof showToast === 'function') showToast('Import erfolgreich', 'success')
+            // reload to reflect imported data
+            setTimeout(() => window.location.reload(), 500)
+        } catch (err) {
+            console.error('Import error', err)
+            if (typeof showToast === 'function') showToast('Import fehlgeschlagen: ' + (err.message || String(err)), 'error')
+        } finally {
+            // clear file input
+            try { document.getElementById('db-import-input').value = '' } catch (e) {}
+        }
+    }
 
     return (
         <div className="admin-editor-area">
@@ -106,6 +146,11 @@ export default function DashboardView({ templateList, pages, snippets, setView }
                         <button className="primary" onClick={() => setView('pages')}>Neue Seite erstellen</button>
                         <button className="primary" onClick={() => setView('navigation')}>Navigation bearbeiten</button>
                         <button className="primary" onClick={() => setView('snippets')}>Snippets verwalten</button>
+                        <button className="primary" onClick={() => exportDatabase()} title="Exportiere Datenbank als JSON">Export DB</button>
+                        <label className="primary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                            Import DB
+                            <input id="db-import-input" type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => handleImportFile(e)} />
+                        </label>
                     </div>
                 </div>
 

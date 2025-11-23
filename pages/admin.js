@@ -299,6 +299,7 @@ export default function Admin() {
               pages={pages}
               snippets={snippets}
               setView={setView}
+              showToast={showToast}
             />
           )}
 

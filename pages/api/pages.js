@@ -21,8 +21,9 @@ export default async function handler(req, res) {
         where.status = 'PUBLISHED'
       }
 
-      // Return pages without forcing an order — preserve stored order where possible
-      const pages = await prisma.page.findMany({ where })
+      // Return pages in a stable, predictable order so navigation appears correctly.
+      // Use creation time as a fallback ordering for top-level pages.
+      const pages = await prisma.page.findMany({ where, orderBy: { createdAt: 'asc' } })
       return res.status(200).json(pages)
     }
 
