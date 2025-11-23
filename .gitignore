@@ -13,7 +13,6 @@ node_modules/
 # Production
 /build
 /public/
-public/
 
 # Misc
 .DS_Store
@@ -57,4 +56,4 @@ Thumbs.db
 
 # Backups (optional - falls automatische Backups nicht versioniert werden sollen)
 # data/backups/
-public/extern_css/main.css
+ 
