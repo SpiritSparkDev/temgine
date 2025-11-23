@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
 import { createButtonHandlers, insertText } from '../lib/insertHelper'
+import boundSnippets from '../data/boundSnippets.json'
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -39,7 +40,13 @@ export default function TemplatesViewModern({ showToast }) {
   function loadSnippets() {
     fetch('/api/snippets')
       .then(r => r.json())
-      .then(data => setSnippets(data || []))
+      .then(data => {
+        const fetched = data || []
+        // Build bound snippet entries from static list so they appear in editor toolbar
+        const boundEntries = (boundSnippets || []).map(b => ({ label: b.label, snippet: `{{snippet:${b.label}}}`, type: 'bound' }))
+        // Merge: bound snippets first (immutable), then fetched snippets from DB
+        setSnippets([...boundEntries, ...fetched])
+      })
       .catch(() => setSnippets([]));
   }
 
