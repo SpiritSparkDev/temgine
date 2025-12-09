@@ -227,7 +227,9 @@ export default function Admin() {
       )}
       <div className="admin-navbar">
         <div className="admin-navbar-left">
-          <h1 className="admin-logo">TempHelix</h1>
+          <a href="/" className="admin-logo-link" title="TempHelix">
+            <img src="/assets/Logo.png" alt="TempHelix" className="admin-logo-img" /> <h1 className='admin-logo'>TempHelix CMS Admin</h1>
+          </a>
         </div>
         <div className="admin-navbar-right">
           <button 
