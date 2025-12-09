@@ -1,7 +1,7 @@
 <section class="page">
   <header>
-    <h2>{{title}}</h2>
+    <h2>{{snippet:title[Titel]}}</h2>
   </header>
-  {{text}}
+  {{snippet:text[Inhalt]}}
   <footer>Footer</footer>
 </section>
