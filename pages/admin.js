@@ -20,9 +20,13 @@ const ContentModelsView = dynamic(() => import('../components/ContentModelsView'
 const ErrorBoundary = dynamic(() => import('../components/ErrorBoundary'), { ssr: false });
 const Toast = dynamic(() => import('../components/Toast'), { ssr: false });
 const ConfirmDialog = dynamic(() => import('../components/ConfirmDialog'), { ssr: false });
+
+// Wrap entire admin page as client-only to prevent SSR errors
+const AdminContent = dynamic(() => Promise.resolve(AdminPage), { ssr: false });
+
 // RightToolbar removed — snippet toolbox moved into TemplatesViewModern
 
-export default function Admin() {
+function AdminPage() {
   const { data: session } = useSession();
   const [templateList, setTemplateList] = useState([]);
   const [templateName, setTemplateName] = useState('');
@@ -393,4 +397,8 @@ export default function Admin() {
       </div>
     </ErrorBoundary>
   );
+}
+
+export default function Admin() {
+  return <AdminContent />;
 }
