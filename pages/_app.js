@@ -56,6 +56,21 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
 
   return (
     <SessionProvider session={session}>
+      <Head>
+        {/* Favicon files served from /public/favicon/ */}
+        <link rel="icon" href="/favicon/favicon.ico" />
+        <link rel="shortcut icon" href="/favicon/favicon.ico" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png" />
+        <link rel="manifest" href="/favicon/site.webmanifest" />
+        <meta name="theme-color" content="#ffffff" />
+        {/* Site logo (served from public/assets/) - preload and social preview */}
+        <link rel="preload" as="image" href="/assets/logo.png" />
+        <meta property="og:image" content="/assets/logo.png" />
+        <meta name="twitter:image" content="/assets/logo.png" />
+        <meta name="msapplication-TileImage" content="/assets/logo.png" />
+      </Head>
       <Component {...pageProps} />
     </SessionProvider>
   );
