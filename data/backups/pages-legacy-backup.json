@@ -1,0 +1,126 @@
+[
+  {
+    "id": "demo-home",
+    "slug": "home",
+    "title": "Startseite",
+    "template": "Seiten",
+    "blocks": [
+      {
+        "type": "content",
+        "template": "Text",
+        "props": {
+          "title": "das is ein tittl",
+          "text": "Dat is text"
+        }
+      },
+      {
+        "type": "content",
+        "template": "Text /w Img",
+        "props": {
+          "title": "Das ist Titel",
+          "text": "Das ist Text",
+          "imgurl": "/uploads/1763650566777_logo_color2.png"
+        }
+      }
+    ],
+    "data": {
+      "title": "",
+      "type": "",
+      "button": {
+        "label": "Jetzt starten",
+        "url": "/features"
+      }
+    },
+    "children": [
+      {
+        "id": "byghgv5lp",
+        "title": "Neue Seite",
+        "children": [],
+        "slug": "neue-seite",
+        "blocks": [
+          {
+            "type": "content",
+            "template": "Text",
+            "props": {
+              "title": "Titel",
+              "text": "Test"
+            }
+          }
+        ],
+        "template": "Seiten",
+        "data": {
+          "navigation:main": "",
+          "title": "",
+          "text": ""
+        },
+        "redirectType": "none"
+      }
+    ],
+    "redirectType": "none"
+  },
+  {
+    "id": "demo-features",
+    "slug": "features",
+    "title": "Features",
+    "template": "Seiten",
+    "blocks": [
+      {
+        "type": "text",
+        "props": {
+          "title": "Das funktioniert!",
+          "icon": "",
+          "content": "Blaa",
+          "text": "\"Ich\" hab ein CMS gebaut",
+          "button": "",
+          "price": 0,
+          "description": "Dasd",
+          "link": "",
+          "buttonText": "adasdasd",
+          "blocks": "Block",
+          "featured": "",
+          "features": [],
+          "avatar": "",
+          "author": "",
+          "role": "",
+          "image": "",
+          "date": "",
+          "category": "",
+          "excerpt": "",
+          "url": "",
+          "label": ""
+        },
+        "template": "Feature Cards"
+      },
+      {
+        "type": "content",
+        "template": "Text",
+        "props": {
+          "title": "Ein Titel",
+          "text": "Mit Kontenttt"
+        }
+      },
+      {
+        "type": "content",
+        "template": "Text",
+        "props": {
+          "title": "Nch ein Tttl",
+          "text": "dakjshdaksd"
+        }
+      }
+    ],
+    "children": [],
+    "data": {
+      "navigation:main": "",
+      "title": "Seiteaaa",
+      "text": "",
+      "content": "Das ist Content"
+    },
+    "redirectType": "none"
+  },
+  {
+    "id": "k30jpcae1",
+    "title": "Impressum",
+    "children": [],
+    "template": "Seiten"
+  }
+]

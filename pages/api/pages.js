@@ -32,7 +32,6 @@ export default async function handler(req, res) {
     // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
     if (req.method === 'POST') {
       const body = req.body
-      console.log('DEBUG /api/pages POST body:', JSON.stringify(body, null, 2));
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
         const results = []
@@ -71,12 +70,10 @@ export default async function handler(req, res) {
           try {
             // Wenn diese Seite als Homepage gesetzt wird, deaktiviere alle anderen Homepages
             if (p.isHomepage === true) {
-              console.log(`Setting ${p.slug} as homepage, disabling others...`);
               await prisma.page.updateMany({
                 where: { isHomepage: true, slug: { not: String(p.slug) } },
                 data: { isHomepage: false }
               })
-              console.log('Homepage update successful');
             }
           } catch (e) {
             console.error('Error updating homepages:', e);
@@ -132,11 +129,7 @@ export default async function handler(req, res) {
         try {
           const allPages = await prisma.page.findMany()
           const existingSlugs = allPages.map(p => p.slug)
-          // Visible debug output
-          console.log('DEBUG /api/pages POST providedSlugs:', Array.from(providedSlugs))
-          console.log('DEBUG /api/pages POST existingSlugs:', existingSlugs)
           const toDelete = existingSlugs.filter(s => !providedSlugs.has(s))
-          console.log('DEBUG /api/pages POST toDelete:', toDelete)
 
           if (toDelete.length > 0) {
             // Find matching DB entries for the toDelete slugs
@@ -144,8 +137,7 @@ export default async function handler(req, res) {
             const slugsFound = pagesToDelete.map(p => p.slug)
             if (slugsFound.length > 0) {
               // Bulk delete for efficiency
-              const delRes = await prisma.page.deleteMany({ where: { slug: { in: slugsFound } } })
-              console.log('DEBUG /api/pages POST deleteMany count:', delRes.count)
+              await prisma.page.deleteMany({ where: { slug: { in: slugsFound } } })
               // Create audit logs per deleted page
               for (const pd of pagesToDelete) {
                 try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: null, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
@@ -218,7 +210,6 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Revision create failed', e)
       }
-      console.log('DEBUG /api/pages POST single upsert result:', { id: up.id, slug: up.slug, status: up.status });
       try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
       return res.status(200).json(up)
     }

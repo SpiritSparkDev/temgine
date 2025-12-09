@@ -370,7 +370,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage
     };
-    console.log('PageEditor.handleSave: updatedPage =', updatedPage);
     onSave && onSave(updatedPage, options);
   }
 

@@ -23,11 +23,8 @@ export default function Home() {
           return
         }
         
-        console.log('index.js: loaded pages, searching for homepage...', pages.map(p => ({ slug: p.slug, isHomepage: p.isHomepage, status: p.status })))
-        
         // Finde die Startseite: erste Seite mit isHomepage=true, oder fallback auf demo-home/home/erste Seite
         const homePage = pages.find(p => p.isHomepage === true) || pages.find(p => p.id === 'demo-home' || p.slug === 'home') || pages[0]
-        console.log('index.js: found homePage:', homePage ? { slug: homePage.slug, title: homePage.title, isHomepage: homePage.isHomepage } : null)
         
         if (!homePage) {
           setHtml('<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>')
@@ -92,9 +89,6 @@ export default function Home() {
         }
 
         // Rendere Seite
-        // Debug: welche Templates wurden geladen
-        // eslint-disable-next-line no-console
-        console.log('index: templatesToLoad ->', Array.from(templatesToLoad))
         const pageTemplateCode = homePage.template ? templateCodes[homePage.template] : null
         const html = renderPage(homePage, templateCodes, pageTemplateCode, pages, navigationTemplates)
         setHtml(html)

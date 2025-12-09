@@ -33,7 +33,6 @@ export default function PagesView({
           allPages={pages}
           onSave={async (updatedPage, options) => {
             try {
-              console.log('PagesView.onSave called with:', {updatedPage, options});
               // Ensure options is an object
               const opts = options || {};
               
@@ -44,7 +43,6 @@ export default function PagesView({
                     : { ...n, children: updatePageInTree(n.children || []) }
                 );
               const updated = updatePageInTree(pages);
-              console.log('PagesView: updated tree =', JSON.stringify(updated, null, 2));
               const saved = await handleUpdatePages(updated);
               
               if (!saved) {
