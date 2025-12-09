@@ -225,6 +225,19 @@ export default function Admin() {
           onCancel={confirmDialog.onCancel}
         />
       )}
+      {process.env.NEXT_PUBLIC_DEV_MODE === 'true' && (
+        <div style={{
+          background: '#ff9800',
+          color: '#000',
+          padding: '8px 16px',
+          textAlign: 'center',
+          fontWeight: 'bold',
+          fontSize: '14px',
+          borderBottom: '2px solid #f57c00'
+        }}>
+          ⚠️ DEVELOPMENT MODE - Authentifizierung deaktiviert
+        </div>
+      )}
       <div className="admin-navbar">
         <div className="admin-navbar-left">
           <a href="/" className="admin-logo-link" title="TempHelix">
