@@ -85,6 +85,17 @@ npm run build
 npm start
 ```
 
+## Deployment (Plesk)
+
+1. **Code pullen**: `git pull origin main`
+2. **Abhängigkeiten**: `npm install`
+3. **Templates in DB synchronisieren**: `node scripts/deploy-templates.js`
+4. **Build**: `npm run build`
+5. **App neu starten**:
+	- Plesk Node/Passenger: im Plesk UI auf „Restart Node App“
+	- pm2: `pm2 restart temphelix`
+6. **Health-Check**: `/api/database/health` aufrufen; kurz `/admin` öffnen und Labels im Block-Editor prüfen.
+
 ## Technologie-Stack
 
 - **Framework**: Next.js 13
