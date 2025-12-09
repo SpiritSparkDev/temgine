@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen } from 'lucide-react';
 import dynamic from 'next/dynamic';
+
+// Lazy-load icons — diese könnten SSR-Probleme verursachen
+const Icons = dynamic(() => import('lucide-react'), { ssr: false });
 
 // Dynamisch laden (Client-only, kein SSR)
 const DashboardView = dynamic(() => import('../components/DashboardView'), { ssr: false });
@@ -20,9 +22,6 @@ const ContentModelsView = dynamic(() => import('../components/ContentModelsView'
 const ErrorBoundary = dynamic(() => import('../components/ErrorBoundary'), { ssr: false });
 const Toast = dynamic(() => import('../components/Toast'), { ssr: false });
 const ConfirmDialog = dynamic(() => import('../components/ConfirmDialog'), { ssr: false });
-
-// Wrap entire admin page as client-only to prevent SSR errors
-const AdminContent = dynamic(() => Promise.resolve(AdminPage), { ssr: false });
 
 // RightToolbar removed — snippet toolbox moved into TemplatesViewModern
 
