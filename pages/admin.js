@@ -3,21 +3,23 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
 import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen } from 'lucide-react';
-import DashboardView from '../components/DashboardView';
-import TemplatesViewModern from '../components/TemplatesViewModern';
-import PagesView from '../components/PagesView';
-import SnippetsView from '../components/SnippetsView';
-import SettingsView from '../components/SettingsView';
-import UsersView from '../components/UsersView';
-import UsersViewModern from '../components/UsersViewModern';
-import UserInvitationsView from '../components/UserInvitationsView';
-import CSSManagerViewModern from '../components/CSSManagerViewModern';
-import NavigationViewModern from '../components/NavigationViewModern';
-import FileManagerView from '../components/FileManagerView';
-import Toast from '../components/Toast';
-import ConfirmDialog from '../components/ConfirmDialog';
-import ContentModelsView from '../components/ContentModelsView';
-import ErrorBoundary from '../components/ErrorBoundary';
+import dynamic from 'next/dynamic';
+
+// Dynamisch laden (Client-only, kein SSR)
+const DashboardView = dynamic(() => import('../components/DashboardView'), { ssr: false });
+const TemplatesViewModern = dynamic(() => import('../components/TemplatesViewModern'), { ssr: false });
+const PagesView = dynamic(() => import('../components/PagesView'), { ssr: false });
+const SnippetsView = dynamic(() => import('../components/SnippetsView'), { ssr: false });
+const SettingsView = dynamic(() => import('../components/SettingsView'), { ssr: false });
+const UsersViewModern = dynamic(() => import('../components/UsersViewModern'), { ssr: false });
+const UserInvitationsView = dynamic(() => import('../components/UserInvitationsView'), { ssr: false });
+const CSSManagerViewModern = dynamic(() => import('../components/CSSManagerViewModern'), { ssr: false });
+const NavigationViewModern = dynamic(() => import('../components/NavigationViewModern'), { ssr: false });
+const FileManagerView = dynamic(() => import('../components/FileManagerView'), { ssr: false });
+const ContentModelsView = dynamic(() => import('../components/ContentModelsView'), { ssr: false });
+const ErrorBoundary = dynamic(() => import('../components/ErrorBoundary'), { ssr: false });
+const Toast = dynamic(() => import('../components/Toast'), { ssr: false });
+const ConfirmDialog = dynamic(() => import('../components/ConfirmDialog'), { ssr: false });
 // RightToolbar removed — snippet toolbox moved into TemplatesViewModern
 
 export default function Admin() {
