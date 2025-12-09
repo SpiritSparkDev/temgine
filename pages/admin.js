@@ -107,27 +107,42 @@ export default function Admin() {
   useEffect(() => {
     (async () => {
       try {
-        const t = await fetch('/api/templates').then(r => r.json()).catch(() => []);
+        const tRes = await fetch('/api/templates');
+        if (!tRes.ok) throw new Error(`API error: ${tRes.status}`);
+        const t = await tRes.json();
         let list = Array.isArray(t) ? t : [];
         if (list.length > 0 && typeof list[0] === 'string') {
           // older format: array of names
           list = list.map(n => ({ name: n, type: 'SITE' }));
         }
         setTemplateList(list);
-      } catch (e) { setTemplateList([]); }
+      } catch (e) { 
+        console.error('[admin] Error loading templates:', e);
+        setTemplateList([]); 
+      }
       try {
-        const s = await fetch('/api/snippets').then(r => r.json()).catch(() => []);
+        const sRes = await fetch('/api/snippets');
+        if (!sRes.ok) throw new Error(`API error: ${sRes.status}`);
+        const s = await sRes.json();
         setSnippets(Array.isArray(s) && s.length > 0 ? s : [
           { label: 'Titel', snippet: '{{title}}' },
           { label: 'Text', snippet: '{{text}}' },
           { label: 'Bild', snippet: '{{images.0}}' }
         ]);
-      } catch (e) { setSnippets([]); }
+      } catch (e) { 
+        console.error('[admin] Error loading snippets:', e);
+        setSnippets([]); 
+      }
       try {
         // Admin should see drafts as well
-        const p = await fetch('/api/pages?includeDrafts=true').then(r => r.json()).catch(() => []);
+        const pRes = await fetch('/api/pages?includeDrafts=true');
+        if (!pRes.ok) throw new Error(`API error: ${pRes.status}`);
+        const p = await pRes.json();
         setPages(Array.isArray(p) ? p : (p.pages || []));
-      } catch (e) { setPages([]); }
+      } catch (e) { 
+        console.error('[admin] Error loading pages:', e);
+        setPages([]); 
+      }
     })();
   }, []);
 
