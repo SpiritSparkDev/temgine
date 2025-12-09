@@ -96,6 +96,22 @@ npm start
 	- pm2: `pm2 restart temphelix`
 6. **Health-Check**: `/api/database/health` aufrufen; kurz `/admin` öffnen und Labels im Block-Editor prüfen.
 
+### Plesk Node-App Einstellungen
+- **Node.js-Version**: 20.x LTS (empfohlen; 22.x kann funktionieren, aber 20 ist stabil mit Next.js)
+- **Package Manager**: npm
+- **Anwendungsmodus**: production
+- **Anwendungsstamm**: `/httpdocs` (Pfad zum Projektroot)
+- **Dokumentenstamm**: `/httpdocs` (oder Unterordner, falls gewünscht)
+- **Anwendungsstartdatei**: `server.js` (liegt im Projektroot und startet `next start`)
+- **Start-Befehl**: nicht nötig, Plesk ruft `node server.js` auf. Falls Plesk ein Feld „Script parameters“ hat, leer lassen.
+- **Benutzerdefinierte ENV Variablen**: setze alle aus `.env`/`.env.local` (z.B. `DATABASE_URL`, `NEXTAUTH_SECRET`, `GITHUB_ID`, `GITHUB_SECRET`, `DEV_MODE=false`).
+
+### Build/Run in Plesk UI
+1. „Install NPM Packages“ klicken (entspricht `npm install`).
+2. „Run Script“ -> `npm run build` ausführen.
+3. „Restart Node App“ klicken (lädt `server.js`).
+4. Prüfen: `/api/database/health`, danach `/admin` öffnen und Label-Anzeige testen.
+
 ## Technologie-Stack
 
 - **Framework**: Next.js 13
