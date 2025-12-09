@@ -107,10 +107,42 @@ npm start
 - **Benutzerdefinierte ENV Variablen**: setze alle aus `.env`/`.env.local` (z.B. `DATABASE_URL`, `NEXTAUTH_SECRET`, `GITHUB_ID`, `GITHUB_SECRET`, `DEV_MODE=false`).
 
 ### Build/Run in Plesk UI
-1. „Install NPM Packages“ klicken (entspricht `npm install`).
-2. „Run Script“ -> `npm run build` ausführen.
-3. „Restart Node App“ klicken (lädt `server.js`).
+1. „Install NPM Packages" klicken (entspricht `npm install`).
+2. „Run Script" -> `npm run build` ausführen.
+3. „Restart Node App" klicken (lädt `server.js`).
 4. Prüfen: `/api/database/health`, danach `/admin` öffnen und Label-Anzeige testen.
+
+### Umgebungsvariablen in Plesk konfigurieren
+
+**Wichtig**: Plesk liest Env-Variablen aus der UI, **nicht** aus `.env.local`. Setze folgende Variablen in der Plesk Node-App:
+
+| Variable | Wert | Notizen |
+|----------|------|---------|
+| `DATABASE_URL` | `postgresql://USER:PASS@localhost:5432/DBNAME?schema=public` | URL-kodierung für Sonderzeichen (z.B. `@` → `%40`, `!` → `%21`) |
+| `NEXTAUTH_URL` | `https://deine-domain.com` | **Muss** öffentliche HTTPS-URL sein, nicht `localhost` |
+| `NEXTAUTH_SECRET` | `openssl rand -base64 32` | Neu generieren für Prod (nicht dev-secret verwenden) |
+| `GITHUB_ID` | dein GitHub App ID | Gleich wie in dev |
+| `GITHUB_SECRET` | dein GitHub App Secret | Gleich wie in dev |
+| `DEV_MODE` | `false` | **Wichtig** für Prod: Auth wird erzwungen |
+
+**Prisma Migrations in Plesk:**
+- Mit `.env` im Projektroot: `npx prisma migrate deploy` oder `npx prisma db push`
+- Ohne `.env`: Variablen manuell exportieren: `export DATABASE_URL="..."; npx prisma migrate deploy`
+
+### Häufige Fehler & Lösungen
+
+**Fehler: `DATABASE_URL not found`**
+- Plesk setzt Env-Variablen nicht automatisch in der Shell — `.env` im Projektroot (`/httpdocs/.env`) anlegen oder manuell exportieren vor `npx prisma ...`
+
+**Fehler: 500 auf `/admin` über öffentliche URL, aber `localhost:3000/admin` funktioniert**
+- Node-Server selbst läuft OK, Problem ist Plesk/Passenger Proxy
+- **Lösung**: In Plesk UI → „Run Script" → `npm run build` ausführen, dann „Restart Node App"
+- Das rebuilt Static-Assets und resettet den Proxy-Cache
+
+**GitHub OAuth funktioniert lokal nicht, aber sollte auf Prod funktionieren**
+- OAuth-App muss mit der öffentlichen URL registriert sein, nicht `localhost:3000`
+- `NEXTAUTH_URL` muss exakt der Domain entsprechen, auf der die App läuft
+- Redirect URI in GitHub App Settings: `https://deine-domain.com/api/auth/callback/github`
 
 ## Technologie-Stack
 

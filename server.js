@@ -1,5 +1,9 @@
 // Lightweight Next.js custom server for Plesk/Passenger
 // Starts the production build created via `npm run build`
+
+// Load .env before anything else
+require('dotenv').config();
+
 const { createServer } = require('http');
 const next = require('next');
 

@@ -40,7 +40,7 @@ export default async function handler(req, res) {
 
     res.status(405).json({ error: 'Method not allowed' })
   } catch (e) {
-    console.error(e)
-    res.status(500).json({ error: 'Server Fehler' })
+    console.error('[/api/templates Error]', e.message, e.stack)
+    res.status(500).json({ error: 'Server Fehler', details: e.message })
   }
 }
