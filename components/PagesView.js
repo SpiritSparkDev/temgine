@@ -31,8 +31,12 @@ export default function PagesView({
           page={editingPage} 
           templates={templateList}
           allPages={pages}
-          onSave={async (updatedPage, options = {}) => {
+          onSave={async (updatedPage, options) => {
             try {
+              console.log('PagesView.onSave called with:', {updatedPage, options});
+              // Ensure options is an object
+              const opts = options || {};
+              
               const updatePageInTree = (nodes) => 
                 nodes.map(n => 
                   n.id === updatedPage.id 
@@ -40,20 +44,46 @@ export default function PagesView({
                     : { ...n, children: updatePageInTree(n.children || []) }
                 );
               const updated = updatePageInTree(pages);
-              await handleUpdatePages(updated);
+              console.log('PagesView: updated tree =', JSON.stringify(updated, null, 2));
+              const saved = await handleUpdatePages(updated);
+              
+              if (!saved) {
+                // Fehler wurde bereits durch handleUpdatePages angezeigt
+                return;
+              }
+              
               showToast('Seite erfolgreich gespeichert!', 'success');
               
-              // Verarbeite Optionen
-              if (options.close) {
-                // Schließe Editor
+              // Verarbeite Optionen - nur wenn explizit gesetzt
+              if (opts.close === true) {
+                // Schließe Editor und kehre zur Seitenverwaltung zurück
                 setEditingPage(null);
-              } else if (options.view) {
-                // Öffne Seite in neuem Tab
-                window.open(`/${updatedPage.slug}`, '_blank');
-                // Aktualisiere Daten
+              } else if (opts.view === true) {
+                // Versuche, die Seite in einem bestehenden Tab zu fokussieren oder öffne einen neuen
+                const pageUrl = `/${updatedPage.slug}`;
+                let opened = false;
+                try {
+                  // window.open mit dem gleichen Namen kann existierende Fenster reuse
+                  const safeName = `page_${updatedPage.slug.replace(/[^a-z0-9]/gi, '_')}`;
+                  const newWindow = window.open(pageUrl, safeName);
+                  if (newWindow) {
+                    // Erzwinge ein Reload, um sicherzustellen, dass die neue Version angezeigt wird
+                    setTimeout(() => {
+                      newWindow.location.reload();
+                    }, 100);
+                    opened = true;
+                  }
+                } catch (e) {
+                  console.warn('Fehler beim Öffnen des Tabs:', e);
+                }
+                if (!opened) {
+                  // Fallback: öffne neuen Tab
+                  window.open(pageUrl, '_blank');
+                }
+                // Aktualisiere Daten im Editor (aber bleibe im Editor)
                 setEditingPage(updatedPage);
               } else {
-                // Normal: Seite NICHT verlassen, nur Daten aktualisieren
+                // Normal (oder wenn options nicht gesetzt): Speichern nur, Editor bleibt offen mit aktualisierten Daten
                 setEditingPage(updatedPage);
               }
             } catch (error) {

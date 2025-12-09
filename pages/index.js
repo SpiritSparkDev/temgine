@@ -11,7 +11,10 @@ export default function Home() {
     setLoading(true)
     
     // Lade Seiten-Daten und finde Startseite
-    fetch(`/api/pages?_t=${Date.now()}`)
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
+    
+    fetch(pagesUrl)
       .then(r => r.json())
       .then(async pages => {
         if (!Array.isArray(pages)) {
@@ -20,8 +23,11 @@ export default function Home() {
           return
         }
         
-        // Finde die Startseite (erste Seite mit ID "demo-home" oder slug "home")
-        const homePage = pages.find(p => p.id === 'demo-home' || p.slug === 'home') || pages[0]
+        console.log('index.js: loaded pages, searching for homepage...', pages.map(p => ({ slug: p.slug, isHomepage: p.isHomepage, status: p.status })))
+        
+        // Finde die Startseite: erste Seite mit isHomepage=true, oder fallback auf demo-home/home/erste Seite
+        const homePage = pages.find(p => p.isHomepage === true) || pages.find(p => p.id === 'demo-home' || p.slug === 'home') || pages[0]
+        console.log('index.js: found homePage:', homePage ? { slug: homePage.slug, title: homePage.title, isHomepage: homePage.isHomepage } : null)
         
         if (!homePage) {
           setHtml('<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>')

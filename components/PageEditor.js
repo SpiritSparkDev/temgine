@@ -16,6 +16,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [templateCodes, setTemplateCodes] = useState({});
   const [redirectType, setRedirectType] = useState('none');
   const [redirectUrl, setRedirectUrl] = useState('');
+  const [isHomepage, setIsHomepage] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
@@ -36,6 +37,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setPageData(page.data || {});
       setRedirectType(page.redirectType || 'none');
       setRedirectUrl(page.redirectUrl || '');
+      setIsHomepage(page.isHomepage || false);
     }
   }, [page]);
 
@@ -365,8 +367,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       blocks,
       data: pageData,
       redirectType,
-      redirectUrl: redirectType !== 'none' ? redirectUrl : undefined
+      redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
+      isHomepage
     };
+    console.log('PageEditor.handleSave: updatedPage =', updatedPage);
     onSave && onSave(updatedPage, options);
   }
 
@@ -605,6 +609,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             className="input-field"
           />
           <small className="url-hint">URL: /{slug || 'seiten-url'}</small>
+        </div>
+
+        {/* Startseite setzen */}
+        <div className="field-group">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={isHomepage}
+              onChange={e => setIsHomepage(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            <span>🏠 Als Startseite festlegen</span>
+          </label>
+          <small className="url-hint">Diese Seite wird als Standard-Startseite verwendet, wenn keine Slug eingegeben wird.</small>
         </div>
 
         {/* Weiterleitungsoptionen */}

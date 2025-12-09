@@ -21,9 +21,11 @@ export default async function handler(req, res) {
         where.status = 'PUBLISHED'
       }
 
-      // Return pages in a stable, predictable order so navigation appears correctly.
-      // Use creation time as a fallback ordering for top-level pages.
-      const pages = await prisma.page.findMany({ where, orderBy: { createdAt: 'asc' } })
+      // Get all root-level pages (those without a parent). To preserve editing order,
+      // we don't strictly orderBy createdAt. Instead, let the client manage order via children array.
+      // Return pages with minimal ordering (updatedAt desc) so recently modified appear first,
+      // but rely on the client to send the full tree structure in the desired order on save.
+      const pages = await prisma.page.findMany({ where })
       return res.status(200).json(pages)
     }
 
@@ -65,6 +67,21 @@ export default async function handler(req, res) {
             console.warn('Failed to sanitize incoming page payload', e)
           }
           if (!p || !p.slug) continue
+
+          try {
+            // Wenn diese Seite als Homepage gesetzt wird, deaktiviere alle anderen Homepages
+            if (p.isHomepage === true) {
+              console.log(`Setting ${p.slug} as homepage, disabling others...`);
+              await prisma.page.updateMany({
+                where: { isHomepage: true, slug: { not: String(p.slug) } },
+                data: { isHomepage: false }
+              })
+              console.log('Homepage update successful');
+            }
+          } catch (e) {
+            console.error('Error updating homepages:', e);
+          }
+
           const up = await prisma.page.upsert({
             where: { slug: String(p.slug) },
             create: {
@@ -75,7 +92,8 @@ export default async function handler(req, res) {
               status: p.status || 'DRAFT',
               publishAt: p.publishAt || null,
               template: p.template || null,
-              data: p.data || {}
+              data: p.data || {},
+              isHomepage: p.isHomepage || false
             },
             update: {
               title: p.title || undefined,
@@ -84,7 +102,8 @@ export default async function handler(req, res) {
               status: p.status || undefined,
               publishAt: p.publishAt || undefined,
               template: p.template || undefined,
-              data: p.data || undefined
+              data: p.data || undefined,
+              isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined
             }
           })
           results.push(up)

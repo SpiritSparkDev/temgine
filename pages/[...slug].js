@@ -42,6 +42,12 @@ export default function PageCatchAll() {
         }
 
         let foundPage = findPageByPath(pages, segments)
+        
+        // Wenn keine Seite gefunden und keine segments (root), versuche Homepage zu laden
+        if (!foundPage && segments.length === 0) {
+          foundPage = pages.find(p => p.isHomepage === true)
+        }
+        
         if (!foundPage) {
           const find404Page = (nodes) => {
             for (const node of nodes) {

@@ -141,10 +141,9 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
         <div className="node-row">
           <div className="node-title">
             <a href={`/${node.slug}`} target="_blank" rel="noopener noreferrer">{node.title}</a>
+            {node.isHomepage && <span className="page-badge badge-home">🏠 Homepage</span>}
             {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
             {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
-            {node.id === 'demo-home' && <span className="page-badge badge-home">Home</span>}
-
           </div>
           <div className="node-actions">
             <select 
