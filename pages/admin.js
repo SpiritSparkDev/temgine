@@ -17,6 +17,7 @@ import FileManagerView from '../components/FileManagerView';
 import Toast from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ContentModelsView from '../components/ContentModelsView';
+import ErrorBoundary from '../components/ErrorBoundary';
 // RightToolbar removed — snippet toolbox moved into TemplatesViewModern
 
 export default function Admin() {
@@ -222,7 +223,7 @@ export default function Admin() {
   }
 
   return (
-    <>
+    <ErrorBoundary>
       <Head>
         <title>TempHelix Admin</title>
       </Head>
@@ -388,6 +389,7 @@ export default function Admin() {
           {/* Right toolbar removed — snippets live inside Templates editor now */}
         </main>
       </div>
+    </ErrorBoundary>
     </>
   );
 }
