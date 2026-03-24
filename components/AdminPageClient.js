@@ -40,6 +40,9 @@ export default function AdminPageClient() {
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadWarnings, setLoadWarnings] = useState([]);
   const router = useRouter();
 
   useEffect(() => {
@@ -55,6 +58,33 @@ export default function AdminPageClient() {
       localStorage.setItem('adminView', view);
     } catch (e) {}
   }, [view]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setMobileNavOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') {
+        setMobileNavOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
+
+  const handleSelectView = (nextView) => {
+    setView(nextView);
+    setMobileNavOpen(false);
+  };
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -99,7 +129,11 @@ export default function AdminPageClient() {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     (async () => {
+      const warnings = [];
+
       try {
         const tRes = await fetch('/api/templates');
         if (!tRes.ok) throw new Error(`API error: ${tRes.status}`);
@@ -108,34 +142,50 @@ export default function AdminPageClient() {
         if (list.length > 0 && typeof list[0] === 'string') {
           list = list.map(n => ({ name: n, type: 'SITE' }));
         }
-        setTemplateList(list);
+        if (isMounted) setTemplateList(list);
       } catch (e) { 
         console.error('[admin] Error loading templates:', e);
-        setTemplateList([]); 
+        warnings.push('Templates konnten nicht geladen werden.');
+        if (isMounted) setTemplateList([]);
       }
+
       try {
         const sRes = await fetch('/api/snippets');
         if (!sRes.ok) throw new Error(`API error: ${sRes.status}`);
         const s = await sRes.json();
-        setSnippets(Array.isArray(s) && s.length > 0 ? s : [
-          { label: 'Titel', snippet: '{{title}}' },
-          { label: 'Text', snippet: '{{text}}' },
-          { label: 'Bild', snippet: '{{images.0}}' }
-        ]);
+        if (isMounted) {
+          setSnippets(Array.isArray(s) && s.length > 0 ? s : [
+            { label: 'Titel', snippet: '{{title}}' },
+            { label: 'Text', snippet: '{{text}}' },
+            { label: 'Bild', snippet: '{{images.0}}' }
+          ]);
+        }
       } catch (e) { 
         console.error('[admin] Error loading snippets:', e);
-        setSnippets([]); 
+        warnings.push('Snippets konnten nicht geladen werden.');
+        if (isMounted) setSnippets([]);
       }
+
       try {
         const pRes = await fetch('/api/pages?includeDrafts=true');
         if (!pRes.ok) throw new Error(`API error: ${pRes.status}`);
         const p = await pRes.json();
-        setPages(Array.isArray(p) ? p : (p.pages || []));
+        if (isMounted) setPages(Array.isArray(p) ? p : (p.pages || []));
       } catch (e) { 
         console.error('[admin] Error loading pages:', e);
-        setPages([]); 
+        warnings.push('Seiten konnten nicht geladen werden.');
+        if (isMounted) setPages([]);
+      }
+
+      if (isMounted) {
+        setLoadWarnings(warnings);
+        setInitialLoading(false);
       }
     })();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   async function handleUpdatePages(updated) {
@@ -246,6 +296,14 @@ export default function AdminPageClient() {
       )}
       <div className="admin-navbar">
         <div className="admin-navbar-left">
+          <button
+            className="admin-mobile-menu-btn"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Navigation öffnen"
+            title="Navigation öffnen"
+          >
+            <Menu size={18} />
+          </button>
           <a href="/" className="admin-logo-link" title="TempHelix">
             <img src="/assets/Logo.png" alt="TempHelix" className="admin-logo-img" /> <h1 className='admin-logo'>TempHelix CMS Admin</h1>
           </a>
@@ -254,6 +312,7 @@ export default function AdminPageClient() {
           <button 
             className="admin-theme-toggle" 
             onClick={toggleDarkMode}
+            aria-label={darkMode ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}
             title={darkMode ? 'Light Mode' : 'Dark Mode'}
           >
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -270,25 +329,49 @@ export default function AdminPageClient() {
         </div>
       </div>
       <div className="admin-main">
-        <aside className="admin-sidebar">
-          <nav className="admin-nav">
+        {mobileNavOpen && (
+          <div
+            className="admin-sidebar-overlay"
+            onClick={() => setMobileNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        <aside className={`admin-sidebar ${mobileNavOpen ? 'open' : ''}`}>
+          <nav className="admin-nav" aria-label="Admin Navigation">
+            <button
+              className="admin-sidebar-close"
+              onClick={() => setMobileNavOpen(false)}
+              aria-label="Navigation schließen"
+            >
+              Schließen
+            </button>
             <ul>
-              <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => setView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
-              <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => setView('pages')}><FileText size={18} /> Pages</button></li>
-              <li><button className={`menu-item ${view==='templates'?'active':''}`} onClick={() => setView('templates')}><Layout size={18} /> Templates</button></li>
-              <li><button className={`menu-item ${view==='content-models'?'active':''}`} onClick={() => setView('content-models')}><Code size={18} /> Content Models</button></li>
-              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => setView('navigation')}><Menu size={18} /> Navigation</button></li>
-              <li><button className={`menu-item ${view==='snippets'?'active':''}`} onClick={() => setView('snippets')}><Code size={18} /> Snippets</button></li>
-              <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => setView('files')}><FolderOpen size={18} /> Dateien</button></li>
-              <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => setView('css')}><Code size={18} /> CSS</button></li>
-              <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => setView('users')}><Users size={18} /> Benutzer</button></li>
-              <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => setView('settings')}><Settings size={18} /> Settings</button></li>
+              <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
+              <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
+              <li><button className={`menu-item ${view==='templates'?'active':''}`} onClick={() => handleSelectView('templates')}><Layout size={18} /> Templates</button></li>
+              <li><button className={`menu-item ${view==='content-models'?'active':''}`} onClick={() => handleSelectView('content-models')}><Code size={18} /> Content Models</button></li>
+              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Menu size={18} /> Navigation</button></li>
+              <li><button className={`menu-item ${view==='snippets'?'active':''}`} onClick={() => handleSelectView('snippets')}><Code size={18} /> Snippets</button></li>
+              <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
+              <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
+              <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
+              <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Settings</button></li>
             </ul>
             <div className="menu-sep" />
           </nav>
         </aside>
 
         <main className="admin-editor">
+          {initialLoading && (
+            <div className="admin-view-loading" role="status" aria-live="polite">
+              Lade Admin-Daten...
+            </div>
+          )}
+          {!initialLoading && loadWarnings.length > 0 && (
+            <div className="admin-load-warning" role="status" aria-live="polite">
+              <strong>Hinweis:</strong> {loadWarnings.join(' ')}
+            </div>
+          )}
           {view === 'templates' && <TemplatesViewModern showToast={showToast} />}
           {view === 'content-models' && <ContentModelsView />}
           {view === 'pages' && (

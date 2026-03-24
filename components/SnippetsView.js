@@ -47,6 +47,7 @@ export default function SnippetsView({ showToast }) {
   const [editType, setEditType] = useState('free');
   const [editHandler, setEditHandler] = useState('');
   const [activeTab, setActiveTab] = useState('content');
+  const [searchTerm, setSearchTerm] = useState('');
 
   function handleSave() {
     const newSnippets = [...snippets];
@@ -117,6 +118,17 @@ export default function SnippetsView({ showToast }) {
       .catch(err => showToast('Fehler beim Löschen: ' + err.message, 'error'));
   }
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredSnippets = snippets
+    .map((snippet, index) => ({ snippet, index }))
+    .filter(({ snippet }) => {
+      if (!normalizedSearch) return true;
+      return (
+        String(snippet.label || '').toLowerCase().includes(normalizedSearch) ||
+        String(snippet.snippet || '').toLowerCase().includes(normalizedSearch)
+      );
+    });
+
   return (
     <div className="snippets-editor-container">
       <div className="snippets-sidebar">
@@ -126,19 +138,40 @@ export default function SnippetsView({ showToast }) {
             <Plus size={18} />
           </button>
         </div>
+
+        <div className="editor-search-wrap">
+          <input
+            className="editor-search-input"
+            type="text"
+            placeholder="Snippets suchen..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
         
         <div className="snippets-list">
           {snippets.length === 0 ? (
             <div className="empty-state">Keine Snippets vorhanden</div>
+          ) : filteredSnippets.length === 0 ? (
+            <div className="empty-state">Keine Treffer für "{searchTerm}"</div>
           ) : (
-            snippets.map((snippet, index) => (
+            filteredSnippets.map(({ snippet, index }) => (
               <div 
                 key={index} 
                 className={`snippet-list-item ${selectedSnippet === index ? 'active' : ''}`}
+                onClick={() => handleEdit(snippet, index)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleEdit(snippet, index);
+                  }
+                }}
               >
-                <div className="snippet-info" onClick={() => handleEdit(snippet, index)}>
+                <div className="snippet-info">
                   <div className="snippet-label">{snippet.label}</div>
-                  <div className="snippet-preview">{snippet.snippet.substring(0, 60)}...</div>
+                  <div className="snippet-preview">{(snippet.snippet || '').length > 60 ? `${snippet.snippet.substring(0, 60)}...` : (snippet.snippet || '')}</div>
                 </div>
                 <div className="snippet-actions">
                   <button 
@@ -183,33 +216,32 @@ export default function SnippetsView({ showToast }) {
                 <div className="editor-wrapper">
                   {activeTab === 'content' ? (
                     <CodeEditor
-                      height="600px"
+                      height="100%"
                       language="html"
                       value={editContent}
                       onChange={v => setEditContent(v || '')}
                       options={{}}
                     />
                   ) : (
-                    <div style={{ padding: 12 }}>
-                      <label>Label</label>
+                    <div className="snippet-meta-panel">
+                      <label className="snippet-meta-label">Label</label>
                       <input
                         type="text"
                         className="snippet-label-input"
                         placeholder="Snippet Name"
                         value={editLabel}
                         onChange={e => setEditLabel(e.target.value)}
-                        style={{ width: '100%', marginBottom: 8 }}
                       />
-                      <label>Typ</label>
-                      <select value={editType} onChange={e => setEditType(e.target.value)} style={{ width: '100%', marginBottom: 8 }}>
+                      <label className="snippet-meta-label">Typ</label>
+                      <select value={editType} onChange={e => setEditType(e.target.value)} className="snippet-meta-input">
                         <option value="free">Free (editable)</option>
                         <option value="bound">Bound (#name) — auto-filled from DB</option>
                         <option value="defined">Defined (special handler)</option>
                       </select>
                       {editType === 'defined' && (
                         <>
-                          <label>Handler</label>
-                          <input type="text" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} style={{ width: '100%' }} />
+                          <label className="snippet-meta-label">Handler</label>
+                          <input type="text" className="snippet-meta-input" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} />
                         </>
                       )}
                     </div>

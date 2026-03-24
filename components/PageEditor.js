@@ -401,12 +401,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       },
       onDragLeave: (e) => { 
         e.currentTarget.style.borderColor = 'transparent';
-        e.currentTarget.style.backgroundColor = 'white';
+        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
       },
       onDrop: (e) => {
         e.preventDefault();
         e.currentTarget.style.borderColor = 'transparent';
-        e.currentTarget.style.backgroundColor = 'white';
+        e.currentTarget.style.backgroundColor = 'var(--bg-secondary)';
         const fromPath = e.dataTransfer.getData('blockPath');
         const toPath = path;
         if (!fromPath) return;
@@ -435,9 +435,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     };
 
     return (
-      <div key={path} className="block-item" style={{ cursor: 'default', border: '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', overflow: 'hidden' }} {...containerProps}>
+      <div key={path} className="block-item" style={{ cursor: 'default', border: '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: '0 2px 8px var(--shadow)', overflow: 'hidden' }} {...containerProps}>
         {/* Block Header */}
-        <div className="block-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: '#f8f9fa', borderBottom: '1px solid #e0e0e0', transition: 'all 0.2s' }}>
+        <div className="block-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', transition: 'all 0.2s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {isTop ? (
               <div
@@ -463,7 +463,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 value={block.template || ''}
                 onChange={e => updateNestedBlockTemplate(path, e.target.value)}
                 className="input-field-small"
-                style={{ fontSize: '0.95rem', backgroundColor: 'white', borderRadius: 6, border: '1px solid #ddd', padding: '6px 10px' }}
+                style={{ fontSize: '0.95rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px' }}
               >
                 <option value="">-- Kein Template --</option>
                 {blockTemplateNames.map(tn => (
@@ -482,11 +482,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         {/* Block Content */}
         <div style={{ padding: '16px' }}>
           {/* Anchor ID field - Modern Design */}
-          <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f0f4ff', borderRadius: 8, border: '1px solid #e3ebff' }}>
+          <div style={{ marginBottom: 16, padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: '18px' }}>🔗</span>
-              <label style={{ fontWeight: '600', color: '#333', margin: 0 }}>Anchor ID</label>
-              <span style={{ fontSize: '11px', backgroundColor: '#dce6ff', color: '#667eea', padding: '2px 8px', borderRadius: 12, fontWeight: 500 }}>optional</span>
+              <label style={{ fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>Anchor ID</label>
+              <span style={{ fontSize: '11px', backgroundColor: 'var(--active-bg)', color: 'var(--accent-primary)', padding: '2px 8px', borderRadius: 12, fontWeight: 500 }}>optional</span>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input 
@@ -495,7 +495,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 value={block.props && block.props.anchorId ? block.props.anchorId : ''} 
                 onChange={e => updateNestedBlock(path, { anchorId: e.target.value })} 
                 className="input-field-small" 
-                style={{ flex: 1, borderRadius: 6, border: '1px solid #ddd', padding: '8px 12px', fontSize: '0.9rem' }} 
+                style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px 12px', fontSize: '0.9rem' }} 
               />
               <button 
                 type="button" 
@@ -521,7 +521,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 ✨ Generieren
               </button>
             </div>
-            <small style={{ display: 'block', marginTop: 6, color: '#666', fontSize: '12px' }}>Wird für Anker-Links verwendet (#section-intro)</small>
+            <small style={{ display: 'block', marginTop: 6, color: 'var(--text-secondary)', fontSize: '12px' }}>Wird für Anker-Links verwendet (#section-intro)</small>
           </div>
 
           {/* Template specific fields (reuse existing logic) */}
@@ -538,10 +538,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     
                     if (isUrlVariable(varName)) {
                       return (
-                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
-                          <label className="field-label-xs" style={{ color: '#333', fontWeight: '600' }}>🔗 {label}</label>
+                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🔗 {label}</label>
                           <div style={{ display: 'flex', gap: '6px', marginTop: 6, flexDirection: 'column' }}>
-                            <input type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid #ddd', padding: '8px' }} />
+                            <input type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                             <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" style={{ whiteSpace: 'nowrap', width: '100%' }}>📁 Datei</button>
                           </div>
                         </div>
@@ -565,17 +565,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       };
 
                       return (
-                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
-                          <label className="field-label-xs" style={{ color: '#333', fontWeight: '600' }}>📝 {label}</label>
+                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📝 {label}</label>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 6, flexDirection: 'column' }}>
-                            <select value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid #ddd', padding: '6px' }}>
+                            <select value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                               <option value="h1">H1</option>
                               <option value="h2">H2</option>
                               <option value="h3">H3</option>
                               <option value="h4">H4</option>
                               <option value="h5">H5</option>
                             </select>
-                            <input type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid #ddd', padding: '6px 10px' }} />
+                            <input type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                           </div>
                         </div>
                       )
@@ -584,9 +584,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     if (inputType === 'array') {
                       const arrayLabel = snippetLabels[block.template]?.[varName] || varName;
                       return (
-                        <div key={varName} className="field-item" style={{ gridColumn: 'span 1', padding: 12, backgroundColor: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
-                          <label className="field-label-xs" style={{ color: '#333', fontWeight: '600' }}>📋 {arrayLabel}</label>
-                          <textarea placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: 6, resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', marginTop: 6 }} />
+                        <div key={varName} className="field-item" style={{ gridColumn: 'span 1', padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📋 {arrayLabel}</label>
+                          <textarea placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                         </div>
                       )
                     }
@@ -594,9 +594,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     // Default text/number input
                     const defaultLabel = snippetLabels[block.template]?.[varName] || varName;
                     return (
-                      <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: '#fafafa', borderRadius: 6, border: '1px solid #eee' }}>
-                        <label className="field-label-xs" style={{ color: '#333', fontWeight: '600' }}>📌 {defaultLabel}</label>
-                        <input type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', marginTop: 6 }} />
+                      <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                        <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📌 {defaultLabel}</label>
+                        <input type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.9rem', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                       </div>
                     )
                   })}
@@ -610,8 +610,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   const label = snippetLabels[block.template]?.[varName] || varName;
                   return (
                     <div key={varName} className="field-item" style={{ marginBottom: 12 }}>
-                      <label className="field-label-xs" style={{ color: '#333', fontWeight: '600' }}>✏️ {label}</label>
-                      <div style={{ border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden', marginTop: 6 }}>
+                      <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>✏️ {label}</label>
+                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', marginTop: 6, background: 'var(--bg-secondary)' }}>
                         <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
                       </div>
                     </div>
@@ -623,8 +623,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           {/* Fallback simple text/gallery editors when no template */}
           {!block.template && block.type === 'text' && (
             <>
-              <input type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8, borderRadius: 6, border: '1px solid #ddd', padding: '8px', width: '100%' }} />
-              <div style={{ border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden' }}>
+              <input type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
                 <ReactQuill value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} theme="snow" />
               </div>
             </>
@@ -659,44 +659,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     <div className="page-editor">
 
       {/* Tab Navigation */}
-      <div className="tabs-container" style={{
-        display: 'flex',
-        gap: '0',
-        borderBottom: '2px solid #e0e0e0',
-        marginBottom: '20px',
-        backgroundColor: '#f8f8f8'
-      }}>
+      <div className="tabs-container">
         <button
           onClick={() => setActiveTab('info')}
           className={activeTab === 'info' ? 'tab-active' : 'tab-inactive'}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            backgroundColor: activeTab === 'info' ? 'white' : 'transparent',
-            borderBottom: activeTab === 'info' ? '3px solid #667eea' : 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: activeTab === 'info' ? 'bold' : 'normal',
-            color: activeTab === 'info' ? '#667eea' : '#666',
-            transition: 'all 0.3s ease'
-          }}
         >
           ℹ️ Seiten-Informationen
         </button>
         <button
           onClick={() => setActiveTab('blocks')}
           className={activeTab === 'blocks' ? 'tab-active' : 'tab-inactive'}
-          style={{
-            padding: '12px 20px',
-            border: 'none',
-            backgroundColor: activeTab === 'blocks' ? 'white' : 'transparent',
-            borderBottom: activeTab === 'blocks' ? '3px solid #667eea' : 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: activeTab === 'blocks' ? 'bold' : 'normal',
-            color: activeTab === 'blocks' ? '#667eea' : '#666',
-            transition: 'all 0.3s ease'
-          }}
         >
           📦 Blöcke
         </button>

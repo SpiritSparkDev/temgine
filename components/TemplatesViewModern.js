@@ -13,6 +13,7 @@ export default function TemplatesViewModern({ showToast }) {
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
   const [templateType, setTemplateType] = useState('SITE');
+  const [searchTerm, setSearchTerm] = useState('');
   const [snippets, setSnippets] = useState([]);
   const [navigations, setNavigations] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
@@ -119,6 +120,16 @@ export default function TemplatesViewModern({ showToast }) {
     await insertText(text, () => setTemplateCode(c => c + text))
   }
 
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredTemplates = templates.filter((t) => {
+    if (!normalizedSearch) return true;
+    return t.name.toLowerCase().includes(normalizedSearch);
+  });
+
+  const boundSnippets = snippets.filter((s) => s.type === 'bound');
+  const definedSnippets = snippets.filter((s) => s.type === 'defined');
+  const freeSnippets = snippets.filter((s) => !s.type || (s.type !== 'bound' && s.type !== 'defined'));
+
   return (
     <div className="editor-container">
       <div className="editor-sidebar">
@@ -128,20 +139,46 @@ export default function TemplatesViewModern({ showToast }) {
             <Plus size={18} />
           </button>
         </div>
+
+        <div className="editor-search-wrap">
+          <input
+            className="editor-search-input"
+            type="text"
+            placeholder="Templates suchen..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
         
         <div className="editor-list">
           {templates.length === 0 ? (
             <div className="empty-list-state">Keine Templates vorhanden</div>
+          ) : filteredTemplates.length === 0 ? (
+            <div className="empty-list-state">Keine Treffer für "{searchTerm}"</div>
           ) : (
-            templates.map((t, index) => (
+            filteredTemplates.map((t) => {
+              const index = templates.findIndex((x) => x.name === t.name);
+              return (
               <div 
                 key={t.name} 
                 className={`editor-list-item ${selectedTemplate === index ? 'active' : ''}`}
+                onClick={() => handleEdit(t.name, index)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleEdit(t.name, index);
+                  }
+                }}
               >
-                <div className="editor-item-info" onClick={() => handleEdit(t.name, index)}>
+                <div className="editor-item-info">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {t.type === 'BLOCK' ? <Grid size={14} /> : <Layout size={14} />}
                     <div className="editor-item-label">{t.name}</div>
+                    <span className={`template-type-badge ${t.type === 'BLOCK' ? 'block' : 'site'}`}>
+                      {t.type === 'BLOCK' ? 'Block' : 'Site'}
+                    </span>
                   </div>
                 </div>
                 <div className="editor-item-actions">
@@ -161,7 +198,7 @@ export default function TemplatesViewModern({ showToast }) {
                   </button>
                 </div>
               </div>
-            ))
+            )})
           )}
         </div>
       </div>
@@ -180,7 +217,7 @@ export default function TemplatesViewModern({ showToast }) {
               <select
                 value={templateType}
                 onChange={e => setTemplateType(e.target.value)}
-                style={{ marginLeft: 8, padding: '6px 8px', borderRadius: 4 }}
+                className="editor-filter-select"
                 title="Template Type"
               >
                 <option value="SITE">Site Template</option>
@@ -206,50 +243,75 @@ export default function TemplatesViewModern({ showToast }) {
               </div>
 
               <div className="editor-snippets-panel">
-              <h4>Snippets einfügen</h4>
-              <div className="snippet-buttons">
-                {snippets.map(s => (
-                  <button key={s.label} className={`template-snippet-btn ${s.type === 'bound' ? 'bound-snippet' : (s.type === 'defined' ? 'defined-snippet' : '')}`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.type === 'bound' ? ' (bound)' : s.type === 'defined' ? ' (defined)' : ''}</button>
-                ))}
-                {/* Bound snippets */}
-                <div style={{ marginTop: 8 }}>
-                  <strong>Gebundene Snippets</strong>
-                  <div className="snippet-buttons" style={{ marginTop: 6 }}>
-                    {snippets.filter(s => s.type === 'bound').map(s => (
-                      <button key={s.label} className="template-snippet-btn bound-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
-                    ))}
+                <h4>Snippets einfügen</h4>
+                <div className="template-snippet-stack">
+                  {boundSnippets.length > 0 && (
+                    <div className="snippet-group">
+                      <div className="snippet-group-title">Gebundene Snippets</div>
+                      <div className="snippet-buttons">
+                        {boundSnippets.map(s => (
+                          <button key={s.label} className="template-snippet-btn bound-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {definedSnippets.length > 0 && (
+                    <div className="snippet-group">
+                      <div className="snippet-group-title">Definierte Snippets</div>
+                      <div className="snippet-buttons">
+                        {definedSnippets.map(s => (
+                          <button key={s.label} className="template-snippet-btn defined-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` - ${s.handler}` : ''}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {freeSnippets.length > 0 && (
+                    <div className="snippet-group">
+                      <div className="snippet-group-title">Freie Snippets</div>
+                      <div className="snippet-buttons">
+                        {freeSnippets.map(s => (
+                          <button key={s.label} className="template-snippet-btn" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}</button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {navigations.length > 0 && (
+                    <div className="snippet-group">
+                      <div className="snippet-group-title">Navigationen</div>
+                      <div className="snippet-buttons">
+                        {navigations.map(nav => (
+                          <button 
+                            key={nav} 
+                            className="template-snippet-btn navigation-snippet"
+                            {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
+                          >
+                            📍 {nav}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="snippet-group">
+                    <div className="snippet-group-title">Templates referenzieren</div>
+                    <div className="snippet-buttons">
+                      {templates
+                        .filter(t => t.name !== templateName)
+                        .map(t => (
+                          <button 
+                            key={t.name} 
+                            className="template-snippet-btn template-snippet"
+                            {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
+                          >
+                            🧩 {t.name}
+                          </button>
+                        ))}
+                    </div>
                   </div>
                 </div>
-                {/* Defined snippets */}
-                <div style={{ marginTop: 8 }}>
-                  <strong>Definierte Snippets</strong>
-                  <div className="snippet-buttons" style={{ marginTop: 6 }}>
-                    {snippets.filter(s => s.type === 'defined').map(s => (
-                      <button key={s.label} className="template-snippet-btn defined-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` — ${s.handler}` : ''}</button>
-                    ))}
-                  </div>
-                </div>
-                {navigations.map(nav => (
-                  <button 
-                    key={nav} 
-                    className="template-snippet-btn navigation-snippet"
-                    {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
-                  >
-                    📍 {nav}
-                  </button>
-                ))}
-                {templates
-                  .filter(t => t.name !== templateName) // Verhindere Selbstreferenz
-                  .map(t => (
-                    <button 
-                      key={t.name} 
-                      className="template-snippet-btn template-snippet"
-                      {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
-                    >
-                      🧩 {t.name}
-                    </button>
-                  ))}
-              </div>
               </div>
             </div>
           </>

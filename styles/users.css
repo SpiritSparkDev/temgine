@@ -32,7 +32,7 @@
 }
 
 .user-card {
-  background: var(--background-secondary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1.5rem;
@@ -125,7 +125,7 @@
   padding: 0.5rem;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  background: var(--background-primary);
+  background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 500;
@@ -140,7 +140,7 @@
 /* Icon Button Small */
 .icon-btn-small {
   padding: 0.375rem;
-  background: var(--background-primary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   cursor: pointer;
@@ -160,7 +160,7 @@
 
 /* Permissions Info */
 .permissions-info {
-  background: var(--background-secondary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 2rem;
@@ -179,7 +179,7 @@
 }
 
 .permission-item {
-  background: var(--background-primary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 1.25rem;
