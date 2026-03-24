@@ -187,7 +187,7 @@ export default function Login({ providers }) {
         )}
 
         <p style={{ marginTop: '1.5rem', fontSize: '0.85rem', color: '#999' }}>
-          Standard: admin / admin
+          Bitte verwenden Sie ein angelegtes Benutzerkonto oder OAuth.
         </p>
       </div>
     </div>

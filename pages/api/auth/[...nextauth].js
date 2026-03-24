@@ -14,38 +14,40 @@ export const authOptions = {
       async authorize(credentials) {
         const { prisma } = await import('../../../lib/prisma');
         const crypto = await import('crypto');
+        const username = credentials?.username?.trim();
+        const password = credentials?.password;
+
+        if (!username || !password) {
+          return null;
+        }
         
         try {
-          // Admin Fallback
-          if (credentials?.username === 'admin' && credentials?.password === 'admin') {
-            const user = await prisma.user.upsert({
-              where: { email: 'admin@example.com' },
-              update: { name: 'Admin' },
-              create: {
-                email: 'admin@example.com',
-                name: 'Admin',
-                role: 'ADMIN',
-              },
-            });
-            return { id: user.id, name: user.name, email: user.email };
-          }
-
           // Suche User mit Passwort (username kann Email oder Name sein)
-          const users = await prisma.user.findMany({
+          const user = await prisma.user.findFirst({
             where: {
-              password: { not: null }
-            }
+              password: { not: null },
+              OR: [
+                { email: username },
+                { name: username },
+              ],
+            },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              password: true,
+              role: true,
+            },
           });
 
-          const hashedPassword = crypto.createHash('sha256').update(credentials.password).digest('hex');
-          
-          const user = users.find(u => 
-            (u.email === credentials.username || u.name === credentials.username) &&
-            u.password === hashedPassword
-          );
+          if (!user?.password) {
+            return null;
+          }
 
-          if (user) {
-            return { id: user.id, name: user.name, email: user.email };
+          const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
+
+          if (user.password === hashedPassword) {
+            return { id: user.id, name: user.name, email: user.email, role: user.role };
           }
         } catch (error) {
           console.error('Auth error:', error);
