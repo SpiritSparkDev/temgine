@@ -252,6 +252,14 @@ export default function SnippetsView({ showToast }) {
               <div className="editor-snippets-panel">
                 <h4>Einfügehilfen</h4>
                 <div className="snippet-buttons" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className="template-snippet-btn"
+                    {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => fallbackAppend('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
+                    title="Dynamisches Heading mit frei wählbarem Level"
+                  >
+                    Heading Dynamisch
+                  </button>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => fallbackAppend('{{title}}'))}>{'{{title}}'}</button>
                     <select className="heading-select" defaultValue="" onChange={e => { if (e.target.value) { insertHeadingToken('{{title}}', e.target.value); e.target.value = '' } }} title="Als Heading einfügen">

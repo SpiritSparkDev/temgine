@@ -322,6 +322,13 @@ export default function TemplatesViewModern({ showToast }) {
                   <div className="snippet-group">
                     <div className="snippet-group-title">Templates referenzieren</div>
                     <div className="snippet-buttons">
+                      <button
+                        className="template-snippet-btn"
+                        {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => setTemplateCode(c => c + '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
+                        title="Dynamisches Heading mit frei wählbarem Level"
+                      >
+                        Heading Dynamisch
+                      </button>
                       {templates
                         .filter(t => t.name !== templateName)
                         .map(t => (

@@ -25,6 +25,11 @@
     "type": "free"
   },
   {
+    "label": "Heading Dynamisch",
+    "snippet": "<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>",
+    "type": "free"
+  },
+  {
     "label": "Heading H1",
     "snippet": "#heading",
     "type": "defined",

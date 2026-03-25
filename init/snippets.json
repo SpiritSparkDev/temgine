@@ -1,6 +1,7 @@
 [
   { "label": "Titel", "snippet": "{{title}}" },
   { "label": "Text", "snippet": "{{text}}" },
+  { "label": "Heading Dynamisch", "snippet": "<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>" },
   { "label": "Bild (erstes)", "snippet": "{{images.0}}" },
   { "label": "Excerpt", "snippet": "{{data.excerpt}}" }
 ]

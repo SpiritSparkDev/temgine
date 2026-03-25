@@ -1,9 +1,100 @@
 import React, { useState, useEffect } from 'react';
-import { Database, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import {
+    Activity,
+    AlertCircle,
+    ArrowRight,
+    Braces,
+    CheckCircle,
+    Database,
+    Download,
+    FileText,
+    LayoutTemplate,
+    RefreshCw,
+    Upload,
+    XCircle,
+} from 'lucide-react';
 
 export default function DashboardView({ templateList, pages, snippets, setView, showToast }) {
     const [dbHealth, setDbHealth] = useState(null);
     const [dbLoading, setDbLoading] = useState(true);
+
+    const siteTemplateCount = templateList.filter(template => template.type !== 'BLOCK').length;
+    const blockTemplateCount = templateList.filter(template => template.type === 'BLOCK').length;
+    const recentPages = pages.slice(0, 6);
+
+    const dbStatusTone = dbLoading ? 'pending' : dbHealth?.connected ? 'success' : 'danger';
+    const dbStatusLabel = dbLoading ? 'Prüfung läuft' : dbHealth?.connected ? 'Verbunden' : 'Getrennt';
+    const dbStatusMeta = dbLoading
+        ? 'Die Erreichbarkeit der Datenbank wird geprüft.'
+        : dbHealth?.connected
+            ? `${dbHealth.tables || 0} Tabellen verfügbar`
+            : (dbHealth?.error || 'Keine Verbindung zur Datenbank');
+
+    const stats = [
+        {
+            key: 'templates',
+            title: 'Templates',
+            value: templateList.length,
+            meta: `${siteTemplateCount} Site, ${blockTemplateCount} Block`,
+            icon: LayoutTemplate,
+            accent: 'primary',
+        },
+        {
+            key: 'pages',
+            title: 'Seiten',
+            value: pages.length,
+            meta: pages.length > 0 ? `${pages.filter(page => (page.blocks || []).length > 0).length} mit Inhalt` : 'Noch keine Inhalte angelegt',
+            icon: FileText,
+            accent: 'secondary',
+        },
+        {
+            key: 'snippets',
+            title: 'Snippets',
+            value: snippets.length,
+            meta: snippets.length > 0 ? 'Wiederverwendbare Bausteine bereit' : 'Noch keine Snippets angelegt',
+            icon: Braces,
+            accent: 'tertiary',
+        },
+        {
+            key: 'database',
+            title: 'Datenbank',
+            value: dbStatusLabel,
+            meta: dbStatusMeta,
+            icon: Database,
+            accent: dbStatusTone,
+        },
+    ];
+
+    const quickActions = [
+        {
+            key: 'templates',
+            title: 'Template anlegen',
+            description: 'Neue Site- oder Block-Templates direkt vorbereiten.',
+            icon: LayoutTemplate,
+            onClick: () => setView('templates'),
+        },
+        {
+            key: 'pages',
+            title: 'Seite erstellen',
+            description: 'Neue Inhalte anlegen und mit Templates verbinden.',
+            icon: FileText,
+            onClick: () => setView('pages'),
+        },
+        {
+            key: 'navigation',
+            title: 'Navigation pflegen',
+            description: 'Menüs und Seitenstruktur schnell aktualisieren.',
+            icon: ArrowRight,
+            onClick: () => setView('navigation'),
+        },
+        {
+            key: 'snippets',
+            title: 'Snippets verwalten',
+            description: 'Wiederverwendbare Fragmente organisieren.',
+            icon: Braces,
+            onClick: () => setView('snippets'),
+        },
+    ];
 
     useEffect(() => {
         checkDatabaseHealth();
@@ -66,131 +157,227 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
 
     return (
         <div className="admin-editor-area">
-            <div style={{ padding: 40 }}>
-                <h2 style={{ marginBottom: 30 }}>Dashboard</h2>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 40 }}>
-                    <div style={{ background: 'var(--bg-secondary)', padding: 30, borderRadius: 10, boxShadow: '0 2px 8px var(--shadow)' }}>
-                        <h3 style={{ fontSize: '2rem', color: '#667eea', marginBottom: 10 }}>{templateList.length}</h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Templates</p>
-                    </div>
-                    <div style={{ background: 'var(--bg-secondary)', padding: 30, borderRadius: 10, boxShadow: '0 2px 8px var(--shadow)' }}>
-                        <h3 style={{ fontSize: '2rem', color: '#667eea', marginBottom: 10 }}>{pages.length}</h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Seiten</p>
-                    </div>
-                    <div style={{ background: 'var(--bg-secondary)', padding: 30, borderRadius: 10, boxShadow: '0 2px 8px var(--shadow)' }}>
-                        <h3 style={{ fontSize: '2rem', color: '#667eea', marginBottom: 10 }}>{snippets.length}</h3>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '1.1rem' }}>Snippets</p>
-                    </div>
-
-                    {/* Database Health Monitor */}
-                    <div style={{ 
-                        background: dbHealth?.connected ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)', 
-                        padding: 30, 
-                        borderRadius: 10, 
-                        boxShadow: '0 2px 8px var(--shadow)',
-                        border: `2px solid ${dbHealth?.connected ? '#86efac' : '#fca5a5'}`
-                    }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15 }}>
-                            <Database size={24} color={dbHealth?.connected ? '#22c55e' : '#ef4444'} />
-                            <h4 style={{ margin: 0, fontSize: '1.1rem' }}>Database Status</h4>
+            <div className="dashboard-shell">
+                <section className="dashboard-hero">
+                    <div className="dashboard-hero-copy">
+                        <span className="dashboard-eyebrow">Admin Dashboard</span>
+                        <h2>Dein Content-Hub auf einen Blick</h2>
+                        <p>
+                            Schnellzugriff auf Templates, Seiten, Snippets und Systemstatus.
+                            Das Dashboard priorisiert jetzt die nächsten sinnvollen Schritte statt nur Rohzahlen.
+                        </p>
+                        <div className="dashboard-hero-tags">
+                            <span className="dashboard-tag">{siteTemplateCount} Site-Templates</span>
+                            <span className="dashboard-tag">{blockTemplateCount} Block-Templates</span>
+                            <span className="dashboard-tag">{pages.length} Seiten gesamt</span>
                         </div>
-                        {dbLoading ? (
-                            <p style={{ color: 'var(--text-secondary)' }}>Überprüfe...</p>
-                        ) : dbHealth?.connected ? (
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                    <CheckCircle size={18} color="#22c55e" />
-                                    <span style={{ fontWeight: 'bold', color: '#22c55e' }}>Verbunden</span>
+                    </div>
+
+                    <div className="dashboard-hero-actions">
+                        <button className="dashboard-action dashboard-action-primary" onClick={() => setView('pages')}>
+                            <FileText size={18} />
+                            Seite erstellen
+                        </button>
+                        <button className="dashboard-action" onClick={() => setView('templates')}>
+                            <LayoutTemplate size={18} />
+                            Templates öffnen
+                        </button>
+                        <button className="dashboard-action" onClick={checkDatabaseHealth}>
+                            <RefreshCw size={18} className={dbLoading ? 'dashboard-spin' : ''} />
+                            Datenbank prüfen
+                        </button>
+                    </div>
+                </section>
+
+                <section className="dashboard-stats-grid">
+                    {stats.map(stat => {
+                        const Icon = stat.icon;
+                        return (
+                            <article key={stat.key} className={`dashboard-stat-card accent-${stat.accent}`}>
+                                <div className="dashboard-stat-header">
+                                    <span className="dashboard-stat-icon">
+                                        <Icon size={20} />
+                                    </span>
+                                    <span className="dashboard-stat-title">{stat.title}</span>
                                 </div>
-                                <div style={{ fontSize: '0.85rem', color: '#666', lineHeight: 1.6 }}>
-                                    <div>Verbindungszeit: {dbHealth.connectionTime}</div>
-                                    <div>Tabellen: {dbHealth.tables}</div>
-                                    <div style={{ fontSize: '0.75rem', marginTop: 8, opacity: 0.7 }}>
+                                <div className="dashboard-stat-value">{stat.value}</div>
+                                <p className="dashboard-stat-meta">{stat.meta}</p>
+                                {stat.key === 'database' && !dbLoading && dbHealth?.connected && (
+                                    <div className="dashboard-stat-inline-status success">
+                                        <CheckCircle size={16} />
                                         Letzter Check: {new Date(dbHealth.timestamp).toLocaleTimeString('de-DE')}
                                     </div>
+                                )}
+                                {stat.key === 'database' && !dbLoading && !dbHealth?.connected && (
+                                    <div className="dashboard-stat-inline-status danger">
+                                        <XCircle size={16} />
+                                        Verbindung prüfen
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })}
+                </section>
+
+                <section className="dashboard-content-grid">
+                    <article className="dashboard-panel dashboard-panel-wide">
+                        <div className="dashboard-panel-head">
+                            <div>
+                                <span className="dashboard-panel-kicker">Schnellzugriff</span>
+                                <h3>Häufige Aufgaben</h3>
+                            </div>
+                            <span className="dashboard-panel-note">Direkte Einstiege für den Redaktionsalltag</span>
+                        </div>
+
+                        <div className="dashboard-quick-grid">
+                            {quickActions.map(action => {
+                                const Icon = action.icon;
+                                return (
+                                    <button key={action.key} className="dashboard-quick-card" onClick={action.onClick}>
+                                        <span className="dashboard-quick-icon">
+                                            <Icon size={20} />
+                                        </span>
+                                        <span className="dashboard-quick-content">
+                                            <strong>{action.title}</strong>
+                                            <span>{action.description}</span>
+                                        </span>
+                                        <ArrowRight size={18} className="dashboard-quick-arrow" />
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <div className="dashboard-utility-actions">
+                            <button className="dashboard-action" onClick={exportDatabase} title="Exportiere Datenbank als JSON">
+                                <Download size={18} />
+                                Export DB
+                            </button>
+                            <label className="dashboard-action" htmlFor="db-import-input">
+                                <Upload size={18} />
+                                Import DB
+                                <input id="db-import-input" type="file" accept="application/json" className="dashboard-hidden-input" onChange={(e) => handleImportFile(e)} />
+                            </label>
+                        </div>
+                    </article>
+
+                    <article className="dashboard-panel">
+                        <div className="dashboard-panel-head">
+                            <div>
+                                <span className="dashboard-panel-kicker">System</span>
+                                <h3>Datenbankstatus</h3>
+                            </div>
+                            <button className="dashboard-mini-action" onClick={checkDatabaseHealth}>
+                                Neu prüfen
+                            </button>
+                        </div>
+
+                        <div className={`dashboard-system-card tone-${dbStatusTone}`}>
+                            <div className="dashboard-system-topline">
+                                <div className="dashboard-system-icon-wrap">
+                                    {dbLoading ? <Activity size={18} /> : dbHealth?.connected ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                                </div>
+                                <div>
+                                    <strong>{dbStatusLabel}</strong>
+                                    <p>{dbStatusMeta}</p>
                                 </div>
                             </div>
-                        ) : (
+
+                            {dbHealth?.connected && !dbLoading && (
+                                <dl className="dashboard-system-facts">
+                                    <div>
+                                        <dt>Verbindungszeit</dt>
+                                        <dd>{dbHealth.connectionTime || 'n/a'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Tabellen</dt>
+                                        <dd>{dbHealth.tables ?? 'n/a'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Letzter Check</dt>
+                                        <dd>{new Date(dbHealth.timestamp).toLocaleTimeString('de-DE')}</dd>
+                                    </div>
+                                </dl>
+                            )}
+                        </div>
+                    </article>
+                </section>
+
+                <section className="dashboard-content-grid dashboard-content-grid-bottom">
+                    <article className="dashboard-panel dashboard-panel-wide">
+                        <div className="dashboard-panel-head">
                             <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                    <XCircle size={18} color="#ef4444" />
-                                    <span style={{ fontWeight: 'bold', color: '#ef4444' }}>Getrennt</span>
-                                </div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                    {dbHealth?.error || 'Keine Verbindung zur Datenbank'}
+                                <span className="dashboard-panel-kicker">Content</span>
+                                <h3>Veröffentlichte Seiten</h3>
+                            </div>
+                            <button className="dashboard-mini-action" onClick={() => setView('pages')}>
+                                Seiten verwalten
+                            </button>
+                        </div>
+
+                        {recentPages.length > 0 ? (
+                            <div className="dashboard-page-list">
+                                {recentPages.map(page => (
+                                    <div key={page.id} className="dashboard-page-row">
+                                        <div className="dashboard-page-meta">
+                                            <strong>{page.title}</strong>
+                                            <span>/{page.slug || ''}</span>
+                                            <p>Template: {page.template || 'Standard'} · Blöcke: {(page.blocks || []).length}</p>
+                                        </div>
+                                        <div className="dashboard-page-actions">
+                                            <button className="dashboard-mini-action" onClick={() => setView('pages')}>
+                                                Bearbeiten
+                                            </button>
+                                            <a href={`/${page.slug}`} target="_blank" rel="noopener noreferrer" className="dashboard-link-button">
+                                                Ansehen
+                                            </a>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="dashboard-empty-state">
+                                <FileText size={20} />
+                                <div>
+                                    <strong>Noch keine Seiten erstellt</strong>
+                                    <p>Lege zuerst eine Seite an, um Inhalte zu veröffentlichen.</p>
                                 </div>
                             </div>
                         )}
-                        <button 
-                            onClick={checkDatabaseHealth}
-                            style={{
-                                marginTop: 15,
-                                padding: '6px 12px',
-                                fontSize: '0.85rem',
-                                border: '1px solid var(--border-color)',
-                                borderRadius: 5,
-                                background: 'var(--bg-secondary)',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            Neu prüfen
-                        </button>
-                    </div>
-                </div>
+                    </article>
 
-                <div style={{ background: 'var(--bg-secondary)', padding: 30, borderRadius: 10, boxShadow: '0 2px 8px var(--shadow)', marginBottom: 40 }}>
-                    <h4 style={{ marginBottom: 15 }}>Schnellzugriff</h4>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <button className="primary" onClick={() => setView('templates')}>Neues Template erstellen</button>
-                        <button className="primary" onClick={() => setView('pages')}>Neue Seite erstellen</button>
-                        <button className="primary" onClick={() => setView('navigation')}>Navigation bearbeiten</button>
-                        <button className="primary" onClick={() => setView('snippets')}>Snippets verwalten</button>
-                        <button className="primary" onClick={() => exportDatabase()} title="Exportiere Datenbank als JSON">Export DB</button>
-                        <label className="primary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                            Import DB
-                            <input id="db-import-input" type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => handleImportFile(e)} />
-                        </label>
-                    </div>
-                </div>
+                    <article className="dashboard-panel">
+                        <div className="dashboard-panel-head">
+                            <div>
+                                <span className="dashboard-panel-kicker">Empfehlung</span>
+                                <h3>Nächste sinnvolle Schritte</h3>
+                            </div>
+                        </div>
 
-                <div style={{ background: 'var(--bg-secondary)', padding: 30, borderRadius: 10, boxShadow: '0 2px 8px var(--shadow)', marginBottom: 20 }}>
-                    <h3 style={{ marginBottom: 20, fontSize: '1.5rem' }}>Veröffentlichte Seiten</h3>
-                    {pages.length > 0 ? (
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                            {pages.map(page => (
-                                <li key={page.id} style={{ padding: '15px 0', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <div>
-                                        <strong style={{ fontSize: '1.1rem' }}>{page.title}</strong>
-                                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: 5 }}>
-                                            Template: {page.template || 'Standard'} • Blöcke: {(page.blocks || []).length}
-                                        </div>
-                                    </div>
-                                    <a
-                                        href={`/${page.slug}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style={{
-                                            background: 'var(--accent-primary)',
-                                            color: 'white',
-                                            padding: '8px 20px',
-                                            borderRadius: 5,
-                                            textDecoration: 'none',
-                                            fontSize: '0.9rem',
-                                            fontWeight: 'bold'
-                                        }}
-                                    >
-                                        Ansehen →
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
-                    ) : (
-                        <p style={{ color: 'var(--text-secondary)' }}>Noch keine Seiten erstellt.</p>
-                    )}
-                </div>
-
-
+                        <div className="dashboard-checklist">
+                            <div className="dashboard-checklist-item">
+                                <CheckCircle size={18} />
+                                <div>
+                                    <strong>Template-Basis prüfen</strong>
+                                    <span>{templateList.length > 0 ? 'Die Template-Struktur ist vorhanden.' : 'Lege zuerst ein erstes Template an.'}</span>
+                                </div>
+                            </div>
+                            <div className="dashboard-checklist-item">
+                                <CheckCircle size={18} />
+                                <div>
+                                    <strong>Seitenbestand ausbauen</strong>
+                                    <span>{pages.length > 0 ? 'Vorhandene Seiten können jetzt weiter verfeinert werden.' : 'Es fehlt noch mindestens eine veröffentlichbare Seite.'}</span>
+                                </div>
+                            </div>
+                            <div className="dashboard-checklist-item">
+                                <CheckCircle size={18} />
+                                <div>
+                                    <strong>Wiederverwendung erhöhen</strong>
+                                    <span>{snippets.length > 0 ? 'Snippets stehen als Bausteine bereit.' : 'Snippets helfen, Inhalte schneller konsistent zu bauen.'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                </section>
             </div>
         </div>
     );

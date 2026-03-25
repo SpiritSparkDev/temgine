@@ -1,5 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { ChevronUp, ChevronDown, Edit, Plus, Trash2 } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Edit,
+  FileText,
+  FolderTree,
+  Globe,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import Toast from './Toast';
 
 
 
@@ -7,6 +18,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   const [tree, setTree] = useState([]);
   const [newTitle, setNewTitle] = useState('');
   const [templates, setTemplates] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     setTree(pages || []);
@@ -26,6 +39,45 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   const siteTemplateNames = normalizedTemplates
     .filter(t => String(t.type || 'SITE').toUpperCase() === 'SITE')
     .map(t => t.name);
+
+  const treeStats = useMemo(() => {
+    const visit = (nodes) => nodes.reduce((acc, node) => {
+      acc.total += 1;
+      if (node.isHomepage) acc.homepages += 1;
+      if ((node.children || []).length > 0) acc.withChildren += 1;
+      if (node.status === 'DRAFT') acc.drafts += 1;
+      return visit(node.children || []).reduce((nestedAcc, key) => nestedAcc, acc);
+    }, { total: 0, drafts: 0, homepages: 0, withChildren: 0 });
+
+    const mergeVisit = (nodes, acc = { total: 0, drafts: 0, homepages: 0, withChildren: 0 }) => {
+      for (const node of nodes) {
+        acc.total += 1;
+        if (node.isHomepage) acc.homepages += 1;
+        if ((node.children || []).length > 0) acc.withChildren += 1;
+        if (node.status === 'DRAFT') acc.drafts += 1;
+        mergeVisit(node.children || [], acc);
+      }
+      return acc;
+    };
+
+    return mergeVisit(tree);
+  }, [tree]);
+
+  const filteredTree = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return tree;
+
+    const filterNodes = (nodes) => nodes.reduce((acc, node) => {
+      const children = filterNodes(node.children || []);
+      const haystack = [node.title, node.slug, node.template, node.status].filter(Boolean).join(' ').toLowerCase();
+      if (haystack.includes(term) || children.length > 0) {
+        acc.push({ ...node, children });
+      }
+      return acc;
+    }, []);
+
+    return filterNodes(tree);
+  }, [searchTerm, tree]);
 
   function handleAdd(parentId = null) {
     const id = Math.random().toString(36).substr(2, 9);
@@ -55,7 +107,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   function handleDelete(id) {
     // Startseite darf nicht gelöscht werden
     if (id === 'demo-home') {
-      showToast?.('Die Startseite kann nicht gelöscht werden.', 'error');
+      setToast({ message: 'Die Startseite kann nicht gelöscht werden.', type: 'error' });
       return;
     }
     const removeNode = (nodes) => nodes.filter(n => n.id !== id).map(n => ({ ...n, children: removeNode(n.children || []) }));
@@ -135,15 +187,42 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     onUpdate && onUpdate(updated);
   }
 
+  function getStatusLabel(node) {
+    if (node.isHomepage) return 'Homepage';
+    if (node.redirectType === '404') return '404-Seite';
+    if (node.redirectType === '503') return '503-Seite';
+    return node.status === 'DRAFT' ? 'Entwurf' : 'Veröffentlicht';
+  }
+
+  function renderNodeMeta(node) {
+    const childCount = (node.children || []).length;
+    return [
+      `/${node.slug || ''}`,
+      `Template: ${node.template || 'Kein Template'}`,
+      childCount > 0 ? `${childCount} Unterseiten` : 'Keine Unterseiten',
+    ].join(' · ');
+  }
+
   function renderTree(nodes, parentId = null) {
     return nodes.map((node, index) => (
       <div key={node.id} className="tree-node">
         <div className="node-row">
           <div className="node-title">
-            <a href={`/${node.slug}`} target="_blank" rel="noopener noreferrer">{node.title}</a>
-            {node.isHomepage && <span className="page-badge badge-home">🏠 Homepage</span>}
-            {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
-            {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
+            <div className="page-node-leading">
+              <span className="page-node-icon">
+                {parentId ? <FolderTree size={16} /> : <Globe size={16} />}
+              </span>
+              <div className="page-node-copy">
+                <a href={`/${node.slug}`} target="_blank" rel="noopener noreferrer">{node.title}</a>
+                <p>{renderNodeMeta(node)}</p>
+              </div>
+            </div>
+            <div className="page-node-badges">
+              <span className="page-badge page-badge-neutral">{getStatusLabel(node)}</span>
+              {node.isHomepage && <span className="page-badge badge-home">🏠 Homepage</span>}
+              {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
+              {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
+            </div>
           </div>
           <div className="node-actions">
             <select 
@@ -164,6 +243,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
                 disabled={index === 0}
                 style={{ opacity: index === 0 ? 0.3 : 1 }}
                 title="Nach oben"
+                aria-label={`${node.title} nach oben verschieben`}
               >
                 <ChevronUp size={16} />
               </button>
@@ -173,15 +253,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
                 disabled={index === nodes.length - 1}
                 style={{ opacity: index === nodes.length - 1 ? 0.3 : 1 }}
                 title="Nach unten"
+                aria-label={`${node.title} nach unten verschieben`}
               >
                 <ChevronDown size={16} />
               </button>
             </div>
             <div className="btn-group">
-              <button className="icon-btn" onClick={() => onSelect && onSelect(node.id)} title="Bearbeiten">
+              <button className="icon-btn" onClick={() => onSelect && onSelect(node.id)} title="Bearbeiten" aria-label={`${node.title} bearbeiten`}>
                 <Edit size={16} />
               </button>
-              <button className="icon-btn" onClick={() => handleAdd(node.id)} title="Unterseite hinzufügen">
+              <button className="icon-btn" onClick={() => handleAdd(node.id)} title="Unterseite hinzufügen" aria-label={`Unterseite unter ${node.title} hinzufügen`}>
                 <Plus size={16} />
               </button>
             </div>
@@ -192,6 +273,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
                 disabled={node.id === 'demo-home'}
                 style={{ opacity: node.id === 'demo-home' ? 0.3 : 1 }}
                 title={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : 'Löschen'}
+                aria-label={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : `${node.title} löschen`}
               >
                 <Trash2 size={16} />
               </button>
@@ -211,13 +293,82 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
 
   return (
     <div className="page-tree">
-      <h2>Seitenbaum</h2>
-      <div className="controls">
-        <input type="text" placeholder="Seitentitel" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
-        <button className="primary" onClick={() => handleAdd()}>Seite hinzufügen</button>
-      </div>
-      <div>
-        {renderTree(tree)}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <div className="page-tree-shell">
+        <div className="page-tree-hero">
+          <div className="page-tree-hero-copy">
+            <span className="page-tree-eyebrow">Pages</span>
+            <h2>Seiten strukturieren und pflegen</h2>
+            <p>
+              Verwalte Seitenhierarchie, Templates und Bearbeitungsschritte an einer Stelle.
+              Suche und Aktionen sind jetzt direkter erreichbar.
+            </p>
+          </div>
+
+          <div className="page-tree-stats">
+            <div className="page-tree-stat">
+              <strong>{treeStats.total}</strong>
+              <span>Seiten gesamt</span>
+            </div>
+            <div className="page-tree-stat">
+              <strong>{treeStats.withChildren}</strong>
+              <span>mit Unterseiten</span>
+            </div>
+            <div className="page-tree-stat">
+              <strong>{treeStats.homepages}</strong>
+              <span>Systemseiten</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="page-tree-toolbar">
+          <label className="page-tree-search">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Seiten, Slugs oder Templates durchsuchen"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </label>
+
+          <div className="controls">
+            <input
+              type="text"
+              placeholder="Titel für neue Seite"
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAdd();
+              }}
+            />
+            <button className="primary" onClick={() => handleAdd()}>
+              <Plus size={16} />
+              Seite hinzufügen
+            </button>
+          </div>
+        </div>
+
+        <div className="page-tree-list">
+          {filteredTree.length > 0 ? (
+            renderTree(filteredTree)
+          ) : (
+            <div className="page-tree-empty-state">
+              <FileText size={20} />
+              <div>
+                <strong>Keine passenden Seiten gefunden</strong>
+                <p>Prüfe den Suchbegriff oder lege eine neue Seite an.</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, X, Layout, Grid } from 'lucide-react';
 import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
+import Toast from './Toast';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
   const [title, setTitle] = useState('');
@@ -23,12 +24,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState('info');
+  const [toast, setToast] = useState(null);
 
   // templates is expected to be an array of objects { name, type }
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
   const siteTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'SITE').map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
+  const selectedTemplateType = template ? (siteTemplateNames.includes(template) ? 'Site' : 'Block') : 'Ohne Template';
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     if (page) {
@@ -148,7 +155,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         if (!res.ok) {
           const error = await res.json();
           console.error('Upload-Fehler:', error);
-          alert(`Fehler beim Hochladen von ${file.name}: ${error.error || 'Unbekannter Fehler'}`);
+          showToast(`Fehler beim Hochladen von ${file.name}: ${error.error || 'Unbekannter Fehler'}`, 'error');
           continue;
         }
 
@@ -156,7 +163,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         console.log('Datei hochgeladen:', result);
       } catch (error) {
         console.error('Upload-Fehler:', error);
-        alert(`Fehler beim Hochladen von ${file.name}`);
+        showToast(`Fehler beim Hochladen von ${file.name}`, 'error');
       }
     }
 
@@ -173,6 +180,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
     setUploading(false);
     e.target.value = ''; // Reset input
+    showToast('Dateien erfolgreich aktualisiert', 'success');
   };
 
   function handleAddBlock(type) {
@@ -459,6 +467,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             ) : null}
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
               <Grid size={16} style={{ color: '#667eea' }} />
+              <span className="page-block-index">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
               <select
                 value={block.template || ''}
                 onChange={e => updateNestedBlockTemplate(path, e.target.value)}
@@ -470,6 +479,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   <option key={tn} value={tn}>{tn}</option>
                 ))}
               </select>
+              <span className="page-block-template-pill">{block.template || 'Freier Block'}</span>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -535,6 +545,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     const inputType = guessInputType(varName);
                     const value = block.props[varName] || '';
                     const label = snippetLabels[block.template]?.[varName] || varName;
+
+                    if (varName.toLowerCase().includes('headinglevel')) {
+                      const normalizedLevel = String(value || '2').replace(/^h/i, '');
+                      return (
+                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
+                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🏷️ {label}</label>
+                          <select
+                            value={normalizedLevel}
+                            onChange={e => updateNestedBlock(path, { [varName]: e.target.value })}
+                            className="input-field-small"
+                            style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', marginTop: 6 }}
+                          >
+                            <option value="1">H1</option>
+                            <option value="2">H2</option>
+                            <option value="3">H3</option>
+                            <option value="4">H4</option>
+                            <option value="5">H5</option>
+                            <option value="6">H6</option>
+                          </select>
+                        </div>
+                      )
+                    }
                     
                     if (isUrlVariable(varName)) {
                       return (
@@ -657,6 +689,38 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   return (
     <div className="page-editor">
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      <div className="page-editor-hero">
+        <div className="page-editor-hero-copy">
+          <span className="page-editor-eyebrow">Pages Editor</span>
+          <h2>{title || page?.title || 'Neue Seite bearbeiten'}</h2>
+          <p>
+            Bearbeite Seiteninformationen, Routing und Blockstruktur in einer klareren Oberfläche.
+            Die wichtigsten Zustände sind jetzt direkt sichtbar.
+          </p>
+        </div>
+        <div className="page-editor-summary">
+          <div className="page-editor-summary-item">
+            <strong>/{slug || 'seiten-url'}</strong>
+            <span>Aktueller Slug</span>
+          </div>
+          <div className="page-editor-summary-item">
+            <strong>{selectedTemplateType}</strong>
+            <span>Template-Typ</span>
+          </div>
+          <div className="page-editor-summary-item">
+            <strong>{blocks.length}</strong>
+            <span>Blöcke</span>
+          </div>
+        </div>
+      </div>
 
       {/* Tab Navigation */}
       <div className="tabs-container">
@@ -670,19 +734,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           onClick={() => setActiveTab('blocks')}
           className={activeTab === 'blocks' ? 'tab-active' : 'tab-inactive'}
         >
-          📦 Blöcke
+          📦 Blöcke ({blocks.length})
         </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'info' && (
         <div className="tab-content info-tab">
-          <div className="field-group">
+          <div className="page-editor-section">
+            <div className="page-editor-section-head">
+              <div>
+                <h3>Grunddaten</h3>
+                <p>Titel, URL und Routing-Logik dieser Seite.</p>
+              </div>
+              <span className="page-editor-section-badge">Info</span>
+            </div>
 
-            <h2>Seiten-Informationen</h2>
-
-            {/* Grid Layout für wichtige Felder */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+            <div className="page-editor-two-column">
               {/* Titel */}
               <div className="field-group" style={{ marginBottom: 0 }}>
                 <label className="field-label">📄 Titel</label>
@@ -709,37 +777,39 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
 
-            {/* Startseite setzen */}
-            <div className="field-group">
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={isHomepage}
-                  onChange={e => setIsHomepage(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <span>🏠 Als Startseite festlegen</span>
-              </label>
-              <small className="url-hint">Diese Seite wird als Standard-Startseite verwendet, wenn keine Slug eingegeben wird.</small>
-            </div>
+            <div className="page-editor-switch-grid">
+              <div className="page-editor-inline-card">
+                <label className="page-editor-checkline">
+                  <input
+                    type="checkbox"
+                    checked={isHomepage}
+                    onChange={e => setIsHomepage(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span>
+                    <strong>🏠 Als Startseite festlegen</strong>
+                    <small>Diese Seite wird als Standard-Startseite genutzt.</small>
+                  </span>
+                </label>
+              </div>
 
-            {/* Weiterleitungsoptionen */}
-            <div className="field-group">
-              <label className="field-label">Weiterleitung</label>
-              <select
-                value={redirectType}
-                onChange={e => setRedirectType(e.target.value)}
-                className="input-field"
-              >
-                <option value="none">Keine Weiterleitung</option>
-                <option value="404">404 - Seite nicht gefunden</option>
-                <option value="503">503 - Service nicht verfügbar</option>
-                <option value="external">Externe URL</option>
-              </select>
+              <div className="page-editor-inline-card">
+                <label className="field-label">Weiterleitung</label>
+                <select
+                  value={redirectType}
+                  onChange={e => setRedirectType(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="none">Keine Weiterleitung</option>
+                  <option value="404">404 - Seite nicht gefunden</option>
+                  <option value="503">503 - Service nicht verfügbar</option>
+                  <option value="external">Externe URL</option>
+                </select>
+              </div>
             </div>
 
             {redirectType === 'external' && (
-              <div className="field-group">
+              <div className="field-group page-editor-inline-card">
                 <label className="field-label">Externe URL</label>
                 <input
                   type="url"
@@ -751,8 +821,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <small className="url-hint">Vollständige URL mit http:// oder https://</small>
               </div>
             )}
+          </div>
 
-            {/* Seiten-Template Auswahl */}
+          <div className="page-editor-section">
+            <div className="page-editor-section-head">
+              <div>
+                <h3>Layout und Template</h3>
+                <p>Lege das Seitentemplate fest und pflege die dazugehörigen Template-Daten.</p>
+              </div>
+              <span className="page-editor-section-badge">Template</span>
+            </div>
+
             <div className="field-group">
               <label className="field-label">Seiten-Template (Optional)</label>
               <select
@@ -776,10 +855,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </small>
             </div>
 
-            <div className="hidden-section">
-              {/* Template-spezifische Felder */}
-              {template && templateCodes[template] && (
-                <div className="page-data-section">
+            {template && templateCodes[template] && (
+              <div className="page-data-section page-editor-template-data">
+                <div className="page-editor-section-head page-editor-section-head-compact">
+                  <div>
+                    <h3>Template-Daten</h3>
+                    <p>Inhalte für das gewählte Seitentemplate.</p>
+                  </div>
+                </div>
                   <h4 style={{ marginBottom: 10, fontSize: '0.95rem' }}>Template-Daten für "{template}"</h4>
                   {extractTemplateVariables(templateCodes[template]).map(varName => {
                     const inputType = guessInputType(varName);
@@ -851,6 +934,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       );
                     }
 
+                    if (varName.toLowerCase().includes('headinglevel')) {
+                      const normalizedLevel = String(value || '2').replace(/^h/i, '');
+                      return (
+                        <div key={varName} style={{ marginBottom: 10 }}>
+                          <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
+                          <select
+                            value={normalizedLevel}
+                            onChange={e => handleNestedUpdate(e.target.value)}
+                            className="input-field"
+                            style={{ width: '100%' }}
+                          >
+                            <option value="1">H1</option>
+                            <option value="2">H2</option>
+                            <option value="3">H3</option>
+                            <option value="4">H4</option>
+                            <option value="5">H5</option>
+                            <option value="6">H6</option>
+                          </select>
+                        </div>
+                      );
+                    }
+
                     if (inputType === 'textarea') {
                       return (
                         <div key={varName} style={{ marginBottom: 10 }}>
@@ -894,10 +999,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       </div>
                     );
                   })}
-                </div>
-              )}
-            </div>
-
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -905,9 +1008,44 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       {/* Blöcke Tab */}
       {activeTab === 'blocks' && (
         <div className="tab-content blocks-tab">
+          <div className="page-editor-section">
+            <div className="page-editor-section-head">
+              <div>
+                <h3>Block-Struktur</h3>
+                <p>Ordne Inhalte als Bausteine, füge neue Blöcke hinzu und verschiebe Top-Level-Blöcke per Drag & Drop.</p>
+              </div>
+              <span className="page-editor-section-badge">{blocks.length} Elemente</span>
+            </div>
+
+            <div className="page-block-toolbar">
+              <button
+                type="button"
+                className="btn-modern"
+                onClick={() => handleAddBlock('content')}
+              >
+                + Inhaltsblock hinzufügen
+              </button>
+              <div className="page-block-hints">
+                <span>Top-Level-Blöcke sind sortierbar.</span>
+                <span>Kind- und Sibling-Blöcke direkt im jeweiligen Block hinzufügen.</span>
+              </div>
+            </div>
+          </div>
+
           <div className="blocks-container">
-            <h3 className="blocks-title">Blöcke (Drag & Drop zum Sortieren)</h3>
-            {renderBlocksList()}
+            {blocks.length > 0 ? renderBlocksList() : (
+              <div className="page-block-empty-state">
+                <strong>Noch keine Blöcke vorhanden</strong>
+                <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
+                <button
+                  type="button"
+                  className="btn-modern"
+                  onClick={() => handleAddBlock('content')}
+                >
+                  Ersten Block hinzufügen
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
