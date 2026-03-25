@@ -13,6 +13,7 @@ export default function TemplatesViewModern({ showToast }) {
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
   const [templateType, setTemplateType] = useState('SITE');
+  const [activeTemplateScope, setActiveTemplateScope] = useState('SITE');
   const [searchTerm, setSearchTerm] = useState('');
   const [snippets, setSnippets] = useState([]);
   const [navigations, setNavigations] = useState([]);
@@ -62,6 +63,7 @@ export default function TemplatesViewModern({ showToast }) {
     setSelectedTemplate(null);
     setTemplateName('');
     setTemplateCode('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
+    setTemplateType(activeTemplateScope);
     setIsEditing(true);
   }
 
@@ -73,6 +75,7 @@ export default function TemplatesViewModern({ showToast }) {
         setTemplateName(data.name);
         setTemplateCode(data.code);
         setTemplateType(data.type || 'SITE');
+        setActiveTemplateScope(data.type || 'SITE');
         setIsEditing(true);
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
@@ -121,9 +124,12 @@ export default function TemplatesViewModern({ showToast }) {
   }
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
+  const siteTemplates = templates.filter((t) => (t.type || 'SITE') === 'SITE');
+  const blockTemplates = templates.filter((t) => t.type === 'BLOCK');
   const filteredTemplates = templates.filter((t) => {
-    if (!normalizedSearch) return true;
-    return t.name.toLowerCase().includes(normalizedSearch);
+    const typeMatches = (t.type || 'SITE') === activeTemplateScope;
+    const searchMatches = !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch);
+    return typeMatches && searchMatches;
   });
 
   const boundSnippets = snippets.filter((s) => s.type === 'bound');
@@ -141,10 +147,28 @@ export default function TemplatesViewModern({ showToast }) {
         </div>
 
         <div className="editor-search-wrap">
+          <div className="editor-segmented-control template-scope-switcher">
+            <button
+              type="button"
+              className={`editor-segment-btn ${activeTemplateScope === 'SITE' ? 'active' : ''}`}
+              onClick={() => setActiveTemplateScope('SITE')}
+            >
+              Site
+              <span className="editor-segment-count">{siteTemplates.length}</span>
+            </button>
+            <button
+              type="button"
+              className={`editor-segment-btn ${activeTemplateScope === 'BLOCK' ? 'active' : ''}`}
+              onClick={() => setActiveTemplateScope('BLOCK')}
+            >
+              Block
+              <span className="editor-segment-count">{blockTemplates.length}</span>
+            </button>
+          </div>
           <input
             className="editor-search-input"
             type="text"
-            placeholder="Templates suchen..."
+            placeholder={`${activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates suchen...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -154,7 +178,7 @@ export default function TemplatesViewModern({ showToast }) {
           {templates.length === 0 ? (
             <div className="empty-list-state">Keine Templates vorhanden</div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="empty-list-state">Keine Treffer für "{searchTerm}"</div>
+            <div className="empty-list-state">Keine {activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates{searchTerm ? ` für "${searchTerm}"` : ''}</div>
           ) : (
             filteredTemplates.map((t) => {
               const index = templates.findIndex((x) => x.name === t.name);

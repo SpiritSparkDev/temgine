@@ -1,14 +1,15 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { registerEditorApi } from '../lib/insertHelper'
 import Editor from 'react-simple-code-editor'
 import Highlight, { defaultProps } from 'prism-react-renderer'
-import theme from 'prism-react-renderer/themes/github'
+import githubTheme from 'prism-react-renderer/themes/github'
+import duotoneDarkTheme from 'prism-react-renderer/themes/duotoneDark'
 
-function PrismHighlight({ code, language }) {
+function PrismHighlight({ code, language, theme }) {
   return (
     <Highlight {...defaultProps} code={code} language={language} theme={theme}>
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <pre className={className} style={{ ...style, margin: 0, fontFamily: 'monospace' }}>
+        <pre className={`${className} codeeditor-pre`} style={{ ...style, margin: 0, fontFamily: 'monospace', background: 'transparent', minHeight: '100%' }}>
           {tokens.map((line, i) => (
             <div key={i} {...getLineProps({ line, key: i })}>
               {line.map((token, key) => (
@@ -26,6 +27,7 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
   const textareaRef = useRef(null)
   const textareaIdRef = useRef('temphelix-editor-' + Math.random().toString(36).slice(2, 9))
   const apiRef = useRef(null)
+  const [isDarkMode, setIsDarkMode] = useState(false)
 
   useEffect(() => {
     const api = {
@@ -59,15 +61,32 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
     } catch (e) {}
   }, [])
 
-  const highlight = code => <PrismHighlight code={code} language={language} />
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+
+    const root = document.documentElement
+    const syncDarkMode = () => setIsDarkMode(root.classList.contains('dark-mode'))
+
+    syncDarkMode()
+
+    const observer = new MutationObserver(syncDarkMode)
+    observer.observe(root, { attributes: true, attributeFilter: ['class'] })
+
+    return () => observer.disconnect()
+  }, [])
+
+  const highlightTheme = isDarkMode ? duotoneDarkTheme : githubTheme
+  const highlight = code => <PrismHighlight code={code} language={language} theme={highlightTheme} />
 
   return (
     <div className="codeeditor-wrapper" style={{ height }}>
       <Editor
+        className="codeeditor-root"
+        textareaClassName="codeeditor-textarea"
+        preClassName="codeeditor-highlight"
         value={value}
         onValueChange={code => onChange(code)}
         highlight={highlight}
-        padding={10}
         textareaId={textareaIdRef.current}
         onFocus={() => {
           try {
@@ -89,9 +108,13 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
         padding={10}
         style={{
           fontFamily: 'monospace',
-          fontSize: 13,
+          fontSize: 14,
+          lineHeight: 1.6,
           minHeight: height,
-          outline: 0
+          height: '100%',
+          outline: 0,
+          background: 'var(--bg-secondary)',
+          color: 'var(--text-primary)'
         }}
       />
     </div>

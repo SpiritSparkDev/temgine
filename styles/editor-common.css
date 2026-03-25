@@ -47,6 +47,62 @@
   background: var(--bg-secondary);
 }
 
+.editor-segmented-control {
+  display: inline-flex;
+  width: 100%;
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-primary);
+}
+
+.editor-segment-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.editor-segment-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.editor-segment-btn.active {
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+  border-color: var(--border-color);
+}
+
+.editor-segment-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.editor-segment-btn.active .editor-segment-count {
+  background: var(--active-bg);
+  color: var(--accent-primary);
+}
+
 .editor-search-input,
 .editor-filter-select {
   width: 100%;
@@ -218,6 +274,50 @@
   flex: 1 1;
   min-width: 0;
   overflow: hidden;
+}
+
+.codeeditor-wrapper {
+  height: 100%;
+  min-height: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 1px 0 var(--shadow);
+}
+
+.codeeditor-root {
+  min-height: 100%;
+  height: 100%;
+  background: var(--bg-secondary) !important;
+}
+
+.codeeditor-root textarea,
+.codeeditor-root pre {
+  min-height: 100% !important;
+  box-sizing: border-box;
+  font-family: Consolas, "SFMono-Regular", Menlo, Monaco, monospace !important;
+  line-height: 1.5 !important;
+}
+
+.codeeditor-root textarea {
+  color: var(--text-primary) !important;
+  caret-color: var(--accent-primary);
+  background: transparent !important;
+}
+
+.codeeditor-root textarea:focus {
+  outline: none;
+}
+
+.codeeditor-root pre,
+.codeeditor-pre,
+.codeeditor-highlight {
+  background: transparent !important;
+}
+
+.codeeditor-root ::selection {
+  background: rgba(124, 145, 255, 0.28);
 }
 
 .templates-editor-columns .editor-snippets-panel {
