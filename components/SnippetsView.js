@@ -46,7 +46,6 @@ export default function SnippetsView({ showToast }) {
 
   const [editType, setEditType] = useState('free');
   const [editHandler, setEditHandler] = useState('');
-  const [activeTab, setActiveTab] = useState('content');
   const [searchTerm, setSearchTerm] = useState('');
 
   function handleSave() {
@@ -199,82 +198,81 @@ export default function SnippetsView({ showToast }) {
         {isEditing ? (
           <>
             <div className="editor-header">
-              <div className="snippet-tabs" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button className={`tab-btn ${activeTab === 'content' ? 'active' : ''}`} onClick={() => setActiveTab('content')}>Inhalt</button>
-                <button className={`tab-btn ${activeTab === 'meta' ? 'active' : ''}`} onClick={() => setActiveTab('meta')}>Metadaten</button>
+              <div className="snippets-editor-title">
+                <strong>{editLabel || 'Neues Snippet'}</strong>
+                <span>Content im Mittelbereich, Metadaten rechts</span>
               </div>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div className="editor-actions">
-                  <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
-                  <button className="btn-primary" onClick={handleSave}>Speichern</button>
-                </div>
+              <div className="editor-actions" style={{ marginLeft: 'auto' }}>
+                <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
+                <button className="btn-primary" onClick={handleSave}>Speichern</button>
               </div>
             </div>
 
             <div className="templates-editor-columns">
               <div className="templates-editor-wrapper" style={{ flex: 1 }}>
                 <div className="editor-wrapper">
-                  {activeTab === 'content' ? (
-                    <CodeEditor
-                      height="100%"
-                      language="html"
-                      value={editContent}
-                      onChange={v => setEditContent(v || '')}
-                      options={{}}
-                    />
-                  ) : (
-                    <div className="snippet-meta-panel">
-                      <label className="snippet-meta-label">Label</label>
-                      <input
-                        type="text"
-                        className="snippet-label-input"
-                        placeholder="Snippet Name"
-                        value={editLabel}
-                        onChange={e => setEditLabel(e.target.value)}
-                      />
-                      <label className="snippet-meta-label">Typ</label>
-                      <select value={editType} onChange={e => setEditType(e.target.value)} className="snippet-meta-input">
-                        <option value="free">Free (editable)</option>
-                        <option value="bound">Bound (#name) — auto-filled from DB</option>
-                        <option value="defined">Defined (special handler)</option>
-                      </select>
-                      {editType === 'defined' && (
-                        <>
-                          <label className="snippet-meta-label">Handler</label>
-                          <input type="text" className="snippet-meta-input" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} />
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <CodeEditor
+                    height="100%"
+                    language="html"
+                    value={editContent}
+                    onChange={v => setEditContent(v || '')}
+                    options={{}}
+                  />
                 </div>
               </div>
 
               <div className="editor-snippets-panel">
-                <h4>Einfügehilfen</h4>
-                <div className="snippet-buttons" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="template-snippet-btn"
-                    {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => fallbackAppend('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
-                    title="Dynamisches Heading mit frei wählbarem Level"
-                  >
-                    Heading Dynamisch
-                  </button>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => fallbackAppend('{{title}}'))}>{'{{title}}'}</button>
-                    <select className="heading-select" defaultValue="" onChange={e => { if (e.target.value) { insertHeadingToken('{{title}}', e.target.value); e.target.value = '' } }} title="Als Heading einfügen">
-                      <option value="">H</option>
-                      <option value="1">H1</option>
-                      <option value="2">H2</option>
-                      <option value="3">H3</option>
-                      <option value="4">H4</option>
-                      <option value="5">H5</option>
-                      <option value="6">H6</option>
-                    </select>
+                <div className="snippet-meta-panel">
+                  <h4>Metadaten</h4>
+                  <label className="snippet-meta-label">Label</label>
+                  <input
+                    type="text"
+                    className="snippet-meta-input"
+                    placeholder="Snippet Name"
+                    value={editLabel}
+                    onChange={e => setEditLabel(e.target.value)}
+                  />
+                  <label className="snippet-meta-label">Typ</label>
+                  <select value={editType} onChange={e => setEditType(e.target.value)} className="snippet-meta-input">
+                    <option value="free">Free (editable)</option>
+                    <option value="bound">Bound (#name) — auto-filled from DB</option>
+                    <option value="defined">Defined (special handler)</option>
+                  </select>
+                  {editType === 'defined' && (
+                    <>
+                      <label className="snippet-meta-label">Handler</label>
+                      <input type="text" className="snippet-meta-input" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} />
+                    </>
+                  )}
+                </div>
+
+                <div className="snippet-helper-group">
+                  <h4>Einfügehilfen</h4>
+                  <div className="snippet-buttons" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      className="template-snippet-btn"
+                      {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => fallbackAppend('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
+                      title="Dynamisches Heading mit frei wählbarem Level"
+                    >
+                      Heading Dynamisch
+                    </button>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{title}}', () => fallbackAppend('{{title}}'))}>{'{{title}}'}</button>
+                      <select className="heading-select" defaultValue="" onChange={e => { if (e.target.value) { insertHeadingToken('{{title}}', e.target.value); e.target.value = '' } }} title="Als Heading einfügen">
+                        <option value="">H</option>
+                        <option value="1">H1</option>
+                        <option value="2">H2</option>
+                        <option value="3">H3</option>
+                        <option value="4">H4</option>
+                        <option value="5">H5</option>
+                        <option value="6">H6</option>
+                      </select>
+                    </div>
+                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{text}}', () => fallbackAppend('{{text}}'))}>{'{{text}}'}</button>
+                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{images.0}}', () => fallbackAppend('{{images.0}}'))}>{'{{images.0}}'}</button>
+                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{author}}', () => fallbackAppend('{{author}}'))}>{'{{author}}'}</button>
                   </div>
-                  <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{text}}', () => fallbackAppend('{{text}}'))}>{'{{text}}'}</button>
-                  <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{images.0}}', () => fallbackAppend('{{images.0}}'))}>{'{{images.0}}'}</button>
-                  <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{author}}', () => fallbackAppend('{{author}}'))}>{'{{author}}'}</button>
                 </div>
               </div>
             </div>

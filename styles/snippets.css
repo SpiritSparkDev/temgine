@@ -159,6 +159,22 @@
   background: var(--bg-secondary);
 }
 
+.snippets-editor-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.snippets-editor-title strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.snippets-editor-title span {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
 .snippet-label-input {
   flex: 1;
   padding: 10px 16px;
@@ -240,11 +256,17 @@
 }
 
 .snippet-meta-panel {
-  padding: 16px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 520px;
+  max-width: none;
+}
+
+.snippet-helper-group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
 }
 
 .snippet-meta-label {

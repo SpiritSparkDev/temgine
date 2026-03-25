@@ -27,6 +27,7 @@ export default function AdminPageClient() {
   const [pages, setPages] = useState([]);
   const [editingPage, setEditingPage] = useState(null);
   const [view, setView] = useState('dashboard');
+  const [builderTab, setBuilderTab] = useState('templates');
   const [settingsTab, setSettingsTab] = useState('database');
 
   useEffect(() => {
@@ -48,8 +49,20 @@ export default function AdminPageClient() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('adminView');
-      const allowed = ['dashboard','pages','templates','navigation','snippets','files','css','users','settings','content-models'];
-      if (saved && allowed.includes(saved)) setView(saved);
+      const legacyBuilderMap = {
+        templates: 'templates',
+        navigation: 'navigation',
+        snippets: 'snippets',
+        'content-models': 'content-models'
+      };
+      const allowed = ['dashboard','pages','builder','files','css','users','settings'];
+
+      if (saved && legacyBuilderMap[saved]) {
+        setBuilderTab(legacyBuilderMap[saved]);
+        setView('builder');
+      } else if (saved && allowed.includes(saved)) {
+        setView(saved);
+      }
     } catch (e) {}
   }, []);
 
@@ -83,6 +96,26 @@ export default function AdminPageClient() {
 
   const handleSelectView = (nextView) => {
     setView(nextView);
+    setMobileNavOpen(false);
+  };
+
+  useEffect(() => {
+    const legacyBuilderMap = {
+      templates: 'templates',
+      navigation: 'navigation',
+      snippets: 'snippets',
+      'content-models': 'content-models'
+    };
+
+    if (legacyBuilderMap[view]) {
+      setBuilderTab(legacyBuilderMap[view]);
+      setView('builder');
+    }
+  }, [view]);
+
+  const openBuilderTab = (tab) => {
+    setBuilderTab(tab);
+    setView('builder');
     setMobileNavOpen(false);
   };
 
@@ -348,10 +381,7 @@ export default function AdminPageClient() {
             <ul>
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
-              <li><button className={`menu-item ${view==='templates'?'active':''}`} onClick={() => handleSelectView('templates')}><Layout size={18} /> Templates</button></li>
-              <li><button className={`menu-item ${view==='content-models'?'active':''}`} onClick={() => handleSelectView('content-models')}><Code size={18} /> Content Models</button></li>
-              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Menu size={18} /> Navigation</button></li>
-              <li><button className={`menu-item ${view==='snippets'?'active':''}`} onClick={() => handleSelectView('snippets')}><Code size={18} /> Snippets</button></li>
+              <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Struktur & Bausteine</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
@@ -372,8 +402,45 @@ export default function AdminPageClient() {
               <strong>Hinweis:</strong> {loadWarnings.join(' ')}
             </div>
           )}
-          {view === 'templates' && <TemplatesViewModern showToast={showToast} />}
-          {view === 'content-models' && <ContentModelsView />}
+          {view === 'builder' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, height: '100%' }}>
+              <div className="settings-tabs-wrapper">
+                <div className="settings-tabs">
+                  <button
+                    onClick={() => openBuilderTab('templates')}
+                    className={`settings-tab-btn ${builderTab === 'templates' ? 'active' : ''}`}
+                  >
+                    Templates
+                  </button>
+                  <button
+                    onClick={() => openBuilderTab('navigation')}
+                    className={`settings-tab-btn ${builderTab === 'navigation' ? 'active' : ''}`}
+                  >
+                    Navigation
+                  </button>
+                  <button
+                    onClick={() => openBuilderTab('snippets')}
+                    className={`settings-tab-btn ${builderTab === 'snippets' ? 'active' : ''}`}
+                  >
+                    Snippets
+                  </button>
+                  <button
+                    onClick={() => openBuilderTab('content-models')}
+                    className={`settings-tab-btn ${builderTab === 'content-models' ? 'active' : ''}`}
+                  >
+                    Content Models
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} />}
+                {builderTab === 'navigation' && <NavigationViewModern showToast={showToast} />}
+                {builderTab === 'snippets' && <SnippetsView showToast={showToast} />}
+                {builderTab === 'content-models' && <ContentModelsView />}
+              </div>
+            </div>
+          )}
           {view === 'pages' && (
             <PagesView
               pages={pages}
@@ -383,8 +450,6 @@ export default function AdminPageClient() {
               handleUpdatePages={handleUpdatePages}
             />
           )}
-          {view === 'snippets' && <SnippetsView showToast={showToast} />}
-          {view === 'navigation' && <NavigationViewModern showToast={showToast} />}
           {view === 'dashboard' && (
             <DashboardView
               templateList={templateList}

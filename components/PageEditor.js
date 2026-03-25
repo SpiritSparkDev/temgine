@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, X, Layout, Grid } from 'lucide-react';
+import { GripVertical, Grid } from 'lucide-react';
 import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
@@ -23,7 +23,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState('info');
+  const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [toast, setToast] = useState(null);
 
   // templates is expected to be an array of objects { name, type }
@@ -31,7 +31,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const templateNames = templateObjs.map(t => t.name);
   const siteTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'SITE').map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
-  const selectedTemplateType = template ? (siteTemplateNames.includes(template) ? 'Site' : 'Block') : 'Ohne Template';
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -47,8 +46,35 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectType(page.redirectType || 'none');
       setRedirectUrl(page.redirectUrl || '');
       setIsHomepage(page.isHomepage || false);
+      const initialBlocks = page.blocks || [];
+      setSelectedBlockPath(initialBlocks.length > 0 ? '0' : '');
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!Array.isArray(blocks) || blocks.length === 0) {
+      if (selectedBlockPath !== '') setSelectedBlockPath('');
+      return;
+    }
+
+    const getBlockByPath = (path) => {
+      if (!path && path !== '0') return null;
+      const parts = String(path).split('.').map(p => parseInt(p, 10));
+      let cur = blocks;
+      for (let i = 0; i < parts.length; i++) {
+        const idx = parts[i];
+        if (!Array.isArray(cur) || idx < 0 || idx >= cur.length) return null;
+        const block = cur[idx];
+        if (i === parts.length - 1) return block;
+        cur = block.children || [];
+      }
+      return null;
+    };
+
+    if (!selectedBlockPath || !getBlockByPath(selectedBlockPath)) {
+      setSelectedBlockPath('0');
+    }
+  }, [blocks, selectedBlockPath]);
 
   useEffect(() => {
     // Lade Template-Codes für alle Templates
@@ -353,6 +379,32 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setBlocks(copy);
   }
 
+  const getBlockAtPath = (path) => {
+    if (!path && path !== '0') return null;
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = blocks || [];
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (!Array.isArray(cur) || idx < 0 || idx >= cur.length) return null;
+      const block = cur[idx];
+      if (i === parts.length - 1) return block;
+      cur = block.children || [];
+    }
+    return null;
+  };
+
+  const flattenBlocks = (items = [], prefix = '') => {
+    const out = [];
+    items.forEach((item, idx) => {
+      const path = prefix ? `${prefix}.${idx}` : String(idx);
+      out.push({ path, block: item, depth: path.split('.').length - 1 });
+      if (Array.isArray(item.children) && item.children.length > 0) {
+        out.push(...flattenBlocks(item.children, path));
+      }
+    });
+    return out;
+  };
+
   function handleSave(options = {}) {
     // Prüfe ob bereits eine andere 404-Seite existiert
     if (redirectType === '404' && allPages) {
@@ -443,7 +495,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     };
 
     return (
-      <div key={path} className="block-item" style={{ cursor: 'default', border: '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: '0 2px 8px var(--shadow)', overflow: 'hidden' }} {...containerProps}>
+      <div
+        key={path}
+        className={`block-item ${selectedBlockPath === path ? 'selected' : ''}`}
+        style={{ cursor: 'default', border: selectedBlockPath === path ? '2px solid var(--accent-primary)' : '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: selectedBlockPath === path ? '0 0 0 3px rgba(102, 126, 234, 0.12)' : '0 2px 8px var(--shadow)', overflow: 'hidden' }}
+        onClick={() => setSelectedBlockPath(path)}
+        {...containerProps}
+      >
         {/* Block Header */}
         <div className="block-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', transition: 'all 0.2s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -468,72 +526,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
               <Grid size={16} style={{ color: '#667eea' }} />
               <span className="page-block-index">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
-              <select
-                value={block.template || ''}
-                onChange={e => updateNestedBlockTemplate(path, e.target.value)}
-                className="input-field-small"
-                style={{ fontSize: '0.95rem', backgroundColor: 'var(--bg-secondary)', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px' }}
-              >
-                <option value="">-- Kein Template --</option>
-                {blockTemplateNames.map(tn => (
-                  <option key={tn} value={tn}>{tn}</option>
-                ))}
-              </select>
               <span className="page-block-template-pill">{block.template || 'Freier Block'}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-modern-small" onClick={() => addNestedBlock(path, 'content', true)} title="Kind-Block hinzufügen">👶 Kind</button>
-            <button className="btn-modern-small" onClick={() => addNestedBlock(path, 'content', false)} title="Sibling-Block hinzufügen">👥 Sibling</button>
-            <button className="icon-btn delete" onClick={() => handleDeleteBlock(path)} style={{ padding: '6px 10px', color: '#d32f2f' }}><X size={16} /></button>
-          </div>
+          <small style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+            {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
+          </small>
         </div>
 
         {/* Block Content */}
         <div style={{ padding: '16px' }}>
-          {/* Anchor ID field - Modern Design */}
-          <div style={{ marginBottom: 16, padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 8, border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: '18px' }}>🔗</span>
-              <label style={{ fontWeight: '600', color: 'var(--text-primary)', margin: 0 }}>Anchor ID</label>
-              <span style={{ fontSize: '11px', backgroundColor: 'var(--active-bg)', color: 'var(--accent-primary)', padding: '2px 8px', borderRadius: 12, fontWeight: 500 }}>optional</span>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input 
-                type="text" 
-                placeholder="z. B. section-intro" 
-                value={block.props && block.props.anchorId ? block.props.anchorId : ''} 
-                onChange={e => updateNestedBlock(path, { anchorId: e.target.value })} 
-                className="input-field-small" 
-                style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px 12px', fontSize: '0.9rem' }} 
-              />
-              <button 
-                type="button" 
-                className="btn-modern-small" 
-                onClick={() => {
-                  let gen = '';
-                  if (block.props && block.props.headingText) gen = block.props.headingText;
-                  else if (block.props && block.props.title) gen = block.props.title;
-                  else {
-                    for (let i = 1; i <= 5; i++) {
-                      if (block.props && block.props[`h${i}`]) { gen = block.props[`h${i}`]; break; }
-                    }
-                  }
-                  if (gen) {
-                    const id = String(gen).toLowerCase().trim().replace(/[^a-z0-9-_]+/g, '-').replace(/-{2,}/g, '-').replace(/^-+|-+$/g, '')
-                    updateNestedBlock(path, { anchorId: id });
-                  } else {
-                    alert('Kein geeigneter Text zum Generieren gefunden (heading/title)');
-                  }
-                }}
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                ✨ Generieren
-              </button>
-            </div>
-            <small style={{ display: 'block', marginTop: 6, color: 'var(--text-secondary)', fontSize: '12px' }}>Wird für Anker-Links verwendet (#section-intro)</small>
-          </div>
-
           {/* Template specific fields (reuse existing logic) */}
           {block.template && templateCodes[block.template] && (
             <div>
@@ -697,376 +699,204 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         />
       )}
 
-      <div className="page-editor-hero">
-        <div className="page-editor-hero-copy">
-          <span className="page-editor-eyebrow">Pages Editor</span>
-          <h2>{title || page?.title || 'Neue Seite bearbeiten'}</h2>
-          <p>
-            Bearbeite Seiteninformationen, Routing und Blockstruktur in einer klareren Oberfläche.
-            Die wichtigsten Zustände sind jetzt direkt sichtbar.
-          </p>
-        </div>
-        <div className="page-editor-summary">
-          <div className="page-editor-summary-item">
-            <strong>/{slug || 'seiten-url'}</strong>
-            <span>Aktueller Slug</span>
-          </div>
-          <div className="page-editor-summary-item">
-            <strong>{selectedTemplateType}</strong>
-            <span>Template-Typ</span>
-          </div>
-          <div className="page-editor-summary-item">
-            <strong>{blocks.length}</strong>
-            <span>Blöcke</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Tab Navigation */}
-      <div className="tabs-container">
-        <button
-          onClick={() => setActiveTab('info')}
-          className={activeTab === 'info' ? 'tab-active' : 'tab-inactive'}
-        >
-          ℹ️ Seiten-Informationen
-        </button>
-        <button
-          onClick={() => setActiveTab('blocks')}
-          className={activeTab === 'blocks' ? 'tab-active' : 'tab-inactive'}
-        >
-          📦 Blöcke ({blocks.length})
-        </button>
-      </div>
+      <div className="tab-content blocks-tab">
 
-      {/* Tab Content */}
-      {activeTab === 'info' && (
-        <div className="tab-content info-tab">
-          <div className="page-editor-section">
-            <div className="page-editor-section-head">
-              <div>
-                <h3>Grunddaten</h3>
-                <p>Titel, URL und Routing-Logik dieser Seite.</p>
+          <div className="page-editor-workspace">
+            <aside className="page-editor-outline">
+              <div className="page-editor-outline-head">
+                <span className="page-editor-outline-eyebrow">Aktuelle Seite</span>
+                <strong>{title || page?.title || 'Unbenannte Seite'}</strong>
+                <span>/{slug || 'seiten-url'}</span>
               </div>
-              <span className="page-editor-section-badge">Info</span>
-            </div>
 
-            <div className="page-editor-two-column">
-              {/* Titel */}
-              <div className="field-group" style={{ marginBottom: 0 }}>
-                <label className="field-label">📄 Titel</label>
+              <div className="page-editor-outline-settings">
+                <label className="field-label-xs">Seitentitel</label>
                 <input
                   type="text"
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   placeholder="Seitentitel"
-                  className="input-field"
+                  className="input-field-small"
                 />
-              </div>
 
-              {/* Slug */}
-              <div className="field-group" style={{ marginBottom: 0 }}>
-                <label className="field-label">🔗 Slug (URL)</label>
+                <label className="field-label-xs">Slug</label>
                 <input
                   type="text"
                   value={slug}
                   onChange={e => setSlug(e.target.value)}
                   placeholder="seiten-url"
-                  className="input-field"
+                  className="input-field-small"
                 />
-                <small className="url-hint">URL: /{slug || 'seiten-url'}</small>
-              </div>
-            </div>
 
-            <div className="page-editor-switch-grid">
-              <div className="page-editor-inline-card">
-                <label className="page-editor-checkline">
+                <label className="field-label-xs">Seiten-Template</label>
+                <select
+                  value={template}
+                  onChange={e => handleUpdatePageTemplate(e.target.value)}
+                  className="input-field-small"
+                >
+                  <option value="">-- Kein Template --</option>
+                  {siteTemplateNames.map(tn => (
+                    <option key={tn} value={tn}>{tn}</option>
+                  ))}
+                </select>
+
+                <label className="field-label-xs">Weiterleitung</label>
+                <select
+                  value={redirectType}
+                  onChange={e => setRedirectType(e.target.value)}
+                  className="input-field-small"
+                >
+                  <option value="none">Keine</option>
+                  <option value="404">404</option>
+                  <option value="503">503</option>
+                  <option value="external">Externe URL</option>
+                </select>
+
+                {redirectType === 'external' && (
+                  <input
+                    type="url"
+                    value={redirectUrl}
+                    onChange={e => setRedirectUrl(e.target.value)}
+                    placeholder="https://example.com"
+                    className="input-field-small"
+                  />
+                )}
+
+                <label className="page-editor-outline-toggle">
                   <input
                     type="checkbox"
                     checked={isHomepage}
                     onChange={e => setIsHomepage(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
                   />
-                  <span>
-                    <strong>🏠 Als Startseite festlegen</strong>
-                    <small>Diese Seite wird als Standard-Startseite genutzt.</small>
-                  </span>
+                  Als Startseite
                 </label>
               </div>
 
-              <div className="page-editor-inline-card">
-                <label className="field-label">Weiterleitung</label>
-                <select
-                  value={redirectType}
-                  onChange={e => setRedirectType(e.target.value)}
-                  className="input-field"
-                >
-                  <option value="none">Keine Weiterleitung</option>
-                  <option value="404">404 - Seite nicht gefunden</option>
-                  <option value="503">503 - Service nicht verfügbar</option>
-                  <option value="external">Externe URL</option>
-                </select>
+              <div className="page-editor-outline-list">
+                {flattenBlocks(blocks).length === 0 ? (
+                  <div className="page-editor-outline-empty">Noch keine Blöcke.</div>
+                ) : (
+                  flattenBlocks(blocks).map(({ path, block, depth }) => (
+                    <button
+                      key={path}
+                      type="button"
+                      className={`page-editor-outline-item ${selectedBlockPath === path ? 'active' : ''}`}
+                      onClick={() => setSelectedBlockPath(path)}
+                      style={{ paddingLeft: `${12 + depth * 14}px` }}
+                    >
+                      <span className="page-editor-outline-item-title">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
+                      <span className="page-editor-outline-item-meta">{block.template || block.type || 'content'}</span>
+                    </button>
+                  ))
+                )}
               </div>
-            </div>
+            </aside>
 
-            {redirectType === 'external' && (
-              <div className="field-group page-editor-inline-card">
-                <label className="field-label">Externe URL</label>
-                <input
-                  type="url"
-                  value={redirectUrl}
-                  onChange={e => setRedirectUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="input-field"
-                />
-                <small className="url-hint">Vollständige URL mit http:// oder https://</small>
-              </div>
-            )}
-          </div>
-
-          <div className="page-editor-section">
-            <div className="page-editor-section-head">
-              <div>
-                <h3>Layout und Template</h3>
-                <p>Lege das Seitentemplate fest und pflege die dazugehörigen Template-Daten.</p>
-              </div>
-              <span className="page-editor-section-badge">Template</span>
-            </div>
-
-            <div className="field-group">
-              <label className="field-label">Seiten-Template (Optional)</label>
-              <select
-                value={template}
-                onChange={e => handleUpdatePageTemplate(e.target.value)}
-                className="input-field"
-              >
-                <option value="">-- Kein Template (nur Blöcke) --</option>
-                {siteTemplateNames.map(tn => (
-                  <option key={tn} value={tn}>{tn}</option>
-                ))}
-              </select>
-              {template ? (
-                <span style={{ marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {siteTemplateNames.includes(template) ? <Layout size={14} /> : <Grid size={14} />}
-                  <small style={{ color: 'var(--text-secondary)' }}>{siteTemplateNames.includes(template) ? 'Site' : 'Block'}</small>
-                </span>
-              ) : null}
-              <small className="url-hint">
-                Wähle ein Template für das Gesamtlayout der Seite. Blöcke werden an {'{{blocks}}'} eingefügt.
-              </small>
-            </div>
-
-            {template && templateCodes[template] && (
-              <div className="page-data-section page-editor-template-data">
-                <div className="page-editor-section-head page-editor-section-head-compact">
-                  <div>
-                    <h3>Template-Daten</h3>
-                    <p>Inhalte für das gewählte Seitentemplate.</p>
+            <div className="page-editor-canvas">
+              <div className="blocks-container">
+                {blocks.length > 0 ? renderBlocksList() : (
+                  <div className="page-block-empty-state">
+                    <strong>Noch keine Blöcke vorhanden</strong>
+                    <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
+                    <button
+                      type="button"
+                      className="btn-modern"
+                      onClick={() => {
+                        handleAddBlock('content');
+                        setSelectedBlockPath('0');
+                      }}
+                    >
+                      Ersten Block hinzufügen
+                    </button>
                   </div>
-                </div>
-                  <h4 style={{ marginBottom: 10, fontSize: '0.95rem' }}>Template-Daten für "{template}"</h4>
-                  {extractTemplateVariables(templateCodes[template]).map(varName => {
-                    const inputType = guessInputType(varName);
+                )}
+              </div>
+            </div>
 
-                    // Verschachtelte Felder behandeln (z.B. "button.url")
-                    const isNested = varName.includes('.');
-                    let value = '';
+            <aside className="page-editor-inspector">
+              <div className="page-editor-inspector-content">
+                {(() => {
+                  const selectedBlock = getBlockAtPath(selectedBlockPath);
+                  if (!selectedBlock) {
+                    return <div className="page-editor-inspector-empty">Wähle einen Block in der Mitte oder links aus, um Metadaten zu bearbeiten.</div>;
+                  }
+                  return (
+                    <>
+                    <div className="page-editor-inspector-head">
+                      <h4>Block-Metadaten</h4>
+                      <span>#{selectedBlockPath.split('.').map(part => Number(part) + 1).join('.')}</span>
+                    </div>
 
-                    if (isNested) {
-                      const parts = varName.split('.');
-                      let current = pageData;
-                      for (const part of parts) {
-                        if (current && current[part] !== undefined) {
-                          current = current[part];
-                        } else {
-                          current = '';
-                          break;
-                        }
-                      }
-                      value = current;
-                    } else {
-                      value = pageData[varName] || '';
-                    }
+                    <div className="page-editor-inspector-group">
+                      <label className="field-label-xs">Template</label>
+                      <select
+                        value={selectedBlock.template || ''}
+                        onChange={e => updateNestedBlockTemplate(selectedBlockPath, e.target.value)}
+                        className="input-field-small"
+                      >
+                        <option value="">-- Kein Template --</option>
+                        {blockTemplateNames.map(tn => (
+                          <option key={tn} value={tn}>{tn}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                    // Funktion zum Aktualisieren verschachtelter Werte
-                    const handleNestedUpdate = (newValue) => {
-                      if (isNested) {
-                        const parts = varName.split('.');
-                        const updated = { ...pageData };
-                        let current = updated;
+                    <div className="page-editor-inspector-group">
+                      <label className="field-label-xs">Anchor ID</label>
+                      <input
+                        type="text"
+                        className="input-field-small"
+                        placeholder="z. B. section-intro"
+                        value={selectedBlock.props?.anchorId || ''}
+                        onChange={e => updateNestedBlock(selectedBlockPath, { anchorId: e.target.value })}
+                      />
+                    </div>
 
-                        for (let i = 0; i < parts.length - 1; i++) {
-                          const part = parts[i];
-                          if (!current[part] || typeof current[part] !== 'object') {
-                            current[part] = {};
+                    <div className="page-editor-inspector-actions">
+                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}>Kind hinzufügen</button>
+                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', false)}>Sibling hinzufügen</button>
+                      <button
+                        className="btn-modern-small"
+                        onClick={() => {
+                          const currentPath = selectedBlockPath;
+                          handleDeleteBlock(currentPath);
+                          const segments = currentPath.split('.');
+                          if (segments.length > 1) {
+                            setSelectedBlockPath(segments.slice(0, -1).join('.'));
+                          } else {
+                            setSelectedBlockPath('0');
                           }
-                          current = current[part];
-                        }
-
-                        current[parts[parts.length - 1]] = newValue;
-                        handleUpdatePageData(updated);
-                      } else {
-                        handleUpdatePageData({ [varName]: newValue });
-                      }
-                    };
-
-                    // URL-Felder: Zeige Dateiauswahl
-                    if (isUrlVariable(varName)) {
-                      return (
-                        <div key={varName} style={{ marginBottom: 10 }}>
-                          <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
-                          <div style={{ display: 'flex', gap: '5px' }}>
-                            <input
-                              type="text"
-                              placeholder="URL oder Dateipfad"
-                              value={value}
-                              onChange={e => handleNestedUpdate(e.target.value)}
-                              style={{ flex: 1, padding: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: '0.9rem' }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => openFileModal(handleNestedUpdate)}
-                              style={{ padding: '8px 16px', background: '#667eea', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                            >
-                              📁 Datei wählen
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    if (varName.toLowerCase().includes('headinglevel')) {
-                      const normalizedLevel = String(value || '2').replace(/^h/i, '');
-                      return (
-                        <div key={varName} style={{ marginBottom: 10 }}>
-                          <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
-                          <select
-                            value={normalizedLevel}
-                            onChange={e => handleNestedUpdate(e.target.value)}
-                            className="input-field"
-                            style={{ width: '100%' }}
-                          >
-                            <option value="1">H1</option>
-                            <option value="2">H2</option>
-                            <option value="3">H3</option>
-                            <option value="4">H4</option>
-                            <option value="5">H5</option>
-                            <option value="6">H6</option>
-                          </select>
-                        </div>
-                      );
-                    }
-
-                    if (inputType === 'textarea') {
-                      return (
-                        <div key={varName} style={{ marginBottom: 10 }}>
-                          <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
-                          <div style={{ border: '1px solid #ddd', borderRadius: 4, overflow: 'hidden' }}>
-                            <ReactQuill
-                              value={value || ''}
-                              onChange={(val) => handleNestedUpdate(val)}
-                              theme="snow"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    if (inputType === 'array') {
-                      return (
-                        <div key={varName} style={{ marginBottom: 10 }}>
-                          <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName} (Array)</label>
-                          <textarea
-                            placeholder="Ein Wert pro Zeile"
-                            value={Array.isArray(value) ? value.join('\n') : ''}
-                            onChange={e => handleNestedUpdate(e.target.value.split('\n').filter(v => v.trim()))}
-                            rows={3}
-                            style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, resize: 'vertical', fontSize: '0.9rem' }}
-                          />
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div key={varName} style={{ marginBottom: 10 }}>
-                        <label style={{ display: 'block', marginBottom: 5, fontSize: '0.9rem', fontWeight: 'bold' }}>{varName}</label>
-                        <input
-                          type={inputType === 'number' ? 'number' : 'text'}
-                          placeholder={varName}
-                          value={value}
-                          onChange={e => handleNestedUpdate(e.target.value)}
-                          style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: '0.9rem' }}
-                        />
-                      </div>
-                    );
-                  })}
+                        }}
+                      >
+                        Block löschen
+                      </button>
+                    </div>
+                    </>
+                  );
+                })()}
               </div>
-            )}
-          </div>
-        </div>
-      )}
 
-      {/* Blöcke Tab */}
-      {activeTab === 'blocks' && (
-        <div className="tab-content blocks-tab">
-          <div className="page-editor-section">
-            <div className="page-editor-section-head">
-              <div>
-                <h3>Block-Struktur</h3>
-                <p>Ordne Inhalte als Bausteine, füge neue Blöcke hinzu und verschiebe Top-Level-Blöcke per Drag & Drop.</p>
-              </div>
-              <span className="page-editor-section-badge">{blocks.length} Elemente</span>
-            </div>
-
-            <div className="page-block-toolbar">
-              <button
-                type="button"
-                className="btn-modern"
-                onClick={() => handleAddBlock('content')}
-              >
-                + Inhaltsblock hinzufügen
-              </button>
-              <div className="page-block-hints">
-                <span>Top-Level-Blöcke sind sortierbar.</span>
-                <span>Kind- und Sibling-Blöcke direkt im jeweiligen Block hinzufügen.</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="blocks-container">
-            {blocks.length > 0 ? renderBlocksList() : (
-              <div className="page-block-empty-state">
-                <strong>Noch keine Blöcke vorhanden</strong>
-                <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
+              <div className="page-editor-inspector-global-actions">
                 <button
                   type="button"
                   className="btn-modern"
-                  onClick={() => handleAddBlock('content')}
+                  onClick={() => {
+                    const nextPath = String((blocks || []).length);
+                    handleAddBlock('content');
+                    setSelectedBlockPath(nextPath);
+                  }}
                 >
-                  Ersten Block hinzufügen
+                  + Neuer Block hinzufügen
                 </button>
+                <button type="button" className="btn-modern-small" onClick={handleSave}>Speichern</button>
+                <button type="button" className="btn-modern-small" onClick={handleSaveAndClose}>Speichern und schließen</button>
+                <button type="button" className="btn-modern-small" onClick={handleSaveAndView}>Speichern und anzeigen</button>
+                <button type="button" className="btn-modern-small" onClick={onCancel}>Abbrechen</button>
               </div>
-            )}
+            </aside>
           </div>
         </div>
-      )}
-
-      {/* Fixierte untere Aktionsleiste */}
-      <div className="action-bar">
-        <button
-          type="button"
-          className="primary"
-          onClick={() => handleAddBlock('content')}
-        >
-          + Neuen Block hinzufügen
-        </button>
-
-        <div className="action-bar-right">
-          <button type="button" className="primary" onClick={handleSave}>Speichern</button>
-          <button type="button" className="primary" onClick={handleSaveAndClose}>Speichern und schließen</button>
-          <button type="button" className="primary" onClick={handleSaveAndView}>Speichern und anzeigen</button>
-          <button type="button" className="icon-btn" onClick={onCancel}>Abbrechen</button>
-        </div>
-      </div>
 
       {/* Datei-Auswahl Modal */}
       {showFileModal && (

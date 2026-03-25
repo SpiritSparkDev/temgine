@@ -235,7 +235,6 @@ body {
 
 .admin-editor {
   flex: 1;
-  padding: 32px;
   margin-left: 240px;
   min-width: 0;
   max-width: 100%;
