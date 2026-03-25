@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -28,6 +28,8 @@ export default function AdminPageClient() {
   const [editingPage, setEditingPage] = useState(null);
   const [view, setView] = useState('dashboard');
   const [builderTab, setBuilderTab] = useState('templates');
+  const [builderSearch, setBuilderSearch] = useState('');
+  const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [settingsTab, setSettingsTab] = useState('database');
 
   useEffect(() => {
@@ -87,6 +89,7 @@ export default function AdminPageClient() {
     const handleEsc = (event) => {
       if (event.key === 'Escape') {
         setMobileNavOpen(false);
+        setShowBuilderQuickSwitch(false);
       }
     };
 
@@ -117,7 +120,59 @@ export default function AdminPageClient() {
     setBuilderTab(tab);
     setView('builder');
     setMobileNavOpen(false);
+    setShowBuilderQuickSwitch(false);
+    setBuilderSearch('');
   };
+
+  const builderModules = [
+    {
+      id: 'templates',
+      label: 'Templates',
+      description: 'Site- und Block-Templates pflegen',
+      icon: Layout,
+      count: templateList.length
+    },
+    {
+      id: 'navigation',
+      label: 'Navigation',
+      description: 'Navigationsstrukturen bearbeiten',
+      icon: Compass,
+      count: 'Modul'
+    },
+    {
+      id: 'snippets',
+      label: 'Snippets',
+      description: 'Wiederverwendbare Tokens verwalten',
+      icon: Braces,
+      count: snippets.length
+    },
+    {
+      id: 'content-models',
+      label: 'Content Models',
+      description: 'Datenstrukturen fuer Inhalte definieren',
+      icon: Box,
+      count: 'Modul'
+    }
+  ];
+
+  const filteredBuilderModules = builderModules.filter((module) => {
+    const q = builderSearch.trim().toLowerCase();
+    if (!q) return true;
+    return module.label.toLowerCase().includes(q) || module.description.toLowerCase().includes(q);
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const isCmdK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
+      if (!isCmdK) return;
+      if (view !== 'builder') return;
+      event.preventDefault();
+      setShowBuilderQuickSwitch((prev) => !prev);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [view]);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -403,7 +458,47 @@ export default function AdminPageClient() {
             </div>
           )}
           {view === 'builder' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0, height: '100%' }}>
+            <div className="builder-shell">
+              <div className="builder-shell-head">
+                <div className="builder-shell-title-wrap">
+                  <span className="builder-shell-kicker">Workspace</span>
+                  <h2>Struktur &amp; Bausteine</h2>
+                  <p>Templates, Navigation, Snippets und Content Models in einem gemeinsamen Arbeitsbereich.</p>
+                </div>
+                <div className="builder-shell-actions">
+                  <button
+                    type="button"
+                    className="builder-quick-switch-btn"
+                    onClick={() => setShowBuilderQuickSwitch(true)}
+                    title="Schnellwechsel (Strg/Cmd + K)"
+                  >
+                    <Search size={15} /> Schnellwechsel
+                  </button>
+                  <span className="builder-shortcut-hint">Strg/Cmd + K</span>
+                </div>
+              </div>
+
+              <div className="builder-module-grid">
+                {builderModules.map((module) => {
+                  const Icon = module.icon;
+                  return (
+                    <button
+                      key={module.id}
+                      type="button"
+                      className={`builder-module-chip ${builderTab === module.id ? 'active' : ''}`}
+                      onClick={() => openBuilderTab(module.id)}
+                    >
+                      <span className="builder-module-chip-icon"><Icon size={14} /></span>
+                      <span className="builder-module-chip-main">
+                        <strong>{module.label}</strong>
+                        <small>{module.description}</small>
+                      </span>
+                      <span className="builder-module-chip-count">{module.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
               <div className="settings-tabs-wrapper">
                 <div className="settings-tabs">
                   <button
@@ -439,6 +534,46 @@ export default function AdminPageClient() {
                 {builderTab === 'snippets' && <SnippetsView showToast={showToast} />}
                 {builderTab === 'content-models' && <ContentModelsView />}
               </div>
+
+              {showBuilderQuickSwitch && (
+                <div className="builder-quick-switch-overlay" onClick={() => setShowBuilderQuickSwitch(false)}>
+                  <div className="builder-quick-switch-modal" onClick={(e) => e.stopPropagation()}>
+                    <div className="builder-quick-switch-head">
+                      <h3>Modul wechseln</h3>
+                      <button type="button" className="builder-quick-close" onClick={() => setShowBuilderQuickSwitch(false)}>Schliessen</button>
+                    </div>
+                    <input
+                      autoFocus
+                      type="text"
+                      className="builder-quick-search"
+                      placeholder="Templates, Navigation, Snippets, Content Models..."
+                      value={builderSearch}
+                      onChange={(e) => setBuilderSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && filteredBuilderModules.length > 0) {
+                          openBuilderTab(filteredBuilderModules[0].id);
+                        }
+                      }}
+                    />
+                    <div className="builder-quick-results">
+                      {filteredBuilderModules.length === 0 ? (
+                        <div className="builder-quick-empty">Keine Treffer</div>
+                      ) : (
+                        filteredBuilderModules.map((module) => {
+                          const Icon = module.icon;
+                          return (
+                            <button key={module.id} type="button" className="builder-quick-item" onClick={() => openBuilderTab(module.id)}>
+                              <Icon size={14} />
+                              <span>{module.label}</span>
+                              <small>{module.description}</small>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {view === 'pages' && (
