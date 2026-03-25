@@ -459,45 +459,8 @@ export default function AdminPageClient() {
           )}
           {view === 'builder' && (
             <div className="builder-shell">
-              <div className="builder-shell-head">
-                <div className="builder-shell-title-wrap">
-                  <span className="builder-shell-kicker">Workspace</span>
-                  <h2>Struktur &amp; Bausteine</h2>
-                  <p>Templates, Navigation, Snippets und Content Models in einem gemeinsamen Arbeitsbereich.</p>
-                </div>
-                <div className="builder-shell-actions">
-                  <button
-                    type="button"
-                    className="builder-quick-switch-btn"
-                    onClick={() => setShowBuilderQuickSwitch(true)}
-                    title="Schnellwechsel (Strg/Cmd + K)"
-                  >
-                    <Search size={15} /> Schnellwechsel
-                  </button>
-                  <span className="builder-shortcut-hint">Strg/Cmd + K</span>
-                </div>
-              </div>
 
-              <div className="builder-module-grid">
-                {builderModules.map((module) => {
-                  const Icon = module.icon;
-                  return (
-                    <button
-                      key={module.id}
-                      type="button"
-                      className={`builder-module-chip ${builderTab === module.id ? 'active' : ''}`}
-                      onClick={() => openBuilderTab(module.id)}
-                    >
-                      <span className="builder-module-chip-icon"><Icon size={14} /></span>
-                      <span className="builder-module-chip-main">
-                        <strong>{module.label}</strong>
-                        <small>{module.description}</small>
-                      </span>
-                      <span className="builder-module-chip-count">{module.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
+
 
               <div className="settings-tabs-wrapper">
                 <div className="settings-tabs">

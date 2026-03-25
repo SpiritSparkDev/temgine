@@ -6,6 +6,59 @@ import boundSnippets from '../data/boundSnippets.json'
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
+
+function parseTemplateStructure(code) {
+  if (!code || typeof code !== 'string') return [];
+
+  const root = { label: 'root', type: 'root', children: [] };
+  const stack = [root];
+  const tokenRegex = /<\/?[a-zA-Z][^>]*>|{{{[^}]+}}}|{{[^}]+}}/g;
+  const tokens = String(code).match(tokenRegex) || [];
+
+  for (const token of tokens.slice(0, 200)) {
+    if (/^<\//.test(token)) {
+      if (stack.length > 1) stack.pop();
+      continue;
+    }
+
+    if (/^</.test(token)) {
+      const tagMatch = token.match(/^<\s*([a-zA-Z0-9-]+)/);
+      if (!tagMatch) continue;
+      const tagName = tagMatch[1].toLowerCase();
+      const selfClosing = /\/>$/.test(token) || VOID_TAGS.has(tagName);
+      const node = { label: tagName, type: 'tag', children: [] };
+      stack[stack.length - 1].children.push(node);
+      if (!selfClosing) stack.push(node);
+      continue;
+    }
+
+    if (/^{{/.test(token)) {
+      stack[stack.length - 1].children.push({ label: token, type: 'placeholder', children: [] });
+    }
+  }
+
+  return root.children;
+}
+
+function TemplateWireNode({ node, depth = 0 }) {
+  const depthClass = `template-wire-depth-${depth % 5}`;
+  const placeholderClass = node.type === 'placeholder' ? ' placeholder' : '';
+
+  return (
+    <div className={`template-wire-node ${depthClass}${placeholderClass}`}>
+      <div className="template-wire-label">{node.label}</div>
+      {Array.isArray(node.children) && node.children.length > 0 && (
+        <div className="template-wire-children">
+          {node.children.map((child, idx) => (
+            <TemplateWireNode key={`${child.label}-${idx}`} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function TemplatesViewModern({ showToast }) {
   const [templates, setTemplates] = useState([]);
   // inserterRef no longer required; editor registers centrally
@@ -135,6 +188,7 @@ export default function TemplatesViewModern({ showToast }) {
   const boundSnippets = snippets.filter((s) => s.type === 'bound');
   const definedSnippets = snippets.filter((s) => s.type === 'defined');
   const freeSnippets = snippets.filter((s) => !s.type || (s.type !== 'bound' && s.type !== 'defined'));
+  const templateStructureNodes = parseTemplateStructure(templateCode);
 
   return (
     <div className="editor-container">
@@ -340,6 +394,19 @@ export default function TemplatesViewModern({ showToast }) {
                             🧩 {t.name}
                           </button>
                         ))}
+                    </div>
+                  </div>
+
+                  <div className="snippet-group">
+                    <div className="snippet-group-title">Strukturvorschau</div>
+                    <div className="template-wire-preview">
+                      {templateStructureNodes.length === 0 ? (
+                        <div className="template-wire-empty">Keine Struktur erkannt</div>
+                      ) : (
+                        templateStructureNodes.map((node, idx) => (
+                          <TemplateWireNode key={`${templateName || 'template'}-${idx}`} node={node} />
+                        ))
+                      )}
                     </div>
                   </div>
                 </div>
