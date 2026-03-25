@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid } from 'lucide-react';
 import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps } from '../lib/templateParser';
-import { renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
@@ -24,7 +23,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
+  const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [toast, setToast] = useState(null);
+  const blockNodeRefs = useRef({});
+  const fieldNodeRefs = useRef({});
 
   // templates is expected to be an array of objects { name, type }
   const templateObjs = Array.isArray(templates) ? templates : [];
@@ -54,6 +56,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   useEffect(() => {
     if (!Array.isArray(blocks) || blocks.length === 0) {
       if (selectedBlockPath !== '') setSelectedBlockPath('');
+      if (selectedFieldKey !== '') setSelectedFieldKey('');
       return;
     }
 
@@ -73,8 +76,70 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
     if (!selectedBlockPath || !getBlockByPath(selectedBlockPath)) {
       setSelectedBlockPath('0');
+      setSelectedFieldKey('');
     }
-  }, [blocks, selectedBlockPath]);
+  }, [blocks, selectedBlockPath, selectedFieldKey]);
+
+  useEffect(() => {
+    if (!selectedBlockPath) return;
+
+    if (selectedFieldKey && selectedFieldKey.startsWith(`${selectedBlockPath}::`)) {
+      return;
+    }
+
+    const target = blockNodeRefs.current[selectedBlockPath];
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const focusFirstField = () => {
+      const firstInput = target.querySelector('input:not([type="hidden"]), textarea, select, .ql-editor');
+      if (!firstInput || typeof firstInput.focus !== 'function') return;
+      try {
+        firstInput.focus({ preventScroll: true });
+      } catch (e) {
+        firstInput.focus();
+      }
+    };
+
+    window.requestAnimationFrame(focusFirstField);
+  }, [selectedBlockPath, selectedFieldKey]);
+
+  useEffect(() => {
+    if (!selectedFieldKey) return;
+
+    const target = fieldNodeRefs.current[selectedFieldKey];
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.requestAnimationFrame(() => {
+      try {
+        target.focus({ preventScroll: true });
+      } catch (e) {
+        target.focus();
+      }
+    });
+  }, [selectedFieldKey]);
+
+  const makeFieldKey = (path, varName) => `${path}::${varName}`;
+
+  const setFieldRef = (path, varName, node) => {
+    const key = makeFieldKey(path, varName);
+    if (!node) {
+      delete fieldNodeRefs.current[key];
+      return;
+    }
+
+    if (typeof node.matches === 'function' && node.matches('input, textarea, select, [contenteditable="true"]')) {
+      fieldNodeRefs.current[key] = node;
+      return;
+    }
+
+    const focusable = node.querySelector('input:not([type="hidden"]), textarea, select, [contenteditable="true"], .ql-editor');
+    if (focusable) {
+      fieldNodeRefs.current[key] = focusable;
+    }
+  };
 
   useEffect(() => {
     // Lade Template-Codes für alle Templates
@@ -123,6 +188,34 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return /url/i.test(varName);
   };
 
+  const extractBlockSlotNames = (code) => {
+    if (!code || typeof code !== 'string') return [];
+    const regex = /\{\{\{\s*blockSlot:([^}]+?)\s*\}\}\}/g;
+    const slots = new Set();
+    let match = null;
+    while ((match = regex.exec(code)) !== null) {
+      const name = String(match[1] || '').trim();
+      if (name) slots.add(name);
+    }
+    return Array.from(slots);
+  };
+
+  const selectedPageTemplateCode = template ? templateCodes[template] : '';
+  const pageTemplateSlots = useMemo(() => extractBlockSlotNames(selectedPageTemplateCode), [selectedPageTemplateCode]);
+  const pageBlockSlotMap = (pageData && pageData.blockSlots) || {};
+
+  const templateVariablesByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = extractTemplateVariables(code) || [];
+      } catch (e) {
+        out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
   // Entfernt HTML-Tags aus einem String
   const stripTags = (s) => {
     if (!s) return '';
@@ -136,6 +229,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
     setShowFileModal(true);
+  };
+
+  const updatePageBlockSlot = (slotName, templateName) => {
+    const nextMap = { ...(pageBlockSlotMap || {}) };
+    if (!templateName) {
+      delete nextMap[slotName];
+    } else {
+      nextMap[slotName] = templateName;
+    }
+    handleUpdatePageData({ blockSlots: nextMap });
   };
 
   const selectFile = (fileUrl) => {
@@ -220,26 +323,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           : {}
     };
     setBlocks([...blocks, newBlock]);
-  }
-
-  function handleUpdateBlock(index, props) {
-    const updated = [...blocks];
-    updated[index].props = { ...updated[index].props, ...props };
-    setBlocks(updated);
-  }
-
-  function handleUpdateBlockTemplate(index, templateName) {
-    const updated = [...blocks];
-    updated[index].template = templateName;
-
-    // Wenn Template gewählt wurde, generiere Default-Props
-    if (templateName && templateCodes[templateName]) {
-      const defaultProps = generateDefaultProps(templateCodes[templateName]);
-      // Merge mit existierenden Props
-      updated[index].props = { ...defaultProps, ...updated[index].props };
-    }
-
-    setBlocks(updated);
   }
 
   function handleUpdatePageTemplate(templateName) {
@@ -405,6 +488,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   };
 
+  const getBlockFieldEntries = (block, path) => {
+    if (!block || !block.template || !templateCodes[block.template]) return [];
+    const vars = templateVariablesByName[block.template] || [];
+    return vars.map((varName) => ({
+      varName,
+      fieldKey: makeFieldKey(path, varName),
+      label: snippetLabels[block.template]?.[varName] || varName
+    }));
+  };
+
+  const flattenedBlocks = useMemo(() => flattenBlocks(blocks), [blocks]);
+
+  const outlineFieldEntries = useMemo(() => (
+    flattenedBlocks.flatMap(({ path, block, depth }) =>
+      getBlockFieldEntries(block, path).map((entry) => ({ ...entry, path, depth }))
+    )
+  ), [flattenedBlocks, templateVariablesByName, snippetLabels]);
+
   function handleSave(options = {}) {
     // Prüfe ob bereits eine andere 404-Seite existiert
     if (redirectType === '404' && allPages) {
@@ -450,8 +551,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // Render helpers for nested block editor
   const renderBlockEditor = (block, path, depth = 0) => {
     const isTop = depth === 0;
-    const idx = path;
-    const previewHtml = (block.template && templateCodes[block.template]) ? (() => { try { return renderTemplate(templateCodes[block.template], block.props) } catch (e) { return '<div style="color: #d32f2f; padding: 10px;">Vorschau-Fehler</div>' } })() : '';
+    const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
 
     const containerProps = isTop ? {
       onDragOver: (e) => {
@@ -497,6 +597,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return (
       <div
         key={path}
+        ref={(el) => {
+          if (el) {
+            blockNodeRefs.current[path] = el;
+          } else {
+            delete blockNodeRefs.current[path];
+          }
+        }}
+        data-block-path={path}
         className={`block-item ${selectedBlockPath === path ? 'selected' : ''}`}
         style={{ cursor: 'default', border: selectedBlockPath === path ? '2px solid var(--accent-primary)' : '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: selectedBlockPath === path ? '0 0 0 3px rgba(102, 126, 234, 0.12)' : '0 2px 8px var(--shadow)', overflow: 'hidden' }}
         onClick={() => setSelectedBlockPath(path)}
@@ -541,7 +649,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <div>
               {/* Grid layout for non-textarea fields */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
-                {extractTemplateVariables(templateCodes[block.template])
+                {templateVariables
                   .filter(varName => guessInputType(varName) !== 'textarea')
                   .map(varName => {
                     const inputType = guessInputType(varName);
@@ -554,6 +662,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                           <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🏷️ {label}</label>
                           <select
+                            ref={(el) => setFieldRef(path, varName, el)}
                             value={normalizedLevel}
                             onChange={e => updateNestedBlock(path, { [varName]: e.target.value })}
                             className="input-field-small"
@@ -575,7 +684,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                           <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🔗 {label}</label>
                           <div style={{ display: 'flex', gap: '6px', marginTop: 6, flexDirection: 'column' }}>
-                            <input type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                             <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" style={{ whiteSpace: 'nowrap', width: '100%' }}>📁 Datei</button>
                           </div>
                         </div>
@@ -602,14 +711,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                           <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📝 {label}</label>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 6, flexDirection: 'column' }}>
-                            <select value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                            <select ref={(el) => setFieldRef(path, `${varName}Level`, el)} value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                               <option value="h1">H1</option>
                               <option value="h2">H2</option>
                               <option value="h3">H3</option>
                               <option value="h4">H4</option>
                               <option value="h5">H5</option>
                             </select>
-                            <input type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                            <input ref={(el) => setFieldRef(path, `${varName}Text`, el)} type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                           </div>
                         </div>
                       )
@@ -620,7 +729,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       return (
                         <div key={varName} className="field-item" style={{ gridColumn: 'span 1', padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                           <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📋 {arrayLabel}</label>
-                          <textarea placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                          <textarea ref={(el) => setFieldRef(path, varName, el)} placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                         </div>
                       )
                     }
@@ -630,14 +739,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     return (
                       <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
                         <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📌 {defaultLabel}</label>
-                        <input type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.9rem', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                        <input ref={(el) => setFieldRef(path, varName, el)} type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.9rem', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
                       </div>
                     )
                   })}
               </div>
 
               {/* Separate textarea fields (full width) - NACH dem Grid */}
-              {extractTemplateVariables(templateCodes[block.template])
+              {templateVariables
                 .filter(varName => guessInputType(varName) === 'textarea')
                 .map(varName => {
                   const value = block.props[varName] || '';
@@ -645,7 +754,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   return (
                     <div key={varName} className="field-item" style={{ marginBottom: 12 }}>
                       <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>✏️ {label}</label>
-                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', marginTop: 6, background: 'var(--bg-secondary)' }}>
+                      <div ref={(el) => setFieldRef(path, varName, el)} style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', marginTop: 6, background: 'var(--bg-secondary)' }}>
                         <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
                       </div>
                     </div>
@@ -657,8 +766,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           {/* Fallback simple text/gallery editors when no template */}
           {!block.template && block.type === 'text' && (
             <>
-              <input type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+              <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+              <div ref={(el) => setFieldRef(path, 'content', el)} style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
                 <ReactQuill value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} theme="snow" />
               </div>
             </>
@@ -741,6 +850,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   ))}
                 </select>
 
+                {pageTemplateSlots.length > 0 && (
+                  <>
+                    <label className="field-label-xs">Block-Slots (Template)</label>
+                    {pageTemplateSlots.map((slotName) => (
+                      <div key={slotName} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700 }}>{slotName}</span>
+                        <select
+                          value={pageBlockSlotMap[slotName] || ''}
+                          onChange={e => updatePageBlockSlot(slotName, e.target.value)}
+                          className="input-field-small"
+                        >
+                          <option value="">-- Block-Template waehlen --</option>
+                          {blockTemplateNames.map((tn) => (
+                            <option key={`${slotName}-${tn}`} value={tn}>{tn}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </>
+                )}
+
                 <label className="field-label-xs">Weiterleitung</label>
                 <select
                   value={redirectType}
@@ -774,15 +904,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
 
               <div className="page-editor-outline-list">
-                {flattenBlocks(blocks).length === 0 ? (
+                {flattenedBlocks.length === 0 ? (
                   <div className="page-editor-outline-empty">Noch keine Blöcke.</div>
                 ) : (
-                  flattenBlocks(blocks).map(({ path, block, depth }) => (
+                  flattenedBlocks.map(({ path, block, depth }) => (
                     <button
                       key={path}
                       type="button"
                       className={`page-editor-outline-item ${selectedBlockPath === path ? 'active' : ''}`}
-                      onClick={() => setSelectedBlockPath(path)}
+                      onClick={() => {
+                        setSelectedBlockPath(path);
+                        setSelectedFieldKey('');
+                      }}
                       style={{ paddingLeft: `${12 + depth * 14}px` }}
                     >
                       <span className="page-editor-outline-item-title">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
@@ -790,6 +923,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                   ))
                 )}
+
+                {outlineFieldEntries.map(({ fieldKey, label, path, depth }) => (
+                  <button
+                    key={fieldKey}
+                    type="button"
+                    className={`page-editor-outline-field ${selectedFieldKey === fieldKey ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedBlockPath(path);
+                      setSelectedFieldKey(fieldKey);
+                    }}
+                    style={{ paddingLeft: `${28 + depth * 14}px` }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </aside>
 

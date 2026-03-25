@@ -591,6 +591,33 @@ select:focus {
   font-size: 0.75rem;
 }
 
+.page-editor-outline-field {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.77rem;
+  text-align: left;
+  padding-top: 5px;
+  padding-right: 8px;
+  padding-bottom: 5px;
+  transition: all 0.2s ease;
+}
+
+.page-editor-outline-field:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.page-editor-outline-field.active {
+  background: color-mix(in srgb, var(--active-bg) 65%, transparent);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
 .page-editor-outline-empty,
 .page-editor-inspector-empty {
   color: var(--text-secondary);
@@ -2213,6 +2240,18 @@ select:focus {
 
 .template-wire-node.placeholder {
   border-style: dashed;
+}
+
+.template-wire-node.block-slot {
+  border-color: #8b5cf6;
+  color: #6d28d9;
+  background: color-mix(in srgb, #8b5cf6 14%, transparent);
+}
+
+.dark-mode .template-wire-node.block-slot {
+  border-color: #a78bfa;
+  color: #ddd6fe;
+  background: color-mix(in srgb, #a78bfa 20%, transparent);
 }
 
 .wire-bind-example {

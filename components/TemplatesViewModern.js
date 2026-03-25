@@ -34,7 +34,17 @@ function parseTemplateStructure(code) {
     }
 
     if (/^{{/.test(token)) {
-      stack[stack.length - 1].children.push({ label: token, type: 'placeholder', children: [] });
+      const dynamicSlotMatch = token.match(/^\{\{\{\s*blockSlot:([^}]+?)\s*\}\}\}$/);
+      const legacyBlockMatch = token.match(/^\{\{\{\s*blockTemplate:([^|}]+?)(?:\|([^}]+))?\s*\}\}\}$/);
+      if (dynamicSlotMatch) {
+        const slotName = String(dynamicSlotMatch[1] || '').trim();
+        stack[stack.length - 1].children.push({ label: `slot: ${slotName}`, type: 'block-slot', children: [] });
+      } else if (legacyBlockMatch) {
+        const slotTemplate = String(legacyBlockMatch[1] || '').trim();
+        stack[stack.length - 1].children.push({ label: `legacy block: ${slotTemplate}`, type: 'block-slot', children: [] });
+      } else {
+        stack[stack.length - 1].children.push({ label: token, type: 'placeholder', children: [] });
+      }
     }
   }
 
@@ -44,9 +54,10 @@ function parseTemplateStructure(code) {
 function TemplateWireNode({ node, depth = 0 }) {
   const depthClass = `template-wire-depth-${depth % 5}`;
   const placeholderClass = node.type === 'placeholder' ? ' placeholder' : '';
+  const blockSlotClass = node.type === 'block-slot' ? ' block-slot' : '';
 
   return (
-    <div className={`template-wire-node ${depthClass}${placeholderClass}`}>
+    <div className={`template-wire-node ${depthClass}${placeholderClass}${blockSlotClass}`}>
       <div className="template-wire-label">{node.label}</div>
       {Array.isArray(node.children) && node.children.length > 0 && (
         <div className="template-wire-children">
