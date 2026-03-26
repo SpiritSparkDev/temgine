@@ -4,10 +4,13 @@ import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid } from 'lucide-react';
-import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps } from '../lib/templateParser';
+import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps, extractBlockTargets } from '../lib/templateParser';
 import Toast from './Toast';
+import TemplateStructurePreview from './TemplateStructurePreview';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
+  const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+  const devTitle = (text) => (showDevHints ? text : undefined);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [template, setTemplate] = useState('');
@@ -28,6 +31,53 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
 
+  const normalizeSlotName = (value) => {
+    if (value === undefined || value === null) return '';
+    return String(value).trim();
+  };
+
+  const migrateLegacySlotMapToBlocks = (incomingBlocks = [], incomingData = {}) => {
+    if (!Array.isArray(incomingBlocks) || incomingBlocks.length === 0) {
+      return { blocks: incomingBlocks, migrated: false };
+    }
+
+    const legacyMap = (incomingData && incomingData.blockSlots && typeof incomingData.blockSlots === 'object')
+      ? incomingData.blockSlots
+      : null;
+
+    if (!legacyMap || Object.keys(legacyMap).length === 0) {
+      return { blocks: incomingBlocks, migrated: false };
+    }
+
+    const topLevelHasAssignedSlots = incomingBlocks.some((block) => normalizeSlotName(block?.slot));
+    if (topLevelHasAssignedSlots) {
+      return { blocks: incomingBlocks, migrated: false };
+    }
+
+    const migratedBlocks = JSON.parse(JSON.stringify(incomingBlocks));
+    const availableByTemplate = {};
+    migratedBlocks.forEach((block, index) => {
+      const tpl = String((block && (block.template || block.type)) || '').trim();
+      if (!tpl) return;
+      if (!availableByTemplate[tpl]) availableByTemplate[tpl] = [];
+      availableByTemplate[tpl].push(index);
+    });
+
+    Object.entries(legacyMap).forEach(([rawSlotName, rawTemplateName]) => {
+      const slotName = normalizeSlotName(rawSlotName);
+      const templateName = String(rawTemplateName || '').trim();
+      if (!slotName || !templateName) return;
+      const queue = availableByTemplate[templateName] || [];
+      if (queue.length === 0) return;
+      const targetIndex = queue.shift();
+      if (migratedBlocks[targetIndex]) {
+        migratedBlocks[targetIndex].slot = slotName;
+      }
+    });
+
+    return { blocks: migratedBlocks, migrated: true };
+  };
+
   // templates is expected to be an array of objects { name, type }
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
@@ -40,16 +90,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   useEffect(() => {
     if (page) {
+      const initialBlocks = Array.isArray(page.blocks) ? page.blocks : [];
+      const migration = migrateLegacySlotMapToBlocks(initialBlocks, page.data || {});
       setTitle(page.title || '');
       setSlug(page.slug || '');
       setTemplate(page.template || '');
-      setBlocks(page.blocks || []);
+      setBlocks(migration.blocks || []);
       setPageData(page.data || {});
       setRedirectType(page.redirectType || 'none');
       setRedirectUrl(page.redirectUrl || '');
       setIsHomepage(page.isHomepage || false);
-      const initialBlocks = page.blocks || [];
-      setSelectedBlockPath(initialBlocks.length > 0 ? '0' : '');
+      setSelectedBlockPath((migration.blocks || []).length > 0 ? '0' : '');
     }
   }, [page]);
 
@@ -189,20 +240,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   };
 
   const extractBlockSlotNames = (code) => {
-    if (!code || typeof code !== 'string') return [];
-    const regex = /\{\{\{\s*blockSlot:([^}]+?)\s*\}\}\}/g;
-    const slots = new Set();
-    let match = null;
-    while ((match = regex.exec(code)) !== null) {
-      const name = String(match[1] || '').trim();
-      if (name) slots.add(name);
-    }
-    return Array.from(slots);
+    return extractBlockTargets(code).map((target) => target.name);
   };
 
   const selectedPageTemplateCode = template ? templateCodes[template] : '';
   const pageTemplateSlots = useMemo(() => extractBlockSlotNames(selectedPageTemplateCode), [selectedPageTemplateCode]);
-  const pageBlockSlotMap = (pageData && pageData.blockSlots) || {};
+  const firstPageTemplateSlot = pageTemplateSlots[0] || '';
+  const selectedTopLevelIndex = useMemo(() => {
+    if (!selectedBlockPath) return -1;
+    const firstSegment = String(selectedBlockPath).split('.')[0];
+    const idx = parseInt(firstSegment, 10);
+    if (isNaN(idx) || idx < 0) return -1;
+    return idx;
+  }, [selectedBlockPath]);
+  const selectedTopLevelBlock = selectedTopLevelIndex >= 0 ? (blocks?.[selectedTopLevelIndex] || null) : null;
+  const activeSelectedSlot = normalizeSlotName(selectedTopLevelBlock?.slot);
+  const slotUsageByName = useMemo(() => {
+    const usage = {};
+    (blocks || []).forEach((block) => {
+      const slotName = normalizeSlotName(block?.slot) || firstPageTemplateSlot;
+      if (!slotName) return;
+      usage[slotName] = (usage[slotName] || 0) + 1;
+    });
+    return usage;
+  }, [blocks, firstPageTemplateSlot]);
 
   const templateVariablesByName = useMemo(() => {
     const out = {};
@@ -226,19 +287,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }
   };
 
+  const formatBlockNumber = (path) => String(path).split('.').map(part => Number(part) + 1).join('.');
+
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
     setShowFileModal(true);
-  };
-
-  const updatePageBlockSlot = (slotName, templateName) => {
-    const nextMap = { ...(pageBlockSlotMap || {}) };
-    if (!templateName) {
-      delete nextMap[slotName];
-    } else {
-      nextMap[slotName] = templateName;
-    }
-    handleUpdatePageData({ blockSlots: nextMap });
   };
 
   const selectFile = (fileUrl) => {
@@ -462,6 +515,26 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setBlocks(copy);
   }
 
+  const updateNestedBlockSlot = (path, slotName) => {
+    const normalized = normalizeSlotName(slotName);
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        if (normalized) {
+          cur[idx].slot = normalized;
+        } else {
+          delete cur[idx].slot;
+        }
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
+  }
+
   const getBlockAtPath = (path) => {
     if (!path && path !== '0') return null;
     const parts = String(path).split('.').map(p => parseInt(p, 10));
@@ -526,13 +599,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     }
 
+    const normalizedPageData = { ...(pageData || {}) };
+    delete normalizedPageData.blockSlots;
+    delete normalizedPageData.__blockSlots;
+
     const updatedPage = {
       ...page,
       title,
       slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
       template,
       blocks,
-      data: pageData,
+      data: normalizedPageData,
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage
@@ -608,6 +685,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         className={`block-item ${selectedBlockPath === path ? 'selected' : ''}`}
         style={{ cursor: 'default', border: selectedBlockPath === path ? '2px solid var(--accent-primary)' : '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: selectedBlockPath === path ? '0 0 0 3px rgba(102, 126, 234, 0.12)' : '0 2px 8px var(--shadow)', overflow: 'hidden' }}
         onClick={() => setSelectedBlockPath(path)}
+        title={devTitle(`Komponente: Block ${formatBlockNumber(path)}. Funktion: Block auswaehlen und Inhalte bearbeiten.`)}
         {...containerProps}
       >
         {/* Block Header */}
@@ -618,6 +696,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 draggable
                 onDragStart={handleGripDragStart}
                 onDragEnd={handleGripDragEnd}
+                title={devTitle(`Funktion: Block ${formatBlockNumber(path)} per Drag-and-Drop neu anordnen`)}
                 style={{ 
                   cursor: 'grab',
                   padding: '4px',
@@ -637,9 +716,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <span className="page-block-template-pill">{block.template || 'Freier Block'}</span>
             </div>
           </div>
-          <small style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
-            {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
-          </small>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isTop && pageTemplateSlots.length > 0 && (
+              <select
+                value={normalizeSlotName(block.slot)}
+                onChange={(e) => updateNestedBlockSlot(path, e.target.value)}
+                className="input-field-small"
+                style={{ minWidth: 170 }}
+                onClick={(e) => e.stopPropagation()}
+                title={devTitle(`Feld: Slot-Zuordnung fuer Block ${formatBlockNumber(path)}`)}
+                aria-label={`Slot-Zuordnung fuer Block ${formatBlockNumber(path)}`}
+              >
+                <option value="">-- Kein Slot --</option>
+                {pageTemplateSlots.map((slotName) => (
+                  <option key={`${path}-slot-${slotName}`} value={slotName}>{slotName}</option>
+                ))}
+              </select>
+            )}
+            <small style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+              {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
+            </small>
+          </div>
         </div>
 
         {/* Block Content */}
@@ -685,7 +782,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🔗 {label}</label>
                           <div style={{ display: 'flex', gap: '6px', marginTop: 6, flexDirection: 'column' }}>
                             <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
-                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" style={{ whiteSpace: 'nowrap', width: '100%' }}>📁 Datei</button>
+                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" style={{ whiteSpace: 'nowrap', width: '100%' }} title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
                           </div>
                         </div>
                       )
@@ -777,11 +874,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <div>
               <button className="btn-modern" onClick={() => {
                 const url = prompt('Bild-URL:'); if (url) { const images = [...(block.props.images || []), { src: url, alt: 'Bild' }]; updateNestedBlock(path, { images }); }
-              }} style={{ marginBottom: 10 }}>➕ Bild hinzufügen</button>
+              }} style={{ marginBottom: 10 }} title={devTitle('Bild zur Galerie hinzufuegen')} aria-label="Bild zur Galerie hinzufuegen">➕ Bild hinzufügen</button>
               <div className="gallery-images">{(block.props.images || []).map((img, imgIdx) => (
                 <div key={imgIdx} className="gallery-image-wrapper">
                   <img src={img.src} alt={img.alt} className="gallery-image" />
-                  <button onClick={() => { const images = block.props.images.filter((_, i) => i !== imgIdx); updateNestedBlock(path, { images }); }} className="gallery-delete-btn">✖</button>
+                  <button onClick={() => { const images = block.props.images.filter((_, i) => i !== imgIdx); updateNestedBlock(path, { images }); }} className="gallery-delete-btn" title={devTitle(`Bild ${imgIdx + 1} aus Galerie entfernen`)} aria-label={`Bild ${imgIdx + 1} aus Galerie entfernen`}>✖</button>
                 </div>
               ))}</div>
             </div>
@@ -798,6 +895,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return (blocks || []).map((b, i) => renderBlockEditor(b, String(i), 0))
   }
 
+  const assignSelectedTopLevelSlot = (slotName) => {
+    let targetIndex = selectedTopLevelIndex;
+    if (targetIndex < 0) {
+      if (!Array.isArray(blocks) || blocks.length === 0) return;
+      targetIndex = 0;
+      setSelectedBlockPath('0');
+    }
+    updateNestedBlockSlot(String(targetIndex), slotName);
+    setSelectedFieldKey('');
+  };
+
+  const handleStructureBlockClick = (path) => {
+    if (!path && path !== '0') return;
+    setSelectedBlockPath(String(path));
+    setSelectedFieldKey('');
+  };
+
   return (
     <div className="page-editor">
       {toast && (
@@ -812,9 +926,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       <div className="tab-content blocks-tab">
 
           <div className="page-editor-workspace">
-            <aside className="page-editor-outline">
+            <aside className="page-editor-outline" title={devTitle('Bereich: Seiteneinstellungen und Strukturvorschau')}>
               <div className="page-editor-outline-head">
                 <span className="page-editor-outline-eyebrow">Aktuelle Seite</span>
+                {showDevHints && <div className="page-editor-panel-hint">Bereich: Seiteneinstellungen und Struktur</div>}
                 <strong>{title || page?.title || 'Unbenannte Seite'}</strong>
                 <span>/{slug || 'seiten-url'}</span>
               </div>
@@ -827,6 +942,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   onChange={e => setTitle(e.target.value)}
                   placeholder="Seitentitel"
                   className="input-field-small"
+                  title={devTitle('Feld: Seitentitel')}
+                  aria-label="Seitentitel"
                 />
 
                 <label className="field-label-xs">Slug</label>
@@ -836,6 +953,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   onChange={e => setSlug(e.target.value)}
                   placeholder="seiten-url"
                   className="input-field-small"
+                  title={devTitle('Feld: URL-Slug')}
+                  aria-label="URL-Slug"
                 />
 
                 <label className="field-label-xs">Seiten-Template</label>
@@ -843,6 +962,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   value={template}
                   onChange={e => handleUpdatePageTemplate(e.target.value)}
                   className="input-field-small"
+                  title={devTitle('Feld: Seiten-Template')}
+                  aria-label="Seiten-Template"
                 >
                   <option value="">-- Kein Template --</option>
                   {siteTemplateNames.map(tn => (
@@ -850,32 +971,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   ))}
                 </select>
 
-                {pageTemplateSlots.length > 0 && (
-                  <>
-                    <label className="field-label-xs">Block-Slots (Template)</label>
-                    {pageTemplateSlots.map((slotName) => (
-                      <div key={slotName} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700 }}>{slotName}</span>
-                        <select
-                          value={pageBlockSlotMap[slotName] || ''}
-                          onChange={e => updatePageBlockSlot(slotName, e.target.value)}
-                          className="input-field-small"
-                        >
-                          <option value="">-- Block-Template waehlen --</option>
-                          {blockTemplateNames.map((tn) => (
-                            <option key={`${slotName}-${tn}`} value={tn}>{tn}</option>
-                          ))}
-                        </select>
-                      </div>
-                    ))}
-                  </>
-                )}
-
                 <label className="field-label-xs">Weiterleitung</label>
                 <select
                   value={redirectType}
                   onChange={e => setRedirectType(e.target.value)}
                   className="input-field-small"
+                  title={devTitle('Feld: Weiterleitungstyp')}
+                  aria-label="Weiterleitungstyp"
                 >
                   <option value="none">Keine</option>
                   <option value="404">404</option>
@@ -890,10 +992,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     onChange={e => setRedirectUrl(e.target.value)}
                     placeholder="https://example.com"
                     className="input-field-small"
+                    title={devTitle('Feld: Ziel-URL fuer externe Weiterleitung')}
+                    aria-label="Ziel-URL fuer externe Weiterleitung"
                   />
                 )}
 
-                <label className="page-editor-outline-toggle">
+                <label className="page-editor-outline-toggle" title={devTitle('Option: Diese Seite als Startseite markieren')}>
                   <input
                     type="checkbox"
                     checked={isHomepage}
@@ -903,45 +1007,49 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 </label>
               </div>
 
-              <div className="page-editor-outline-list">
-                {flattenedBlocks.length === 0 ? (
-                  <div className="page-editor-outline-empty">Noch keine Blöcke.</div>
+
+              <div className="page-editor-outline-structure">
+                <div className="page-editor-outline-structure-head">
+                  {showDevHints && <div className="page-editor-panel-hint">Komponente: Strukturvorschau, Funktion: Slots und Blöcke zuordnen</div>}
+                  <strong>Strukturvorschau</strong>
+                  <span>
+                    {blocks.length > 0
+                      ? 'Klicke auf einen Slot zur Zuweisung oder auf einen Block zum Springen'
+                      : 'Lege zuerst einen Block an'}
+                  </span>
+                </div>
+
+                {!selectedPageTemplateCode ? (
+                  <div className="page-editor-outline-empty">Kein Seiten-Template ausgewählt.</div>
                 ) : (
-                  flattenedBlocks.map(({ path, block, depth }) => (
-                    <button
-                      key={path}
-                      type="button"
-                      className={`page-editor-outline-item ${selectedBlockPath === path ? 'active' : ''}`}
-                      onClick={() => {
-                        setSelectedBlockPath(path);
-                        setSelectedFieldKey('');
-                      }}
-                      style={{ paddingLeft: `${12 + depth * 14}px` }}
-                    >
-                      <span className="page-editor-outline-item-title">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
-                      <span className="page-editor-outline-item-meta">{block.template || block.type || 'content'}</span>
-                    </button>
-                  ))
+                  <TemplateStructurePreview
+                    code={selectedPageTemplateCode}
+                    blocks={blocks}
+                    activeSlot={activeSelectedSlot}
+                    activeBlockPath={selectedBlockPath}
+                    slotUsage={slotUsageByName}
+                    onSlotClick={blocks.length > 0 ? assignSelectedTopLevelSlot : null}
+                    onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
+                    previewClassName="template-wire-preview page-editor-structure-wire"
+                  />
                 )}
 
-                {outlineFieldEntries.map(({ fieldKey, label, path, depth }) => (
-                  <button
-                    key={fieldKey}
-                    type="button"
-                    className={`page-editor-outline-field ${selectedFieldKey === fieldKey ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedBlockPath(path);
-                      setSelectedFieldKey(fieldKey);
-                    }}
-                    style={{ paddingLeft: `${28 + depth * 14}px` }}
-                  >
-                    {label}
-                  </button>
-                ))}
+                {pageTemplateSlots.length > 0 && (
+                  <div className="page-editor-outline-slot-legend">
+                    {pageTemplateSlots.map((slotName) => {
+                      const count = slotUsageByName[slotName] || 0;
+                      return (
+                        <span key={`slot-legend-${slotName}`} className={`page-editor-outline-slot-pill ${count > 0 ? 'mapped' : ''}`}>
+                          {slotName} ({count})
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </aside>
 
-            <div className="page-editor-canvas">
+            <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
               <div className="blocks-container">
                 {blocks.length > 0 ? renderBlocksList() : (
                   <div className="page-block-empty-state">
@@ -954,6 +1062,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         handleAddBlock('content');
                         setSelectedBlockPath('0');
                       }}
+                      title={devTitle('Ersten Inhaltsblock anlegen')}
+                      aria-label="Ersten Inhaltsblock anlegen"
                     >
                       Ersten Block hinzufügen
                     </button>
@@ -962,7 +1072,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
 
-            <aside className="page-editor-inspector">
+            <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
               <div className="page-editor-inspector-content">
                 {(() => {
                   const selectedBlock = getBlockAtPath(selectedBlockPath);
@@ -972,7 +1082,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   return (
                     <>
                     <div className="page-editor-inspector-head">
-                      <h4>Block-Metadaten</h4>
+                      <div>
+                        {showDevHints && <div className="page-editor-panel-hint">Bereich: Block-Inspektor</div>}
+                        <h4>Block-Metadaten</h4>
+                      </div>
                       <span>#{selectedBlockPath.split('.').map(part => Number(part) + 1).join('.')}</span>
                     </div>
 
@@ -982,6 +1095,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         value={selectedBlock.template || ''}
                         onChange={e => updateNestedBlockTemplate(selectedBlockPath, e.target.value)}
                         className="input-field-small"
+                        title={devTitle('Feld: Block-Template')}
+                        aria-label="Block-Template"
                       >
                         <option value="">-- Kein Template --</option>
                         {blockTemplateNames.map(tn => (
@@ -989,6 +1104,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         ))}
                       </select>
                     </div>
+
+                    {pageTemplateSlots.length > 0 && selectedBlockPath.indexOf('.') === -1 && (
+                      <div className="page-editor-inspector-group">
+                        <label className="field-label-xs">Slot</label>
+                        <select
+                          value={normalizeSlotName(selectedBlock.slot)}
+                          onChange={e => updateNestedBlockSlot(selectedBlockPath, e.target.value)}
+                          className="input-field-small"
+                          title={devTitle('Feld: Slot fuer den ausgewaehlten Block')}
+                          aria-label="Slot fuer den ausgewaehlten Block"
+                        >
+                          <option value="">-- Kein Slot --</option>
+                          {pageTemplateSlots.map((slotName) => (
+                            <option key={`inspector-slot-${slotName}`} value={slotName}>{slotName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="page-editor-inspector-group">
                       <label className="field-label-xs">Anchor ID</label>
@@ -998,12 +1131,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         placeholder="z. B. section-intro"
                         value={selectedBlock.props?.anchorId || ''}
                         onChange={e => updateNestedBlock(selectedBlockPath, { anchorId: e.target.value })}
+                        title={devTitle('Feld: Anchor-ID fuer den ausgewaehlten Block')}
+                        aria-label="Anchor-ID fuer den ausgewaehlten Block"
                       />
                     </div>
 
                     <div className="page-editor-inspector-actions">
-                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}>Kind hinzufügen</button>
-                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', false)}>Sibling hinzufügen</button>
+                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)} title={devTitle('Unterblock innerhalb des ausgewaehlten Blocks anlegen')}>Kind hinzufügen</button>
+                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', false)} title={devTitle('Block auf derselben Ebene anlegen')}>Sibling hinzufügen</button>
                       <button
                         className="btn-modern-small"
                         onClick={() => {
@@ -1016,6 +1151,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             setSelectedBlockPath('0');
                           }
                         }}
+                        title={devTitle('Ausgewaehlten Block loeschen')}
                       >
                         Block löschen
                       </button>
@@ -1024,7 +1160,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   );
                 })()}
               </div>
-
+                <hr></hr>
               <div className="page-editor-inspector-global-actions">
                 <button
                   type="button"
@@ -1034,13 +1170,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     handleAddBlock('content');
                     setSelectedBlockPath(nextPath);
                   }}
+                  title={devTitle('Neuen Top-Level-Block anlegen')}
+                  aria-label="Neuen Top-Level-Block anlegen"
                 >
                   + Neuer Block hinzufügen
                 </button>
-                <button type="button" className="btn-modern-small" onClick={handleSave}>Speichern</button>
-                <button type="button" className="btn-modern-small" onClick={handleSaveAndClose}>Speichern und schließen</button>
-                <button type="button" className="btn-modern-small" onClick={handleSaveAndView}>Speichern und anzeigen</button>
-                <button type="button" className="btn-modern-small" onClick={onCancel}>Abbrechen</button>
+              </div>
+              <hr></hr>
+              <div className="page-editor-inspector-global-actions">
+                <button type="button" className="btn-modern-small green" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
+                <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern und schließen</button>
+                <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern und anzeigen</button>
+                <button type="button" className="btn-modern-small red" onClick={onCancel} title={devTitle('Bearbeitung abbrechen')}>Abbrechen</button>
               </div>
             </aside>
           </div>
@@ -1138,6 +1279,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <div
                       key={file.url}
                       onClick={() => selectFile(file.url)}
+                      title={devTitle(`Datei auswaehlen: ${filename}`)}
+                      aria-label={`Datei auswaehlen: ${filename}`}
                       style={{
                         border: '2px solid #ddd',
                         borderRadius: 8,
@@ -1218,6 +1361,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             }}>
               <button
                 onClick={() => setShowFileModal(false)}
+                title={devTitle('Dateiauswahl abbrechen')}
+                aria-label="Dateiauswahl abbrechen"
                 style={{
                   padding: '10px 20px',
                   background: '#f5f5f5',

@@ -507,8 +507,12 @@ export default async function handler(req, res) {
 ```
 styles/
 ├── global.css          # Globale Styles & CSS-Variablen
-├── admin.css           # Admin-Layout
-├── admin-components.css # Admin-Komponenten
+├── admin.css           # Admin-Layout & gemeinsame Design-Tokens
+├── admin-foundation.css # Formulare, Tabs, Quill, allgemeine Admin-Basis
+├── admin-feedback.css  # Toasts und Dialoge
+├── page-editor.css     # Page-Editor Workspace und Block-UI
+├── templates-structure.css # Templates Builder und Strukturvorschau
+├── admin-data-views.css # Users- und CSS-Manager-Ansichten
 ├── buttons.css         # Button-Styles
 ├── editor-common.css   # Editor-Styles
 ├── file-manager.css

@@ -19,6 +19,8 @@ import ContentModelsView from './ContentModelsView';
 import ErrorBoundary from './ErrorBoundary';
 
 export default function AdminPageClient() {
+  const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+  const devTitle = (text) => (showDevHints ? text : undefined);
   const { data: session } = useSession();
   const [templateList, setTemplateList] = useState([]);
   const [templateName, setTemplateName] = useState('');
@@ -467,24 +469,32 @@ export default function AdminPageClient() {
                   <button
                     onClick={() => openBuilderTab('templates')}
                     className={`settings-tab-btn ${builderTab === 'templates' ? 'active' : ''}`}
+                    title={devTitle('Modul: Templates. Site- und Block-Templates bearbeiten.')}
+                    aria-label="Templates-Modul oeffnen"
                   >
                     Templates
                   </button>
                   <button
                     onClick={() => openBuilderTab('navigation')}
                     className={`settings-tab-btn ${builderTab === 'navigation' ? 'active' : ''}`}
+                    title={devTitle('Modul: Navigation. Menues und Navigationsstrukturen bearbeiten.')}
+                    aria-label="Navigations-Modul oeffnen"
                   >
                     Navigation
                   </button>
                   <button
                     onClick={() => openBuilderTab('snippets')}
                     className={`settings-tab-btn ${builderTab === 'snippets' ? 'active' : ''}`}
+                    title={devTitle('Modul: Snippets. Wiederverwendbare Platzhalter und Tokens verwalten.')}
+                    aria-label="Snippets-Modul oeffnen"
                   >
                     Snippets
                   </button>
                   <button
                     onClick={() => openBuilderTab('content-models')}
                     className={`settings-tab-btn ${builderTab === 'content-models' ? 'active' : ''}`}
+                    title={devTitle('Modul: Content Models. Datenstrukturen fuer Inhalte definieren.')}
+                    aria-label="Content-Models-Modul oeffnen"
                   >
                     Content Models
                   </button>
@@ -502,8 +512,11 @@ export default function AdminPageClient() {
                 <div className="builder-quick-switch-overlay" onClick={() => setShowBuilderQuickSwitch(false)}>
                   <div className="builder-quick-switch-modal" onClick={(e) => e.stopPropagation()}>
                     <div className="builder-quick-switch-head">
-                      <h3>Modul wechseln</h3>
-                      <button type="button" className="builder-quick-close" onClick={() => setShowBuilderQuickSwitch(false)}>Schliessen</button>
+                      <div>
+                        <h3>Modul wechseln</h3>
+                        {showDevHints && <p className="editor-role-hint">Bereich: Schneller Wechsel zwischen den Builder-Modulen</p>}
+                      </div>
+                      <button type="button" className="builder-quick-close" onClick={() => setShowBuilderQuickSwitch(false)} title={devTitle('Schnellwechsel schliessen')} aria-label="Schnellwechsel schliessen">Schliessen</button>
                     </div>
                     <input
                       autoFocus
@@ -512,6 +525,8 @@ export default function AdminPageClient() {
                       placeholder="Templates, Navigation, Snippets, Content Models..."
                       value={builderSearch}
                       onChange={(e) => setBuilderSearch(e.target.value)}
+                      title={devTitle('Suche nach einem Builder-Modul')}
+                      aria-label="Builder-Modul suchen"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && filteredBuilderModules.length > 0) {
                           openBuilderTab(filteredBuilderModules[0].id);
@@ -525,7 +540,7 @@ export default function AdminPageClient() {
                         filteredBuilderModules.map((module) => {
                           const Icon = module.icon;
                           return (
-                            <button key={module.id} type="button" className="builder-quick-item" onClick={() => openBuilderTab(module.id)}>
+                            <button key={module.id} type="button" className="builder-quick-item" onClick={() => openBuilderTab(module.id)} title={devTitle(`Modul ${module.label} oeffnen: ${module.description}`)} aria-label={`Modul ${module.label} oeffnen`}>
                               <Icon size={14} />
                               <span>{module.label}</span>
                               <small>{module.description}</small>

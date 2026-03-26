@@ -3,74 +3,13 @@ import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
 import { createButtonHandlers, insertText } from '../lib/insertHelper'
 import boundSnippets from '../data/boundSnippets.json'
+import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-
-function parseTemplateStructure(code) {
-  if (!code || typeof code !== 'string') return [];
-
-  const root = { label: 'root', type: 'root', children: [] };
-  const stack = [root];
-  const tokenRegex = /<\/?[a-zA-Z][^>]*>|{{{[^}]+}}}|{{[^}]+}}/g;
-  const tokens = String(code).match(tokenRegex) || [];
-
-  for (const token of tokens.slice(0, 200)) {
-    if (/^<\//.test(token)) {
-      if (stack.length > 1) stack.pop();
-      continue;
-    }
-
-    if (/^</.test(token)) {
-      const tagMatch = token.match(/^<\s*([a-zA-Z0-9-]+)/);
-      if (!tagMatch) continue;
-      const tagName = tagMatch[1].toLowerCase();
-      const selfClosing = /\/>$/.test(token) || VOID_TAGS.has(tagName);
-      const node = { label: tagName, type: 'tag', children: [] };
-      stack[stack.length - 1].children.push(node);
-      if (!selfClosing) stack.push(node);
-      continue;
-    }
-
-    if (/^{{/.test(token)) {
-      const dynamicSlotMatch = token.match(/^\{\{\{\s*blockSlot:([^}]+?)\s*\}\}\}$/);
-      const legacyBlockMatch = token.match(/^\{\{\{\s*blockTemplate:([^|}]+?)(?:\|([^}]+))?\s*\}\}\}$/);
-      if (dynamicSlotMatch) {
-        const slotName = String(dynamicSlotMatch[1] || '').trim();
-        stack[stack.length - 1].children.push({ label: `slot: ${slotName}`, type: 'block-slot', children: [] });
-      } else if (legacyBlockMatch) {
-        const slotTemplate = String(legacyBlockMatch[1] || '').trim();
-        stack[stack.length - 1].children.push({ label: `legacy block: ${slotTemplate}`, type: 'block-slot', children: [] });
-      } else {
-        stack[stack.length - 1].children.push({ label: token, type: 'placeholder', children: [] });
-      }
-    }
-  }
-
-  return root.children;
-}
-
-function TemplateWireNode({ node, depth = 0 }) {
-  const depthClass = `template-wire-depth-${depth % 5}`;
-  const placeholderClass = node.type === 'placeholder' ? ' placeholder' : '';
-  const blockSlotClass = node.type === 'block-slot' ? ' block-slot' : '';
-
-  return (
-    <div className={`template-wire-node ${depthClass}${placeholderClass}${blockSlotClass}`}>
-      <div className="template-wire-label">{node.label}</div>
-      {Array.isArray(node.children) && node.children.length > 0 && (
-        <div className="template-wire-children">
-          {node.children.map((child, idx) => (
-            <TemplateWireNode key={`${child.label}-${idx}`} node={child} depth={depth + 1} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function TemplatesViewModern({ showToast }) {
+  const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
+  const devTitle = (text) => (showDevHints ? text : undefined);
   const [templates, setTemplates] = useState([]);
   // inserterRef no longer required; editor registers centrally
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -199,14 +138,21 @@ export default function TemplatesViewModern({ showToast }) {
   const boundSnippets = snippets.filter((s) => s.type === 'bound');
   const definedSnippets = snippets.filter((s) => s.type === 'defined');
   const freeSnippets = snippets.filter((s) => !s.type || (s.type !== 'bound' && s.type !== 'defined'));
-  const templateStructureNodes = parseTemplateStructure(templateCode);
 
   return (
     <div className="editor-container">
       <div className="editor-sidebar">
         <div className="editor-header">
-          <h2><Layout size={18} /> Templates</h2>
-          <button className="icon-btn" onClick={handleNew} title="Neues Template">
+          <div className="editor-header-copy">
+            <h2><Layout size={18} /> Templates</h2>
+            {showDevHints && <p className="editor-role-hint">Bereich: Template-Liste, Filter und Schnellaktionen</p>}
+          </div>
+          <button
+            className="icon-btn"
+            onClick={handleNew}
+            title={devTitle('Funktion: Neues Template anlegen')}
+            aria-label="Neues Template anlegen"
+          >
             <Plus size={18} />
           </button>
         </div>
@@ -217,6 +163,8 @@ export default function TemplatesViewModern({ showToast }) {
               type="button"
               className={`editor-segment-btn ${activeTemplateScope === 'SITE' ? 'active' : ''}`}
               onClick={() => setActiveTemplateScope('SITE')}
+              title={devTitle('Filter: Nur Site-Templates anzeigen')}
+              aria-label="Nur Site-Templates anzeigen"
             >
               Site
               <span className="editor-segment-count">{siteTemplates.length}</span>
@@ -225,6 +173,8 @@ export default function TemplatesViewModern({ showToast }) {
               type="button"
               className={`editor-segment-btn ${activeTemplateScope === 'BLOCK' ? 'active' : ''}`}
               onClick={() => setActiveTemplateScope('BLOCK')}
+              title={devTitle('Filter: Nur Block-Templates anzeigen')}
+              aria-label="Nur Block-Templates anzeigen"
             >
               Block
               <span className="editor-segment-count">{blockTemplates.length}</span>
@@ -236,6 +186,8 @@ export default function TemplatesViewModern({ showToast }) {
             placeholder={`${activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates suchen...`}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            title={devTitle(`Suche innerhalb der ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`)}
+            aria-label={`Template-Suche fuer ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`}
           />
         </div>
         
@@ -254,6 +206,8 @@ export default function TemplatesViewModern({ showToast }) {
                 onClick={() => handleEdit(t.name, index)}
                 role="button"
                 tabIndex={0}
+                title={devTitle(`Komponente: Template ${t.name}. Funktion: Template zum Bearbeiten oeffnen.`)}
+                aria-label={`Template ${t.name} zum Bearbeiten oeffnen`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
@@ -274,14 +228,16 @@ export default function TemplatesViewModern({ showToast }) {
                   <button 
                     className="icon-btn-small" 
                     onClick={(e) => { e.stopPropagation(); handleEdit(t.name, index); }}
-                    title="Bearbeiten"
+                    title={devTitle(`Funktion: Template ${t.name} bearbeiten`)}
+                    aria-label={`Template ${t.name} bearbeiten`}
                   >
                     <Edit2 size={14} />
                   </button>
                   <button 
                     className="icon-btn-small delete" 
                     onClick={(e) => { e.stopPropagation(); handleDelete(t.name, index); }}
-                    title="Löschen"
+                    title={devTitle(`Funktion: Template ${t.name} loeschen`)}
+                    aria-label={`Template ${t.name} loeschen`}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -296,25 +252,29 @@ export default function TemplatesViewModern({ showToast }) {
         {isEditing ? (
           <>
             <div className="editor-toolbar">
+              {showDevHints && <span className="editor-role-hint">Bereich: Template-Metadaten und Speicheraktionen</span>}
               <input 
                 type="text" 
                 className="editor-name-input" 
                 placeholder="Template Name" 
                 value={templateName} 
                 onChange={e => setTemplateName(e.target.value)}
+                title={devTitle('Feld: Template-Name')}
+                aria-label="Template-Name"
               />
               <select
                 value={templateType}
                 onChange={e => setTemplateType(e.target.value)}
                 className="editor-filter-select"
-                title="Template Type"
+                title={devTitle('Feld: Template-Typ')}
+                aria-label="Template-Typ"
               >
                 <option value="SITE">Site Template</option>
                 <option value="BLOCK">Block Template</option>
               </select>
               <div className="editor-toolbar-actions">
-                <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
-                <button className="btn-primary" onClick={handleSave}>Speichern</button>
+                <button className="btn-secondary" onClick={() => setIsEditing(false)} title={devTitle('Aenderungen verwerfen und Editor verlassen')}>Abbrechen</button>
+                <button className="btn-primary" onClick={handleSave} title={devTitle('Template speichern')}>Speichern</button>
               </div>
             </div>
             
@@ -333,13 +293,14 @@ export default function TemplatesViewModern({ showToast }) {
 
               <div className="editor-snippets-panel">
                 <h4>Snippets einfügen</h4>
+                {showDevHints && <p className="editor-section-hint">Funktion: Vorlagenbausteine, Navigationen und Referenzen in den Code einfuegen</p>}
                 <div className="template-snippet-stack">
                   {boundSnippets.length > 0 && (
                     <div className="snippet-group">
                       <div className="snippet-group-title">Gebundene Snippets</div>
                       <div className="snippet-buttons">
                         {boundSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn bound-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
+                          <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
                         ))}
                       </div>
                     </div>
@@ -350,7 +311,7 @@ export default function TemplatesViewModern({ showToast }) {
                       <div className="snippet-group-title">Definierte Snippets</div>
                       <div className="snippet-buttons">
                         {definedSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn defined-snippet" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` - ${s.handler}` : ''}</button>
+                          <button key={s.label} className="template-snippet-btn defined-snippet" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` - ${s.handler}` : ''}</button>
                         ))}
                       </div>
                     </div>
@@ -361,7 +322,7 @@ export default function TemplatesViewModern({ showToast }) {
                       <div className="snippet-group-title">Freie Snippets</div>
                       <div className="snippet-buttons">
                         {freeSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn" {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}</button>
+                          <button key={s.label} className="template-snippet-btn" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}</button>
                         ))}
                       </div>
                     </div>
@@ -375,6 +336,8 @@ export default function TemplatesViewModern({ showToast }) {
                           <button 
                             key={nav} 
                             className="template-snippet-btn navigation-snippet"
+                            title={devTitle(`Navigation einfuegen: ${nav}`)}
+                            aria-label={`Navigation ${nav} einfuegen`}
                             {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
                           >
                             📍 {nav}
@@ -400,6 +363,8 @@ export default function TemplatesViewModern({ showToast }) {
                           <button 
                             key={t.name} 
                             className="template-snippet-btn template-snippet"
+                            title={devTitle(`Template-Referenz einfuegen: ${t.name}`)}
+                            aria-label={`Template-Referenz ${t.name} einfuegen`}
                             {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
                           >
                             🧩 {t.name}
@@ -410,15 +375,7 @@ export default function TemplatesViewModern({ showToast }) {
 
                   <div className="snippet-group">
                     <div className="snippet-group-title">Strukturvorschau</div>
-                    <div className="template-wire-preview">
-                      {templateStructureNodes.length === 0 ? (
-                        <div className="template-wire-empty">Keine Struktur erkannt</div>
-                      ) : (
-                        templateStructureNodes.map((node, idx) => (
-                          <TemplateWireNode key={`${templateName || 'template'}-${idx}`} node={node} />
-                        ))
-                      )}
-                    </div>
+                    <TemplateStructurePreview code={templateCode} />
                   </div>
                 </div>
               </div>

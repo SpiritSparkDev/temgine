@@ -5,6 +5,35 @@ import { sanitizeRecursive } from '../../lib/htmlSanitize'
 // API-Route für Seiten: Daten kommen jetzt ausschließlich aus der Datenbank
 export default async function handler(req, res) {
   try {
+    const normalizeSlotName = (value) => {
+      if (value === undefined || value === null) return ''
+      return String(value).trim().replace(/\s+/g, '-')
+    }
+
+    const sanitizeBlockNode = (block) => {
+      if (!block || typeof block !== 'object') return block
+
+      const next = { ...block }
+      if (next.props && typeof next.props === 'object') {
+        next.props = sanitizeRecursive(next.props)
+      }
+
+      if (next.slot !== undefined) {
+        const normalizedSlot = normalizeSlotName(next.slot)
+        if (normalizedSlot) {
+          next.slot = normalizedSlot
+        } else {
+          delete next.slot
+        }
+      }
+
+      if (Array.isArray(next.children)) {
+        next.children = next.children.map(sanitizeBlockNode)
+      }
+
+      return next
+    }
+
     // GET: alle Seiten oder eine Seite per ?slug=...
     if (req.method === 'GET') {
       const slug = req.query && req.query.slug
@@ -57,10 +86,7 @@ export default async function handler(req, res) {
           try {
             if (p && p.data) p.data = sanitizeRecursive(p.data)
             if (p && p.blocks && Array.isArray(p.blocks)) {
-              p.blocks = p.blocks.map(b => {
-                if (!b || !b.props) return b
-                return { ...b, props: sanitizeRecursive(b.props) }
-              })
+              p.blocks = p.blocks.map(sanitizeBlockNode)
             }
           } catch (e) {
             console.warn('Failed to sanitize incoming page payload', e)
@@ -165,10 +191,7 @@ export default async function handler(req, res) {
       try {
         if (p && p.data) p.data = sanitizeRecursive(p.data)
         if (p && p.blocks && Array.isArray(p.blocks)) {
-          p.blocks = p.blocks.map(b => {
-            if (!b || !b.props) return b
-            return { ...b, props: sanitizeRecursive(b.props) }
-          })
+          p.blocks = p.blocks.map(sanitizeBlockNode)
         }
       } catch (e) {
         console.warn('Failed to sanitize incoming single page payload', e)
