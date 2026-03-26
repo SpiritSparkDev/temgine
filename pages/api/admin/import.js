@@ -19,12 +19,13 @@ export default async function handler(req, res) {
     // Import snippets (preserve metadata)
     const keys = []
     for (const s of snippets) {
-      if (!s.label) continue
-      const key = String(s.label)
+      const label = String(s.label || s.key || '').trim()
+      if (!label) continue
+      const key = label
       keys.push(key)
       let value = String(s.snippet || '')
-      if (s.type || s.handler) {
-        value = JSON.stringify({ snippet: s.snippet || '', type: s.type || 'free', handler: s.handler || '' })
+      if (s.type || s.handler || s.key) {
+        value = JSON.stringify({ key: s.key || '', snippet: s.snippet || '', type: s.type || 'free', handler: s.handler || '' })
       }
       try { value = sanitizeRecursive(value) } catch (e) {}
       await prisma.snippet.upsert({ where: { key }, create: { key, value }, update: { value } })

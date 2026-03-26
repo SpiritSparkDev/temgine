@@ -16,9 +16,9 @@ export default async function handler(req, res) {
       const raw = s.value || ''
       try {
         const obj = JSON.parse(raw)
-        return { label: s.key, snippet: obj.snippet || '', type: obj.type || 'free', handler: obj.handler || '' }
+        return { label: s.key, key: obj.key || '', snippet: obj.snippet || '', type: obj.type || 'free', handler: obj.handler || '' }
       } catch (e) {
-        return { label: s.key, snippet: raw || '', type: 'free' }
+        return { label: s.key, key: '', snippet: raw || '', type: 'free' }
       }
     })
 

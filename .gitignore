@@ -8,6 +8,7 @@ node_modules/
 
 # Next.js
 /.next/
+/.next-dev/
 /out/
 
 # Production
@@ -53,6 +54,8 @@ prisma/*.db-journal
 
 # OS
 Thumbs.db
+
+docs/
 
 # Backups (optional - falls automatische Backups nicht versioniert werden sollen)
 # data/backups/

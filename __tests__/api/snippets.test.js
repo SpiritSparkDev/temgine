@@ -13,6 +13,7 @@ const mockSnippets = [
 const mockPrisma = {
   snippet: {
     findMany: jest.fn().mockResolvedValue(mockSnippets),
+    findUnique: jest.fn().mockResolvedValue(null),
     upsert: jest.fn().mockImplementation(async ({ where, create, update }) => ({ key: where.key, value: create ? create.value : update.value })),
     delete: jest.fn().mockResolvedValue({}),
     deleteMany: jest.fn().mockResolvedValue({ count: 0 })
@@ -61,6 +62,15 @@ describe('/api/snippets handler', () => {
     expect(res.status).toHaveBeenCalledWith(200)
   })
 
+  test('POST single snippet can rename previous label', async () => {
+    const req = { method: 'POST', body: { label: 'Neu', previousLabel: 'Alt', snippet: '<p>ok</p>', type: 'free' } }
+    const res = makeRes()
+    await handler(req, res, mockPrisma)
+    expect(mockPrisma.snippet.upsert).toHaveBeenCalled()
+    expect(mockPrisma.snippet.delete).toHaveBeenCalledWith({ where: { key: 'Alt' } })
+    expect(res.status).toHaveBeenCalledWith(200)
+  })
+
   test('POST array upserts and deletes missing', async () => {
     const payload = [ { label: 'Titel', snippet: '#title' }, { label: 'Extra', snippet: 'x' } ]
     const req = { method: 'POST', body: payload }
@@ -79,5 +89,13 @@ describe('/api/snippets handler', () => {
     await handler(req, res, mockPrisma)
     expect(mockPrisma.snippet.delete).toHaveBeenCalledWith({ where: { key: 'Titel' } })
     expect(res.status).toHaveBeenCalledWith(200)
+  })
+
+  test('DELETE blocks protected system snippets', async () => {
+    mockPrisma.snippet.findUnique.mockResolvedValueOnce({ key: 'Blocks', value: JSON.stringify({ key: 'blocks', snippet: '#blocks', type: 'bound' }) })
+    const req = { method: 'DELETE', body: { key: 'Blocks' } }
+    const res = makeRes()
+    await handler(req, res, mockPrisma)
+    expect(res.status).toHaveBeenCalledWith(403)
   })
 })

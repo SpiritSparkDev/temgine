@@ -1,68 +1,38 @@
-[
+[ 
   {
-    "label": "Titel",
-    "snippet": "#title",
-    "type": "bound"
-  },
-  {
-    "label": "Slug",
-    "snippet": "#slug",
-    "type": "bound"
-  },
-  {
-    "label": "Text",
-    "snippet": "{{text}}",
+    "label": "Text Abschnitt",
+    "key": "text-section",
+    "snippet": "<section class=\"block block-text\">{{#title}}<h2>{{title}}</h2>{{/title}}<div class=\"text-content\">{{{text}}}</div></section>",
     "type": "free"
   },
   {
-    "label": "Blocks",
-    "snippet": "#blocks",
-    "type": "bound"
-  },
-  {
-    "label": "Image",
-    "snippet": "<img src={{imgUrl}} alt={{alt_text}}/>",
+    "label": "Abschnitt Kopf",
+    "key": "section-heading",
+    "snippet": "<header class=\"section-heading\">{{#eyebrow}}<p class=\"eyebrow\">{{eyebrow}}</p>{{/eyebrow}}<h2>{{title}}</h2>{{#subtitle}}<p class=\"subtitle\">{{subtitle}}</p>{{/subtitle}}</header>",
     "type": "free"
   },
   {
-    "label": "Heading Dynamisch",
-    "snippet": "<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>",
+    "label": "Artikel Text",
+    "key": "article-text",
+    "snippet": "<article class=\"text_article\">{{#title}}<h2>{{title}}</h2>{{/title}}<p>{{text}}</p></article>",
     "type": "free"
   },
   {
-    "label": "Heading H1",
-    "snippet": "#heading",
-    "type": "defined",
-    "handler": "heading"
+    "label": "Artikel mit Bild",
+    "key": "article-with-image",
+    "snippet": "<article class=\"text_article\">{{heading}}<p>{{text}}</p><div class=\"article-image\"><img src=\"{{imgUrl}}\" alt=\"{{alt_text}}\" /></div></article>",
+    "type": "free"
   },
   {
-    "label": "Heading H2",
-    "snippet": "#heading",
-    "type": "defined",
-    "handler": "heading"
+    "label": "Excerpt Zeile",
+    "key": "excerpt-text",
+    "snippet": "<p class=\"excerpt\">{{data.excerpt}}</p>",
+    "type": "free"
   },
   {
-    "label": "Heading H3",
-    "snippet": "#heading",
-    "type": "defined",
-    "handler": "heading"
-  },
-  {
-    "label": "Heading H4",
-    "snippet": "#heading",
-    "type": "defined",
-    "handler": "heading"
-  },
-  {
-    "label": "Heading H5",
-    "snippet": "#heading",
-    "type": "defined",
-    "handler": "heading"
-  },
-  {
-    "label": "File URL",
-    "snippet": "#url",
-    "type": "defined",
-    "handler": "url"
+    "label": "CTA Link",
+    "key": "cta-link",
+    "snippet": "<a class=\"btn btn-primary\" href=\"{{button.url}}\">{{button.label}}</a>",
+    "type": "free"
   }
 ]

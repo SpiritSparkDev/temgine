@@ -35,6 +35,17 @@
   background: var(--bg-primary);
 }
 
+.snippet-system-note {
+  margin: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .snippet-list-item {
   display: flex;
   align-items: center;
@@ -65,17 +76,39 @@
 }
 
 .snippet-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-weight: 600;
   font-size: 14px;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 2px;
   color: var(--text-primary);
+  overflow: hidden;
 }
 
 .snippet-list-item.active .snippet-label {
   color: white;
+}
+
+/* Key badge shown below label in the snippet list */
+.snippet-key-badge {
+  font-size: 11px;
+  font-family: Consolas, 'Courier New', monospace;
+  color: var(--text-tertiary);
+  margin-bottom: 3px;
+}
+
+.snippet-list-item.active .snippet-key-badge {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Lock icon badge for system snippets */
+.snippet-system-badge {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent-primary);
+  opacity: 0.7;
+  flex-shrink: 0;
 }
 
 .snippet-preview {
@@ -269,7 +302,29 @@
   border-top: 1px solid var(--border-color);
 }
 
+.snippet-advanced-toggle {
+  margin-top: 4px;
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  padding: 0;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.snippet-advanced-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .snippet-meta-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-weight: 600;
   font-size: 0.9rem;
   color: var(--text-primary);
@@ -288,6 +343,18 @@
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.snippet-key-input {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.snippet-key-input[readonly] {
+  opacity: 0.65;
+  cursor: default;
+  background: var(--bg-primary);
 }
 
 @media (max-width: 1023px) {

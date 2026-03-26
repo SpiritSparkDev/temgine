@@ -1,7 +1,38 @@
-[
-  { "label": "Titel", "snippet": "{{title}}" },
-  { "label": "Text", "snippet": "{{text}}" },
-  { "label": "Heading Dynamisch", "snippet": "<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>" },
-  { "label": "Bild (erstes)", "snippet": "{{images.0}}" },
-  { "label": "Excerpt", "snippet": "{{data.excerpt}}" }
+[ 
+  {
+    "label": "Text Abschnitt",
+    "key": "text-section",
+    "snippet": "<section class=\"block block-text\">{{#title}}<h2>{{title}}</h2>{{/title}}<div class=\"text-content\">{{{text}}}</div></section>",
+    "type": "free"
+  },
+  {
+    "label": "Abschnitt Kopf",
+    "key": "section-heading",
+    "snippet": "<header class=\"section-heading\">{{#eyebrow}}<p class=\"eyebrow\">{{eyebrow}}</p>{{/eyebrow}}<h2>{{title}}</h2>{{#subtitle}}<p class=\"subtitle\">{{subtitle}}</p>{{/subtitle}}</header>",
+    "type": "free"
+  },
+  {
+    "label": "Artikel Text",
+    "key": "article-text",
+    "snippet": "<article class=\"text_article\">{{#title}}<h2>{{title}}</h2>{{/title}}<p>{{text}}</p></article>",
+    "type": "free"
+  },
+  {
+    "label": "Artikel mit Bild",
+    "key": "article-with-image",
+    "snippet": "<article class=\"text_article\">{{heading}}<p>{{text}}</p><div class=\"article-image\"><img src=\"{{imgUrl}}\" alt=\"{{alt_text}}\" /></div></article>",
+    "type": "free"
+  },
+  {
+    "label": "Excerpt Zeile",
+    "key": "excerpt-text",
+    "snippet": "<p class=\"excerpt\">{{data.excerpt}}</p>",
+    "type": "free"
+  },
+  {
+    "label": "CTA Link",
+    "key": "cta-link",
+    "snippet": "<a class=\"btn btn-primary\" href=\"{{button.url}}\">{{button.label}}</a>",
+    "type": "free"
+  }
 ]

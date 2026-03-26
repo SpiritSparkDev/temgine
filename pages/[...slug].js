@@ -1,6 +1,5 @@
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
-import boundSnippets from '../data/boundSnippets.json'
 import { renderPage } from '../lib/templateEngine'
 
 export default function PageCatchAll() {
@@ -124,7 +123,7 @@ export default function PageCatchAll() {
           console.error('Fehler beim Laden der Navigationen:', e)
         }
 
-        // Load snippets and build a simple map label -> snippet string
+        // Load snippets and build a map by stable key.
         const snippetsMap = {}
         try {
           const sres = await fetch(`/api/snippets?_t=${Date.now()}`)
@@ -132,8 +131,8 @@ export default function PageCatchAll() {
             const sdata = await sres.json()
             if (Array.isArray(sdata)) {
               sdata.forEach(si => {
-                // snippets handler returns { label, snippet, type }
-                if (si && si.label) snippetsMap[String(si.label)] = si.snippet || ''
+                const snippetKey = si?.key || si?.label
+                if (snippetKey) snippetsMap[String(snippetKey)] = si?.snippet || ''
               })
             }
           }
@@ -141,39 +140,10 @@ export default function PageCatchAll() {
           console.error('Fehler beim Laden der Snippets:', e)
         }
 
-        // Populate bound snippets (derived from current page metadata)
-        try {
-          const resolvePath = (obj, path) => {
-            if (!path) return undefined
-            // special helper: 'isChild' computed from segments length
-            if (path === 'isChild') return segments && segments.length > 1
-            const parts = String(path).split('.')
-            let cur = obj
-            for (const p of parts) {
-              if (cur === undefined || cur === null) return undefined
-              if (/^\d+$/.test(p)) {
-                const idx = parseInt(p, 10)
-                cur = Array.isArray(cur) ? cur[idx] : undefined
-              } else {
-                cur = cur[p]
-              }
-            }
-            return cur
-          }
-          ;(boundSnippets || []).forEach(b => {
-            try {
-              const val = resolvePath(foundPage, b.path)
-              snippetsMap[String(b.label)] = val === undefined || val === null ? '' : String(val)
-            } catch (e) {
-              snippetsMap[String(b.label)] = ''
-            }
-          })
-        } catch (e) {
-          console.error('Fehler beim Generieren gebundener Snippets:', e)
-        }
-
         const pageTemplateCode = foundPage.template ? templateCodes[foundPage.template] : null
-        const html = renderPage(foundPage, templateCodes, pageTemplateCode, pages, navigationTemplates, templateCodes, snippetsMap)
+        const html = renderPage(foundPage, templateCodes, pageTemplateCode, pages, navigationTemplates, templateCodes, snippetsMap, {
+          isChild: segments.length > 1
+        })
         // Debug: log length and preview on the client so we can verify insertion
         try {
           // eslint-disable-next-line no-console

@@ -34,8 +34,11 @@ async function run() {
       console.log('Importing snippets:', snippets.length);
       for (const s of snippets) {
         if (!prisma.snippet) { console.log('  Prisma model `Snippet` not available — skip'); break; }
-        const key = (s.label || s.label === 0 ? String(s.label) : s.key || s.label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        await prisma.snippet.upsert({ where: { key }, update: { value: s.snippet }, create: { key, value: s.snippet } });
+        const label = String(s.label || s.key || '').trim();
+        if (!label) continue;
+        const key = label;
+        const value = JSON.stringify({ key: s.key || '', snippet: s.snippet || '', type: s.type || 'free', handler: s.handler || '' });
+        await prisma.snippet.upsert({ where: { key }, update: { value }, create: { key, value } });
         console.log('  upserted snippet:', key);
       }
     }

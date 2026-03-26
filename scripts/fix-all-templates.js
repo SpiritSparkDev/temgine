@@ -10,8 +10,8 @@ async function main() {
     await prisma.template.update({
       where: { name: 'Text Artikel' },
       data: {
-        code: `<article class="text_article {{snippet:title[Titel]}}">
-  <p>{{snippet:text[Text]}}</p>
+        code: `<article class="text_article #class:title">
+  <p>{{text}}</p>
 </article>`
       }
     });
@@ -21,11 +21,11 @@ async function main() {
     await prisma.template.update({
       where: { name: 'Text' },
       data: {
-        code: `<section class="section text {{snippet:pageTitle[Seitentitel]}} {{snippet:pageSlug[Seiten-URL]}}">
+        code: `<section class="section text #class:page.title #class:page.slug">
   <article class="article">
-    <h1>{{snippet:title[Titel]}}</h1>
-    <p>{{snippet:text[Text]}}</p>
-    <p>Test_ {{snippet:pageTitle[Seitentitel]}}</p>
+    <h1>{{title}}</h1>
+    <p>{{text}}</p>
+    <p>Test_ {{page.title}}</p>
   </article>
 </section>`
       }

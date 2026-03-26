@@ -2,10 +2,34 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
 import { createButtonHandlers, insertText } from '../lib/insertHelper'
-import boundSnippets from '../data/boundSnippets.json'
 import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
+
+const SYSTEM_PLACEHOLDERS = [
+  { label: 'Titel', snippet: '{{title}}' },
+  { label: 'Slug', snippet: '{{slug}}' },
+  { label: 'Autor', snippet: '{{data.author}}' },
+  { label: 'Seitenkopf', snippet: '{{data.pageHeader}}' },
+  { label: 'Kindseite', snippet: '{{isChild}}' },
+  { label: 'Blöcke', snippet: '{{{blocks}}}' }
+]
+
+const SYSTEM_SNIPPET_KEYS = new Set([
+  'blocks', 'title', 'titel', 'slug', 'author', 'page title', 'page slug', 'page header', 'header', 'is child'
+])
+
+const normalizeSystemName = (value) => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
+
+const isSystemSnippet = (snippet) => {
+  return SYSTEM_SNIPPET_KEYS.has(normalizeSystemName(snippet?.key || snippet?.label))
+}
+
+const getSnippetReference = (snippet) => {
+  const key = String(snippet?.key || '').trim()
+  if (!key) return ''
+  return `{{snippetHtml:${key}}}`
+}
 
 export default function TemplatesViewModern({ showToast }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -46,11 +70,7 @@ export default function TemplatesViewModern({ showToast }) {
     fetch('/api/snippets')
       .then(r => r.json())
       .then(data => {
-        const fetched = data || []
-        // Build bound snippet entries from static list so they appear in editor toolbar
-        const boundEntries = (boundSnippets || []).map(b => ({ label: b.label, snippet: `{{snippet:${b.label}}}`, type: 'bound' }))
-        // Merge: bound snippets first (immutable), then fetched snippets from DB
-        setSnippets([...boundEntries, ...fetched])
+        setSnippets(data || [])
       })
       .catch(() => setSnippets([]));
   }
@@ -135,9 +155,7 @@ export default function TemplatesViewModern({ showToast }) {
     return typeMatches && searchMatches;
   });
 
-  const boundSnippets = snippets.filter((s) => s.type === 'bound');
-  const definedSnippets = snippets.filter((s) => s.type === 'defined');
-  const freeSnippets = snippets.filter((s) => !s.type || (s.type !== 'bound' && s.type !== 'defined'));
+  const editorSnippets = snippets.filter((s) => !isSystemSnippet(s));
 
   return (
     <div className="editor-container">
@@ -262,16 +280,6 @@ export default function TemplatesViewModern({ showToast }) {
                 title={devTitle('Feld: Template-Name')}
                 aria-label="Template-Name"
               />
-              <select
-                value={templateType}
-                onChange={e => setTemplateType(e.target.value)}
-                className="editor-filter-select"
-                title={devTitle('Feld: Template-Typ')}
-                aria-label="Template-Typ"
-              >
-                <option value="SITE">Site Template</option>
-                <option value="BLOCK">Block Template</option>
-              </select>
               <div className="editor-toolbar-actions">
                 <button className="btn-secondary" onClick={() => setIsEditing(false)} title={devTitle('Aenderungen verwerfen und Editor verlassen')}>Abbrechen</button>
                 <button className="btn-primary" onClick={handleSave} title={devTitle('Template speichern')}>Speichern</button>
@@ -295,34 +303,23 @@ export default function TemplatesViewModern({ showToast }) {
                 <h4>Snippets einfügen</h4>
                 {showDevHints && <p className="editor-section-hint">Funktion: Vorlagenbausteine, Navigationen und Referenzen in den Code einfuegen</p>}
                 <div className="template-snippet-stack">
-                  {boundSnippets.length > 0 && (
+                  {SYSTEM_PLACEHOLDERS.length > 0 && (
                     <div className="snippet-group">
-                      <div className="snippet-group-title">Gebundene Snippets</div>
+                      <div className="snippet-group-title">Systemwerte</div>
                       <div className="snippet-buttons">
-                        {boundSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
+                        {SYSTEM_PLACEHOLDERS.map(s => (
+                          <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Systemwert einfuegen: ${s.label}`)} aria-label={`Systemwert ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {definedSnippets.length > 0 && (
+                  {editorSnippets.length > 0 && (
                     <div className="snippet-group">
-                      <div className="snippet-group-title">Definierte Snippets</div>
+                      <div className="snippet-group-title">Gespeicherte Snippets</div>
                       <div className="snippet-buttons">
-                        {definedSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn defined-snippet" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}{s.handler ? ` - ${s.handler}` : ''}</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {freeSnippets.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Freie Snippets</div>
-                      <div className="snippet-buttons">
-                        {freeSnippets.map(s => (
-                          <button key={s.label} className="template-snippet-btn" title={devTitle(`Snippet einfuegen: ${s.label}`)} aria-label={`Snippet ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label}</button>
+                        {editorSnippets.map(s => (
+                          <button key={s.key || s.label} className={`template-snippet-btn ${s.type === 'defined' ? 'defined-snippet' : ''}`} title={devTitle(`Snippet-Referenz einfuegen: ${s.label}`)} aria-label={`Snippet-Referenz ${s.label} einfuegen`} {...createButtonHandlers(getSnippetReference(s), () => setTemplateCode(c => c + getSnippetReference(s)))}>{s.label} ({s.key})</button>
                         ))}
                       </div>
                     </div>

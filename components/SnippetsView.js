@@ -1,16 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, Code } from 'lucide-react';
+import { Plus, Edit2, Trash2, Code, Lock } from 'lucide-react';
+
+/** Generate a stable key from a human label (mirrors snippetsHandler.cjs) */
+function generateKey(label) {
+  return String(label || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'snippet'
+}
+
+/** Keys that cannot be deleted */
+const SYSTEM_KEYS = new Set(['blocks'])
+
+const HIDDEN_SYSTEM_NAMES = new Set(['blocks', 'title', 'titel', 'slug', 'page title', 'page slug', 'author', 'page header', 'header', 'is child'])
+
+function normalizeSnippetName(value) {
+  return String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
+}
+
+function isSystemSnippet(snippet) {
+  return HIDDEN_SYSTEM_NAMES.has(normalizeSnippetName(snippet?.key || snippet?.label))
+}
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 import { createButtonHandlers, insertText } from '../lib/insertHelper'
 
 export default function SnippetsView({ showToast }) {
   const [snippets, setSnippets] = useState([]);
+  const [hiddenSystemCount, setHiddenSystemCount] = useState(0);
   const [selectedSnippet, setSelectedSnippet] = useState(null);
   const [editLabel, setEditLabel] = useState('');
   const [editContent, setEditContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
 
   useEffect(() => {
@@ -21,7 +47,10 @@ export default function SnippetsView({ showToast }) {
     fetch('/api/snippets')
       .then(r => r.json())
       .then(data => {
-        setSnippets(data || []);
+        const allSnippets = data || [];
+        const visibleSnippets = allSnippets.filter((snippet) => !isSystemSnippet(snippet));
+        setHiddenSystemCount(allSnippets.length - visibleSnippets.length);
+        setSnippets(visibleSnippets);
       })
       .catch(() => setSnippets([]));
   }
@@ -29,27 +58,34 @@ export default function SnippetsView({ showToast }) {
   function handleNew() {
     setSelectedSnippet(null);
     setEditLabel('');
+    setEditKey('');
+    setEditKeyLocked(false);
     setEditContent('');
     setEditType('free');
     setEditHandler('');
+    setShowAdvanced(false);
     setIsEditing(true);
   }
 
   function handleEdit(snippet, index) {
     setSelectedSnippet(index);
     setEditLabel(snippet.label);
+    setEditKey(snippet.key || generateKey(snippet.label));
+    setEditKeyLocked(true); // key is locked once snippet is saved
     setEditContent(snippet.snippet);
     setEditType(snippet.type || 'free');
     setEditHandler(snippet.handler || '');
+    setShowAdvanced(Boolean(snippet.type && snippet.type !== 'free') || Boolean(snippet.handler));
     setIsEditing(true);
   }
 
+  const [editKey, setEditKey] = useState('');
+  const [editKeyLocked, setEditKeyLocked] = useState(false);
   const [editType, setEditType] = useState('free');
   const [editHandler, setEditHandler] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   function handleSave() {
-    const newSnippets = [...snippets];
     let snippetValue = editContent;
     if (editType === 'bound') {
       // ensure bound snippets use the #token form; if user left content empty, derive from label
@@ -59,25 +95,21 @@ export default function SnippetsView({ showToast }) {
         snippetValue = '#' + (sanitized || 'value')
       }
     }
-    const snippetData = { label: editLabel, snippet: snippetValue, type: editType };
+    const snippetData = { label: editLabel, key: editKey || generateKey(editLabel), snippet: snippetValue, type: editType };
     if (editHandler) snippetData.handler = editHandler;
-    
-    if (selectedSnippet !== null) {
-      newSnippets[selectedSnippet] = snippetData;
-    } else {
-      newSnippets.push(snippetData);
-    }
-    
+
+    const previousLabel = selectedSnippet !== null ? snippets[selectedSnippet]?.label : '';
+
     fetch('/api/snippets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSnippets)
+      body: JSON.stringify({ ...snippetData, previousLabel })
     })
       .then(() => {
         showToast('Snippet gespeichert', 'success');
-        setTimeout(() => {
-          window.location.reload();
-        }, 500);
+        loadSnippets();
+        setIsEditing(false);
+        setSelectedSnippet(null);
       })
       .catch(err => showToast('Fehler beim Speichern: ' + err.message, 'error'));
   }
@@ -98,17 +130,20 @@ export default function SnippetsView({ showToast }) {
   }
 
   function handleDelete(index) {
-    // Bestätigung wird durch UI-Interaktion impliziert
-    
-    const newSnippets = snippets.filter((_, i) => i !== index);
-    
+    const snippet = snippets[index];
+    if (!snippet) return;
+    if (typeof window !== 'undefined') {
+      const confirmed = window.confirm(`Snippet "${snippet.label}" wirklich löschen?`);
+      if (!confirmed) return;
+    }
+
     fetch('/api/snippets', {
-      method: 'POST',
+      method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSnippets)
+      body: JSON.stringify({ label: snippet.label })
     })
       .then(() => {
-        setSnippets(newSnippets);
+        loadSnippets();
         if (selectedSnippet === index) {
           setIsEditing(false);
           setSelectedSnippet(null);
@@ -136,6 +171,11 @@ export default function SnippetsView({ showToast }) {
           <button className="icon-btn" onClick={handleNew} title="Neues Snippet">
             <Plus size={18} />
           </button>
+        </div>
+
+        <div className="snippet-system-note">
+          Systemwerte wie `title`, `slug` und `blocks` werden nicht mehr als Snippets verwaltet.
+          {hiddenSystemCount > 0 && ` ${hiddenSystemCount} alte System-Einträge werden ausgeblendet.`}
         </div>
 
         <div className="editor-search-wrap">
@@ -169,7 +209,15 @@ export default function SnippetsView({ showToast }) {
                 }}
               >
                 <div className="snippet-info">
-                  <div className="snippet-label">{snippet.label}</div>
+                  <div className="snippet-label">
+                    {snippet.label}
+                    {SYSTEM_KEYS.has(snippet.key || generateKey(snippet.label)) && (
+                      <span className="snippet-system-badge" title="System-Snippet — kann nicht gelöscht werden">
+                        <Lock size={11} />
+                      </span>
+                    )}
+                  </div>
+                  <div className="snippet-key-badge">{snippet.key || generateKey(snippet.label)}</div>
                   <div className="snippet-preview">{(snippet.snippet || '').length > 60 ? `${snippet.snippet.substring(0, 60)}...` : (snippet.snippet || '')}</div>
                 </div>
                 <div className="snippet-actions">
@@ -180,13 +228,15 @@ export default function SnippetsView({ showToast }) {
                   >
                     <Edit2 size={14} />
                   </button>
-                  <button 
-                    className="icon-btn-small delete" 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(index); }}
-                    title="Löschen"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {!SYSTEM_KEYS.has(snippet.key || generateKey(snippet.label)) && (
+                    <button 
+                      className="icon-btn-small delete" 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(index); }}
+                      title="Löschen"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             ))
@@ -200,7 +250,7 @@ export default function SnippetsView({ showToast }) {
             <div className="editor-header">
               <div className="snippets-editor-title">
                 <strong>{editLabel || 'Neues Snippet'}</strong>
-                <span>Content im Mittelbereich, Metadaten rechts</span>
+                <span>Wiederverwendbares Fragment mit stabiler Referenz</span>
               </div>
               <div className="editor-actions" style={{ marginLeft: 'auto' }}>
                 <button className="btn-secondary" onClick={() => setIsEditing(false)}>Abbrechen</button>
@@ -230,19 +280,50 @@ export default function SnippetsView({ showToast }) {
                     className="snippet-meta-input"
                     placeholder="Snippet Name"
                     value={editLabel}
-                    onChange={e => setEditLabel(e.target.value)}
+                    onChange={e => {
+                      setEditLabel(e.target.value);
+                      if (!editKeyLocked) setEditKey(generateKey(e.target.value));
+                    }}
                   />
-                  <label className="snippet-meta-label">Typ</label>
-                  <select value={editType} onChange={e => setEditType(e.target.value)} className="snippet-meta-input">
-                    <option value="free">Free (editable)</option>
-                    <option value="bound">Bound (#name) — auto-filled from DB</option>
-                    <option value="defined">Defined (special handler)</option>
-                  </select>
-                  {editType === 'defined' && (
-                    <>
-                      <label className="snippet-meta-label">Handler</label>
-                      <input type="text" className="snippet-meta-input" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} />
-                    </>
+                  <label className="snippet-meta-label">
+                    Key
+                    {SYSTEM_KEYS.has(editKey) && (
+                      <span className="snippet-system-badge" title="System-Snippet"><Lock size={11} /></span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    className="snippet-meta-input snippet-key-input"
+                    placeholder="snippet-key"
+                    value={editKey}
+                    readOnly={editKeyLocked}
+                    onChange={e => !editKeyLocked && setEditKey(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                    title={editKeyLocked ? 'Key kann nach dem ersten Speichern nicht mehr geändert werden' : 'Eindeutiger Bezeichner für dieses Snippet (nur Kleinbuchstaben, Zahlen, Bindestriche)'}
+                  />
+
+                  <button
+                    type="button"
+                    className="snippet-advanced-toggle"
+                    onClick={() => setShowAdvanced((current) => !current)}
+                  >
+                    {showAdvanced ? 'Erweiterte Optionen ausblenden' : 'Erweiterte Optionen anzeigen'}
+                  </button>
+
+                  {showAdvanced && (
+                    <div className="snippet-advanced-panel">
+                      <label className="snippet-meta-label">Typ</label>
+                      <select value={editType} onChange={e => setEditType(e.target.value)} className="snippet-meta-input">
+                        <option value="free">Free (editable)</option>
+                        <option value="bound">Bound (#name) — auto-filled from DB</option>
+                        <option value="defined">Defined (special handler)</option>
+                      </select>
+                      {editType === 'defined' && (
+                        <>
+                          <label className="snippet-meta-label">Handler</label>
+                          <input type="text" className="snippet-meta-input" placeholder="handler (e.g. url, heading)" value={editHandler} onChange={e => setEditHandler(e.target.value)} />
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -271,7 +352,7 @@ export default function SnippetsView({ showToast }) {
                     </div>
                     <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{text}}', () => fallbackAppend('{{text}}'))}>{'{{text}}'}</button>
                     <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{images.0}}', () => fallbackAppend('{{images.0}}'))}>{'{{images.0}}'}</button>
-                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{author}}', () => fallbackAppend('{{author}}'))}>{'{{author}}'}</button>
+                    <button type="button" className="template-snippet-btn" {...createButtonHandlers('{{data.author}}', () => fallbackAppend('{{data.author}}'))}>{'{{data.author}}'}</button>
                   </div>
                 </div>
               </div>

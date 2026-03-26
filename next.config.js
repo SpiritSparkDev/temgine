@@ -1,4 +1,5 @@
 const path = require('path');
+const isDev = process.env.NODE_ENV !== 'production';
 
 /**
  * Ensure a single instance of CodeMirror packages is resolved by webpack.
@@ -6,6 +7,7 @@ const path = require('path');
  * copies of `@codemirror/state` being loaded.
  */
 module.exports = {
+  distDir: isDev ? '.next-dev' : '.next',
   webpack: (config) => {
     config.resolve.alias = config.resolve.alias || {};
     const pkgRoot = path.resolve(__dirname, 'node_modules');

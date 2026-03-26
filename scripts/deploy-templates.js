@@ -4,7 +4,7 @@
  * Deployment Script - Template Sync
  * 
  * Dieses Script aktualisiert alle Templates in der Datenbank
- * mit der korrekten {{snippet:fieldname[Label]}} Syntax
+ * auf direkte Feldsyntax und stabile Snippet-Referenzen.
  * 
  * Ausführen mit: node scripts/deploy-templates.js
  */
@@ -18,25 +18,25 @@ const templates = {
     type: 'BLOCK',
     code: `<section class="page">
   <header>
-    <h2>{{snippet:title[Titel]}}</h2>
+    <h2>{{title}}</h2>
   </header>
-  {{snippet:text[Inhalt]}}
+  {{text}}
   <footer>Footer</footer>
 </section>`
   },
   'Text Artikel': {
     type: 'BLOCK',
-    code: `<article class="text_article {{snippet:title[Titel]}}">
-  <p>{{snippet:text[Text]}}</p>
+    code: `<article class="text_article #class:title">
+  <p>{{text}}</p>
 </article>`
   },
   'Text': {
     type: 'BLOCK',
-    code: `<section class="section text {{snippet:pageTitle[Seitentitel]}} {{snippet:pageSlug[Seiten-URL]}}">
+    code: `<section class="section text #class:page.title #class:page.slug">
   <article class="article">
-    <h1>{{snippet:title[Titel]}}</h1>
-    <p>{{snippet:text[Text]}}</p>
-    <p>Test_ {{snippet:pageTitle[Seitentitel]}}</p>
+    <h1>{{title}}</h1>
+    <p>{{text}}</p>
+    <p>Test_ {{page.title}}</p>
   </article>
 </section>`
   }

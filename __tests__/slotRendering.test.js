@@ -150,4 +150,97 @@ describe('slot rendering in templateEngine', () => {
     expect(footerSegment).toContain('Footer Block');
     expect(footerSegment).not.toContain('Main Block');
   });
+
+  test('resolves stored snippets by stable key only', () => {
+    const page = {
+      title: 'Startseite',
+      slug: 'startseite',
+      blocks: [
+        { template: 'Card', props: { title: 'Block Inhalt' } }
+      ],
+      data: {}
+    };
+
+    const html = renderPage(
+      page,
+      {
+        Card: '<article>{{title}}</article>'
+      },
+      '<main>{{snippet:hero-title}}|{{snippetHtml:hero-html}}</main>',
+      [],
+      {},
+      {},
+      {
+        'hero-title': 'Gespeicherter Titel',
+        'hero-html': '<strong>Hero HTML</strong>'
+      },
+      { isChild: false }
+    );
+
+    expect(html).toContain('Gespeicherter Titel');
+    expect(html).toContain('<strong>Hero HTML</strong>');
+    expect(html).not.toContain('Startseite');
+  });
+
+  test('exposes direct page fields for templates without snippet indirection', () => {
+    const page = {
+      title: 'Direkt',
+      slug: 'direkt',
+      blocks: [],
+      data: {
+        author: 'Lin',
+        pageHeader: 'Headertext'
+      }
+    };
+
+    const html = renderPage(
+      page,
+      {},
+      '<main>{{title}}|{{slug}}|{{data.author}}|{{data.pageHeader}}|{{isChild}}</main>',
+      [],
+      {},
+      {},
+      {},
+      { isChild: true }
+    );
+
+    expect(html).toContain('Direkt');
+    expect(html).toContain('direkt');
+    expect(html).toContain('Lin');
+    expect(html).toContain('Headertext');
+    expect(html).toContain('true');
+  });
+
+  test('exposes page context inside block templates', () => {
+    const page = {
+      title: 'Elternseite',
+      slug: 'elternseite',
+      blocks: [
+        { template: 'Card', props: { title: 'Block Titel', text: 'Block Text' } }
+      ],
+      data: {
+        author: 'Ada'
+      }
+    };
+
+    const html = renderPage(
+      page,
+      {
+        Card: '<article class="#class:page.title #class:page.slug"><h2>{{title}}</h2><p>{{text}}</p><span>{{page.title}}</span><span>{{page.slug}}</span><span>{{page.data.author}}</span></article>'
+      },
+      '<main>{{{blocks}}}</main>',
+      [],
+      {},
+      {},
+      {},
+      { isChild: false }
+    );
+
+    expect(html).toContain('Block Titel');
+    expect(html).toContain('Block Text');
+    expect(html).toContain('Elternseite');
+    expect(html).toContain('elternseite');
+    expect(html).toContain('Ada');
+    expect(html).toContain('class="elternseite elternseite"');
+  });
 });

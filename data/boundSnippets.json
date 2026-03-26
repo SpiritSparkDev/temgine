@@ -1,7 +1,0 @@
-[
-  { "label": "Page Title", "path": "title" },
-  { "label": "Page Slug", "path": "slug" },
-  { "label": "Is Child", "path": "isChild" },
-  { "label": "Author", "path": "data.author" },
-  { "label": "Page Header", "path": "data.pageHeader" }
-]
