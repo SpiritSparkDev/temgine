@@ -59,8 +59,8 @@ export default function SetupPage({ hasUsers }) {
 
       // Success — go to login
       router.push('/login?setup=done');
-    } catch {
-      setError('Netzwerkfehler. Bitte versuche es erneut.');
+    } catch (e) {
+      setError('Netzwerkfehler: ' + e.message);
     } finally {
       setLoading(false);
     }

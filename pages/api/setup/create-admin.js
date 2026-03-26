@@ -24,7 +24,14 @@ export default async function handler(req, res) {
   }
 
   // Abort if any user already exists — endpoint is single-use
-  const userCount = await prisma.user.count()
+  let userCount
+  try {
+    userCount = await prisma.user.count()
+  } catch (dbErr) {
+    console.error('[setup] Datenbankfehler:', dbErr)
+    return res.status(500).json({ error: 'Datenbankverbindung fehlgeschlagen: ' + dbErr.message })
+  }
+
   if (userCount > 0) {
     return res.status(403).json({ error: 'Setup bereits abgeschlossen. Es existiert bereits ein Benutzer.' })
   }
@@ -57,14 +64,19 @@ export default async function handler(req, res) {
 
   const hashedPassword = crypto.createHash('sha256').update(cleanPw).digest('hex')
 
-  await prisma.user.create({
-    data: {
-      name: cleanName,
-      email: cleanEmail,
-      password: hashedPassword,
-      role: 'ADMIN',
-    },
-  })
+  try {
+    await prisma.user.create({
+      data: {
+        name: cleanName,
+        email: cleanEmail,
+        password: hashedPassword,
+        role: 'ADMIN',
+      },
+    })
+  } catch (dbErr) {
+    console.error('[setup] Fehler beim Erstellen des Benutzers:', dbErr)
+    return res.status(500).json({ error: 'Benutzer konnte nicht erstellt werden: ' + dbErr.message })
+  }
 
   console.log(`[setup] Erster Admin-Account erstellt: ${cleanEmail}`)
 

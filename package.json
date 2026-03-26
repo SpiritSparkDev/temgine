@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "npm run test && next dev",
     "test": "jest --color",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "publish-scheduled": "node ./scripts/publish-scheduled.js",
     "import-init": "node ./scripts/import-init.js"
   },
