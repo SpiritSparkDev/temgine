@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react'
-import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info } from 'lucide-react'
+import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal } from 'lucide-react'
 
 export default function BackupView({ onToast = () => {}, onConfirm = () => {} }) {
   const importInputRef = useRef(null)
@@ -236,29 +236,88 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
     <div className="backup-view">
       <style>{`
         .backup-view {
-          padding: 20px;
-          max-width: 900px;
+          --surface: #ffffff;
+          --surface-muted: #f4f6f8;
+          --ink: #1b1d22;
+          --ink-soft: #6e7683;
+          --line: #d8dde6;
+          --brand: #0d6efd;
+          --brand-strong: #0a58ca;
+          --danger: #d32f2f;
+          --shadow: 0 12px 30px rgba(10, 16, 28, 0.08);
+          padding: 24px;
+          max-width: 980px;
           margin: 0 auto;
+          color: var(--ink);
+        }
+
+        .dark-mode .backup-view {
+          --surface: #17191f;
+          --surface-muted: #22262f;
+          --ink: #e8ebf2;
+          --ink-soft: #aeb6c4;
+          --line: #343b48;
+          --brand: #5aa0ff;
+          --brand-strong: #7ab3ff;
+          --danger: #ff6b6b;
+          --shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+        }
+
+        .backup-hero {
+          background: linear-gradient(135deg, rgba(13, 110, 253, 0.12), rgba(13, 110, 253, 0.02));
+          border: 1px solid rgba(13, 110, 253, 0.24);
+          border-radius: 14px;
+          padding: 18px 20px;
+          margin-bottom: 16px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .dark-mode .backup-hero {
+          background: linear-gradient(135deg, rgba(90, 160, 255, 0.22), rgba(90, 160, 255, 0.05));
+          border-color: rgba(122, 179, 255, 0.35);
+        }
+
+        .backup-title {
+          font-size: 22px;
+          line-height: 1.2;
+          margin: 0;
+          letter-spacing: 0.01em;
+        }
+
+        .backup-subtitle {
+          margin: 4px 0 0;
+          font-size: 13px;
+          color: var(--ink-soft);
+        }
+
+        .backup-chip {
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--brand-strong);
+          background: rgba(13, 110, 253, 0.12);
+          border: 1px solid rgba(13, 110, 253, 0.28);
+          border-radius: 999px;
+          padding: 6px 10px;
+          white-space: nowrap;
         }
 
         .backup-section {
-          background: var(--background-secondary, #f5f5f5);
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 8px;
+          background: var(--surface);
+          border: 1px solid var(--line);
+          border-radius: 14px;
           padding: 20px;
-          margin-bottom: 20px;
-        }
-
-        .dark-mode .backup-section {
-          background: #2a2a2a;
-          border-color: #444;
+          margin-bottom: 16px;
+          box-shadow: var(--shadow);
         }
 
         .backup-section h3 {
           margin-top: 0;
-          margin-bottom: 15px;
-          font-size: 16px;
-          font-weight: 600;
+          margin-bottom: 14px;
+          font-size: 17px;
+          font-weight: 700;
           display: flex;
           align-items: center;
           gap: 8px;
@@ -274,70 +333,77 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           display: flex;
           gap: 10px;
           flex-wrap: wrap;
-          margin-bottom: 10px;
+          margin-bottom: 12px;
         }
 
         .backup-btn {
-          padding: 10px 16px;
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 6px;
-          background: white;
+          padding: 10px 14px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface-muted);
           cursor: pointer;
           display: flex;
           align-items: center;
           gap: 8px;
           font-size: 14px;
-          font-weight: 500;
-          transition: all 0.2s;
-        }
-
-        .dark-mode .backup-btn {
-          background: #333;
-          border-color: #555;
-          color: #eee;
+          font-weight: 600;
+          transition: all 0.18s ease;
+          color: inherit;
         }
 
         .backup-btn:hover {
-          background: var(--primary-color, #007bff);
-          color: white;
-          border-color: var(--primary-color, #007bff);
+          transform: translateY(-1px);
+          background: var(--brand);
+          color: #fff;
+          border-color: var(--brand);
         }
 
         .backup-btn:disabled {
-          opacity: 0.6;
+          opacity: 0.55;
           cursor: not-allowed;
+          transform: none;
+        }
+
+        .backup-btn-primary {
+          background: var(--brand);
+          border-color: var(--brand);
+          color: #fff;
+        }
+
+        .backup-btn-primary:hover {
+          background: var(--brand-strong);
+          border-color: var(--brand-strong);
         }
 
         .backup-btn-danger {
-          color: #d32f2f;
+          color: var(--danger);
         }
 
         .backup-btn-danger:hover {
-          background: #d32f2f;
+          background: var(--danger);
           color: white;
+          border-color: var(--danger);
         }
 
         .backup-info {
-          background: #e3f2fd;
-          border-left: 4px solid #2196f3;
+          background: rgba(13, 110, 253, 0.08);
+          border: 1px solid rgba(13, 110, 253, 0.22);
+          border-left: 4px solid var(--brand);
           padding: 12px;
-          border-radius: 4px;
-          margin-bottom: 15px;
+          border-radius: 8px;
+          margin-bottom: 14px;
           font-size: 14px;
           line-height: 1.5;
-        }
-
-        .dark-mode .backup-info {
-          background: #1e3a5f;
-          border-left-color: #64b5f6;
+          color: inherit;
         }
 
         .backup-warning {
-          background: #fff3cd;
+          background: #fff6dc;
           border-left: 4px solid #ffc107;
+          border: 1px solid #f3de94;
           padding: 12px;
-          border-radius: 4px;
-          margin-bottom: 15px;
+          border-radius: 8px;
+          margin-bottom: 14px;
           font-size: 14px;
           line-height: 1.5;
           color: #856404;
@@ -350,7 +416,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
 
         .strategy-selector {
           display: flex;
-          gap: 20px;
+          gap: 12px;
           margin: 15px 0;
           flex-wrap: wrap;
         }
@@ -360,6 +426,10 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           align-items: center;
           gap: 8px;
           cursor: pointer;
+          background: var(--surface-muted);
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          padding: 10px 12px;
         }
 
         .radio-option input[type="radio"] {
@@ -372,9 +442,10 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         }
 
         .size-settings {
-          background: var(--background-tertiary, #f9f9f9);
+          background: var(--surface-muted);
+          border: 1px solid var(--line);
           padding: 12px;
-          border-radius: 6px;
+          border-radius: 10px;
           margin-bottom: 15px;
           display: flex;
           gap: 10px;
@@ -382,15 +453,13 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           flex-wrap: wrap;
         }
 
-        .dark-mode .size-settings {
-          background: #333;
-        }
-
         .size-settings input {
           width: 80px;
           padding: 6px;
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 4px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: var(--surface);
+          color: inherit;
         }
 
         .size-settings label {
@@ -410,100 +479,83 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
 
         .backup-list {
           margin-top: 15px;
+          display: grid;
+          gap: 10px;
         }
 
         .backup-item {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 12px;
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 6px;
-          margin-bottom: 8px;
-          background: white;
-          transition: all 0.2s;
-        }
-
-        .dark-mode .backup-item {
-          background: #1a1a1a;
-          border-color: #555;
+          padding: 12px 14px;
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          background: var(--surface-muted);
+          transition: all 0.18s ease;
         }
 
         .backup-item:hover {
-          border-color: var(--primary-color, #007bff);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        }
-
-        .dark-mode .backup-item:hover {
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+          border-color: var(--brand);
+          transform: translateY(-1px);
         }
 
         .backup-item-info {
           flex: 1;
+          min-width: 0;
         }
 
         .backup-item-name {
-          font-weight: 500;
+          font-weight: 600;
           font-size: 14px;
           word-break: break-all;
         }
 
         .backup-item-meta {
           font-size: 12px;
-          color: #666;
+          color: var(--ink-soft);
           margin-top: 4px;
-        }
-
-        .dark-mode .backup-item-meta {
-          color: #999;
         }
 
         .backup-item-actions {
           display: flex;
           gap: 8px;
           margin-left: 12px;
+          flex-shrink: 0;
         }
 
         .backup-item-btn {
           padding: 6px 10px;
-          border: 1px solid var(--border-color, #ddd);
-          border-radius: 4px;
-          background: white;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: var(--surface);
           cursor: pointer;
           display: flex;
           align-items: center;
           gap: 4px;
           font-size: 12px;
-          transition: all 0.2s;
-        }
-
-        .dark-mode .backup-item-btn {
-          background: #333;
-          border-color: #555;
-          color: #eee;
+          font-weight: 600;
+          transition: all 0.18s ease;
+          color: inherit;
         }
 
         .backup-item-btn:hover {
-          background: var(--primary-color, #007bff);
+          background: var(--brand);
           color: white;
-          border-color: var(--primary-color, #007bff);
+          border-color: var(--brand);
         }
 
         .backup-item-btn-danger:hover {
-          background: #d32f2f;
+          background: var(--danger);
+          border-color: var(--danger);
         }
 
         .backup-empty {
           padding: 20px;
           text-align: center;
-          color: #666;
-          border: 2px dashed var(--border-color, #ddd);
-          border-radius: 6px;
-        }
-
-        .dark-mode .backup-empty {
-          color: #999;
-          border-color: #444;
+          color: var(--ink-soft);
+          border: 2px dashed var(--line);
+          border-radius: 10px;
+          background: var(--surface-muted);
         }
 
         .spinner {
@@ -514,9 +566,48 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+
+        @media (max-width: 768px) {
+          .backup-view {
+            padding: 14px;
+          }
+
+          .backup-hero {
+            padding: 14px;
+            flex-direction: column;
+            align-items: flex-start;
+          }
+
+          .backup-item {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+          }
+
+          .backup-item-actions {
+            margin-left: 0;
+            width: 100%;
+          }
+
+          .backup-item-btn {
+            flex: 1;
+            justify-content: center;
+          }
+
+          .backup-btn {
+            width: 100%;
+            justify-content: center;
+          }
+        }
       `}</style>
 
-      <h2>Backup & Wiederherstellung</h2>
+      <div className="backup-hero">
+        <div>
+          <h2 className="backup-title">Backup & Wiederherstellung</h2>
+          <p className="backup-subtitle">Sichere Templates, Snippets, Seiten, CSS und Navigationen in einem Schritt.</p>
+        </div>
+        <span className="backup-chip">Sicherungszentrale</span>
+      </div>
 
       {/* Export Section */}
       <div className="backup-section">
@@ -526,7 +617,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           Erstelle ein vollständiges Backup aller Templates, Snippets, Seiten, CSS-Dateien und Navigationen.
         </div>
         <div className="backup-buttons">
-          <button className="backup-btn" onClick={handleExport} disabled={exporting}>
+          <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting}>
             {exporting ? (
               <>
                 <RefreshCw size={16} className="spinner" /> Wird exportiert...
@@ -538,7 +629,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
             )}
           </button>
           <button className="backup-btn" onClick={() => setShowSizeSettings(!showSizeSettings)}>
-            ⚙️ Größenlimit
+            <SlidersHorizontal size={16} /> Größenlimit
           </button>
         </div>
 
@@ -604,7 +695,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         )}
 
         <div className="file-input-wrapper">
-          <button className="backup-btn" disabled={importing} onClick={openImportDialog} type="button">
+          <button className="backup-btn backup-btn-primary" disabled={importing} onClick={openImportDialog} type="button">
             {importing ? (
               <>
                 <RefreshCw size={16} className="spinner" /> Wird importiert...
@@ -669,7 +760,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
                     onClick={() => handleDeleteBackup(backup)}
                     title="Löschen"
                   >
-                    <Trash2 size={14} /> Delete
+                    <Trash2 size={14} /> Löschen
                   </button>
                 </div>
               </div>
