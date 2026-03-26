@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box, HardDrive } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box, HardDrive, Upload } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -17,6 +17,7 @@ import BackupView from './BackupView';
 import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import ContentModelsView from './ContentModelsView';
+import ImporterView from './ImporterView';
 import ErrorBoundary from './ErrorBoundary';
 
 export default function AdminPageClient() {
@@ -155,7 +156,15 @@ export default function AdminPageClient() {
       description: 'Datenstrukturen fuer Inhalte definieren',
       icon: Box,
       count: 'Modul'
-    }
+    },
+    // Importer is dev-only – hidden in production
+    ...(process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? [{
+      id: 'importer',
+      label: 'Inhalts-Importer',
+      description: 'HTML zu Seite & Templates importieren',
+      icon: Upload,
+      count: 'Modul'
+    }] : []),
   ];
 
   const filteredBuilderModules = builderModules.filter((module) => {
@@ -327,6 +336,33 @@ export default function AdminPageClient() {
       console.error('Fehler beim Speichern:', error);
       showToast('Fehler beim Speichern der Seite!', 'error');
       return false;
+    }
+  }
+
+  // Reload pages from API and update local state. Returns the fresh list.
+  async function loadPagesFromApi() {
+    try {
+      const res = await fetch('/api/pages?includeDrafts=true');
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.pages || []);
+      setPages(list);
+      return list;
+    } catch (e) {
+      console.error('[admin] loadPagesFromApi failed:', e);
+      return pages;
+    }
+  }
+
+  // Called by ImporterView when a new page has been successfully created.
+  // Refreshes the pages list and navigates to the PageEditor for the new page.
+  async function handlePageCreated(slug) {
+    const freshPages = await loadPagesFromApi();
+    // Find the newly created page in the fresh list (top-level)
+    const newPage = (freshPages || []).find(p => String(p.slug) === String(slug));
+    handleSelectView('pages');
+    if (newPage) {
+      setEditingPage(newPage);
     }
   }
 
@@ -532,6 +568,16 @@ export default function AdminPageClient() {
                   >
                     Content Models
                   </button>
+                  {process.env.NEXT_PUBLIC_DEV_MODE === 'true' && (
+                  <button
+                    onClick={() => openBuilderTab('importer')}
+                    className={`settings-tab-btn ${builderTab === 'importer' ? 'active' : ''}`}
+                    title={devTitle('Modul: Inhalts-Importer. HTML zu Seite & Templates importieren.')}
+                    aria-label="Inhalts-Importer oeffnen"
+                  >
+                    Importer
+                  </button>
+                  )}
                 </div>
               </div>
 
@@ -540,6 +586,7 @@ export default function AdminPageClient() {
                 {builderTab === 'navigation' && <NavigationViewModern showToast={showToast} />}
                 {builderTab === 'snippets' && <SnippetsView showToast={showToast} />}
                 {builderTab === 'content-models' && <ContentModelsView />}
+                {builderTab === 'importer' && process.env.NEXT_PUBLIC_DEV_MODE === 'true' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
               </div>
 
               {showBuilderQuickSwitch && (
