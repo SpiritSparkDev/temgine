@@ -3,6 +3,8 @@ import {
   ChevronDown,
   ChevronUp,
   Edit,
+  Eye,
+  EyeOff,
   FileText,
   FolderTree,
   Globe,
@@ -176,6 +178,19 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     }
   }
 
+  function handleToggleStatus(nodeId) {
+    const toggleNode = (nodes) => nodes.map(n =>
+      n.id === nodeId
+        ? { ...n, status: n.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED' }
+        : { ...n, children: toggleNode(n.children || []) }
+    );
+    const updated = toggleNode(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+    const node = (() => { const find = (nodes) => { for (const n of nodes) { if (n.id === nodeId) return n; const f = find(n.children || []); if (f) return f; } }; return find(updated); })();
+    setToast({ message: node?.status === 'PUBLISHED' ? '✓ Seite veröffentlicht' : 'Seite auf Entwurf gesetzt', type: 'success' });
+  }
+
   function handleTemplateChange(nodeId, templateName) {
     const updateTemplate = (nodes) => nodes.map(n => 
       n.id === nodeId 
@@ -218,7 +233,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
               </div>
             </div>
             <div className="page-node-badges">
-              <span className="page-badge page-badge-neutral">{getStatusLabel(node)}</span>
+              <span className={`page-badge ${node.status === 'PUBLISHED' ? 'page-badge-published' : 'page-badge-neutral'}`}>{getStatusLabel(node)}</span>
               {node.isHomepage && <span className="page-badge badge-home">🏠 Homepage</span>}
               {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
               {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
@@ -259,6 +274,15 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
               </button>
             </div>
             <div className="btn-group">
+              <button
+                className={`icon-btn${node.status === 'PUBLISHED' ? ' active' : ''}`}
+                onClick={() => handleToggleStatus(node.id)}
+                title={node.status === 'PUBLISHED' ? 'Veröffentlicht – klicken um auf Entwurf zu setzen' : 'Entwurf – klicken um zu veröffentlichen'}
+                aria-label={node.status === 'PUBLISHED' ? 'Veröffentlichung aufheben' : 'Veröffentlichen'}
+                style={{ color: node.status === 'PUBLISHED' ? '#22c55e' : '#94a3b8' }}
+              >
+                {node.status === 'PUBLISHED' ? <Eye size={16} /> : <EyeOff size={16} />}
+              </button>
               <button className="icon-btn" onClick={() => onSelect && onSelect(node.id)} title="Bearbeiten" aria-label={`${node.title} bearbeiten`}>
                 <Edit size={16} />
               </button>
