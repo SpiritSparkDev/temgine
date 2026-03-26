@@ -1,49 +1,222 @@
 import { prisma } from '../../../lib/prisma'
 import { sanitizeRecursive } from '../../../lib/htmlSanitize'
+import fs from 'fs'
+import path from 'path'
+
+async function importCSSFiles(cssFiles = [], strategy = 'merge') {
+  const cssDir = path.join(process.cwd(), 'public', 'extern_css')
+  if (!fs.existsSync(cssDir)) fs.mkdirSync(cssDir, { recursive: true })
+
+  // If replace strategy: delete all existing CSS files
+  if (strategy === 'replace') {
+    try {
+      const allFiles = fs.readdirSync(cssDir).filter(f => f.endsWith('.css'))
+      for (const file of allFiles) {
+        fs.unlinkSync(path.join(cssDir, file))
+      }
+      // Also delete .order.json
+      const orderPath = path.join(cssDir, '.order.json')
+      if (fs.existsSync(orderPath)) fs.unlinkSync(orderPath)
+    } catch (e) {
+      console.warn('Failed to delete old CSS files:', e.message)
+    }
+  }
+
+  // Write new CSS files
+  const order = []
+  for (const file of cssFiles) {
+    const filename = file.filename || 'style.css'
+    const content = file.content || ''
+    const filePath = path.join(cssDir, filename)
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8')
+      order.push(filename)
+    } catch (e) {
+      console.warn(`Failed to write CSS file ${filename}:`, e.message)
+    }
+  }
+
+  // Update .order.json
+  if (order.length > 0) {
+    try {
+      fs.writeFileSync(path.join(cssDir, '.order.json'), JSON.stringify({ order }, null, 2), 'utf-8')
+    } catch (e) {
+      console.warn('Failed to write .order.json:', e.message)
+    }
+  }
+}
+
+async function importNavigations(navigations = [], strategy = 'merge') {
+  const navDir = path.join(process.cwd(), 'data', 'navigations')
+  if (!fs.existsSync(navDir)) fs.mkdirSync(navDir, { recursive: true })
+
+  // If replace strategy: delete all existing navigation files
+  if (strategy === 'replace') {
+    try {
+      const allFiles = fs.readdirSync(navDir).filter(f => f.endsWith('.html'))
+      for (const file of allFiles) {
+        fs.unlinkSync(path.join(navDir, file))
+      }
+    } catch (e) {
+      console.warn('Failed to delete old navigation files:', e.message)
+    }
+  }
+
+  // Write navigation files
+  for (const nav of navigations) {
+    const filename = nav.filename || `${nav.name || 'nav'}.html`
+    const code = nav.code || ''
+    const filePath = path.join(navDir, filename)
+    try {
+      fs.writeFileSync(filePath, code, 'utf-8')
+    } catch (e) {
+      console.warn(`Failed to write navigation file ${filename}:`, e.message)
+    }
+  }
+}
 
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).end()
 
+    const strategy = (req.query.strategy || 'merge').toLowerCase()
+    if (!['merge', 'replace'].includes(strategy)) {
+      return res.status(400).json({ error: 'Invalid strategy. Use "merge" or "replace"' })
+    }
+
     const body = req.body || {}
-    const pages = Array.isArray(body.pages) ? body.pages : []
-    const templates = Array.isArray(body.templates) ? body.templates : []
-    const snippets = Array.isArray(body.snippets) ? body.snippets : []
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [] }
+    
+    const templates = Array.isArray(backup.templates) ? backup.templates : []
+    const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
+    const pages = Array.isArray(backup.pages) ? backup.pages : []
+    const css = Array.isArray(backup.css) ? backup.css : []
+    const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
+
+    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, errors: [] }
+
+    // Handle replace strategy for database records
+    if (strategy === 'replace') {
+      try {
+        await prisma.template.deleteMany({})
+        await prisma.snippet.deleteMany({})
+        await prisma.page.deleteMany({})
+      } catch (e) {
+        console.warn('Failed to delete existing records in replace mode:', e.message)
+      }
+    }
 
     // Import templates
     for (const t of templates) {
       if (!t.name) continue
-      await prisma.template.upsert({ where: { name: t.name }, create: { name: t.name, code: t.code || '' }, update: { code: t.code || '' } })
+      try {
+        await prisma.template.upsert({
+          where: { name: t.name },
+          create: { name: t.name, code: t.code || '', type: t.type || 'SITE' },
+          update: { code: t.code || '', type: t.type || 'SITE' }
+        })
+        importStats.templates++
+      } catch (e) {
+        importStats.errors.push(`Template "${t.name}": ${e.message}`)
+      }
     }
 
     // Import snippets (preserve metadata)
-    const keys = []
+    const snippetKeys = []
     for (const s of snippets) {
       const label = String(s.label || s.key || '').trim()
       if (!label) continue
-      const key = label
-      keys.push(key)
-      let value = String(s.snippet || '')
-      if (s.type || s.handler || s.key) {
-        value = JSON.stringify({ key: s.key || '', snippet: s.snippet || '', type: s.type || 'free', handler: s.handler || '' })
+      try {
+        const key = label
+        snippetKeys.push(key)
+        let value = String(s.snippet || '')
+        if (s.type || s.handler || s.key) {
+          value = JSON.stringify({
+            key: s.key || '',
+            snippet: s.snippet || '',
+            type: s.type || 'free',
+            handler: s.handler || ''
+          })
+        }
+        try { value = sanitizeRecursive(value) } catch (e) {}
+        await prisma.snippet.upsert({
+          where: { key },
+          create: { key, value },
+          update: { value }
+        })
+        importStats.snippets++
+      } catch (e) {
+        importStats.errors.push(`Snippet "${label}": ${e.message}`)
       }
-      try { value = sanitizeRecursive(value) } catch (e) {}
-      await prisma.snippet.upsert({ where: { key }, create: { key, value }, update: { value } })
+    }
+
+    // In replace mode, delete snippets not in backup
+    if (strategy === 'replace' && snippetKeys.length > 0) {
+      try {
+        await prisma.snippet.deleteMany({ where: { key: { notIn: snippetKeys } } })
+      } catch (e) {
+        console.warn('Failed to cleanup snippets in replace mode:', e.message)
+      }
     }
 
     // Import pages (simple upsert by slug)
     for (const p of pages) {
       if (!p.slug) continue
-      const slug = String(p.slug)
-      const data = sanitizeRecursive(p.data || {})
-      await prisma.page.upsert({ where: { slug }, create: { slug, title: p.title || slug, blocks: p.blocks || [], data, children: p.children || [] }, update: { title: p.title || slug, blocks: p.blocks || [], data, children: p.children || [] } })
+      try {
+        const slug = String(p.slug)
+        const data = sanitizeRecursive(p.data || {})
+        await prisma.page.upsert({
+          where: { slug },
+          create: {
+            slug,
+            title: p.title || slug,
+            blocks: p.blocks || [],
+            data,
+            children: p.children || [],
+            template: p.template || null,
+            status: p.status || 'DRAFT',
+            isHomepage: p.isHomepage || false
+          },
+          update: {
+            title: p.title || slug,
+            blocks: p.blocks || [],
+            data,
+            children: p.children || [],
+            template: p.template,
+            status: p.status || 'DRAFT',
+            isHomepage: p.isHomepage || false
+          }
+        })
+        importStats.pages++
+      } catch (e) {
+        importStats.errors.push(`Page "${p.slug}": ${e.message}`)
+      }
     }
 
-    // Optionally: delete missing snippets? For now, do not remove existing DB entries unless explicitly requested.
+    // Import CSS files
+    try {
+      await importCSSFiles(css, strategy)
+      importStats.css = css.length
+    } catch (e) {
+      importStats.errors.push(`CSS import failed: ${e.message}`)
+    }
 
-    return res.status(200).json({ ok: true })
+    // Import navigations
+    try {
+      await importNavigations(navigations, strategy)
+      importStats.navigations = navigations.length
+    } catch (e) {
+      importStats.errors.push(`Navigations import failed: ${e.message}`)
+    }
+
+    return res.status(200).json({
+      ok: true,
+      strategy,
+      importStats,
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+    })
   } catch (e) {
-    console.error('Import failed', e)
-    return res.status(500).json({ error: 'Import failed' })
+    console.error('[/api/admin/import] Error:', e.message, e.stack)
+    res.status(500).json({ error: 'Import failed', details: e.message })
   }
 }

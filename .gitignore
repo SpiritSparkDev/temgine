@@ -57,6 +57,5 @@ Thumbs.db
 
 docs/
 
-# Backups (optional - falls automatische Backups nicht versioniert werden sollen)
-# data/backups/
- 
+# Backups (werden nicht versioniert)
+data/backups/

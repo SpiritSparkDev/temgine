@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box, HardDrive } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -13,6 +13,7 @@ import UserInvitationsView from './UserInvitationsView';
 import CSSManagerViewModern from './CSSManagerViewModern';
 import NavigationViewModern from './NavigationViewModern';
 import FileManagerView from './FileManagerView';
+import BackupView from './BackupView';
 import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import ContentModelsView from './ContentModelsView';
@@ -59,7 +60,7 @@ export default function AdminPageClient() {
         snippets: 'snippets',
         'content-models': 'content-models'
       };
-      const allowed = ['dashboard','pages','builder','files','css','users','settings'];
+      const allowed = ['dashboard','pages','builder','files','css','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -180,6 +181,15 @@ export default function AdminPageClient() {
     setToast({ message, type });
   };
 
+  // Wrapper für BackupView die Objekt-Format akzeptiert
+  const showToastForBackup = (opts) => {
+    if (typeof opts === 'object' && opts.message) {
+      setToast({ message: opts.message, type: opts.type || 'success' });
+    } else if (typeof opts === 'string') {
+      setToast({ message: opts, type: 'success' });
+    }
+  };
+
   const showConfirm = (message) => {
     return new Promise((resolve) => {
       setConfirmDialog({
@@ -194,6 +204,29 @@ export default function AdminPageClient() {
         }
       });
     });
+  };
+
+  // Wrapper für BackupView die Objekt-Format akzeptiert
+  const showConfirmForBackup = (opts) => {
+    if (typeof opts === 'object') {
+      setConfirmDialog({
+        title: opts.title || 'Bestätigung',
+        message: opts.message || '',
+        onConfirm: async () => {
+          setConfirmDialog(null);
+          if (opts.onConfirm) {
+            try {
+              await opts.onConfirm();
+            } catch (e) {
+              console.error('Confirm action failed:', e);
+            }
+          }
+        },
+        onCancel: () => {
+          setConfirmDialog(null);
+        }
+      });
+    }
   };
 
   useEffect(() => {
@@ -443,6 +476,7 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
               <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Settings</button></li>
+              <li><button className={`menu-item ${view==='backup'?'active':''}`} onClick={() => handleSelectView('backup')}><HardDrive size={18} /> Backup</button></li>
             </ul>
             <div className="menu-sep" />
           </nav>
@@ -621,6 +655,11 @@ export default function AdminPageClient() {
                 {settingsTab === 'css' && <CSSManagerViewModern showToast={showToast} />}
               </div>
             </div>
+          )}
+          {view === 'backup' && (
+            <ErrorBoundary>
+              <BackupView onToast={showToastForBackup} onConfirm={showConfirmForBackup} />
+            </ErrorBoundary>
           )}
         </main>
       </div>
