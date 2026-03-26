@@ -1,0 +1,127 @@
+:root {
+    --background: #f0f0f0;
+    --text-color: #333333;
+    --primary-color: #0070f3;
+    --secondary-color: #1c1c1e;
+    --secondary-bg: #e0e0e0;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-image: url('../uploads/1763935647336_86282.jpg');
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
+    background-repeat: no-repeat;
+    color: var(--text-color);
+}
+
+#banner h1 {
+    position: absolute;
+    top: 20%;
+    left: 20%;
+    bottom: 20%;
+    right: 20%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#banner section.image-container img {
+    width: 100%;
+}
+nav.anchor-nav {
+    position: fixed;
+    z-index: 1;
+    background: var(--background);
+}
+.anchor-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    width: 100vw;
+    justify-content: center;
+}
+
+.anchor-nav ul li {
+    margin: 0;
+    padding: 0.5em 1em;
+    border-bottom: 1px solid #ccc;
+}
+.anchor-nav ul li a {
+    text-decoration: none;
+    color: var(--text-color);
+}
+.anchor-nav ul li a:hover { 
+    color: var(--primary-color);
+} 
+
+/* Top navigation logo styling */
+.main-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0.5em 1em;
+}
+.main-nav .site-logo-link {
+    display: inline-flex;
+    align-items: center;
+}
+.main-nav .site-logo {
+    height: 48px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+}
+.main-nav > ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.page-content article {
+    width: 80%;
+    margin: 0 auto;
+}
+.page-content .block-children {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1em;
+    justify-content: center;
+}
+.page-content .block-children article {
+    width: 100%;
+    flex: 1 1 20%;
+    box-sizing: border-box;
+    background: var(--secondary-bg);
+    padding: 1em;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px #aaa;
+    opacity: 0.8;
+    transition: 0.5s ease;
+}
+.page-content .block-children article:hover {
+    opacity: 1;
+    box-shadow: 0 5px 15px #888;
+}
+
+footer {
+    text-align: center;
+    padding: 1em 0;
+    background: var(--secondary-bg);
+    margin-top: 2em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+footer a {
+    color: var(--primary-color);
+    text-decoration: none;
+    margin: 0 0.5em;
+}

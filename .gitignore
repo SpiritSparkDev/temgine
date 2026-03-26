@@ -13,7 +13,7 @@ node_modules/
 
 # Production
 /build
-/public/
+/public/uploads/
 
 # Misc
 .DS_Store
