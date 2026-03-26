@@ -24,8 +24,19 @@ export default function Home() {
         }
         
         // Finde die Startseite: erste Seite mit isHomepage=true, oder fallback auf demo-home/home/erste Seite
-        const homePage = pages.find(p => p.isHomepage === true) || pages.find(p => p.id === 'demo-home' || p.slug === 'home') || pages[0]
+        let homePage = pages.find(p => p.isHomepage === true) || pages.find(p => p.id === 'demo-home' || p.slug === 'home') || pages[0]
         
+        // Wenn keine Homepage in veröffentlichten Seiten gefunden: nochmal mit includeDrafts suchen
+        if (!homePage) {
+          try {
+            const fallbackRes = await fetch(`/api/pages?includeDrafts=true&_t=${Date.now()}`)
+            const allPages = await fallbackRes.json()
+            if (Array.isArray(allPages)) {
+              homePage = allPages.find(p => p.isHomepage === true) || allPages.find(p => p.slug === 'home') || allPages[0]
+            }
+          } catch (_) {}
+        }
+
         if (!homePage) {
           setHtml('<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>')
           setLoading(false)
