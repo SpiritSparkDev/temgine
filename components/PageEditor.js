@@ -3,8 +3,9 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps, extractBlockTargets } from '../lib/templateParser';
+import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
 
@@ -27,7 +28,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
+  const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
   const [toast, setToast] = useState(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -601,6 +605,57 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     )
   ), [flattenedBlocks, templateVariablesByName, snippetLabels]);
 
+  function buildPreviewHtml() {
+    try {
+      // Build a block templates map from the loaded template codes (BLOCK type only)
+      const blockTemplatesMap = {};
+      const templateObjs2 = Array.isArray(templates) ? templates : [];
+      templateObjs2.forEach(t => {
+        if (String(t.type || '').toUpperCase() === 'BLOCK' && t.name && templateCodes[t.name]) {
+          blockTemplatesMap[t.name] = templateCodes[t.name];
+        }
+      });
+
+      // Also include all loaded codes as fallback (some pages use type===undefined templates)
+      Object.entries(templateCodes || {}).forEach(([name, code]) => {
+        if (!blockTemplatesMap[name]) blockTemplatesMap[name] = code;
+      });
+
+      const siteTemplateCode = template ? (templateCodes[template] || '') : '';
+
+      const currentPage = {
+        title,
+        slug,
+        template,
+        blocks: blocks || [],
+        data: pageData || {},
+        isHomepage,
+      };
+
+      const rendered = renderPage(
+        currentPage,
+        blockTemplatesMap,
+        siteTemplateCode || null,
+        allPages || [],
+        {},
+        {},
+        {}
+      );
+
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title || 'Vorschau'}</title></head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildPreviewHtml failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  function handleTogglePreview() {
+    if (!showPreview) {
+      setPreviewHtml(buildPreviewHtml());
+    }
+    setShowPreview(p => !p);
+  }
+
   function handleSave(options = {}) {
     // Prüfe ob bereits eine andere 404-Seite existiert
     if (redirectType === '404' && allPages) {
@@ -1095,119 +1150,248 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
 
             <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
-              <div className="page-editor-inspector-content">
-                {(() => {
-                  const selectedBlock = getBlockAtPath(selectedBlockPath);
-                  if (!selectedBlock) {
-                    return <div className="page-editor-inspector-empty">Wähle einen Block in der Mitte oder links aus, um Metadaten zu bearbeiten.</div>;
-                  }
-                  return (
-                    <>
-                    <div className="page-editor-inspector-head">
-                      <div>
+              {(() => {
+                const toggleSection = (id) => setCollapsedSections(prev => {
+                  const next = new Set(prev);
+                  if (next.has(id)) next.delete(id); else next.add(id);
+                  return next;
+                });
+                const selectedBlock = getBlockAtPath(selectedBlockPath);
+
+                return (
+                  <>
+                    {/* Inspector Header */}
+                    <div className="inspector-header">
+                      <div className="inspector-header-left">
                         {showDevHints && <div className="page-editor-panel-hint">Bereich: Block-Inspektor</div>}
-                        <h4>Block-Metadaten</h4>
+                        <span className="inspector-title">Block Inspector</span>
+                        <span className="inspector-subtitle">Block-Metadaten</span>
                       </div>
-                      <span>#{selectedBlockPath.split('.').map(part => Number(part) + 1).join('.')}</span>
+                      {selectedBlock && (
+                        <span className="inspector-badge">
+                          #{selectedBlockPath.split('.').map(part => Number(part) + 1).join('.')}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="page-editor-inspector-group">
-                      <label className="field-label-xs">Template</label>
-                      <select
-                        value={selectedBlock.template || ''}
-                        onChange={e => updateNestedBlockTemplate(selectedBlockPath, e.target.value)}
-                        className="input-field-small"
-                        title={devTitle('Feld: Block-Template')}
-                        aria-label="Block-Template"
-                      >
-                        <option value="">-- Kein Template --</option>
-                        {blockTemplateNames.map(tn => (
-                          <option key={tn} value={tn}>{tn}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {!selectedBlock ? (
+                      <div className="page-editor-inspector-empty">Wähle einen Block in der Mitte oder links aus, um Metadaten zu bearbeiten.</div>
+                    ) : (
+                      <>
+                        {/* Section 1: Metadaten & Konfiguration */}
+                        <div className="inspector-section">
+                          <button
+                            type="button"
+                            className="inspector-section-head"
+                            onClick={() => toggleSection('meta')}
+                            aria-expanded={!collapsedSections.has('meta')}
+                          >
+                            <span className="inspector-section-icon">⚙</span>
+                            <span className="inspector-section-label">Metadaten &amp; Konfiguration</span>
+                            {collapsedSections.has('meta') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                          </button>
 
-                    {pageTemplateSlots.length > 0 && selectedBlockPath.indexOf('.') === -1 && (
-                      <div className="page-editor-inspector-group">
-                        <label className="field-label-xs">Slot</label>
-                        <select
-                          value={normalizeSlotName(selectedBlock.slot)}
-                          onChange={e => updateNestedBlockSlot(selectedBlockPath, e.target.value)}
-                          className="input-field-small"
-                          title={devTitle('Feld: Slot fuer den ausgewaehlten Block')}
-                          aria-label="Slot fuer den ausgewaehlten Block"
-                        >
-                          <option value="">-- Kein Slot --</option>
-                          {pageTemplateSlots.map((slotName) => (
-                            <option key={`inspector-slot-${slotName}`} value={slotName}>{slotName}</option>
-                          ))}
-                        </select>
-                      </div>
+                          {!collapsedSections.has('meta') && (
+                            <div className="inspector-section-body">
+                              <label className="field-label-xs">Template</label>
+                              <select
+                                value={selectedBlock.template || ''}
+                                onChange={e => updateNestedBlockTemplate(selectedBlockPath, e.target.value)}
+                                className="input-field-small"
+                                title={devTitle('Feld: Block-Template')}
+                                aria-label="Block-Template"
+                              >
+                                <option value="">-- Kein Template --</option>
+                                {blockTemplateNames.map(tn => (
+                                  <option key={tn} value={tn}>{tn}</option>
+                                ))}
+                              </select>
+
+                              {pageTemplateSlots.length > 0 && selectedBlockPath.indexOf('.') === -1 && (
+                                <>
+                                  <label className="field-label-xs" style={{ marginTop: 8 }}>Slot</label>
+                                  <select
+                                    value={normalizeSlotName(selectedBlock.slot)}
+                                    onChange={e => updateNestedBlockSlot(selectedBlockPath, e.target.value)}
+                                    className="input-field-small"
+                                    title={devTitle('Feld: Slot fuer den ausgewaehlten Block')}
+                                    aria-label="Slot fuer den ausgewaehlten Block"
+                                  >
+                                    <option value="">-- Kein Slot --</option>
+                                    {pageTemplateSlots.map((slotName) => (
+                                      <option key={`inspector-slot-${slotName}`} value={slotName}>{slotName}</option>
+                                    ))}
+                                  </select>
+                                </>
+                              )}
+
+                              <label className="field-label-xs" style={{ marginTop: 8 }}>Anchor ID</label>
+                              <input
+                                type="text"
+                                className="input-field-small"
+                                placeholder="z. B. section-intro"
+                                value={selectedBlock.props?.anchorId || ''}
+                                onChange={e => updateNestedBlock(selectedBlockPath, { anchorId: e.target.value })}
+                                title={devTitle('Feld: Anchor-ID fuer den ausgewaehlten Block')}
+                                aria-label="Anchor-ID fuer den ausgewaehlten Block"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Section 2: Zugeordnete Felder */}
+                        <div className="inspector-section">
+                          <button
+                            type="button"
+                            className="inspector-section-head"
+                            onClick={() => toggleSection('fields')}
+                            aria-expanded={!collapsedSections.has('fields')}
+                          >
+                            <span className="inspector-section-icon">▤</span>
+                            <span className="inspector-section-label">Zugeordnete Felder</span>
+                            {collapsedSections.has('fields') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                          </button>
+
+                          {!collapsedSections.has('fields') && (
+                            <div className="inspector-section-body">
+                              {(() => {
+                                const vars = selectedBlock.template ? (templateVariablesByName[selectedBlock.template] || []) : [];
+                                if (!selectedBlock.template) {
+                                  return <p className="inspector-fields-empty">Kein Template zugeordnet</p>;
+                                }
+                                if (vars.length === 0) {
+                                  return <p className="inspector-fields-empty">Keine Felder erkannt</p>;
+                                }
+                                return (
+                                  <ul className="inspector-field-list">
+                                    {vars.map(varName => {
+                                      const inputType = guessInputType(varName);
+                                      const isTextarea = inputType === 'textarea' || inputType === 'richtext';
+                                      const label = (snippetLabels[selectedBlock.template]?.[varName]) || varName;
+                                      return (
+                                        <li key={varName} className="inspector-field-item">
+                                          <span className="inspector-field-icon">{isTextarea ? '≡' : 'T'}</span>
+                                          <span className="inspector-field-label">{label}</span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Block Actions */}
+                        <div className="inspector-block-actions">
+                          <button type="button" className="inspector-action-btn" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)} title={devTitle('Unterblock anlegen')}>
+                            <Plus size={13} /> Kind hinzufügen
+                          </button>
+                          <button type="button" className="inspector-action-btn" onClick={() => addNestedBlock(selectedBlockPath, 'content', false)} title={devTitle('Sibling-Block anlegen')}>
+                            <Plus size={13} /> Sibling hinzufügen
+                          </button>
+                          <button
+                            type="button"
+                            className="inspector-action-btn danger"
+                            onClick={() => {
+                              const currentPath = selectedBlockPath;
+                              handleDeleteBlock(currentPath);
+                              const segments = currentPath.split('.');
+                              setSelectedBlockPath(segments.length > 1 ? segments.slice(0, -1).join('.') : '0');
+                            }}
+                            title={devTitle('Ausgewaehlten Block loeschen')}
+                          >
+                            <Trash2 size={13} /> Block löschen
+                          </button>
+                        </div>
+                      </>
                     )}
 
-                    <div className="page-editor-inspector-group">
-                      <label className="field-label-xs">Anchor ID</label>
-                      <input
-                        type="text"
-                        className="input-field-small"
-                        placeholder="z. B. section-intro"
-                        value={selectedBlock.props?.anchorId || ''}
-                        onChange={e => updateNestedBlock(selectedBlockPath, { anchorId: e.target.value })}
-                        title={devTitle('Feld: Anchor-ID fuer den ausgewaehlten Block')}
-                        aria-label="Anchor-ID fuer den ausgewaehlten Block"
-                      />
-                    </div>
-
-                    <div className="page-editor-inspector-actions">
-                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)} title={devTitle('Unterblock innerhalb des ausgewaehlten Blocks anlegen')}>Kind hinzufügen</button>
-                      <button className="btn-modern-small" onClick={() => addNestedBlock(selectedBlockPath, 'content', false)} title={devTitle('Block auf derselben Ebene anlegen')}>Sibling hinzufügen</button>
+                    {/* Global Actions */}
+                    <div className="inspector-global-actions">
+                      <button type="button" className="btn-modern-small green" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
                       <button
-                        className="btn-modern-small"
-                        onClick={() => {
-                          const currentPath = selectedBlockPath;
-                          handleDeleteBlock(currentPath);
-                          const segments = currentPath.split('.');
-                          if (segments.length > 1) {
-                            setSelectedBlockPath(segments.slice(0, -1).join('.'));
-                          } else {
-                            setSelectedBlockPath('0');
-                          }
-                        }}
-                        title={devTitle('Ausgewaehlten Block loeschen')}
+                        type="button"
+                        className={`btn-modern-small${showPreview ? ' green' : ' hollow'}`}
+                        onClick={handleTogglePreview}
+                        title={devTitle('Live-Vorschau ein-/ausblenden')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                       >
-                        Block löschen
+                        <Eye size={13} /> Vorschau
                       </button>
+                      <button
+                        type="button"
+                        className="btn-modern-small"
+                        onClick={() => { const p = String((blocks || []).length); handleAddBlock('content'); setSelectedBlockPath(p); }}
+                        title={devTitle('Neuen Top-Level-Block anlegen')}
+                      >
+                        + Neuer Block
+                      </button>
+                      <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
+                      <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
+                      <button type="button" className="btn-modern-small red hollow" onClick={onCancel} title={devTitle('Bearbeitung abbrechen')}>Abbrechen</button>
+                      <button
+                        type="button"
+                        className="inspector-sparkle-btn"
+                        onClick={handleTogglePreview}
+                        title="Vorschau"
+                        aria-label="Vorschau öffnen"
+                      >✦</button>
                     </div>
-                    </>
-                  );
-                })()}
-              </div>
-                <hr></hr>
-              <div className="page-editor-inspector-global-actions">
-                <button
-                  type="button"
-                  className="btn-modern"
-                  onClick={() => {
-                    const nextPath = String((blocks || []).length);
-                    handleAddBlock('content');
-                    setSelectedBlockPath(nextPath);
-                  }}
-                  title={devTitle('Neuen Top-Level-Block anlegen')}
-                  aria-label="Neuen Top-Level-Block anlegen"
-                >
-                  + Neuer Block hinzufügen
-                </button>
-              </div>
-              <hr></hr>
-              <div className="page-editor-inspector-global-actions">
-                <button type="button" className="btn-modern-small green" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
-                <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern und schließen</button>
-                <button type="button" className="btn-modern-small green hollow" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern und anzeigen</button>
-                <button type="button" className="btn-modern-small red" onClick={onCancel} title={devTitle('Bearbeitung abbrechen')}>Abbrechen</button>
-              </div>
+                  </>
+                );
+              })()}
             </aside>
           </div>
         </div>
+
+      {/* Live-Vorschau Panel */}
+      {showPreview && (
+        <div style={{
+          borderTop: '2px solid var(--accent-primary)',
+          backgroundColor: 'var(--bg-primary)',
+          padding: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Vorschau — aktueller Stand (ungespeichert)
+            </strong>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn-modern-small hollow"
+                onClick={() => setPreviewHtml(buildPreviewHtml())}
+                title="Vorschau aktualisieren"
+              >
+                Aktualisieren
+              </button>
+              <button
+                type="button"
+                className="btn-modern-small red hollow"
+                onClick={() => setShowPreview(false)}
+                title="Vorschau schließen"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <iframe
+            srcDoc={previewHtml}
+            sandbox="allow-scripts allow-same-origin"
+            style={{
+              width: '100%',
+              minHeight: 520,
+              border: '1px solid var(--border-color)',
+              borderRadius: 8,
+              background: '#fff',
+            }}
+            title="Seiten-Vorschau"
+          />
+        </div>
+      )}
 
       {/* Datei-Auswahl Modal */}
       {showFileModal && (

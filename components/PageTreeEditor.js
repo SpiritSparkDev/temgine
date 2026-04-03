@@ -18,8 +18,7 @@ import Toast from './Toast';
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   const [tree, setTree] = useState([]);
-  const [newTitle, setNewTitle] = useState('');
-  const [templates, setTemplates] = useState([]);
+  const [newTitle, setNewTitle] = useState('');  const [newTemplate, setNewTemplate] = useState('');  const [templates, setTemplates] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
 
@@ -92,7 +91,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
         .replace(/-+/g, '-');
     };
     const title = newTitle || 'Neue Seite';
-    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT' };
+    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', ...(newTemplate ? { template: newTemplate } : {}) };
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
@@ -104,6 +103,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
       onUpdate && onUpdate(updated);
     }
     setNewTitle('');
+    setNewTemplate('');
   }
 
   function handleDelete(id) {
@@ -373,6 +373,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
                 if (e.key === 'Enter') handleAdd();
               }}
             />
+            <select
+              value={newTemplate}
+              onChange={e => setNewTemplate(e.target.value)}
+              aria-label="Template für neue Seite"
+              style={{ fontSize: '0.85rem', padding: '6px 8px', border: '1px solid var(--border-color)', borderRadius: 6, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+            >
+              <option value="">— Template wählen —</option>
+              {siteTemplateNames.map(tn => (
+                <option key={tn} value={tn}>{tn}</option>
+              ))}
+            </select>
             <button className="primary" onClick={() => handleAdd()}>
               <Plus size={16} />
               Seite hinzufügen
