@@ -4,7 +4,7 @@ import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { extractTemplateVariables, guessInputType, generateDefaultProps, extractBlockTargets } from '../lib/templateParser';
+import { extractTemplateVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
@@ -14,7 +14,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
-  const [template, setTemplate] = useState('');
+
   const [blocks, setBlocks] = useState([]);
   const [pageData, setPageData] = useState({});
   const [templateCodes, setTemplateCodes] = useState({});
@@ -85,7 +85,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // templates is expected to be an array of objects { name, type }
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
-  const siteTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'SITE').map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
 
   const showToast = (message, type = 'success') => {
@@ -98,7 +97,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const migration = migrateLegacySlotMapToBlocks(initialBlocks, page.data || {});
       setTitle(page.title || '');
       setSlug(page.slug || '');
-      setTemplate(page.template || '');
       setBlocks(migration.blocks || []);
       setPageData(page.data || {});
       setRedirectType(page.redirectType || 'none');
@@ -251,32 +249,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return /url/i.test(varName);
   };
 
-  const extractBlockSlotNames = (code) => {
-    return extractBlockTargets(code).map((target) => target.name);
-  };
-
-  const selectedPageTemplateCode = template ? templateCodes[template] : '';
-  const pageTemplateSlots = useMemo(() => extractBlockSlotNames(selectedPageTemplateCode), [selectedPageTemplateCode]);
-  const firstPageTemplateSlot = pageTemplateSlots[0] || '';
-  const selectedTopLevelIndex = useMemo(() => {
-    if (!selectedBlockPath) return -1;
-    const firstSegment = String(selectedBlockPath).split('.')[0];
-    const idx = parseInt(firstSegment, 10);
-    if (isNaN(idx) || idx < 0) return -1;
-    return idx;
-  }, [selectedBlockPath]);
-  const selectedTopLevelBlock = selectedTopLevelIndex >= 0 ? (blocks?.[selectedTopLevelIndex] || null) : null;
-  const activeSelectedSlot = normalizeSlotName(selectedTopLevelBlock?.slot);
-  const slotUsageByName = useMemo(() => {
-    const usage = {};
-    (blocks || []).forEach((block) => {
-      const slotName = normalizeSlotName(block?.slot) || firstPageTemplateSlot;
-      if (!slotName) return;
-      usage[slotName] = (usage[slotName] || 0) + 1;
-    });
-    return usage;
-  }, [blocks, firstPageTemplateSlot]);
-
   const templateVariablesByName = useMemo(() => {
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
@@ -388,17 +360,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           : {}
     };
     setBlocks([...blocks, newBlock]);
-  }
-
-  function handleUpdatePageTemplate(templateName) {
-    setTemplate(templateName);
-
-    // Wenn Template gewählt wurde, generiere Default-Props für Seiten-Daten
-    if (templateName && templateCodes[templateName]) {
-      const defaultProps = generateDefaultProps(templateCodes[templateName]);
-      // Merge mit existierenden Seiten-Daten
-      setPageData({ ...defaultProps, ...pageData });
-    }
   }
 
   function handleUpdatePageData(updates) {
@@ -527,26 +488,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setBlocks(copy);
   }
 
-  const updateNestedBlockSlot = (path, slotName) => {
-    const normalized = normalizeSlotName(slotName);
-    const copy = JSON.parse(JSON.stringify(blocks || []));
-    const parts = String(path).split('.').map(p => parseInt(p, 10));
-    let cur = copy;
-    for (let i = 0; i < parts.length; i++) {
-      const idx = parts[i];
-      if (i === parts.length - 1) {
-        if (normalized) {
-          cur[idx].slot = normalized;
-        } else {
-          delete cur[idx].slot;
-        }
-      } else {
-        cur = cur[idx].children = cur[idx].children || [];
-      }
-    }
-    setBlocks(copy);
-  }
-
   const getBlockAtPath = (path) => {
     if (!path && path !== '0') return null;
     const parts = String(path).split('.').map(p => parseInt(p, 10));
@@ -607,12 +548,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         if (!blockTemplatesMap[name]) blockTemplatesMap[name] = code;
       });
 
-      const siteTemplateCode = template ? (templateCodes[template] || '') : '';
-
       const currentPage = {
         title,
         slug,
-        template,
         blocks: blocks || [],
         data: pageData || {},
         isHomepage,
@@ -666,7 +604,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       ...page,
       title,
       slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-      template,
       blocks,
       data: normalizedPageData,
       redirectType,
@@ -776,22 +713,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {isTop && pageTemplateSlots.length > 0 && (
-              <select
-                value={normalizeSlotName(block.slot)}
-                onChange={(e) => updateNestedBlockSlot(path, e.target.value)}
-                className="input-field-small"
-                style={{ minWidth: 170 }}
-                onClick={(e) => e.stopPropagation()}
-                title={devTitle(`Feld: Slot-Zuordnung fuer Block ${formatBlockNumber(path)}`)}
-                aria-label={`Slot-Zuordnung fuer Block ${formatBlockNumber(path)}`}
-              >
-                <option value="">-- Kein Slot --</option>
-                {pageTemplateSlots.map((slotName) => (
-                  <option key={`${path}-slot-${slotName}`} value={slotName}>{slotName}</option>
-                ))}
-              </select>
-            )}
             <small style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
               {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
             </small>
@@ -954,17 +875,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return (blocks || []).map((b, i) => renderBlockEditor(b, String(i), 0))
   }
 
-  const assignSelectedTopLevelSlot = (slotName) => {
-    let targetIndex = selectedTopLevelIndex;
-    if (targetIndex < 0) {
-      if (!Array.isArray(blocks) || blocks.length === 0) return;
-      targetIndex = 0;
-      setSelectedBlockPath('0');
-    }
-    updateNestedBlockSlot(String(targetIndex), slotName);
-    setSelectedFieldKey('');
-  };
-
   const handleStructureBlockClick = (path) => {
     if (!path && path !== '0') return;
     setSelectedBlockPath(String(path));
@@ -1016,20 +926,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   aria-label="URL-Slug"
                 />
 
-                <label className="field-label-xs">Seiten-Template</label>
-                <select
-                  value={template}
-                  onChange={e => handleUpdatePageTemplate(e.target.value)}
-                  className="input-field-small"
-                  title={devTitle('Feld: Seiten-Template')}
-                  aria-label="Seiten-Template"
-                >
-                  <option value="">-- Kein Template --</option>
-                  {siteTemplateNames.map(tn => (
-                    <option key={tn} value={tn}>{tn}</option>
-                  ))}
-                </select>
-
                 <label className="field-label-xs">Weiterleitung</label>
                 <select
                   value={redirectType}
@@ -1069,42 +965,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
               <div className="page-editor-outline-structure">
                 <div className="page-editor-outline-structure-head">
-                  {showDevHints && <div className="page-editor-panel-hint">Komponente: Strukturvorschau, Funktion: Slots und Blöcke zuordnen</div>}
+                  {showDevHints && <div className="page-editor-panel-hint">Komponente: Strukturvorschau, Funktion: Blöcke anzeigen und anspringen</div>}
                   <strong>Strukturvorschau</strong>
                   <span>
                     {blocks.length > 0
-                      ? 'Klicke auf einen Slot zur Zuweisung oder auf einen Block zum Springen'
+                      ? 'Klicke auf einen Block zum Springen'
                       : 'Lege zuerst einen Block an'}
                   </span>
                 </div>
 
-                {!selectedPageTemplateCode ? (
-                  <div className="page-editor-outline-empty">Kein Seiten-Template ausgewählt.</div>
-                ) : (
-                  <TemplateStructurePreview
-                    code={selectedPageTemplateCode}
+                <TemplateStructurePreview
                     blocks={blocks}
-                    activeSlot={activeSelectedSlot}
                     activeBlockPath={selectedBlockPath}
-                    slotUsage={slotUsageByName}
-                    onSlotClick={blocks.length > 0 ? assignSelectedTopLevelSlot : null}
                     onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
-                    previewClassName="template-wire-preview page-editor-structure-wire"
                   />
-                )}
-
-                {pageTemplateSlots.length > 0 && (
-                  <div className="page-editor-outline-slot-legend">
-                    {pageTemplateSlots.map((slotName) => {
-                      const count = slotUsageByName[slotName] || 0;
-                      return (
-                        <span key={`slot-legend-${slotName}`} className={`page-editor-outline-slot-pill ${count > 0 ? 'mapped' : ''}`}>
-                          {slotName} ({count})
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             </aside>
 
@@ -1188,24 +1062,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   <option key={tn} value={tn}>{tn}</option>
                                 ))}
                               </select>
-
-                              {pageTemplateSlots.length > 0 && selectedBlockPath.indexOf('.') === -1 && (
-                                <>
-                                  <label className="field-label-xs" style={{ marginTop: 8 }}>Slot</label>
-                                  <select
-                                    value={normalizeSlotName(selectedBlock.slot)}
-                                    onChange={e => updateNestedBlockSlot(selectedBlockPath, e.target.value)}
-                                    className="input-field-small"
-                                    title={devTitle('Feld: Slot fuer den ausgewaehlten Block')}
-                                    aria-label="Slot fuer den ausgewaehlten Block"
-                                  >
-                                    <option value="">-- Kein Slot --</option>
-                                    {pageTemplateSlots.map((slotName) => (
-                                      <option key={`inspector-slot-${slotName}`} value={slotName}>{slotName}</option>
-                                    ))}
-                                  </select>
-                                </>
-                              )}
 
                               <label className="field-label-xs" style={{ marginTop: 8 }}>Anchor ID</label>
                               <input

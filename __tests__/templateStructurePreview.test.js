@@ -1,85 +1,77 @@
 const { parseTemplateStructure } = require('../components/TemplateStructurePreview');
 
 describe('TemplateStructurePreview', () => {
-  test('tracks total block count for nested page blocks', () => {
+  test('flat tree when no named slots — returns block[] with correct paths and children', () => {
     const nodes = parseTemplateStructure('<main>{{{blocks}}}</main>', {
       blocks: [
         {
           template: 'Hero',
-          children: [
-            { template: 'Text' },
-            {
-              template: 'Gallery',
-              children: [{ template: 'Image' }]
-            }
-          ]
+          children: [{ template: 'Text' }]
         },
         { template: 'Footer' }
       ]
     });
 
-    const mainNode = nodes.find((node) => node.label === 'main');
-    expect(mainNode).toBeTruthy();
-
-    const blocksPlaceholder = mainNode.children.find((node) => node.type === 'block-slot' && node.slotName === 'main');
-    expect(blocksPlaceholder).toBeTruthy();
-    expect(blocksPlaceholder.totalBlockCount).toBe(5);
-    expect(blocksPlaceholder.children).toHaveLength(2);
-    expect(blocksPlaceholder.children[0].children).toHaveLength(2);
-    expect(blocksPlaceholder.children[0].children[1].children).toHaveLength(1);
+    expect(nodes).toHaveLength(2);
+    expect(nodes[0].type).toBe('block');
+    expect(nodes[0].path).toBe('0');
+    expect(nodes[0].label).toBe('1. Hero');
+    expect(nodes[0].children).toHaveLength(1);
+    expect(nodes[0].children[0].type).toBe('block');
+    expect(nodes[0].children[0].path).toBe('0.0');
+    expect(nodes[1].type).toBe('block');
+    expect(nodes[1].path).toBe('1');
+    expect(nodes[1].label).toBe('2. Footer');
   });
 
-  test('renders assigned blocks as clickable children under their slots', () => {
-    const nodes = parseTemplateStructure('<main><section>{{{blockSlot:hero}}}</section></main>', {
+  test('slot grouping — named slot in template produces slot-group nodes', () => {
+    const nodes = parseTemplateStructure('<main>{{{blockSlot:hero}}}</main>', {
       blocks: [
         { template: 'Hero', slot: 'hero' },
         { template: 'Teaser' }
       ]
     });
 
-    const mainNode = nodes.find((node) => node.label === 'main');
-    const sectionNode = mainNode.children.find((node) => node.label === 'section');
-    const slotNode = sectionNode.children.find((node) => node.type === 'block-slot');
-
-    expect(slotNode).toBeTruthy();
-    expect(slotNode.slotName).toBe('hero');
-    expect(slotNode.children).toHaveLength(1);
-    expect(slotNode.children[0].type).toBe('page-block');
-    expect(slotNode.children[0].label).toContain('Hero');
+    expect(nodes.length).toBeGreaterThanOrEqual(1);
+    const heroGroup = nodes.find((n) => n.type === 'slot-group' && n.slotName === 'hero');
+    expect(heroGroup).toBeTruthy();
+    expect(heroGroup.children).toHaveLength(1);
+    expect(heroGroup.children[0].template).toBe('Hero');
   });
 
-  test('adds an unassigned blocks fallback when no blocks placeholder exists', () => {
-    const nodes = parseTemplateStructure('<main><section>{{{blockSlot:hero}}}</section></main>', {
+  test('unassigned group — block without matching slot appears in Nicht zugewiesen', () => {
+    const nodes = parseTemplateStructure('<main>{{{blockSlot:hero}}}</main>', {
       blocks: [
         { template: 'Hero', slot: 'hero' },
         { template: 'Footer' }
       ]
     });
 
-    const mainNode = nodes.find((node) => node.label === 'main');
-    const blocksPlaceholder = mainNode.children.find((node) => node.type === 'blocks-placeholder');
-
-    expect(blocksPlaceholder).toBeTruthy();
-    expect(blocksPlaceholder.totalBlockCount).toBe(2);
-    expect(blocksPlaceholder.children).toHaveLength(1);
-    expect(blocksPlaceholder.children[0].label).toContain('Footer');
+    const unassignedGroup = nodes.find((n) => n.type === 'slot-group' && n.slotName === '');
+    expect(unassignedGroup).toBeTruthy();
+    expect(unassignedGroup.label).toBe('Nicht zugewiesen');
+    expect(unassignedGroup.children).toHaveLength(1);
+    expect(unassignedGroup.children[0].template).toBe('Footer');
   });
 
-  test('treats singular block placeholder as blocks position in preview', () => {
-    const nodes = parseTemplateStructure('<main><div>{{block}}</div><footer>{{{blockSlot:hero}}}</footer></main>', {
+  test('empty input — blocks:[] returns []', () => {
+    const nodes = parseTemplateStructure('<main>{{{blocks}}}</main>', { blocks: [] });
+    expect(nodes).toEqual([]);
+  });
+
+  test('correct dot-notation paths for nested blocks', () => {
+    const nodes = parseTemplateStructure('<main>{{{blocks}}}</main>', {
       blocks: [
-        { template: 'Text' },
-        { template: 'Hero', slot: 'hero' }
+        {
+          template: 'A',
+          children: [{ template: 'A1' }]
+        },
+        { template: 'B' }
       ]
     });
 
-    const mainNode = nodes.find((node) => node.label === 'main');
-    const divNode = mainNode.children.find((node) => node.label === 'div');
-    const blocksPlaceholder = divNode.children.find((node) => node.type === 'block-slot' && node.slotName === 'div');
-
-    expect(blocksPlaceholder).toBeTruthy();
-    expect(blocksPlaceholder.totalBlockCount).toBe(2);
-    expect(blocksPlaceholder.children).toHaveLength(1);
-    expect(blocksPlaceholder.children[0].label).toContain('Text');
+    expect(nodes[0].path).toBe('0');
+    expect(nodes[0].children[0].path).toBe('0.0');
+    expect(nodes[1].path).toBe('1');
   });
 });

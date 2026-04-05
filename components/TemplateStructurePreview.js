@@ -1,257 +1,140 @@
 import React, { useMemo } from 'react';
 import { extractBlockTargets } from '../lib/templateParser';
 
-const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
-
-function countTotalBlocks(blocks = []) {
-  if (!Array.isArray(blocks) || blocks.length === 0) return 0;
-
-  return blocks.reduce((total, block) => total + 1 + countTotalBlocks(block?.children || []), 0);
-}
-
-function buildPageBlockNodes(blocks = [], prefix = '') {
+function buildBlockNodes(blocks, prefix) {
   if (!Array.isArray(blocks) || blocks.length === 0) return [];
-
   return blocks.map((block, index) => {
     const path = prefix ? `${prefix}.${index}` : String(index);
-    const slotName = String(block?.slot || '').trim();
     const templateLabel = String(block?.template || block?.type || 'Freier Block').trim();
     const blockNumber = path.split('.').map((part) => Number(part) + 1).join('.');
-
     return {
-      label: `Block ${blockNumber}: ${templateLabel}`,
-      type: 'page-block',
+      type: 'block',
       path,
-      slotName,
-      children: buildPageBlockNodes(block?.children || [], path)
+      label: `${blockNumber}. ${templateLabel}`,
+      template: templateLabel,
+      slotName: String(block?.slot || '').trim(),
+      children: buildBlockNodes(block?.children || [], path)
     };
   });
 }
 
-function cloneNodes(nodes = []) {
-  if (!Array.isArray(nodes) || nodes.length === 0) return [];
+export function parseTemplateStructure(code, options = {}) {
+  const blocks = options.blocks || [];
+  if (blocks.length === 0) return [];
 
-  return nodes.map((node) => ({
-    ...node,
-    children: cloneNodes(node.children || [])
-  }));
-}
+  const slotNames = extractBlockTargets(String(code || ''))
+    .filter((t) => !t.implicit)
+    .map((t) => t.name)
+    .filter(Boolean);
 
-function buildTopLevelBlockBuckets(blocks = [], defaultSlotName = '') {
-  const allTopLevelNodes = buildPageBlockNodes(blocks);
+  if (slotNames.length === 0) {
+    return buildBlockNodes(blocks, '');
+  }
+
   const bySlot = {};
   const unassigned = [];
-
-  allTopLevelNodes.forEach((node) => {
-    const slotName = String(node.slotName || '').trim() || defaultSlotName;
-    if (slotName) {
-      if (!bySlot[slotName]) bySlot[slotName] = [];
-      bySlot[slotName].push(node);
-      return;
+  blocks.forEach((block, index) => {
+    const slot = String(block?.slot || '').trim();
+    if (slot && slotNames.includes(slot)) {
+      if (!bySlot[slot]) bySlot[slot] = [];
+      bySlot[slot].push({ block, index });
+    } else {
+      unassigned.push({ block, index });
     }
-    unassigned.push(node);
   });
 
-  return {
-    allTopLevelNodes,
-    bySlot,
-    unassigned,
-    totalBlockCount: countTotalBlocks(blocks)
-  };
-}
+  const nodes = slotNames.map((slotName) => {
+    const slotBlocks = (bySlot[slotName] || []).map(({ block, index }) => ({
+      ...block,
+      _origIndex: index
+    }));
+    return {
+      type: 'slot-group',
+      slotName,
+      label: slotName,
+      children: buildBlockNodes(slotBlocks, '')
+    };
+  });
 
-function appendFallbackBlocksNode(nodes = [], fallbackNode) {
-  if (!fallbackNode) return;
-
-  const firstTagNode = Array.isArray(nodes)
-    ? nodes.find((node) => node && node.type === 'tag')
-    : null;
-
-  if (firstTagNode) {
-    firstTagNode.children = [...(firstTagNode.children || []), fallbackNode];
-    return;
-  }
-
-  if (Array.isArray(nodes)) {
-    nodes.push(fallbackNode);
-  }
-}
-
-export function parseTemplateStructure(code, options = {}) {
-  if (!code || typeof code !== 'string') return [];
-
-  const pageBlocks = options.blocks || [];
-  const blockTargets = extractBlockTargets(code);
-  const implicitTargets = blockTargets.filter((target) => target.implicit);
-  const firstImplicitTargetName = implicitTargets[0]?.name || '';
-  const {
-    allTopLevelNodes,
-    bySlot,
-    unassigned,
-    totalBlockCount
-  } = buildTopLevelBlockBuckets(pageBlocks, firstImplicitTargetName);
-
-  const root = { label: 'root', type: 'root', children: [] };
-  const stack = [root];
-  const tokenRegex = /<\/?[a-zA-Z][^>]*>|\{\{\{[^}]+\}\}\}|\{\{[^}]+\}\}/g;
-  const tokens = String(code).match(tokenRegex) || [];
-  let hasRenderedBlockTarget = false;
-  let implicitTargetIndex = 0;
-
-  for (const token of tokens.slice(0, 200)) {
-    if (/^<\//.test(token)) {
-      if (stack.length > 1) stack.pop();
-      continue;
-    }
-
-    if (/^</.test(token)) {
-      const tagMatch = token.match(/^<\s*([a-zA-Z0-9-]+)/);
-      if (!tagMatch) continue;
-      const tagName = tagMatch[1].toLowerCase();
-      const selfClosing = /\/>$/.test(token) || VOID_TAGS.has(tagName);
-      const node = { label: tagName, type: 'tag', children: [] };
-      stack[stack.length - 1].children.push(node);
-      if (!selfClosing) stack.push(node);
-      continue;
-    }
-
-    if (/^\{\{/.test(token)) {
-      if (/^\{\{\{?\s*blocks?\s*\}?\}\}$/.test(token)) {
-        const implicitTarget = implicitTargets[implicitTargetIndex++] || null;
-        const slotName = implicitTarget?.name || firstImplicitTargetName;
-        const slotChildren = slotName ? cloneNodes(bySlot[slotName] || []) : cloneNodes(allTopLevelNodes);
-        hasRenderedBlockTarget = true;
-        stack[stack.length - 1].children.push({
-          label: implicitTarget?.placeholder || 'blocks',
-          type: 'block-slot',
-          slotName,
-          implicit: true,
-          totalBlockCount,
-          children: slotChildren.length > 0
-            ? slotChildren
-            : [{ label: 'Keine Blöcke', type: 'empty-blocks', children: [] }]
-        });
-        continue;
-      }
-
-      const dynamicSlotMatch = token.match(/^\{\{\{\s*blockSlot:([^}]+?)\s*\}\}\}$/);
-      const legacyBlockMatch = token.match(/^\{\{\{\s*blockTemplate:([^|}]+?)(?:\|([^}]+))?\s*\}\}\}$/);
-      if (dynamicSlotMatch) {
-        const slotName = String(dynamicSlotMatch[1] || '').trim();
-        hasRenderedBlockTarget = true;
-        stack[stack.length - 1].children.push({
-          label: `slot: ${slotName}`,
-          type: 'block-slot',
-          slotName,
-          children: cloneNodes(bySlot[slotName] || [])
-        });
-      } else if (legacyBlockMatch) {
-        const slotTemplate = String(legacyBlockMatch[1] || '').trim();
-        stack[stack.length - 1].children.push({ label: `legacy block: ${slotTemplate}`, type: 'block-slot', children: [] });
-      } else {
-        stack[stack.length - 1].children.push({ label: token, type: 'placeholder', children: [] });
-      }
-    }
-  }
-
-  if ((!hasRenderedBlockTarget || implicitTargets.length === 0) && unassigned.length > 0) {
-    appendFallbackBlocksNode(root.children, {
-      label: 'blocks',
-      type: 'blocks-placeholder',
-      totalBlockCount,
-      children: cloneNodes(unassigned)
+  if (unassigned.length > 0) {
+    const unassignedBlocks = unassigned.map(({ block }) => block);
+    nodes.push({
+      type: 'slot-group',
+      slotName: '',
+      label: 'Nicht zugewiesen',
+      children: buildBlockNodes(unassignedBlocks, '')
     });
   }
 
-  return root.children;
+  return nodes;
 }
 
-function TemplateWireNode({ node, depth = 0, activeSlot, slotUsage, onSlotClick, activeBlockPath, onBlockClick, showDevHints = false }) {
-  const depthClass = `template-wire-depth-${depth % 5}`;
-  const placeholderClass = node.type === 'placeholder' ? ' placeholder' : '';
-  const blocksPlaceholderClass = node.type === 'blocks-placeholder' ? ' blocks-placeholder' : '';
-  const emptyBlocksClass = node.type === 'empty-blocks' ? ' empty-blocks' : '';
-  const slotName = node.type === 'block-slot' ? String(node.slotName || '').trim() : '';
-  const isSlot = node.type === 'block-slot';
-  const isActiveSlot = Boolean(slotName) && slotName === String(activeSlot || '').trim();
-  const mappedCount = slotName ? Number(slotUsage?.[slotName] || 0) : 0;
-  const isMapped = mappedCount > 0;
-  const clickable = isSlot && Boolean(slotName) && typeof onSlotClick === 'function';
-  const blockPath = node.type === 'page-block' ? String(node.path || '') : '';
-  const isBlock = node.type === 'page-block';
-  const isBlocksPlaceholder = node.type === 'blocks-placeholder';
-  const isActiveBlock = Boolean(blockPath) && blockPath === String(activeBlockPath || '').trim();
-  const clickableBlock = isBlock && Boolean(blockPath) && typeof onBlockClick === 'function';
-  const totalBlockCount = isBlocksPlaceholder ? Number(node.totalBlockCount || 0) : 0;
-  const blockSlotClasses = isSlot
-    ? ` block-slot${isActiveSlot ? ' is-active' : ''}${isMapped ? ' is-mapped' : ''}${clickable ? ' is-clickable' : ''}`
-    : '';
-  const pageBlockClasses = isBlock
-    ? ` page-block${isActiveBlock ? ' is-active' : ''}${clickableBlock ? ' is-clickable' : ''}`
-    : '';
-
-  const nodeClasses = `template-wire-node ${depthClass}${placeholderClass}${blocksPlaceholderClass}${emptyBlocksClass}${blockSlotClasses}${pageBlockClasses}`;
-  const slotButtonTitle = slotName
-    ? `Komponente: Slot ${slotName}. Funktion: Block diesem Slot zuweisen.`
-    : `Komponente: Slot. Funktion: Block zuweisen.`;
-  const blockButtonTitle = blockPath
-    ? `Komponente: ${node.label}. Funktion: Diesen Block im Editor fokussieren.`
-    : `Komponente: Block. Funktion: Im Editor fokussieren.`;
-  const nodeTitle = isBlocksPlaceholder
-    ? `Komponente: ${node.label}. Gesamtzahl aller Blöcke: ${totalBlockCount}.`
-    : isSlot
-    ? (slotName
-      ? `Komponente: Slot ${slotName}${isMapped ? `. Zugewiesene Blöcke: ${mappedCount}.` : '. Noch kein Block zugewiesen.'}`
-      : 'Komponente: Slot ohne Namen.')
-    : isBlock
-      ? `Komponente: ${node.label}.`
-      : `Komponente: ${node.label}.`;
-
-  return (
-    <div className={nodeClasses}>
-      {clickable ? (
-        <button
-          type="button"
-          className="template-wire-slot-btn"
-          onClick={() => onSlotClick(slotName)}
-          title={showDevHints ? slotButtonTitle : undefined}
-          aria-label={slotButtonTitle}
+function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick, activeSlot }) {
+  if (node.type === 'slot-group') {
+    const slotName = node.slotName;
+    const isActiveSlot = Boolean(slotName) && slotName === String(activeSlot || '').trim();
+    const isClickable = Boolean(slotName) && typeof onSlotClick === 'function';
+    return (
+      <div className={`block-outline-group${isActiveSlot ? ' is-active-slot' : ''}`}>
+        <div
+          className={`block-outline-slot-header${isClickable ? ' is-clickable' : ''}${isActiveSlot ? ' is-active' : ''}`}
+          onClick={isClickable ? () => onSlotClick(slotName) : undefined}
+          role={isClickable ? 'button' : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onSlotClick(slotName); } : undefined}
+          aria-label={slotName ? `Slot: ${slotName}` : 'Nicht zugewiesen'}
         >
-          <span className="template-wire-label">{node.label}</span>
-          {isMapped && <span className="template-wire-slot-count">{mappedCount}</span>}
-        </button>
-      ) : clickableBlock ? (
-        <button
-          type="button"
-          className="template-wire-slot-btn"
-          onClick={() => onBlockClick(blockPath)}
-          title={showDevHints ? blockButtonTitle : undefined}
-          aria-label={blockButtonTitle}
-        >
-          <span className="template-wire-label">{node.label}</span>
-          {slotName && <span className="template-wire-slot-count">{slotName}</span>}
-        </button>
-      ) : (
-        <div className="template-wire-label" title={showDevHints ? nodeTitle : undefined}>
-          {node.label}
-          {isBlocksPlaceholder && <span className="template-wire-slot-count">{totalBlockCount}</span>}
-          {isMapped && <span className="template-wire-slot-count">{mappedCount}</span>}
-          {!isMapped && slotName && <span className="template-wire-slot-count">{slotName}</span>}
+          <span className="block-outline-slot-icon">⬡</span>
+          <span className="block-outline-slot-name">{node.label}</span>
+          <span className="block-outline-slot-count">{node.children.length}</span>
         </div>
-      )}
+        <div className="block-outline-slot-children">
+          {node.children.length === 0 ? (
+            <span className="block-outline-empty-slot">Keine Blöcke in diesem Slot</span>
+          ) : (
+            node.children.map((child, idx) => (
+              <BlockNode
+                key={`${child.path}-${idx}`}
+                node={child}
+                depth={depth + 1}
+                activeBlockPath={activeBlockPath}
+                onBlockClick={onBlockClick}
+                onSlotClick={onSlotClick}
+                activeSlot={activeSlot}
+              />
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // type === 'block'
+  const isActive = String(node.path) === String(activeBlockPath || '');
+  const isClickable = Boolean(node.path !== undefined) && typeof onBlockClick === 'function';
+  return (
+    <div className={`block-outline-node depth-${depth % 5}${isActive ? ' is-active' : ''}`}>
+      <button
+        type="button"
+        className={`block-outline-btn${!isClickable ? ' no-action' : ''}`}
+        onClick={isClickable ? () => onBlockClick(node.path) : undefined}
+        disabled={!isClickable}
+        aria-label={node.label}
+      >
+        <span className="block-outline-dot" />
+        <span className="block-outline-label">{node.label}</span>
+      </button>
       {Array.isArray(node.children) && node.children.length > 0 && (
-        <div className="template-wire-children">
+        <div className="block-outline-children">
           {node.children.map((child, idx) => (
-            <TemplateWireNode
-              key={`${child.label}-${idx}`}
+            <BlockNode
+              key={`${child.path}-${idx}`}
               node={child}
               depth={depth + 1}
-              activeSlot={activeSlot}
-              slotUsage={slotUsage}
-              onSlotClick={onSlotClick}
               activeBlockPath={activeBlockPath}
               onBlockClick={onBlockClick}
-              showDevHints={showDevHints}
+              onSlotClick={onSlotClick}
+              activeSlot={activeSlot}
             />
           ))}
         </div>
@@ -262,37 +145,31 @@ function TemplateWireNode({ node, depth = 0, activeSlot, slotUsage, onSlotClick,
 
 export default function TemplateStructurePreview({
   code,
-  emptyLabel = 'Keine Struktur erkannt',
+  emptyLabel = 'Keine Blöcke vorhanden',
   activeSlot = '',
   slotUsage = {},
   onSlotClick = null,
   blocks = [],
   activeBlockPath = '',
   onBlockClick = null,
-  previewClassName = 'template-wire-preview'
+  previewClassName = ''
 }) {
   const nodes = useMemo(() => parseTemplateStructure(code, { blocks }), [code, blocks]);
-  const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
 
   return (
-    <div
-      className={previewClassName}
-      title={showDevHints ? 'Komponente: Strukturvorschau. Zeigt Template-Tags, Slots und zugeordnete Blöcke.' : undefined}
-      aria-label="Strukturvorschau fuer Template-Struktur und Slot-Zuordnung"
-    >
+    <div className={`block-outline-preview${previewClassName ? ` ${previewClassName}` : ''}`}>
       {nodes.length === 0 ? (
-        <div className="template-wire-empty">{emptyLabel}</div>
+        <div className="block-outline-empty">{emptyLabel}</div>
       ) : (
         nodes.map((node, idx) => (
-          <TemplateWireNode
-            key={`wire-node-${idx}`}
+          <BlockNode
+            key={`outline-node-${idx}`}
             node={node}
-            activeSlot={activeSlot}
-            slotUsage={slotUsage}
-            onSlotClick={onSlotClick}
+            depth={0}
             activeBlockPath={activeBlockPath}
             onBlockClick={onBlockClick}
-            showDevHints={showDevHints}
+            onSlotClick={onSlotClick}
+            activeSlot={activeSlot}
           />
         ))
       )}
