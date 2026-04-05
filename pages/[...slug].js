@@ -105,52 +105,9 @@ export default function PageCatchAll() {
           })
         )
 
-        const navigationTemplates = {}
-        try {
-          const navRes = await fetch(`/api/navigations?_t=${Date.now()}`)
-          if (navRes.ok) {
-            const navData = await navRes.json()
-            const navList = navData.navigations || []
-            for (const navName of navList) {
-              const navDetailRes = await fetch(`/api/navigations?name=${encodeURIComponent(navName)}&_t=${Date.now()}`)
-              if (navDetailRes.ok) {
-                const navDetail = await navDetailRes.json()
-                navigationTemplates[navName] = navDetail.code
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Fehler beim Laden der Navigationen:', e)
-        }
-
-        // Load snippets and build a map by stable key.
-        const snippetsMap = {}
-        try {
-          const sres = await fetch(`/api/snippets?_t=${Date.now()}`)
-          if (sres.ok) {
-            const sdata = await sres.json()
-            if (Array.isArray(sdata)) {
-              sdata.forEach(si => {
-                const snippetKey = si?.key || si?.label
-                if (snippetKey) snippetsMap[String(snippetKey)] = si?.snippet || ''
-              })
-            }
-          }
-        } catch (e) {
-          console.error('Fehler beim Laden der Snippets:', e)
-        }
-
-        const pageTemplateCode = foundPage.template ? templateCodes[foundPage.template] : null
-        const html = renderPage(foundPage, templateCodes, pageTemplateCode, pages, navigationTemplates, templateCodes, snippetsMap, {
+        const html = renderPage(foundPage, templateCodes, templateCodes, {
           isChild: segments.length > 1
         })
-        // Debug: log length and preview on the client so we can verify insertion
-        try {
-          // eslint-disable-next-line no-console
-          console.debug('catchall: rendered html length ->', html ? String(html.length) : '0')
-          // eslint-disable-next-line no-console
-          console.debug('catchall: rendered html preview ->', html ? String(html).slice(0, 500) : '')
-        } catch (e) {}
         setHtml(html)
         setLoading(false)
       })

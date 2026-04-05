@@ -1,56 +1,42 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
-import { createButtonHandlers, insertText } from '../lib/insertHelper'
-import TemplateStructurePreview from './TemplateStructurePreview';
+import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { insertText } from '../lib/insertHelper';
+import { extractTemplateVariables, guessInputType } from '../lib/templateParser';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
 const SYSTEM_PLACEHOLDERS = [
-  { label: 'Titel', snippet: '{{title}}' },
-  { label: 'Slug', snippet: '{{slug}}' },
-  { label: 'Autor', snippet: '{{data.author}}' },
-  { label: 'Seitenkopf', snippet: '{{data.pageHeader}}' },
-  { label: 'Kindseite', snippet: '{{isChild}}' },
-  { label: 'Blöcke', snippet: '{{{blocks}}}' }
-]
+  { label: 'Bloecke', snippet: '{{{blocks}}}', type: 'html' },
+  { label: 'Titel', snippet: '{{title}}', type: 'string' },
+  { label: 'Slug', snippet: '{{slug}}', type: 'string' },
+  { label: 'Seitenkopf', snippet: '{{data.pageHeader}}', type: 'string' },
+  { label: 'Kindseite', snippet: '{{isChild}}', type: 'boolean' },
+];
 
-const SYSTEM_SNIPPET_KEYS = new Set([
-  'blocks', 'title', 'titel', 'slug', 'author', 'page title', 'page slug', 'page header', 'header', 'is child'
-])
-
-const normalizeSystemName = (value) => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
-
-const isSystemSnippet = (snippet) => {
-  return SYSTEM_SNIPPET_KEYS.has(normalizeSystemName(snippet?.key || snippet?.label))
-}
-
-const getSnippetReference = (snippet) => {
-  const key = String(snippet?.key || '').trim()
-  if (!key) return ''
-  return `{{snippetHtml:${key}}}`
-}
+const TYPE_COLORS = {
+  image: '#4d9fff',
+  url: '#80d4ff',
+  textarea: '#a5d6a7',
+  array: '#ffab40',
+  number: '#ff8a65',
+  text: '#999',
+  date: '#ce93d8',
+  boolean: '#4db6ac',
+};
 
 export default function TemplatesViewModern({ showToast }) {
-  const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
-  const devTitle = (text) => (showDevHints ? text : undefined);
   const [templates, setTemplates] = useState([]);
-  // inserterRef no longer required; editor registers centrally
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
-  const [templateType, setTemplateType] = useState('SITE');
-  const [activeTemplateScope, setActiveTemplateScope] = useState('SITE');
+  const [isDirty, setIsDirty] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [snippets, setSnippets] = useState([]);
-  const [navigations, setNavigations] = useState([]);
-  const [isEditing, setIsEditing] = useState(false);
-  
+  const [activeTab, setActiveTab] = useState('variables');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadTemplates();
-    loadSnippets();
-    loadNavigations();
   }, []);
 
   function loadTemplates() {
@@ -58,334 +44,713 @@ export default function TemplatesViewModern({ showToast }) {
       .then(r => r.json())
       .then(data => {
         let list = Array.isArray(data) ? data : [];
-        if (list.length > 0 && typeof list[0] === 'string') {
-          list = list.map(n => ({ name: n, type: 'SITE' }));
-        }
         setTemplates(list);
       })
       .catch(() => setTemplates([]));
   }
 
-  function loadSnippets() {
-    fetch('/api/snippets')
-      .then(r => r.json())
-      .then(data => {
-        setSnippets(data || [])
-      })
-      .catch(() => setSnippets([]));
-  }
-
-  function loadNavigations() {
-    fetch('/api/navigations')
-      .then(r => r.json())
-      .then(data => setNavigations(data.navigations || []))
-      .catch(() => setNavigations([]));
-  }
-
   function handleNew() {
+    const blank = '<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>';
     setSelectedTemplate(null);
     setTemplateName('');
-    setTemplateCode('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
-    setTemplateType(activeTemplateScope);
-    setIsEditing(true);
+    setTemplateCode(blank);
+    setIsDirty(true);
+    setActiveTab('variables');
   }
 
-  function handleEdit(name, index) {
-    fetch(`/api/templates?name=${encodeURIComponent(name)}`)
+  function handleSelect(tpl) {
+    if (isDirty && window.confirm('Ungespeicherte Aenderungen verwerfen?') === false) return;
+    fetch(`/api/templates?name=${encodeURIComponent(tpl.name)}`)
       .then(r => r.json())
       .then(data => {
-        setSelectedTemplate(index);
+        setSelectedTemplate({ name: data.name, code: data.code });
         setTemplateName(data.name);
-        setTemplateCode(data.code);
-        setTemplateType(data.type || 'SITE');
-        setActiveTemplateScope(data.type || 'SITE');
-        setIsEditing(true);
+        setTemplateCode(data.code || '');
+        setIsDirty(false);
+        setActiveTab('variables');
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
   }
 
-  function handleSave() {
-    if (!templateName.trim()) {
+  function handleCodeChange(value) {
+    setTemplateCode(value || '');
+    setIsDirty(true);
+  }
+
+  function handleNameChange(e) {
+    setTemplateName(e.target.value);
+    setIsDirty(true);
+  }
+
+  async function handleSave() {
+    const name = templateName.trim();
+    if (!name) {
       showToast('Bitte Template-Namen eingeben', 'error');
       return;
     }
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, code: templateCode, type: 'BLOCK' })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      showToast('Template gespeichert!', 'success');
+      setSelectedTemplate({ name, code: templateCode });
+      setIsDirty(false);
+      loadTemplates();
+    } catch (err) {
+      showToast('Fehler: ' + err.message, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
-    fetch('/api/templates', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: templateName, code: templateCode, type: templateType })
-    })
-      .then(r => r.json())
-      .then(() => {
-        showToast('Template gespeichert!', 'success');
-        loadTemplates();
-        setIsEditing(false);
+  async function handleDelete(tplName, e) {
+    e.stopPropagation();
+    if (!window.confirm(`Template "${tplName}" wirklich loeschen?`)) return;
+    try {
+      await fetch('/api/templates', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tplName })
+      });
+      showToast('Template geloescht', 'success');
+      if (selectedTemplate?.name === tplName) {
         setSelectedTemplate(null);
-      })
-      .catch(err => showToast('Fehler: ' + err.message, 'error'));
+        setTemplateName('');
+        setTemplateCode('');
+        setIsDirty(false);
+      }
+      loadTemplates();
+    } catch (err) {
+      showToast('Fehler beim Loeschen: ' + err.message, 'error');
+    }
   }
 
-  function handleDelete(name, index) {
-    fetch('/api/templates', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
-    })
-      .then(() => {
-        showToast('Template gelöscht', 'success');
-        loadTemplates();
-        if (selectedTemplate === index) {
-          setIsEditing(false);
-          setSelectedTemplate(null);
-        }
-      })
-      .catch(err => showToast('Fehler: ' + err.message, 'error'));
+  function handleCancel() {
+    if (isDirty && !window.confirm('Aenderungen verwerfen?')) return;
+    if (selectedTemplate) {
+      setTemplateName(selectedTemplate.name);
+      setTemplateCode(selectedTemplate.code);
+    } else {
+      setTemplateName('');
+      setTemplateCode('');
+    }
+    setIsDirty(false);
   }
 
-  async function insertSnippet(text) {
-    await insertText(text, () => setTemplateCode(c => c + text))
+  async function handleInsert(text) {
+    await insertText(text, () => setTemplateCode(c => c + text));
   }
 
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-  const siteTemplates = templates.filter((t) => (t.type || 'SITE') === 'SITE');
-  const blockTemplates = templates.filter((t) => t.type === 'BLOCK');
-  const filteredTemplates = templates.filter((t) => {
-    const typeMatches = (t.type || 'SITE') === activeTemplateScope;
-    const searchMatches = !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch);
-    return typeMatches && searchMatches;
-  });
+  const filteredTemplates = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return templates;
+    return templates.filter(t => t.name.toLowerCase().includes(q));
+  }, [templates, searchTerm]);
 
-  const editorSnippets = snippets.filter((s) => !isSystemSnippet(s));
+  const extractedVars = useMemo(() => {
+    if (!templateCode) return [];
+    return extractTemplateVariables(templateCode);
+  }, [templateCode]);
+
+  const hasOpenTemplate = templateName !== '' || templateCode !== '';
 
   return (
-    <div className="editor-container">
-      <div className="editor-sidebar">
-        <div className="editor-header">
-          <div className="editor-header-copy">
-            <h2><Layout size={18} /> Templates</h2>
-            {showDevHints && <p className="editor-role-hint">Bereich: Template-Liste, Filter und Schnellaktionen</p>}
-          </div>
-          <button
-            className="icon-btn"
-            onClick={handleNew}
-            title={devTitle('Funktion: Neues Template anlegen')}
-            aria-label="Neues Template anlegen"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-
-        <div className="editor-search-wrap">
-          <div className="editor-segmented-control template-scope-switcher">
-            <button
-              type="button"
-              className={`editor-segment-btn ${activeTemplateScope === 'SITE' ? 'active' : ''}`}
-              onClick={() => setActiveTemplateScope('SITE')}
-              title={devTitle('Filter: Nur Site-Templates anzeigen')}
-              aria-label="Nur Site-Templates anzeigen"
-            >
-              Site
-              <span className="editor-segment-count">{siteTemplates.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`editor-segment-btn ${activeTemplateScope === 'BLOCK' ? 'active' : ''}`}
-              onClick={() => setActiveTemplateScope('BLOCK')}
-              title={devTitle('Filter: Nur Block-Templates anzeigen')}
-              aria-label="Nur Block-Templates anzeigen"
-            >
-              Block
-              <span className="editor-segment-count">{blockTemplates.length}</span>
-            </button>
-          </div>
-          <input
-            className="editor-search-input"
-            type="text"
-            placeholder={`${activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates suchen...`}
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            title={devTitle(`Suche innerhalb der ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`)}
-            aria-label={`Template-Suche fuer ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`}
-          />
-        </div>
-        
-        <div className="editor-list">
-          {templates.length === 0 ? (
-            <div className="empty-list-state">Keine Templates vorhanden</div>
-          ) : filteredTemplates.length === 0 ? (
-            <div className="empty-list-state">Keine {activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates{searchTerm ? ` für "${searchTerm}"` : ''}</div>
+    <div className="tce-container">
+      <div className="tce-toolbar">
+        <div className="tce-toolbar-left">
+          {hasOpenTemplate ? (
+            <input
+              type="text"
+              className="tce-name-input"
+              value={templateName}
+              onChange={handleNameChange}
+              placeholder="template-name"
+            />
           ) : (
-            filteredTemplates.map((t) => {
-              const index = templates.findIndex((x) => x.name === t.name);
-              return (
-              <div 
-                key={t.name} 
-                className={`editor-list-item ${selectedTemplate === index ? 'active' : ''}`}
-                onClick={() => handleEdit(t.name, index)}
-                role="button"
-                tabIndex={0}
-                title={devTitle(`Komponente: Template ${t.name}. Funktion: Template zum Bearbeiten oeffnen.`)}
-                aria-label={`Template ${t.name} zum Bearbeiten oeffnen`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleEdit(t.name, index);
-                  }
-                }}
-              >
-                <div className="editor-item-info">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {t.type === 'BLOCK' ? <Grid size={14} /> : <Layout size={14} />}
-                    <div className="editor-item-label">{t.name}</div>
-                    <span className={`template-type-badge ${t.type === 'BLOCK' ? 'block' : 'site'}`}>
-                      {t.type === 'BLOCK' ? 'Block' : 'Site'}
-                    </span>
-                  </div>
-                </div>
-                <div className="editor-item-actions">
-                  <button 
-                    className="icon-btn-small" 
-                    onClick={(e) => { e.stopPropagation(); handleEdit(t.name, index); }}
-                    title={devTitle(`Funktion: Template ${t.name} bearbeiten`)}
-                    aria-label={`Template ${t.name} bearbeiten`}
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button 
-                    className="icon-btn-small delete" 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(t.name, index); }}
-                    title={devTitle(`Funktion: Template ${t.name} loeschen`)}
-                    aria-label={`Template ${t.name} loeschen`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            )})
+            <span className="tce-toolbar-title">Templates</span>
           )}
         </div>
-      </div>
-
-      <div className="editor-main">
-        {isEditing ? (
-          <>
-            <div className="editor-toolbar">
-              {showDevHints && <span className="editor-role-hint">Bereich: Template-Metadaten und Speicheraktionen</span>}
-              <input 
-                type="text" 
-                className="editor-name-input" 
-                placeholder="Template Name" 
-                value={templateName} 
-                onChange={e => setTemplateName(e.target.value)}
-                title={devTitle('Feld: Template-Name')}
-                aria-label="Template-Name"
-              />
-              <div className="editor-toolbar-actions">
-                <button className="btn-secondary" onClick={() => setIsEditing(false)} title={devTitle('Aenderungen verwerfen und Editor verlassen')}>Abbrechen</button>
-                <button className="btn-primary" onClick={handleSave} title={devTitle('Template speichern')}>Speichern</button>
-              </div>
-            </div>
-            
-            <div className="templates-editor-columns">
-              <div className="templates-editor-wrapper">
-                <div className="editor-codemirror-wrapper">
-                  <CodeEditor
-                    height="100%"
-                    language="html"
-                    value={templateCode}
-                    onChange={value => setTemplateCode(value || '')}
-                    options={{}}
-                  />
-                </div>
-              </div>
-
-              <div className="editor-snippets-panel">
-                <h4>Snippets einfügen</h4>
-                {showDevHints && <p className="editor-section-hint">Funktion: Vorlagenbausteine, Navigationen und Referenzen in den Code einfuegen</p>}
-                <div className="template-snippet-stack">
-                  {SYSTEM_PLACEHOLDERS.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Systemwerte</div>
-                      <div className="snippet-buttons">
-                        {SYSTEM_PLACEHOLDERS.map(s => (
-                          <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Systemwert einfuegen: ${s.label}`)} aria-label={`Systemwert ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {editorSnippets.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Gespeicherte Snippets</div>
-                      <div className="snippet-buttons">
-                        {editorSnippets.map(s => (
-                          <button key={s.key || s.label} className={`template-snippet-btn ${s.type === 'defined' ? 'defined-snippet' : ''}`} title={devTitle(`Snippet-Referenz einfuegen: ${s.label}`)} aria-label={`Snippet-Referenz ${s.label} einfuegen`} {...createButtonHandlers(getSnippetReference(s), () => setTemplateCode(c => c + getSnippetReference(s)))}>{s.label} ({s.key})</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {navigations.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Navigationen</div>
-                      <div className="snippet-buttons">
-                        {navigations.map(nav => (
-                          <button 
-                            key={nav} 
-                            className="template-snippet-btn navigation-snippet"
-                            title={devTitle(`Navigation einfuegen: ${nav}`)}
-                            aria-label={`Navigation ${nav} einfuegen`}
-                            {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
-                          >
-                            📍 {nav}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="snippet-group">
-                    <div className="snippet-group-title">Templates referenzieren</div>
-                    <div className="snippet-buttons">
-                      <button
-                        className="template-snippet-btn"
-                        {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => setTemplateCode(c => c + '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
-                        title="Dynamisches Heading mit frei wählbarem Level"
-                      >
-                        Heading Dynamisch
-                      </button>
-                      {templates
-                        .filter(t => t.name !== templateName)
-                        .map(t => (
-                          <button 
-                            key={t.name} 
-                            className="template-snippet-btn template-snippet"
-                            title={devTitle(`Template-Referenz einfuegen: ${t.name}`)}
-                            aria-label={`Template-Referenz ${t.name} einfuegen`}
-                            {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
-                          >
-                            🧩 {t.name}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-
-                  <div className="snippet-group">
-                    <div className="snippet-group-title">Strukturvorschau</div>
-                    <TemplateStructurePreview code={templateCode} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="editor-empty-state">
-            <Layout size={48} strokeWidth={1} />
-            <h3>Wähle ein Template zum Bearbeiten</h3>
-            <p>oder erstelle ein neues mit dem <Plus size={16} style={{verticalAlign: 'middle'}} /> Button</p>
+        {hasOpenTemplate && (
+          <div className="tce-toolbar-right">
+            <button className="tce-btn" onClick={handleCancel} title="Aenderungen verwerfen">
+              <X size={14} /> Abbrechen
+            </button>
+            <button
+              className="tce-btn tce-btn--primary"
+              onClick={handleSave}
+              disabled={isSaving}
+              title="Template speichern"
+            >
+              <Save size={14} /> {isSaving ? 'Speichern...' : 'Speichern'}
+            </button>
           </div>
         )}
       </div>
+
+      <div className="tce-columns">
+        <div className="tce-panel tce-panel--left">
+          <div className="tce-panel-header">
+            <span className="tce-panel-title">Templates</span>
+            <button
+              className="tce-icon-btn"
+              onClick={handleNew}
+              title="Neues Template"
+              aria-label="Neues Template anlegen"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+          <div className="tce-panel-search">
+            <input
+              type="text"
+              className="tce-search-input"
+              placeholder="Suchen..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="tce-list">
+            {templates.length === 0 ? (
+              <div className="tce-empty">Keine Templates vorhanden</div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="tce-empty">Keine Treffer</div>
+            ) : (
+              filteredTemplates.map(t => (
+                <div
+                  key={t.name}
+                  className={`tce-list-item ${selectedTemplate?.name === t.name ? 'active' : ''}`}
+                  onClick={() => handleSelect(t)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSelect(t); } }}
+                  aria-label={`Template ${t.name} oeffnen`}
+                >
+                  <span className="tce-list-item-name">{t.name}</span>
+                  <div className="tce-list-item-actions">
+                    <button
+                      className="tce-icon-btn tce-icon-btn--small tce-icon-btn--danger"
+                      onClick={e => handleDelete(t.name, e)}
+                      title={`Template ${t.name} loeschen`}
+                      aria-label={`Template ${t.name} loeschen`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="tce-panel tce-panel--center">
+          {hasOpenTemplate ? (
+            <>
+              <div className="tce-code-tabs">
+                <div className="tce-code-tab active">
+                  <Edit2 size={12} />
+                  <span>{templateName || 'neues-template'}.html</span>
+                </div>
+              </div>
+              <div className="tce-code-editor-wrap">
+                <CodeEditor
+                  height="100%"
+                  language="html"
+                  value={templateCode}
+                  onChange={handleCodeChange}
+                  options={{}}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="tce-empty-state">
+              <Edit2 size={40} strokeWidth={1} />
+              <p>Template aus der Liste waehlen oder neues erstellen</p>
+              <button className="tce-btn tce-btn--primary" onClick={handleNew}>
+                <Plus size={14} /> Neues Template
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="tce-panel tce-panel--right">
+          <div className="tce-props-tabs">
+            <button
+              className={`tce-props-tab ${activeTab === 'variables' ? 'active' : ''}`}
+              onClick={() => setActiveTab('variables')}
+            >
+              Variables
+            </button>
+            <button
+              className={`tce-props-tab ${activeTab === 'settings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('settings')}
+            >
+              Settings
+            </button>
+          </div>
+
+          <div className="tce-props-content">
+            {activeTab === 'variables' && (
+              <>
+                <div className="tce-var-section">
+                  <div className="tce-var-section-title">Systemwerte</div>
+                  {SYSTEM_PLACEHOLDERS.map(p => (
+                    <div
+                      key={p.snippet}
+                      className="tce-var-item"
+                      onClick={() => handleInsert(p.snippet)}
+                      role="button"
+                      tabIndex={0}
+                      title={`${p.snippet} einfuegen`}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleInsert(p.snippet); } }}
+                    >
+                      <span className="tce-var-type" style={{ color: TYPE_COLORS[p.type] || '#999' }}>{p.type}</span>
+                      <span className="tce-var-name">{p.snippet}</span>
+                      <span className="tce-var-insert">Insert</span>
+                    </div>
+                  ))}
+                </div>
+
+                {hasOpenTemplate && (
+                  <div className="tce-var-section">
+                    <div className="tce-var-section-title">
+                      Template-Variablen
+                      {extractedVars.length > 0 && <span className="tce-var-count">{extractedVars.length}</span>}
+                    </div>
+                    {extractedVars.length === 0 ? (
+                      <div className="tce-var-empty">Keine freien Variablen erkannt</div>
+                    ) : (
+                      extractedVars.map(varName => {
+                        const type = guessInputType(varName);
+                        const snippet = `{{${varName}}}`;
+                        return (
+                          <div
+                            key={varName}
+                            className="tce-var-item"
+                            onClick={() => handleInsert(snippet)}
+                            role="button"
+                            tabIndex={0}
+                            title={`${snippet} einfuegen`}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleInsert(snippet); } }}
+                          >
+                            <span className="tce-var-type" style={{ color: TYPE_COLORS[type] || '#999' }}>{type}</span>
+                            <span className="tce-var-name">{snippet}</span>
+                            <span className="tce-var-insert">Insert</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+
+                {hasOpenTemplate && templates.filter(t => t.name !== templateName).length > 0 && (
+                  <div className="tce-var-section">
+                    <div className="tce-var-section-title">Templates referenzieren</div>
+                    {templates
+                      .filter(t => t.name !== templateName)
+                      .map(t => {
+                        const snippet = `{{template:${t.name}}}`;
+                        return (
+                          <div
+                            key={t.name}
+                            className="tce-var-item"
+                            onClick={() => handleInsert(snippet)}
+                            role="button"
+                            tabIndex={0}
+                            title={`${snippet} einfuegen`}
+                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleInsert(snippet); } }}
+                          >
+                            <span className="tce-var-type" style={{ color: '#4d9fff' }}>template</span>
+                            <span className="tce-var-name">{snippet}</span>
+                            <span className="tce-var-insert">Insert</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'settings' && (
+              <div className="tce-var-section">
+                <div className="tce-var-section-title">Template-Einstellungen</div>
+                <div className="tce-setting-group">
+                  <label className="tce-setting-label">Name</label>
+                  <input
+                    type="text"
+                    className="tce-setting-input"
+                    value={templateName}
+                    onChange={handleNameChange}
+                    placeholder="template-name"
+                  />
+                </div>
+                <div className="tce-setting-group">
+                  <label className="tce-setting-label">Typ</label>
+                  <input type="text" className="tce-setting-input" value="Block" readOnly />
+                </div>
+                <div className="tce-setting-group">
+                  <label className="tce-setting-label">Zeilen</label>
+                  <input
+                    type="text"
+                    className="tce-setting-input"
+                    value={templateCode ? templateCode.split('\n').length : 0}
+                    readOnly
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="tce-statusbar">
+        <div className="tce-statusbar-left">
+          <span className="tce-status-dot" style={{ background: isDirty ? '#f39c12' : '#00c853' }} />
+          <span>{isDirty ? 'Ungespeichert' : 'Gespeichert'}</span>
+          <span>UTF-8</span>
+          <span>HTML</span>
+          <span>{templates.length} Templates</span>
+        </div>
+        <div className="tce-statusbar-right">
+          <span>{extractedVars.length > 0 ? `${extractedVars.length} Variablen` : 'Keine Variablen'}</span>
+        </div>
+      </div>
+
+      <style>{`
+        .tce-container {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background: #1a1a1a;
+          color: #e1e1e1;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          overflow: hidden;
+        }
+        .tce-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 16px;
+          height: 50px;
+          min-height: 50px;
+          background: #252525;
+          border-bottom: 1px solid #333;
+          gap: 12px;
+          flex-shrink: 0;
+        }
+        .tce-toolbar-left {
+          display: flex;
+          align-items: center;
+          flex: 1;
+          gap: 12px;
+          min-width: 0;
+        }
+        .tce-toolbar-title {
+          font-size: 15px;
+          font-weight: 600;
+          color: #fff;
+        }
+        .tce-toolbar-right {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+        .tce-name-input {
+          background: transparent;
+          border: none;
+          color: #fff;
+          font-size: 14px;
+          font-weight: 500;
+          padding: 6px 10px;
+          border-radius: 4px;
+          min-width: 200px;
+          max-width: 400px;
+        }
+        .tce-name-input:hover { background: #2d2d2d; }
+        .tce-name-input:focus { outline: none; background: #2d2d2d; }
+        .tce-btn {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          background: transparent;
+          border: 1px solid #3d3d3d;
+          color: #e1e1e1;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          border-radius: 6px;
+          transition: all 0.2s;
+        }
+        .tce-btn:hover { background: #2d2d2d; border-color: #4d4d4d; }
+        .tce-btn--primary { background: #0d99ff; border-color: #0d99ff; color: #fff; }
+        .tce-btn--primary:hover { background: #0a7cd6; border-color: #0a7cd6; }
+        .tce-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .tce-columns {
+          display: grid;
+          grid-template-columns: 260px 1fr 300px;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .tce-panel {
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
+        }
+        .tce-panel--left {
+          background: #1e1e1e;
+          border-right: 1px solid #2d2d2d;
+        }
+        .tce-panel--center {
+          background: #1a1a1a;
+        }
+        .tce-panel--right {
+          background: #1e1e1e;
+          border-left: 1px solid #2d2d2d;
+        }
+        .tce-panel-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 14px;
+          border-bottom: 1px solid #2d2d2d;
+          background: #252525;
+          flex-shrink: 0;
+        }
+        .tce-panel-title {
+          font-size: 11px;
+          font-weight: 600;
+          color: #999;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .tce-icon-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          background: transparent;
+          border: none;
+          color: #0d99ff;
+          cursor: pointer;
+          border-radius: 4px;
+          transition: background 0.15s;
+        }
+        .tce-icon-btn:hover { background: #2d2d2d; }
+        .tce-icon-btn--small { width: 22px; height: 22px; }
+        .tce-icon-btn--danger { color: #e74c3c; opacity: 0; }
+        .tce-panel-search {
+          padding: 8px;
+          border-bottom: 1px solid #2d2d2d;
+          flex-shrink: 0;
+        }
+        .tce-search-input {
+          width: 100%;
+          padding: 6px 10px;
+          background: #252525;
+          border: 1px solid #3d3d3d;
+          color: #e1e1e1;
+          font-size: 12px;
+          border-radius: 4px;
+          box-sizing: border-box;
+        }
+        .tce-search-input:focus { outline: none; border-color: #0d99ff; }
+        .tce-list {
+          flex: 1;
+          overflow-y: auto;
+          padding: 6px;
+        }
+        .tce-list-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 13px;
+          color: #e1e1e1;
+          transition: background 0.15s;
+          gap: 8px;
+        }
+        .tce-list-item:hover { background: #2d2d2d; }
+        .tce-list-item:hover .tce-icon-btn--danger { opacity: 1; }
+        .tce-list-item.active { background: #0d99ff20; color: #0d99ff; }
+        .tce-list-item-name {
+          flex: 1;
+          font-family: 'Fira Code', 'Monaco', monospace;
+          font-size: 12px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .tce-list-item-actions { flex-shrink: 0; }
+        .tce-empty {
+          padding: 16px;
+          color: #666;
+          font-size: 12px;
+          text-align: center;
+        }
+        .tce-code-tabs {
+          display: flex;
+          background: #252525;
+          border-bottom: 1px solid #2d2d2d;
+          padding: 0 8px;
+          flex-shrink: 0;
+        }
+        .tce-code-tab {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 9px 12px;
+          color: #fff;
+          font-size: 12px;
+          border-bottom: 2px solid #0d99ff;
+        }
+        .tce-code-editor-wrap {
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+        }
+        .tce-empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          gap: 16px;
+          color: #555;
+        }
+        .tce-empty-state p { font-size: 14px; }
+        .tce-props-tabs {
+          display: flex;
+          background: #252525;
+          border-bottom: 1px solid #2d2d2d;
+          flex-shrink: 0;
+        }
+        .tce-props-tab {
+          flex: 1;
+          padding: 10px;
+          background: transparent;
+          border: none;
+          color: #999;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+          border-bottom: 2px solid transparent;
+          transition: all 0.2s;
+        }
+        .tce-props-tab:hover { color: #e1e1e1; }
+        .tce-props-tab.active { color: #fff; border-bottom-color: #0d99ff; }
+        .tce-props-content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 12px;
+        }
+        .tce-var-section { margin-bottom: 20px; }
+        .tce-var-section-title {
+          font-size: 10px;
+          font-weight: 600;
+          color: #666;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-bottom: 8px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .tce-var-count {
+          background: #2d2d2d;
+          color: #999;
+          font-size: 10px;
+          padding: 1px 5px;
+          border-radius: 3px;
+        }
+        .tce-var-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 10px;
+          background: #252525;
+          border: 1px solid #3d3d3d;
+          border-radius: 4px;
+          margin-bottom: 4px;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-family: 'Fira Code', monospace;
+          font-size: 11px;
+        }
+        .tce-var-item:hover { background: #2d2d2d; border-color: #4d4d4d; }
+        .tce-var-type {
+          font-size: 9px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          min-width: 44px;
+          background: #1a1a1a;
+          padding: 1px 4px;
+          border-radius: 2px;
+        }
+        .tce-var-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tce-var-insert { font-size: 10px; color: #0d99ff; opacity: 0; transition: opacity 0.15s; }
+        .tce-var-item:hover .tce-var-insert { opacity: 1; }
+        .tce-var-empty { color: #555; font-size: 11px; padding: 4px 0; }
+        .tce-setting-group { margin-bottom: 12px; }
+        .tce-setting-label {
+          display: block;
+          font-size: 11px;
+          color: #999;
+          font-weight: 500;
+          margin-bottom: 5px;
+        }
+        .tce-setting-input {
+          width: 100%;
+          padding: 7px 10px;
+          background: #252525;
+          border: 1px solid #3d3d3d;
+          color: #e1e1e1;
+          font-size: 12px;
+          border-radius: 4px;
+          font-family: 'Fira Code', monospace;
+          box-sizing: border-box;
+        }
+        .tce-setting-input:focus { outline: none; border-color: #0d99ff; }
+        .tce-setting-input[readonly] { color: #666; cursor: default; }
+        .tce-statusbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 0 16px;
+          height: 30px;
+          min-height: 30px;
+          background: #252525;
+          border-top: 1px solid #2d2d2d;
+          font-size: 11px;
+          color: #666;
+          flex-shrink: 0;
+        }
+        .tce-statusbar-left, .tce-statusbar-right {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+        }
+        .tce-status-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+        }
+        .tce-list::-webkit-scrollbar,
+        .tce-props-content::-webkit-scrollbar { width: 6px; }
+        .tce-list::-webkit-scrollbar-track,
+        .tce-props-content::-webkit-scrollbar-track { background: transparent; }
+        .tce-list::-webkit-scrollbar-thumb,
+        .tce-props-content::-webkit-scrollbar-thumb { background: #3d3d3d; border-radius: 3px; }
+      `}</style>
     </div>
   );
 }

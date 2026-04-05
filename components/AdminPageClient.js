@@ -2,16 +2,14 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Compass, Search, Braces, Box, HardDrive, Upload } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
-import SnippetsView from './SnippetsView';
 import SettingsView from './SettingsView';
 import UsersViewModern from './UsersViewModern';
 import UserInvitationsView from './UserInvitationsView';
 import CSSManagerViewModern from './CSSManagerViewModern';
-import NavigationViewModern from './NavigationViewModern';
 import FileManagerView from './FileManagerView';
 import BackupView from './BackupView';
 import Toast from './Toast';
@@ -27,14 +25,13 @@ export default function AdminPageClient() {
   const [templateList, setTemplateList] = useState([]);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
-  const [snippets, setSnippets] = useState([]);
   const [pages, setPages] = useState([]);
   const [editingPage, setEditingPage] = useState(null);
   const [view, setView] = useState('dashboard');
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
-  const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [settingsTab, setSettingsTab] = useState('database');
+  const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
 
   useEffect(() => {
     if (view === 'users') {
@@ -57,8 +54,6 @@ export default function AdminPageClient() {
       const saved = localStorage.getItem('adminView');
       const legacyBuilderMap = {
         templates: 'templates',
-        navigation: 'navigation',
-        snippets: 'snippets',
         'content-models': 'content-models'
       };
       const allowed = ['dashboard','pages','builder','files','css','users','settings','backup'];
@@ -109,8 +104,6 @@ export default function AdminPageClient() {
   useEffect(() => {
     const legacyBuilderMap = {
       templates: 'templates',
-      navigation: 'navigation',
-      snippets: 'snippets',
       'content-models': 'content-models'
     };
 
@@ -132,23 +125,9 @@ export default function AdminPageClient() {
     {
       id: 'templates',
       label: 'Templates',
-      description: 'Site- und Block-Templates pflegen',
+      description: 'Block-Templates pflegen',
       icon: Layout,
       count: templateList.length
-    },
-    {
-      id: 'navigation',
-      label: 'Navigation',
-      description: 'Navigationsstrukturen bearbeiten',
-      icon: Compass,
-      count: 'Modul'
-    },
-    {
-      id: 'snippets',
-      label: 'Snippets',
-      description: 'Wiederverwendbare Tokens verwalten',
-      icon: Braces,
-      count: snippets.length
     },
     {
       id: 'content-models',
@@ -272,30 +251,13 @@ export default function AdminPageClient() {
         const t = await tRes.json();
         let list = Array.isArray(t) ? t : [];
         if (list.length > 0 && typeof list[0] === 'string') {
-          list = list.map(n => ({ name: n, type: 'SITE' }));
+          list = list.map(n => ({ name: n, type: 'BLOCK' }));
         }
         if (isMounted) setTemplateList(list);
       } catch (e) { 
         console.error('[admin] Error loading templates:', e);
         warnings.push('Templates konnten nicht geladen werden.');
         if (isMounted) setTemplateList([]);
-      }
-
-      try {
-        const sRes = await fetch('/api/snippets');
-        if (!sRes.ok) throw new Error(`API error: ${sRes.status}`);
-        const s = await sRes.json();
-        if (isMounted) {
-          setSnippets(Array.isArray(s) && s.length > 0 ? s : [
-            { label: 'Titel', snippet: '{{title}}' },
-            { label: 'Text', snippet: '{{text}}' },
-            { label: 'Bild', snippet: '{{images.0}}' }
-          ]);
-        }
-      } catch (e) { 
-        console.error('[admin] Error loading snippets:', e);
-        warnings.push('Snippets konnten nicht geladen werden.');
-        if (isMounted) setSnippets([]);
       }
 
       try {
@@ -539,26 +501,10 @@ export default function AdminPageClient() {
                   <button
                     onClick={() => openBuilderTab('templates')}
                     className={`settings-tab-btn ${builderTab === 'templates' ? 'active' : ''}`}
-                    title={devTitle('Modul: Templates. Site- und Block-Templates bearbeiten.')}
+                    title={devTitle('Modul: Templates. Block-Templates bearbeiten.')}
                     aria-label="Templates-Modul oeffnen"
                   >
                     Templates
-                  </button>
-                  <button
-                    onClick={() => openBuilderTab('navigation')}
-                    className={`settings-tab-btn ${builderTab === 'navigation' ? 'active' : ''}`}
-                    title={devTitle('Modul: Navigation. Menues und Navigationsstrukturen bearbeiten.')}
-                    aria-label="Navigations-Modul oeffnen"
-                  >
-                    Navigation
-                  </button>
-                  <button
-                    onClick={() => openBuilderTab('snippets')}
-                    className={`settings-tab-btn ${builderTab === 'snippets' ? 'active' : ''}`}
-                    title={devTitle('Modul: Snippets. Wiederverwendbare Platzhalter und Tokens verwalten.')}
-                    aria-label="Snippets-Modul oeffnen"
-                  >
-                    Snippets
                   </button>
                   <button
                     onClick={() => openBuilderTab('content-models')}
@@ -583,8 +529,6 @@ export default function AdminPageClient() {
 
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} />}
-                {builderTab === 'navigation' && <NavigationViewModern showToast={showToast} />}
-                {builderTab === 'snippets' && <SnippetsView showToast={showToast} />}
                 {builderTab === 'content-models' && <ContentModelsView />}
                 {builderTab === 'importer' && process.env.NEXT_PUBLIC_DEV_MODE === 'true' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
               </div>
@@ -603,7 +547,7 @@ export default function AdminPageClient() {
                       autoFocus
                       type="text"
                       className="builder-quick-search"
-                      placeholder="Templates, Navigation, Snippets, Content Models..."
+                      placeholder="Templates, Content Models..."
                       value={builderSearch}
                       onChange={(e) => setBuilderSearch(e.target.value)}
                       title={devTitle('Suche nach einem Builder-Modul')}
@@ -648,7 +592,6 @@ export default function AdminPageClient() {
             <DashboardView
               templateList={templateList}
               pages={pages}
-              snippets={snippets}
               setView={setView}
               showToast={showToast}
             />

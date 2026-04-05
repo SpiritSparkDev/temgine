@@ -1,24 +1,18 @@
 const { extractTemplateVariables, generateDefaultProps } = require('../lib/templateParser');
 
-describe('templateParser snippet expansion', () => {
-  test('extracts variables from referenced snippets', () => {
-    const templateCode = '<section>{{snippetHtml:cta-button}}</section>';
-    const snippetsByKey = {
-      'cta-button': '<a class="btn" href="{{button.url}}">{{button.label}}</a>'
-    };
+describe('templateParser variable extraction', () => {
+  test('extracts Mustache variables from template code', () => {
+    const templateCode = '<section><h1>{{title}}</h1><p>{{description}}</p><a href="{{button.url}}">{{button.label}}</a></section>';
 
-    const variables = extractTemplateVariables(templateCode, snippetsByKey);
+    const variables = extractTemplateVariables(templateCode);
 
-    expect(variables).toEqual(expect.arrayContaining(['button.url', 'button.label']));
+    expect(variables).toEqual(expect.arrayContaining(['title', 'description', 'button.url', 'button.label']));
   });
 
-  test('generates nested default props from referenced snippets', () => {
-    const templateCode = '<section>{{snippetHtml:image-figure}}</section>';
-    const snippetsByKey = {
-      'image-figure': '<figure><img src="{{image.src}}" alt="{{image.alt}}" /><figcaption>{{image.caption}}</figcaption></figure>'
-    };
+  test('generates nested default props from template variables', () => {
+    const templateCode = '<figure><img src="{{image.src}}" alt="{{image.alt}}" /><figcaption>{{image.caption}}</figcaption></figure>';
 
-    const defaults = generateDefaultProps(templateCode, snippetsByKey);
+    const defaults = generateDefaultProps(templateCode);
 
     expect(defaults).toEqual({
       image: {

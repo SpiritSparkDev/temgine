@@ -21,8 +21,8 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const { name, code, type } = req.body || {}
       if (!name || !code) return res.status(400).json({ error: 'Name und Code erforderlich' })
-      // normalize type
-      const ttype = (type && String(type).toUpperCase()) === 'BLOCK' ? 'BLOCK' : 'SITE'
+      // normalize type — only SITE is an explicit override; default is BLOCK
+      const ttype = (type && String(type).toUpperCase()) === 'SITE' ? 'SITE' : 'BLOCK'
       const up = await prisma.template.upsert({
         where: { name: String(name) },
         create: { name: String(name), code: String(code), type: ttype },

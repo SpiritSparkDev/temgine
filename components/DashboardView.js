@@ -3,7 +3,6 @@ import {
     Activity,
     AlertCircle,
     ArrowRight,
-    Braces,
     CheckCircle,
     Database,
     Download,
@@ -14,11 +13,10 @@ import {
     XCircle,
 } from 'lucide-react';
 
-export default function DashboardView({ templateList, pages, snippets, setView, showToast }) {
+export default function DashboardView({ templateList, pages, setView, showToast }) {
     const [dbHealth, setDbHealth] = useState(null);
     const [dbLoading, setDbLoading] = useState(true);
 
-    const siteTemplateCount = templateList.filter(template => template.type !== 'BLOCK').length;
     const blockTemplateCount = templateList.filter(template => template.type === 'BLOCK').length;
     const recentPages = pages.slice(0, 6);
 
@@ -35,7 +33,7 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
             key: 'templates',
             title: 'Templates',
             value: templateList.length,
-            meta: `${siteTemplateCount} Site, ${blockTemplateCount} Block`,
+            meta: `${blockTemplateCount} Block-Templates`,
             icon: LayoutTemplate,
             accent: 'primary',
         },
@@ -47,14 +45,7 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
             icon: FileText,
             accent: 'secondary',
         },
-        {
-            key: 'snippets',
-            title: 'Snippets',
-            value: snippets.length,
-            meta: snippets.length > 0 ? 'Wiederverwendbare Bausteine bereit' : 'Noch keine Snippets angelegt',
-            icon: Braces,
-            accent: 'tertiary',
-        },
+
         {
             key: 'database',
             title: 'Datenbank',
@@ -80,20 +71,7 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
             icon: FileText,
             onClick: () => setView('pages'),
         },
-        {
-            key: 'navigation',
-            title: 'Navigation pflegen',
-            description: 'Menüs und Seitenstruktur schnell aktualisieren.',
-            icon: ArrowRight,
-            onClick: () => setView('navigation'),
-        },
-        {
-            key: 'snippets',
-            title: 'Snippets verwalten',
-            description: 'Wiederverwendbare Fragmente organisieren.',
-            icon: Braces,
-            onClick: () => setView('snippets'),
-        },
+
     ];
 
     useEffect(() => {
@@ -163,11 +141,10 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
                         <span className="dashboard-eyebrow">Admin Dashboard</span>
                         <h2>Dein Content-Hub auf einen Blick</h2>
                         <p>
-                            Schnellzugriff auf Templates, Seiten, Snippets und Systemstatus.
+                            Schnellzugriff auf Templates, Seiten und Systemstatus.
                             Das Dashboard priorisiert jetzt die nächsten sinnvollen Schritte statt nur Rohzahlen.
                         </p>
                         <div className="dashboard-hero-tags">
-                            <span className="dashboard-tag">{siteTemplateCount} Site-Templates</span>
                             <span className="dashboard-tag">{blockTemplateCount} Block-Templates</span>
                             <span className="dashboard-tag">{pages.length} Seiten gesamt</span>
                         </div>
@@ -368,13 +345,7 @@ export default function DashboardView({ templateList, pages, snippets, setView, 
                                     <span>{pages.length > 0 ? 'Vorhandene Seiten können jetzt weiter verfeinert werden.' : 'Es fehlt noch mindestens eine veröffentlichbare Seite.'}</span>
                                 </div>
                             </div>
-                            <div className="dashboard-checklist-item">
-                                <CheckCircle size={18} />
-                                <div>
-                                    <strong>Wiederverwendung erhöhen</strong>
-                                    <span>{snippets.length > 0 ? 'Snippets stehen als Bausteine bereit.' : 'Snippets helfen, Inhalte schneller konsistent zu bauen.'}</span>
-                                </div>
-                            </div>
+
                         </div>
                     </article>
                 </section>
