@@ -418,7 +418,7 @@ export default function AdminPageClient() {
             <Menu size={18} />
           </button>
           <a href="/" className="admin-logo-link" title="TempHelix">
-            <img src="/assets/Logo.png" alt="TempHelix" className="admin-logo-img" /> <h1 className='admin-logo'>TempHelix CMS Admin</h1>
+            <img src="/assets/light.png" alt="TempHelix" className="admin-logo-img" /> <h1 className='admin-logo'>TempHelix CMS Admin</h1>
           </a>
         </div>
         <div className="admin-navbar-right">

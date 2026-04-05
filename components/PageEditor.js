@@ -678,54 +678,46 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           }
         }}
         data-block-path={path}
-        className={`block-item ${selectedBlockPath === path ? 'selected' : ''}`}
-        style={{ cursor: 'default', border: selectedBlockPath === path ? '2px solid var(--accent-primary)' : '2px solid transparent', transition: 'all 0.2s', marginLeft: depth * 16, marginBottom: 16, borderRadius: 8, backgroundColor: 'var(--bg-secondary)', boxShadow: selectedBlockPath === path ? '0 0 0 3px rgba(102, 126, 234, 0.12)' : '0 2px 8px var(--shadow)', overflow: 'hidden' }}
+        className={`block-item${selectedBlockPath === path ? ' selected' : ''}`}
+        style={{ marginLeft: depth * 16 }}
         onClick={() => setSelectedBlockPath(path)}
         title={devTitle(`Komponente: Block ${formatBlockNumber(path)}. Funktion: Block auswaehlen und Inhalte bearbeiten.`)}
         {...containerProps}
       >
         {/* Block Header */}
-        <div className="block-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', backgroundColor: 'var(--bg-tertiary)', borderBottom: '1px solid var(--border-color)', transition: 'all 0.2s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="block-header">
+          <div className="block-header-left">
             {isTop ? (
               <div
                 draggable
                 onDragStart={handleGripDragStart}
                 onDragEnd={handleGripDragEnd}
                 title={devTitle(`Funktion: Block ${formatBlockNumber(path)} per Drag-and-Drop neu anordnen`)}
-                style={{ 
-                  cursor: 'grab',
-                  padding: '4px',
-                  borderRadius: '4px',
-                  transition: 'all 0.2s',
-                  userSelect: 'none'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(102, 126, 234, 0.1)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="block-drag-handle"
               >
-                <GripVertical size={18} style={{ color: '#667eea', pointerEvents: 'none' }} />
+                <GripVertical size={18} style={{ pointerEvents: 'none' }} />
               </div>
             ) : null}
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: 1 }}>
-              <Grid size={16} style={{ color: '#667eea' }} />
+            <div className="block-title-row">
+              <Grid size={16} />
               <span className="page-block-index">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
               <span className="page-block-template-pill">{block.template || 'Freier Block'}</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <small style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>
+          <div className="block-header-right">
+            <small className="block-kindblock-count">
               {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
             </small>
           </div>
         </div>
 
         {/* Block Content */}
-        <div style={{ padding: '16px' }}>
+        <div className="block-card-body">
           {/* Template specific fields (reuse existing logic) */}
           {block.template && templateCodes[block.template] && (
             <div>
               {/* Grid layout for non-textarea fields */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+              <div className="block-fields-grid">
                 {templateVariables
                   .filter(varName => guessInputType(varName) !== 'textarea')
                   .map(varName => {
@@ -736,14 +728,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     if (varName.toLowerCase().includes('headinglevel')) {
                       const normalizedLevel = String(value || '2').replace(/^h/i, '');
                       return (
-                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
-                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🏷️ {label}</label>
+                        <div key={varName} className="field-item">
+                          <label className="field-label-xs">🏷️ {label}</label>
                           <select
                             ref={(el) => setFieldRef(path, varName, el)}
                             value={normalizedLevel}
                             onChange={e => updateNestedBlock(path, { [varName]: e.target.value })}
-                            className="input-field-small"
-                            style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)', marginTop: 6 }}
+                            className="input-field-small field-input-full"
                           >
                             <option value="1">H1</option>
                             <option value="2">H2</option>
@@ -758,11 +749,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     
                     if (isUrlVariable(varName)) {
                       return (
-                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
-                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🔗 {label}</label>
-                          <div style={{ display: 'flex', gap: '6px', marginTop: 6, flexDirection: 'column' }}>
-                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" style={{ flex: 1, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
-                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" style={{ whiteSpace: 'nowrap', width: '100%' }} title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
+                        <div key={varName} className="field-item">
+                          <label className="field-label-xs">🔗 {label}</label>
+                          <div className="field-url-row">
+                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
                           </div>
                         </div>
                       )
@@ -785,17 +776,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       };
 
                       return (
-                        <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
-                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📝 {label}</label>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 6, flexDirection: 'column' }}>
-                            <select ref={(el) => setFieldRef(path, `${varName}Level`, el)} value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                        <div key={varName} className="field-item">
+                          <label className="field-label-xs">📝 {label}</label>
+                          <div className="field-heading-row">
+                            <select ref={(el) => setFieldRef(path, `${varName}Level`, el)} value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small field-input-full">
                               <option value="h1">H1</option>
                               <option value="h2">H2</option>
                               <option value="h3">H3</option>
                               <option value="h4">H4</option>
                               <option value="h5">H5</option>
                             </select>
-                            <input ref={(el) => setFieldRef(path, `${varName}Text`, el)} type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small" style={{ width: '100%', borderRadius: 6, border: '1px solid var(--border-color)', padding: '6px 10px', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                            <input ref={(el) => setFieldRef(path, `${varName}Text`, el)} type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small field-input-full" />
                           </div>
                         </div>
                       )
@@ -804,9 +795,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     if (inputType === 'array') {
                       const arrayLabel = snippetLabels[block.template]?.[varName] || varName;
                       return (
-                        <div key={varName} className="field-item" style={{ gridColumn: 'span 1', padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
-                          <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📋 {arrayLabel}</label>
-                          <textarea ref={(el) => setFieldRef(path, varName, el)} placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, resize: 'vertical', fontSize: '0.9rem', fontFamily: 'monospace', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                        <div key={varName} className="field-item">
+                          <label className="field-label-xs">📋 {arrayLabel}</label>
+                          <textarea ref={(el) => setFieldRef(path, varName, el)} placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} className="input-field-small field-input-full field-array-textarea" />
                         </div>
                       )
                     }
@@ -814,9 +805,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     // Default text/number input
                     const defaultLabel = snippetLabels[block.template]?.[varName] || varName;
                     return (
-                      <div key={varName} className="field-item" style={{ padding: 12, backgroundColor: 'var(--bg-tertiary)', borderRadius: 6, border: '1px solid var(--border-color)' }}>
-                        <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>📌 {defaultLabel}</label>
-                        <input ref={(el) => setFieldRef(path, varName, el)} type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} style={{ width: '100%', padding: '8px', border: '1px solid var(--border-color)', borderRadius: 6, fontSize: '0.9rem', marginTop: 6, background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">📌 {defaultLabel}</label>
+                        <input ref={(el) => setFieldRef(path, varName, el)} type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
                       </div>
                     )
                   })}
@@ -829,9 +820,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   const value = block.props[varName] || '';
                   const label = snippetLabels[block.template]?.[varName] || varName;
                   return (
-                    <div key={varName} className="field-item" style={{ marginBottom: 12 }}>
-                      <label className="field-label-xs" style={{ color: 'var(--text-primary)', fontWeight: '600' }}>✏️ {label}</label>
-                      <div ref={(el) => setFieldRef(path, varName, el)} style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', marginTop: 6, background: 'var(--bg-secondary)' }}>
+                    <div key={varName} className="field-item field-item-textarea">
+                      <label className="field-label-xs">✏️ {label}</label>
+                      <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
                         <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
                       </div>
                     </div>
@@ -843,8 +834,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           {/* Fallback simple text/gallery editors when no template */}
           {!block.template && block.type === 'text' && (
             <>
-              <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small" style={{ marginBottom: 8, borderRadius: 6, border: '1px solid var(--border-color)', padding: '8px', width: '100%', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }} />
-              <div ref={(el) => setFieldRef(path, 'content', el)} style={{ border: '1px solid var(--border-color)', borderRadius: 6, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+              <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
+              <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
                 <ReactQuill value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} theme="snow" />
               </div>
             </>
@@ -852,9 +843,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
           {!block.template && block.type === 'gallery' && (
             <div>
-              <button className="btn-modern" onClick={() => {
+              <button className="btn-modern gallery-add-btn" onClick={() => {
                 const url = prompt('Bild-URL:'); if (url) { const images = [...(block.props.images || []), { src: url, alt: 'Bild' }]; updateNestedBlock(path, { images }); }
-              }} style={{ marginBottom: 10 }} title={devTitle('Bild zur Galerie hinzufuegen')} aria-label="Bild zur Galerie hinzufuegen">➕ Bild hinzufügen</button>
+              }} title={devTitle('Bild zur Galerie hinzufuegen')} aria-label="Bild zur Galerie hinzufuegen">➕ Bild hinzufügen</button>
               <div className="gallery-images">{(block.props.images || []).map((img, imgIdx) => (
                 <div key={imgIdx} className="gallery-image-wrapper">
                   <img src={img.src} alt={img.alt} className="gallery-image" />
@@ -1150,10 +1141,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <button type="button" className="btn-modern-small green" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
                       <button
                         type="button"
-                        className={`btn-modern-small${showPreview ? ' green' : ' hollow'}`}
+                        className={`btn-modern-small btn-icon-row${showPreview ? ' green' : ' hollow'}`}
                         onClick={handleTogglePreview}
                         title={devTitle('Live-Vorschau ein-/ausblenden')}
-                        style={{ display: 'flex', alignItems: 'center', gap: 4 }}
                       >
                         <Eye size={13} /> Vorschau
                       </button>
@@ -1185,19 +1175,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       {/* Live-Vorschau Panel */}
       {showPreview && (
-        <div style={{
-          borderTop: '2px solid var(--accent-primary)',
-          backgroundColor: 'var(--bg-primary)',
-          padding: '16px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <strong style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+        <div className="page-preview-panel">
+          <div className="page-preview-panel-head">
+            <strong className="page-preview-label">
               Vorschau — aktueller Stand (ungespeichert)
             </strong>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="page-preview-actions">
               <button
                 type="button"
                 className="btn-modern-small hollow"
@@ -1219,13 +1202,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           <iframe
             srcDoc={previewHtml}
             sandbox="allow-scripts allow-same-origin"
-            style={{
-              width: '100%',
-              minHeight: 520,
-              border: '1px solid var(--border-color)',
-              borderRadius: 8,
-              background: '#fff',
-            }}
+            className="page-preview-iframe"
             title="Seiten-Vorschau"
           />
         </div>
@@ -1233,50 +1210,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       {/* Datei-Auswahl Modal */}
       {showFileModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: 'white',
-            borderRadius: 8,
-            padding: '20px',
-            maxWidth: '900px',
-            width: '100%',
-            maxHeight: '80vh',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-              borderBottom: '2px solid #667eea',
-              paddingBottom: '10px'
-            }}>
-              <h3 style={{ margin: 0, color: '#333' }}>Datei auswählen</h3>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <label style={{
-                  padding: '8px 16px',
-                  background: '#667eea',
-                  color: 'white',
-                  borderRadius: 4,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  fontSize: '14px',
-                  opacity: uploading ? 0.6 : 1,
-                  whiteSpace: 'nowrap'
-                }}>
+        <div className="file-modal-overlay">
+          <div className="file-modal">
+            <div className="file-modal-header">
+              <h3 className="file-modal-title">Datei auswählen</h3>
+              <div className="file-modal-header-actions">
+                <label className={`file-upload-label${uploading ? ' is-uploading' : ''}`}>
                   {uploading ? '⏳ Hochladen...' : '⬆️ Hochladen'}
                   <input
                     type="file"
@@ -1288,29 +1227,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 </label>
                 <button
                   onClick={() => setShowFileModal(false)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '24px',
-                    cursor: 'pointer',
-                    color: '#666',
-                    lineHeight: 1
-                  }}
+                  className="file-modal-close-btn"
                 >
                   ×
                 </button>
               </div>
             </div>
 
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: '15px',
-              overflowY: 'auto',
-              padding: '10px'
-            }}>
+            <div className="file-modal-grid">
               {uploadedFiles.length === 0 ? (
-                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#999' }}>
+                <div className="file-modal-empty">
                   Keine Dateien hochgeladen
                 </div>
               ) : (
@@ -1325,68 +1251,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       onClick={() => selectFile(file.url)}
                       title={devTitle(`Datei auswaehlen: ${filename}`)}
                       aria-label={`Datei auswaehlen: ${filename}`}
-                      style={{
-                        border: '2px solid #ddd',
-                        borderRadius: 8,
-                        padding: '10px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        transition: 'all 0.2s',
-                        background: 'white'
-                      }}
-                      onMouseEnter={e => {
-                        e.currentTarget.style.borderColor = '#667eea';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(102, 126, 234, 0.2)';
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = '#ddd';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
+                      className="file-modal-item"
                     >
-                      <div style={{
-                        width: '100%',
-                        height: '120px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: '8px',
-                        background: '#f5f5f5',
-                        borderRadius: 4,
-                        overflow: 'hidden'
-                      }}>
+                      <div className="file-modal-thumb">
                         {isImage ? (
                           <img
                             src={file.url}
                             alt={filename}
-                            style={{
-                              maxWidth: '100%',
-                              maxHeight: '100%',
-                              objectFit: 'contain'
-                            }}
                           />
                         ) : (
-                          <span style={{ fontSize: '48px' }}>{preview}</span>
+                          <span className="file-modal-icon">{preview}</span>
                         )}
                       </div>
-                      <div style={{
-                        fontSize: '12px',
-                        textAlign: 'center',
-                        color: '#333',
-                        wordBreak: 'break-word',
-                        width: '100%'
-                      }}>
+                      <div className="file-modal-filename">
                         {filename}
                       </div>
                       {file.size && (
-                        <div style={{
-                          fontSize: '10px',
-                          color: '#999',
-                          marginTop: '4px'
-                        }}>
+                        <div className="file-modal-filesize">
                           {(file.size / 1024).toFixed(1)} KB
                         </div>
                       )}
@@ -1396,25 +1277,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               )}
             </div>
 
-            <div style={{
-              marginTop: '20px',
-              paddingTop: '15px',
-              borderTop: '1px solid #eee',
-              display: 'flex',
-              justifyContent: 'flex-end'
-            }}>
+            <div className="file-modal-footer">
               <button
                 onClick={() => setShowFileModal(false)}
                 title={devTitle('Dateiauswahl abbrechen')}
                 aria-label="Dateiauswahl abbrechen"
-                style={{
-                  padding: '10px 20px',
-                  background: '#f5f5f5',
-                  border: 'none',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontSize: '14px'
-                }}
+                className="file-modal-cancel-btn"
               >
                 Abbrechen
               </button>
