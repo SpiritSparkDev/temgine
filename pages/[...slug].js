@@ -89,23 +89,26 @@ export default function PageCatchAll() {
         console.debug('catchall: templatesToLoad ->', Array.from(templatesToLoad))
 
         const templateCodes = {}
-        await Promise.all(
-          Array.from(templatesToLoad).map(async templateName => {
-            try {
-              const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}&_t=${Date.now()}`)
-              if (res.ok) {
-                const data = await res.json()
-                // Map both the requested name and the canonical DB name to the template code
-                templateCodes[templateName] = data.code
-                if (data.name && data.name !== templateName) templateCodes[data.name] = data.code
-              }
-            } catch (e) {
-              console.error(`Fehler beim Laden von Template "${templateName}":`, e)
-            }
-          })
-        )
 
-        const html = renderPage(foundPage, templateCodes, templateCodes, {
+        const fetchTemplate = async (templateName) => {
+          if (templateCodes[templateName] !== undefined) return
+          templateCodes[templateName] = null // mark as pending to avoid duplicate fetches
+          try {
+            const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}&_t=${Date.now()}`)
+            if (res.ok) {
+              const data = await res.json()
+              templateCodes[templateName] = data.code
+              if (data.name && data.name !== templateName) templateCodes[data.name] = data.code
+            }
+          } catch (e) {
+            console.error(`Fehler beim Laden von Template "${templateName}":`, e)
+          }
+        }
+
+        // Load directly referenced templates
+        await Promise.all(Array.from(templatesToLoad).map(fetchTemplate))
+
+        const html = renderPage(foundPage, templateCodes, {
           isChild: segments.length > 1
         })
         setHtml(html)

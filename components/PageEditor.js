@@ -4,7 +4,7 @@ import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { extractTemplateVariables, extractSnippetLabels, guessInputType, generateDefaultProps, extractBlockTargets } from '../lib/templateParser';
+import { extractTemplateVariables, guessInputType, generateDefaultProps, extractBlockTargets } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
@@ -18,7 +18,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blocks, setBlocks] = useState([]);
   const [pageData, setPageData] = useState({});
   const [templateCodes, setTemplateCodes] = useState({});
-  const [snippetTemplatesByKey, setSnippetTemplatesByKey] = useState({});
   const [snippetLabels, setSnippetLabels] = useState({});
   const [redirectType, setRedirectType] = useState('none');
   const [redirectUrl, setRedirectUrl] = useState('');
@@ -197,52 +196,39 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }
   };
 
-  useEffect(() => {
-    const loadSnippets = async () => {
-      try {
-        const res = await fetch('/api/snippets');
-        if (!res.ok) return;
-        const data = await res.json();
-        const snippetsByKey = {};
-        (data || []).forEach((snippet) => {
-          const key = String(snippet?.key || '').trim();
-          if (!key) return;
-          snippetsByKey[key] = String(snippet?.snippet || '');
-        });
-        setSnippetTemplatesByKey(snippetsByKey);
-      } catch (e) {
-        console.error('Snippets laden fehlgeschlagen:', e);
-      }
-    };
 
-    loadSnippets();
-  }, []);
 
   useEffect(() => {
-    // Lade Template-Codes für alle Templates
+    // Lade Template-Codes inkl. {{template:X}} Referenzen
     const loadTemplateCodes = async () => {
       const codes = {};
       const labels = {};
-      for (const tmplName of templateNames) {
+
+      const fetchTemplate = async (tmplName) => {
+        if (codes[tmplName] !== undefined) return; // already fetched or pending
+        codes[tmplName] = null; // pending sentinel
         try {
           const res = await fetch(`/api/templates?name=${encodeURIComponent(tmplName)}`);
           if (res.ok) {
             const data = await res.json();
             codes[tmplName] = data.code;
-            // Extrahiere auch die Snippet-Labels
-            labels[tmplName] = extractSnippetLabels(data.code, snippetTemplatesByKey);
+            labels[tmplName] = {};
           }
         } catch (e) {
           console.error('Template laden fehlgeschlagen:', e);
         }
-      }
+      };
+
+      // Load directly referenced templates
+      await Promise.all(templateNames.map(fetchTemplate));
+
       setTemplateCodes(codes);
       setSnippetLabels(labels);
     };
     if (templateNames.length > 0) {
       loadTemplateCodes();
     }
-  }, [templates, snippetTemplatesByKey]);
+  }, [templates]);
 
   useEffect(() => {
     // Lade hochgeladene Dateien
@@ -295,13 +281,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
       try {
-        out[name] = extractTemplateVariables(code, snippetTemplatesByKey) || [];
+        out[name] = extractTemplateVariables(code) || [];
       } catch (e) {
         out[name] = [];
       }
     });
     return out;
-  }, [templateCodes, snippetTemplatesByKey]);
+  }, [templateCodes]);
 
   // Entfernt HTML-Tags aus einem String
   const stripTags = (s) => {
@@ -409,7 +395,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
     // Wenn Template gewählt wurde, generiere Default-Props für Seiten-Daten
     if (templateName && templateCodes[templateName]) {
-      const defaultProps = generateDefaultProps(templateCodes[templateName], snippetTemplatesByKey);
+      const defaultProps = generateDefaultProps(templateCodes[templateName]);
       // Merge mit existierenden Seiten-Daten
       setPageData({ ...defaultProps, ...pageData });
     }
@@ -528,7 +514,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         cur[idx].template = templateName || '';
         if (templateName && templateCodes && templateCodes[templateName]) {
           try {
-            const defaultProps = generateDefaultProps(templateCodes[templateName], snippetTemplatesByKey);
+            const defaultProps = generateDefaultProps(templateCodes[templateName]);
             cur[idx].props = { ...defaultProps, ...(cur[idx].props || {}) };
           } catch (e) {
             // ignore default prop generation errors
@@ -635,10 +621,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const rendered = renderPage(
         currentPage,
         blockTemplatesMap,
-        siteTemplateCode || null,
-        allPages || [],
-        {},
-        {},
         {}
       );
 

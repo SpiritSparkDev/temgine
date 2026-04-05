@@ -7,12 +7,10 @@ import '../styles/templates-structure.css'
 import '../styles/admin-data-views.css'
 import '../styles/snippets.css'
 import '../styles/buttons.css'
-import '../styles/templates.css'
 import '../styles/page-tree.css'
 import '../styles/editor-common.css'
 import '../styles/file-manager.css'
 import '../styles/users.css'
-/* toolbar.css removed — floating toolbar removed; snippets live in TemplatesViewModern */
 import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';

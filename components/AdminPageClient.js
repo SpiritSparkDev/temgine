@@ -220,11 +220,7 @@ export default function AdminPageClient() {
   useEffect(() => {
     const saved = localStorage.getItem('darkMode');
     if (saved !== null) {
-      const isDark = saved === 'true';
-      setDarkMode(isDark);
-      if (isDark) {
-        document.documentElement.classList.add('dark-mode');
-      }
+      setDarkMode(saved === 'true');
     }
   }, []);
 
@@ -232,11 +228,6 @@ export default function AdminPageClient() {
     const newMode = !darkMode;
     setDarkMode(newMode);
     localStorage.setItem('darkMode', newMode.toString());
-    if (newMode) {
-      document.documentElement.classList.add('dark-mode');
-    } else {
-      document.documentElement.classList.remove('dark-mode');
-    }
   };
 
   useEffect(() => {
@@ -385,6 +376,7 @@ export default function AdminPageClient() {
 
   return (
     <ErrorBoundary>
+      <div className={`admin-scope${darkMode ? ' dark-mode' : ''}`}>
       <Head>
         <title>TempHelix Admin</title>
       </Head>
@@ -652,6 +644,7 @@ export default function AdminPageClient() {
             </ErrorBoundary>
           )}
         </main>
+      </div>
       </div>
     </ErrorBoundary>
   );

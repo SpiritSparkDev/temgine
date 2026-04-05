@@ -346,31 +346,6 @@ export default function TemplatesViewModern({ showToast }) {
                   </div>
                 )}
 
-                {hasOpenTemplate && templates.filter(t => t.name !== templateName).length > 0 && (
-                  <div className="tce-var-section">
-                    <div className="tce-var-section-title">Templates referenzieren</div>
-                    {templates
-                      .filter(t => t.name !== templateName)
-                      .map(t => {
-                        const snippet = `{{template:${t.name}}}`;
-                        return (
-                          <div
-                            key={t.name}
-                            className="tce-var-item"
-                            onClick={() => handleInsert(snippet)}
-                            role="button"
-                            tabIndex={0}
-                            title={`${snippet} einfuegen`}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleInsert(snippet); } }}
-                          >
-                            <span className="tce-var-type" style={{ color: '#4d9fff' }}>template</span>
-                            <span className="tce-var-name">{snippet}</span>
-                            <span className="tce-var-insert">Insert</span>
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
               </>
             )}
 
