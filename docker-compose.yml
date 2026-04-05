@@ -3,12 +3,12 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: temphelix-db
+    container_name: temgine-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DATABASE_USER:-temphelix}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-temphelix_dev}
-      POSTGRES_DB: ${DATABASE_NAME:-temphelix}
+      POSTGRES_USER: ${DATABASE_USER:-temgine}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-temgine_dev}
+      POSTGRES_DB: ${DATABASE_NAME:-temgine}
     ports:
       - "${DATABASE_PORT:-5432}:5432"
     volumes:

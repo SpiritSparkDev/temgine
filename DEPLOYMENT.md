@@ -1,7 +1,7 @@
-# TempHelix Plesk Deployment Guide
+# Temgine CMS Plesk Deployment Guide
 
 ## Overview
-TempHelix ist eine Next.js CMS-Anwendung, die auf einem Plesk-Server (mit Phusion Passenger) deployt wird.
+Temgine CMS ist eine Next.js CMS-Anwendung, die auf einem Plesk-Server (mit Phusion Passenger) deployt wird.
 
 ## Recent Fix: Client-Only Admin Page (2024)
 
@@ -16,7 +16,7 @@ Die `/admin` Seite wurde refaktoriert, um vollständig client-seitig zu rendern 
 ### 1. Lokales Bauen (Windows)
 
 ```powershell
-# In der TempHelix-Root-Directory
+# In der Temgine CMS-Root-Directory
 npm run build
 ```
 

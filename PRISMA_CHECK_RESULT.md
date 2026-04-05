@@ -4,7 +4,7 @@
 
 ### Verbindung
 - ✅ PostgreSQL 17.2 läuft auf localhost:5432
-- ✅ Datenbank: `temphelix`
+- ✅ Datenbank: `temphelix` (bestehende Produktionsdatenbank — kein Rename nötig)
 - ✅ Connection String korrekt in `.env`
 - ✅ Prisma Schema aktuell (mit UserRole enum)
 

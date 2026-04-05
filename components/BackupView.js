@@ -59,7 +59,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       }
 
       // Get filename from Content-Disposition header if available
-      let filename = 'temphelix-backup.json'
+      let filename = 'temgine-backup.json'
       const disposition = res.headers.get('content-disposition')
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/)

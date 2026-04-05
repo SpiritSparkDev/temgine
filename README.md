@@ -1,6 +1,6 @@
-# TempHelix
+# Temgine CMS
 
-**TempHelix** ist ein modernes Template-basiertes CMS (Content Management System) gebaut mit Next.js, React und Prisma.
+**Temgine CMS** ist ein modernes Template-basiertes CMS (Content Management System) gebaut mit Next.js, React und Prisma.
 
 ## Features
 
@@ -93,7 +93,7 @@ npm start
 4. **Build**: `npm run build`
 5. **App neu starten**:
 	- Plesk Node/Passenger: im Plesk UI auf „Restart Node App“
-	- pm2: `pm2 restart temphelix`
+	- pm2: `pm2 restart temgine`
 6. **Health-Check**: `/api/database/health` aufrufen; kurz `/admin` öffnen und Labels im Block-Editor prüfen.
 
 ### Plesk Node-App Einstellungen

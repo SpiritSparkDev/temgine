@@ -5,7 +5,7 @@
 1. Gehen Sie zu: https://github.com/settings/developers
 2. Klicken Sie auf "New OAuth App"
 3. Füllen Sie das Formular aus:
-   - **Application name**: TempHelix Admin
+   - **Application name**: Temgine CMS Admin
    - **Homepage URL**: `http://localhost:3000`
    - **Authorization callback URL**: `http://localhost:3000/api/auth/callback/github`
 4. Klicken Sie auf "Register application"

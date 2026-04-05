@@ -378,7 +378,7 @@ export default function AdminPageClient() {
     <ErrorBoundary>
       <div className={`admin-scope${darkMode ? ' dark-mode' : ''}`}>
       <Head>
-        <title>TempHelix Admin</title>
+        <title>Temgine CMS Admin</title>
       </Head>
       {toast && (
         <Toast 
@@ -417,8 +417,8 @@ export default function AdminPageClient() {
           >
             <Menu size={18} />
           </button>
-          <a href="/" className="admin-logo-link" title="TempHelix">
-            <img src="/assets/light.png" alt="TempHelix" className="admin-logo-img" /> <h1 className='admin-logo'>TempHelix CMS Admin</h1>
+          <a href="/" className="admin-logo-link" title="Temgine CMS">
+            <img src="/assets/light.png" alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Temgine CMS Admin</h1>
           </a>
         </div>
         <div className="admin-navbar-right">

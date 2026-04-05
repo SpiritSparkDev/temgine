@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       const now = new Date()
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
-      const filename = proposedFilename || `temphelix-backup-${dateStr}-${timeStr}.json`
+      const filename = proposedFilename || `temgine-backup-${dateStr}-${timeStr}.json`
 
       const filePath = path.join(BACKUPS_DIR, filename)
 

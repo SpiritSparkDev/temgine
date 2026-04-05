@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-Das TempHelix CMS verfügt jetzt über ein vollständiges Einladungssystem für neue Benutzer.
+Das Temgine CMS verfügt jetzt über ein vollständiges Einladungssystem für neue Benutzer.
 
 ## Features
 

@@ -1,13 +1,13 @@
 #!/bin/bash
-# Deployment script for TempHelix to Plesk
+# Deployment script for Temgine CMS to Plesk
 # Run this on your local machine before uploading to server
 
-echo "🚀 TempHelix Deployment Script"
+echo "🚀 Temgine CMS Deployment Script"
 echo "=============================="
 
 # Check if we're in the right directory
 if [ ! -f "package.json" ]; then
-    echo "❌ Error: package.json not found. Run this script from the TempHelix root directory."
+    echo "❌ Error: package.json not found. Run this script from the Temgine CMS root directory."
     exit 1
 fi
 

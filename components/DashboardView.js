@@ -102,7 +102,7 @@ export default function DashboardView({ templateList, pages, setView, showToast 
             const url = URL.createObjectURL(blob)
             const a = document.createElement('a')
             a.href = url
-            a.download = `temphelix-export-${new Date().toISOString()}.json`
+            a.download = `temgine-export-${new Date().toISOString()}.json`
             a.click()
             URL.revokeObjectURL(url)
             if (typeof showToast === 'function') showToast('Export erfolgreich', 'success')

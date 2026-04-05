@@ -1,10 +1,10 @@
-Write-Host "🚀 TempHelix Deployment Script" -ForegroundColor Green
+Write-Host "🚀 Temgine CMS Deployment Script" -ForegroundColor Green
 Write-Host "==============================" -ForegroundColor Green
 Write-Host ""
 
 # Check if we're in the right directory
 if (!(Test-Path "package.json")) {
-    Write-Host "❌ Error: package.json not found. Run this script from the TempHelix root directory." -ForegroundColor Red
+    Write-Host "❌ Error: package.json not found. Run this script from the Temgine CMS root directory." -ForegroundColor Red
     exit 1
 }
 

@@ -170,7 +170,7 @@ export default function InvitePage() {
   return (
     <div className="invite-page">
       <Head>
-        <title>Willkommen zu TempHelix</title>
+        <title>Willkommen zu Temgine CMS</title>
       </Head>
       
       <div className="invite-container">
@@ -179,10 +179,10 @@ export default function InvitePage() {
             <div className="invite-icon">
               <Mail size={48} color="#667eea" />
             </div>
-            <h1>Willkommen zu TempHelix!</h1>
+            <h1>Willkommen zu Temgine CMS!</h1>
             <p className="invite-text">
               Sie wurden von <strong>{invitation.createdBy}</strong> eingeladen, 
-              TempHelix beizutreten.
+              Temgine CMS beizutreten.
             </p>
             
             <div className="invite-details">

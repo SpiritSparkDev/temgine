@@ -56,8 +56,8 @@ async function registerEmmet(monaco) {
 }
 
 function registerProviders(monaco) {
-  if (monaco.__temphelixProviders) return
-  monaco.__temphelixProviders = true
+  if (monaco.__temgineProviders) return
+  monaco.__temgineProviders = true
   registerMustacheProvider(monaco)
   registerEmmet(monaco) // async, fire-and-forget
 }
@@ -126,11 +126,11 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
     apiRef.current = api
 
     editor.onDidFocusEditorWidget(() => {
-      try { window.__temphelix_active_editor = api } catch (e) {}
+      try { window.__temgine_active_editor = api } catch (e) {}
     })
     editor.onDidBlurEditorWidget(() => {
       try {
-        if (window.__temphelix_active_editor === api) window.__temphelix_active_editor = null
+        if (window.__temgine_active_editor === api) window.__temgine_active_editor = null
       } catch (e) {}
     })
   }

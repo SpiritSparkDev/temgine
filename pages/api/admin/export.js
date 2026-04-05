@@ -123,7 +123,7 @@ export default async function handler(req, res) {
     const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
     
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Content-Disposition', `attachment; filename="temphelix-backup-${dateStr}-${timeStr}.json"`)
+    res.setHeader('Content-Disposition', `attachment; filename="temgine-backup-${dateStr}-${timeStr}.json"`)
     res.setHeader('X-Backup-Size', fileSize)
     res.status(200).send(json)
   } catch (e) {
