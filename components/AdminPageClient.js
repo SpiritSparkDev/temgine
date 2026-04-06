@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -32,6 +32,7 @@ export default function AdminPageClient() {
   const [builderSearch, setBuilderSearch] = useState('');
   const [settingsTab, setSettingsTab] = useState('database');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
+  const [alphaTab, setAlphaTab] = useState('content-models');
 
   useEffect(() => {
     if (view === 'users') {
@@ -56,7 +57,7 @@ export default function AdminPageClient() {
         templates: 'templates',
         'content-models': 'content-models'
       };
-      const allowed = ['dashboard','pages','builder','files','css','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','users','settings','backup','alpha'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -132,18 +133,17 @@ export default function AdminPageClient() {
     {
       id: 'content-models',
       label: 'Content Models',
-      description: 'Datenstrukturen fuer Inhalte definieren',
+      description: 'Datenstrukturen fuer Inhalte definieren (Alpha)',
       icon: Box,
-      count: 'Modul'
+      count: 'Alpha'
     },
-    // Importer is dev-only – hidden in production
-    ...(process.env.NEXT_PUBLIC_DEV_MODE === 'true' ? [{
+    {
       id: 'importer',
       label: 'Inhalts-Importer',
-      description: 'HTML zu Seite & Templates importieren',
+      description: 'HTML zu Seite & Templates importieren (Alpha)',
       icon: Upload,
-      count: 'Modul'
-    }] : []),
+      count: 'Alpha'
+    },
   ];
 
   const filteredBuilderModules = builderModules.filter((module) => {
@@ -461,12 +461,13 @@ export default function AdminPageClient() {
             <ul>
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
-              <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Struktur & Bausteine</button></li>
+              <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
               <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Settings</button></li>
               <li><button className={`menu-item ${view==='backup'?'active':''}`} onClick={() => handleSelectView('backup')}><HardDrive size={18} /> Backup</button></li>
+              <li><button className={`menu-item ${view==='alpha'?'active':''}`} onClick={() => handleSelectView('alpha')}><FlaskConical size={18} /> Alpha</button></li>
             </ul>
             <div className="menu-sep" />
           </nav>
@@ -486,43 +487,10 @@ export default function AdminPageClient() {
           {view === 'builder' && (
             <div className="builder-shell">
 
-
-
-              <div className="settings-tabs-wrapper">
-                <div className="settings-tabs">
-                  <button
-                    onClick={() => openBuilderTab('templates')}
-                    className={`settings-tab-btn ${builderTab === 'templates' ? 'active' : ''}`}
-                    title={devTitle('Modul: Templates. Block-Templates bearbeiten.')}
-                    aria-label="Templates-Modul oeffnen"
-                  >
-                    Templates
-                  </button>
-                  <button
-                    onClick={() => openBuilderTab('content-models')}
-                    className={`settings-tab-btn ${builderTab === 'content-models' ? 'active' : ''}`}
-                    title={devTitle('Modul: Content Models. Datenstrukturen fuer Inhalte definieren.')}
-                    aria-label="Content-Models-Modul oeffnen"
-                  >
-                    Content Models
-                  </button>
-                  {process.env.NEXT_PUBLIC_DEV_MODE === 'true' && (
-                  <button
-                    onClick={() => openBuilderTab('importer')}
-                    className={`settings-tab-btn ${builderTab === 'importer' ? 'active' : ''}`}
-                    title={devTitle('Modul: Inhalts-Importer. HTML zu Seite & Templates importieren.')}
-                    aria-label="Inhalts-Importer oeffnen"
-                  >
-                    Importer
-                  </button>
-                  )}
-                </div>
-              </div>
-
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} />}
                 {builderTab === 'content-models' && <ContentModelsView />}
-                {builderTab === 'importer' && process.env.NEXT_PUBLIC_DEV_MODE === 'true' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
+                {builderTab === 'importer' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
               </div>
 
               {showBuilderQuickSwitch && (
@@ -642,6 +610,30 @@ export default function AdminPageClient() {
             <ErrorBoundary>
               <BackupView onToast={showToastForBackup} onConfirm={showConfirmForBackup} />
             </ErrorBoundary>
+          )}
+          {view === 'alpha' && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div className="settings-tabs-wrapper">
+                <div className="settings-tabs">
+                  <button
+                    onClick={() => setAlphaTab('content-models')}
+                    className={`settings-tab-btn ${alphaTab === 'content-models' ? 'active' : ''}`}
+                  >
+                    Content Models
+                  </button>
+                  <button
+                    onClick={() => setAlphaTab('importer')}
+                    className={`settings-tab-btn ${alphaTab === 'importer' ? 'active' : ''}`}
+                  >
+                    Importer
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                {alphaTab === 'content-models' && <ContentModelsView />}
+                {alphaTab === 'importer' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
+              </div>
+            </div>
           )}
         </main>
       </div>
