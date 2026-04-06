@@ -334,39 +334,6 @@ export default function TemplatesViewModern({ showToast }) {
                       ))}
                     </div>
                   )}
-
-                  <div className="tce-vars-section">
-                    <div className="tce-vars-title">Referenzen</div>
-                    <button
-                      className="tce-ref-btn"
-                      {...createButtonHandlers(
-                        '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>',
-                        () =>
-                          setTemplateCode(
-                            (c) => c + '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'
-                          )
-                      )}
-                      title="Dynamisches Heading"
-                    >
-                      Heading Dynamisch
-                    </button>
-                    {templates
-                      .filter((t) => t.name !== templateName)
-                      .map((t) => (
-                        <button
-                          key={t.name}
-                          className="tce-ref-btn"
-                          {...createButtonHandlers(
-                            `{{template:${t.name}}}`,
-                            () => setTemplateCode((c) => c + `{{template:${t.name}}}`)
-                          )}
-                          title={`{{template:${t.name}}}`}
-                          aria-label={`Template-Referenz ${t.name} einfügen`}
-                        >
-                          {t.name}
-                        </button>
-                      ))}
-                  </div>
                 </div>
               )}
 

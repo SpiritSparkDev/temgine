@@ -197,7 +197,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
 
   useEffect(() => {
-    // Lade Template-Codes inkl. {{template:X}} Referenzen
     const loadTemplateCodes = async () => {
       const codes = {};
       const labels = {};
