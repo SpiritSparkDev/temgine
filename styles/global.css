@@ -1,13 +1,25 @@
 
+@font-face {
+    font-family: 'Quantum';
+    src: url('/assets/Quantum.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 :root {
-    --primary-color: #1976d2;
-    --secondary-color: #424242;
-    --danger-color: #d32f2f;
-    --background-color: #f8f8f8;
-    --text-color: #333;
+    --primary-color: #c25208;
+    --secondary-color: #c2b5a5;
+    --danger-color: #c0392b;
+    --background-color: #f0ebe4;
+    --text-color: #1a150e;
 }
 body {
-    font-family: Arial, Helvetica, sans-serif;
-    background: #f8f8f8;
+    font-family: 'Fira Code', monospace;
+    background: #f0ebe4;
     margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Quantum', Arial, sans-serif;
 }

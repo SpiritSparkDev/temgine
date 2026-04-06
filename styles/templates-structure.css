@@ -591,6 +591,8 @@
   font-weight: 400;
   cursor: pointer;
   transition: all var(--transition-fast);
+  font-family: 'Fira Code', monospace;
+  font-size: ;
 }
 
 .settings-tab-btn.active {

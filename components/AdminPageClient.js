@@ -418,7 +418,7 @@ export default function AdminPageClient() {
             <Menu size={18} />
           </button>
           <a href="/" className="admin-logo-link" title="Temgine CMS">
-            <img src="/assets/light.png" alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Temgine CMS Admin</h1>
+            <img style={{ marginRight: '10px' }} src="/assets/light.png" alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Admin Bereich</h1>
           </a>
         </div>
         <div className="admin-navbar-right">

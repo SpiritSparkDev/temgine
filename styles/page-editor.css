@@ -534,7 +534,7 @@
 
 .block-item.selected {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  box-shadow: 0 0 0 3px rgb(var(--accent-primary-rgb) / 0.12);
 }
 
 .block-header {
@@ -560,11 +560,11 @@
   border-radius: 4px;
   transition: background-color 0.2s;
   user-select: none;
-  color: #667eea;
+  color: var(--accent-primary);
 }
 
 .block-drag-handle:hover {
-  background-color: rgba(102, 126, 234, 0.1);
+  background-color: rgb(var(--accent-primary-rgb) / 0.1);
 }
 
 .block-title-row {
@@ -572,7 +572,7 @@
   gap: 10px;
   align-items: center;
   flex: 1;
-  color: #667eea;
+  color: var(--accent-primary);
 }
 
 .block-header-right {
@@ -768,6 +768,8 @@
   .page-editor-inspector {
     position: sticky;
     top: 84px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
   }
 }
 
@@ -911,7 +913,7 @@
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--accent-primary);
-  background: rgba(102, 126, 234, 0.12);
+  background: rgb(var(--accent-primary-rgb) / 0.12);
   border-radius: 4px;
   padding: 1px 5px;
   font-family: monospace;
@@ -1034,7 +1036,7 @@
 }
 
 .file-modal {
-  background: white;
+  background: var(--bg-secondary);
   border-radius: 8px;
   padding: 20px;
   max-width: 900px;
@@ -1042,7 +1044,7 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
 }
 
 .file-modal-header {
@@ -1050,13 +1052,13 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-  border-bottom: 2px solid #667eea;
+  border-bottom: 2px solid var(--accent-primary);
   padding-bottom: 10px;
 }
 
 .file-modal-title {
   margin: 0;
-  color: #333;
+  color: var(--text-primary);
 }
 
 .file-modal-header-actions {
@@ -1067,7 +1069,7 @@
 
 .file-upload-label {
   padding: 8px 16px;
-  background: #667eea;
+  background: var(--accent-primary);
   color: white;
   border-radius: 4px;
   cursor: pointer;
@@ -1085,7 +1087,7 @@
   border: none;
   font-size: 24px;
   cursor: pointer;
-  color: #666;
+  color: var(--text-secondary);
   line-height: 1;
 }
 
@@ -1101,11 +1103,11 @@
   grid-column: 1 / -1;
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .file-modal-item {
-  border: 2px solid #ddd;
+  border: 2px solid var(--border-color);
   border-radius: 8px;
   padding: 10px;
   cursor: pointer;
@@ -1113,13 +1115,13 @@
   flex-direction: column;
   align-items: center;
   transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
-  background: white;
+  background: var(--bg-secondary);
 }
 
 .file-modal-item:hover {
-  border-color: #667eea;
+  border-color: var(--accent-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 8px rgb(var(--accent-primary-rgb) / 0.2);
 }
 
 .file-modal-thumb {
@@ -1129,7 +1131,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 8px;
-  background: #f5f5f5;
+  background: var(--bg-tertiary);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -1145,28 +1147,29 @@
 .file-modal-filename {
   font-size: 12px;
   text-align: center;
-  color: #333;
+  color: var(--text-primary);
   word-break: break-word;
   width: 100%;
 }
 
 .file-modal-filesize {
   font-size: 10px;
-  color: #999;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
 .file-modal-footer {
   margin-top: 20px;
   padding-top: 15px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
 }
 
 .file-modal-cancel-btn {
   padding: 10px 20px;
-  background: #f5f5f5;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
   border: none;
   border-radius: 4px;
   cursor: pointer;

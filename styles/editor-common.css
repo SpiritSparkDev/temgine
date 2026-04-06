@@ -129,7 +129,7 @@
 .editor-filter-select:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+  box-shadow: 0 0 0 3px rgb(var(--accent-primary-rgb) / 0.12);
 }
 
 .editor-list {
