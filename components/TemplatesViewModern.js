@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, Layout, Download, GripVertical, Grid } from 'lucide-react';
-import { createButtonHandlers, insertText } from '../lib/insertHelper'
+import { Plus, Edit2, Trash2, Layout, Grid } from 'lucide-react';
+import { createButtonHandlers } from '../lib/insertHelper'
 import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -15,21 +15,6 @@ const SYSTEM_PLACEHOLDERS = [
   { label: 'Blöcke', snippet: '{{{blocks}}}' }
 ]
 
-const SYSTEM_SNIPPET_KEYS = new Set([
-  'blocks', 'title', 'titel', 'slug', 'author', 'page title', 'page slug', 'page header', 'header', 'is child'
-])
-
-const normalizeSystemName = (value) => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ')
-
-const isSystemSnippet = (snippet) => {
-  return SYSTEM_SNIPPET_KEYS.has(normalizeSystemName(snippet?.key || snippet?.label))
-}
-
-const getSnippetReference = (snippet) => {
-  const key = String(snippet?.key || '').trim()
-  if (!key) return ''
-  return `{{snippetHtml:${key}}}`
-}
 
 export default function TemplatesViewModern({ showToast }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -39,18 +24,13 @@ export default function TemplatesViewModern({ showToast }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
-  const [templateType, setTemplateType] = useState('SITE');
-  const [activeTemplateScope, setActiveTemplateScope] = useState('SITE');
+  const [templateType, setTemplateType] = useState('BLOCK');
   const [searchTerm, setSearchTerm] = useState('');
-  const [snippets, setSnippets] = useState([]);
-  const [navigations, setNavigations] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   
 
   useEffect(() => {
     loadTemplates();
-    loadSnippets();
-    loadNavigations();
   }, []);
 
   function loadTemplates() {
@@ -59,34 +39,18 @@ export default function TemplatesViewModern({ showToast }) {
       .then(data => {
         let list = Array.isArray(data) ? data : [];
         if (list.length > 0 && typeof list[0] === 'string') {
-          list = list.map(n => ({ name: n, type: 'SITE' }));
+          list = list.map(n => ({ name: n, type: 'BLOCK' }));
         }
         setTemplates(list);
       })
       .catch(() => setTemplates([]));
   }
 
-  function loadSnippets() {
-    fetch('/api/snippets')
-      .then(r => r.json())
-      .then(data => {
-        setSnippets(data || [])
-      })
-      .catch(() => setSnippets([]));
-  }
-
-  function loadNavigations() {
-    fetch('/api/navigations')
-      .then(r => r.json())
-      .then(data => setNavigations(data.navigations || []))
-      .catch(() => setNavigations([]));
-  }
-
   function handleNew() {
     setSelectedTemplate(null);
     setTemplateName('');
     setTemplateCode('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
-    setTemplateType(activeTemplateScope);
+    setTemplateType('BLOCK');
     setIsEditing(true);
   }
 
@@ -97,8 +61,7 @@ export default function TemplatesViewModern({ showToast }) {
         setSelectedTemplate(index);
         setTemplateName(data.name);
         setTemplateCode(data.code);
-        setTemplateType(data.type || 'SITE');
-        setActiveTemplateScope(data.type || 'SITE');
+        setTemplateType(data.type || 'BLOCK');
         setIsEditing(true);
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
@@ -142,20 +105,10 @@ export default function TemplatesViewModern({ showToast }) {
       .catch(err => showToast('Fehler: ' + err.message, 'error'));
   }
 
-  async function insertSnippet(text) {
-    await insertText(text, () => setTemplateCode(c => c + text))
-  }
-
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const siteTemplates = templates.filter((t) => (t.type || 'SITE') === 'SITE');
-  const blockTemplates = templates.filter((t) => t.type === 'BLOCK');
-  const filteredTemplates = templates.filter((t) => {
-    const typeMatches = (t.type || 'SITE') === activeTemplateScope;
-    const searchMatches = !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch);
-    return typeMatches && searchMatches;
-  });
-
-  const editorSnippets = snippets.filter((s) => !isSystemSnippet(s));
+  const filteredTemplates = templates.filter((t) =>
+    !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch)
+  );
 
   return (
     <div className="editor-container">
@@ -176,36 +129,14 @@ export default function TemplatesViewModern({ showToast }) {
         </div>
 
         <div className="editor-search-wrap">
-          <div className="editor-segmented-control template-scope-switcher">
-            <button
-              type="button"
-              className={`editor-segment-btn ${activeTemplateScope === 'SITE' ? 'active' : ''}`}
-              onClick={() => setActiveTemplateScope('SITE')}
-              title={devTitle('Filter: Nur Site-Templates anzeigen')}
-              aria-label="Nur Site-Templates anzeigen"
-            >
-              Site
-              <span className="editor-segment-count">{siteTemplates.length}</span>
-            </button>
-            <button
-              type="button"
-              className={`editor-segment-btn ${activeTemplateScope === 'BLOCK' ? 'active' : ''}`}
-              onClick={() => setActiveTemplateScope('BLOCK')}
-              title={devTitle('Filter: Nur Block-Templates anzeigen')}
-              aria-label="Nur Block-Templates anzeigen"
-            >
-              Block
-              <span className="editor-segment-count">{blockTemplates.length}</span>
-            </button>
-          </div>
           <input
             className="editor-search-input"
             type="text"
-            placeholder={`${activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates suchen...`}
+            placeholder="Block-Templates suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            title={devTitle(`Suche innerhalb der ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`)}
-            aria-label={`Template-Suche fuer ${activeTemplateScope === 'SITE' ? 'Site' : 'Block'}-Templates`}
+            title={devTitle('Suche in Block-Templates')}
+            aria-label="Template-Suche"
           />
         </div>
         
@@ -213,7 +144,7 @@ export default function TemplatesViewModern({ showToast }) {
           {templates.length === 0 ? (
             <div className="empty-list-state">Keine Templates vorhanden</div>
           ) : filteredTemplates.length === 0 ? (
-            <div className="empty-list-state">Keine {activeTemplateScope === 'SITE' ? 'Site' : 'Block'} Templates{searchTerm ? ` für "${searchTerm}"` : ''}</div>
+            <div className="empty-list-state">Keine Block-Templates{searchTerm ? ` für "${searchTerm}"` : ''}</div>
           ) : (
             filteredTemplates.map((t) => {
               const index = templates.findIndex((x) => x.name === t.name);
@@ -235,11 +166,8 @@ export default function TemplatesViewModern({ showToast }) {
               >
                 <div className="editor-item-info">
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {t.type === 'BLOCK' ? <Grid size={14} /> : <Layout size={14} />}
+                    <Grid size={14} />
                     <div className="editor-item-label">{t.name}</div>
-                    <span className={`template-type-badge ${t.type === 'BLOCK' ? 'block' : 'site'}`}>
-                      {t.type === 'BLOCK' ? 'Block' : 'Site'}
-                    </span>
                   </div>
                 </div>
                 <div className="editor-item-actions">
@@ -300,8 +228,8 @@ export default function TemplatesViewModern({ showToast }) {
               </div>
 
               <div className="editor-snippets-panel">
-                <h4>Snippets einfügen</h4>
-                {showDevHints && <p className="editor-section-hint">Funktion: Vorlagenbausteine, Navigationen und Referenzen in den Code einfuegen</p>}
+                <h4>Platzhalter einfügen</h4>
+                {showDevHints && <p className="editor-section-hint">Funktion: Systemwerte und Template-Referenzen in den Code einfuegen</p>}
                 <div className="template-snippet-stack">
                   {SYSTEM_PLACEHOLDERS.length > 0 && (
                     <div className="snippet-group">
@@ -309,36 +237,6 @@ export default function TemplatesViewModern({ showToast }) {
                       <div className="snippet-buttons">
                         {SYSTEM_PLACEHOLDERS.map(s => (
                           <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Systemwert einfuegen: ${s.label}`)} aria-label={`Systemwert ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {editorSnippets.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Gespeicherte Snippets</div>
-                      <div className="snippet-buttons">
-                        {editorSnippets.map(s => (
-                          <button key={s.key || s.label} className={`template-snippet-btn ${s.type === 'defined' ? 'defined-snippet' : ''}`} title={devTitle(`Snippet-Referenz einfuegen: ${s.label}`)} aria-label={`Snippet-Referenz ${s.label} einfuegen`} {...createButtonHandlers(getSnippetReference(s), () => setTemplateCode(c => c + getSnippetReference(s)))}>{s.label} ({s.key})</button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {navigations.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Navigationen</div>
-                      <div className="snippet-buttons">
-                        {navigations.map(nav => (
-                          <button 
-                            key={nav} 
-                            className="template-snippet-btn navigation-snippet"
-                            title={devTitle(`Navigation einfuegen: ${nav}`)}
-                            aria-label={`Navigation ${nav} einfuegen`}
-                            {...createButtonHandlers(`{{navigation:${nav}}}`, () => setTemplateCode(c => c + `{{navigation:${nav}}}`))}
-                          >
-                            📍 {nav}
-                          </button>
                         ))}
                       </div>
                     </div>
