@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, Layout, Grid } from 'lucide-react';
-import { createButtonHandlers } from '../lib/insertHelper'
+import { Plus, Trash2, Layout, Grid, Code2, Save } from 'lucide-react';
+import { createButtonHandlers } from '../lib/insertHelper';
 import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -12,22 +12,31 @@ const SYSTEM_PLACEHOLDERS = [
   { label: 'Autor', snippet: '{{data.author}}' },
   { label: 'Seitenkopf', snippet: '{{data.pageHeader}}' },
   { label: 'Kindseite', snippet: '{{isChild}}' },
-  { label: 'Blöcke', snippet: '{{{blocks}}}' }
-]
+  { label: 'Blöcke', snippet: '{{{blocks}}}' },
+];
 
+function extractVars(code) {
+  const vars = new Set();
+  const re = /\{\{\{?\s*([^#/>!{}\s][^{}]*?)\s*\}?\}\}/g;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    const v = m[1].trim();
+    if (v && !v.includes(' ') && !v.startsWith('!') && !v.startsWith('>')) vars.add(v);
+  }
+  return [...vars];
+}
 
 export default function TemplatesViewModern({ showToast }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [templates, setTemplates] = useState([]);
-  // inserterRef no longer required; editor registers centrally
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
-  const [templateType, setTemplateType] = useState('BLOCK');
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  
+  const [rightTab, setRightTab] = useState('variables');
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -50,7 +59,6 @@ export default function TemplatesViewModern({ showToast }) {
     setSelectedTemplate(null);
     setTemplateName('');
     setTemplateCode('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
-    setTemplateType('BLOCK');
     setIsEditing(true);
   }
 
@@ -61,7 +69,6 @@ export default function TemplatesViewModern({ showToast }) {
         setSelectedTemplate(index);
         setTemplateName(data.name);
         setTemplateCode(data.code);
-        setTemplateType(data.type || 'BLOCK');
         setIsEditing(true);
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'));
@@ -72,27 +79,26 @@ export default function TemplatesViewModern({ showToast }) {
       showToast('Bitte Template-Namen eingeben', 'error');
       return;
     }
-
+    setIsSaving(true);
     fetch('/api/templates', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: templateName, code: templateCode, type: templateType })
+      body: JSON.stringify({ name: templateName, code: templateCode, type: 'BLOCK' }),
     })
       .then(r => r.json())
       .then(() => {
         showToast('Template gespeichert!', 'success');
         loadTemplates();
-        setIsEditing(false);
-        setSelectedTemplate(null);
       })
-      .catch(err => showToast('Fehler: ' + err.message, 'error'));
+      .catch(err => showToast('Fehler: ' + err.message, 'error'))
+      .finally(() => setIsSaving(false));
   }
 
   function handleDelete(name, index) {
     fetch('/api/templates', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
     })
       .then(() => {
         showToast('Template gelöscht', 'success');
@@ -105,182 +111,292 @@ export default function TemplatesViewModern({ showToast }) {
       .catch(err => showToast('Fehler: ' + err.message, 'error'));
   }
 
+  function handleCancel() {
+    setIsEditing(false);
+    setSelectedTemplate(null);
+    setTemplateName('');
+    setTemplateCode('');
+  }
+
+  const extractedVars = isEditing ? extractVars(templateCode) : [];
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredTemplates = templates.filter((t) =>
-    !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch)
+  const filteredTemplates = templates.filter(
+    (t) => !normalizedSearch || t.name.toLowerCase().includes(normalizedSearch)
   );
 
   return (
-    <div className="editor-container">
-      <div className="editor-sidebar">
-        <div className="editor-header">
-          <div className="editor-header-copy">
-            <h2><Layout size={18} /> Templates</h2>
-            {showDevHints && <p className="editor-role-hint">Bereich: Template-Liste, Filter und Schnellaktionen</p>}
-          </div>
-          <button
-            className="icon-btn"
-            onClick={handleNew}
-            title={devTitle('Funktion: Neues Template anlegen')}
-            aria-label="Neues Template anlegen"
-          >
-            <Plus size={18} />
-          </button>
-        </div>
-
-        <div className="editor-search-wrap">
-          <input
-            className="editor-search-input"
-            type="text"
-            placeholder="Block-Templates suchen..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            title={devTitle('Suche in Block-Templates')}
-            aria-label="Template-Suche"
-          />
-        </div>
-        
-        <div className="editor-list">
-          {templates.length === 0 ? (
-            <div className="empty-list-state">Keine Templates vorhanden</div>
-          ) : filteredTemplates.length === 0 ? (
-            <div className="empty-list-state">Keine Block-Templates{searchTerm ? ` für "${searchTerm}"` : ''}</div>
+    <div className="tce-root">
+      {/* TOP TOOLBAR */}
+      <div className="tce-toolbar">
+        <div className="tce-toolbar-left">
+          <Layout size={16} className="tce-toolbar-icon" aria-hidden="true" />
+          {isEditing ? (
+            <input
+              type="text"
+              className="tce-name-input"
+              placeholder="Template-Name"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              aria-label="Template-Name"
+              title={devTitle('Feld: Template-Name')}
+            />
           ) : (
-            filteredTemplates.map((t) => {
-              const index = templates.findIndex((x) => x.name === t.name);
-              return (
-              <div 
-                key={t.name} 
-                className={`editor-list-item ${selectedTemplate === index ? 'active' : ''}`}
-                onClick={() => handleEdit(t.name, index)}
-                role="button"
-                tabIndex={0}
-                title={devTitle(`Komponente: Template ${t.name}. Funktion: Template zum Bearbeiten oeffnen.`)}
-                aria-label={`Template ${t.name} zum Bearbeiten oeffnen`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    handleEdit(t.name, index);
-                  }
-                }}
+            <span className="tce-toolbar-title">Block-Templates</span>
+          )}
+        </div>
+        <div className="tce-toolbar-right">
+          {isEditing ? (
+            <>
+              <button
+                className="tce-btn tce-btn-ghost"
+                onClick={handleCancel}
+                title={devTitle('Änderungen verwerfen')}
               >
-                <div className="editor-item-info">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Grid size={14} />
-                    <div className="editor-item-label">{t.name}</div>
-                  </div>
-                </div>
-                <div className="editor-item-actions">
-                  <button 
-                    className="icon-btn-small" 
-                    onClick={(e) => { e.stopPropagation(); handleEdit(t.name, index); }}
-                    title={devTitle(`Funktion: Template ${t.name} bearbeiten`)}
-                    aria-label={`Template ${t.name} bearbeiten`}
-                  >
-                    <Edit2 size={14} />
-                  </button>
-                  <button 
-                    className="icon-btn-small delete" 
-                    onClick={(e) => { e.stopPropagation(); handleDelete(t.name, index); }}
-                    title={devTitle(`Funktion: Template ${t.name} loeschen`)}
-                    aria-label={`Template ${t.name} loeschen`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            )})
+                Abbrechen
+              </button>
+              <button
+                className="tce-btn tce-btn-primary"
+                onClick={handleSave}
+                disabled={isSaving}
+                title={devTitle('Template speichern')}
+              >
+                <Save size={13} aria-hidden="true" />
+                {isSaving ? 'Speichern…' : 'Speichern'}
+              </button>
+            </>
+          ) : (
+            <button
+              className="tce-btn tce-btn-primary"
+              onClick={handleNew}
+              title={devTitle('Neues Template anlegen')}
+              aria-label="Neues Template anlegen"
+            >
+              <Plus size={13} aria-hidden="true" />
+              Neu
+            </button>
           )}
         </div>
       </div>
 
-      <div className="editor-main">
-        {isEditing ? (
-          <>
-            <div className="editor-toolbar">
-              {showDevHints && <span className="editor-role-hint">Bereich: Template-Metadaten und Speicheraktionen</span>}
-              <input 
-                type="text" 
-                className="editor-name-input" 
-                placeholder="Template Name" 
-                value={templateName} 
-                onChange={e => setTemplateName(e.target.value)}
-                title={devTitle('Feld: Template-Name')}
-                aria-label="Template-Name"
-              />
-              <div className="editor-toolbar-actions">
-                <button className="btn-secondary" onClick={() => setIsEditing(false)} title={devTitle('Aenderungen verwerfen und Editor verlassen')}>Abbrechen</button>
-                <button className="btn-primary" onClick={handleSave} title={devTitle('Template speichern')}>Speichern</button>
-              </div>
-            </div>
-            
-            <div className="templates-editor-columns">
-              <div className="templates-editor-wrapper">
-                <div className="editor-codemirror-wrapper">
-                  <CodeEditor
-                    height="100%"
-                    language="html"
-                    value={templateCode}
-                    onChange={value => setTemplateCode(value || '')}
-                    options={{}}
-                  />
+      {/* BODY: 3 columns */}
+      <div className="tce-body">
+        {/* LEFT: Template list */}
+        <div className="tce-list-panel">
+          <div className="tce-list-header">
+            <input
+              className="tce-search-input"
+              type="text"
+              placeholder="Suchen…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Template suchen"
+            />
+          </div>
+          <div className="tce-list-body">
+            {templates.length === 0 ? (
+              <div className="tce-list-empty">Keine Templates vorhanden</div>
+            ) : filteredTemplates.length === 0 ? (
+              <div className="tce-list-empty">Keine Treffer für „{searchTerm}"</div>
+            ) : (
+              filteredTemplates.map((t) => {
+                const index = templates.findIndex((x) => x.name === t.name);
+                return (
+                  <div
+                    key={t.name}
+                    className={`tce-list-item${selectedTemplate === index && isEditing ? ' active' : ''}`}
+                    onClick={() => handleEdit(t.name, index)}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Template ${t.name} bearbeiten`}
+                    title={devTitle(`Template ${t.name} öffnen`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleEdit(t.name, index);
+                      }
+                    }}
+                  >
+                    <Grid size={12} className="tce-item-icon" aria-hidden="true" />
+                    <span className="tce-item-name">{t.name}</span>
+                    <button
+                      className="tce-item-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(t.name, index);
+                      }}
+                      aria-label={`Template ${t.name} löschen`}
+                      title="Löschen"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {/* CENTER: Code editor */}
+        <div className="tce-code-panel">
+          {isEditing ? (
+            <>
+              <div className="tce-code-tabs">
+                <div className="tce-code-tab active">
+                  <Code2 size={11} aria-hidden="true" />
+                  <span>{templateName || 'unbenannt'}.html</span>
                 </div>
               </div>
+              <div className="tce-code-body">
+                <CodeEditor
+                  height="100%"
+                  language="html"
+                  value={templateCode}
+                  onChange={(value) => setTemplateCode(value || '')}
+                  options={{}}
+                />
+              </div>
+              <div className="tce-statusbar">
+                <span className="tce-status-item">HTML</span>
+                <span className="tce-status-sep">·</span>
+                <span className="tce-status-item">UTF-8</span>
+                <span className="tce-status-sep">·</span>
+                <span className="tce-status-type">BLOCK</span>
+              </div>
+            </>
+          ) : (
+            <div className="tce-empty-state">
+              <Layout size={48} strokeWidth={1} aria-hidden="true" />
+              <h3>Wähle ein Template</h3>
+              <p>oder erstelle ein neues mit <strong>Neu</strong></p>
+            </div>
+          )}
+        </div>
 
-              <div className="editor-snippets-panel">
-                <h4>Platzhalter einfügen</h4>
-                {showDevHints && <p className="editor-section-hint">Funktion: Systemwerte und Template-Referenzen in den Code einfuegen</p>}
-                <div className="template-snippet-stack">
-                  {SYSTEM_PLACEHOLDERS.length > 0 && (
-                    <div className="snippet-group">
-                      <div className="snippet-group-title">Systemwerte</div>
-                      <div className="snippet-buttons">
-                        {SYSTEM_PLACEHOLDERS.map(s => (
-                          <button key={s.label} className="template-snippet-btn bound-snippet" title={devTitle(`Systemwert einfuegen: ${s.label}`)} aria-label={`Systemwert ${s.label} einfuegen`} {...createButtonHandlers(s.snippet || '', () => setTemplateCode(c => c + (s.snippet || '')))}>{s.label} ({s.snippet})</button>
-                        ))}
+        {/* RIGHT: Properties panel (only when editing) */}
+        {isEditing && (
+          <div className="tce-props-panel">
+            <div className="tce-props-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={rightTab === 'variables'}
+                className={`tce-props-tab${rightTab === 'variables' ? ' active' : ''}`}
+                onClick={() => setRightTab('variables')}
+              >
+                Variablen
+              </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'structure'}
+                className={`tce-props-tab${rightTab === 'structure' ? ' active' : ''}`}
+                onClick={() => setRightTab('structure')}
+              >
+                Struktur
+              </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'settings'}
+                className={`tce-props-tab${rightTab === 'settings' ? ' active' : ''}`}
+                onClick={() => setRightTab('settings')}
+              >
+                Settings
+              </button>
+            </div>
+
+            <div className="tce-props-body">
+              {rightTab === 'variables' && (
+                <div className="tce-vars">
+                  <div className="tce-vars-section">
+                    <div className="tce-vars-title">Systemwerte</div>
+                    {SYSTEM_PLACEHOLDERS.map((s) => (
+                      <div key={s.label} className="tce-var-row">
+                        <span className="tce-var-code">{s.snippet}</span>
+                        <button
+                          className="tce-var-insert-btn"
+                          {...createButtonHandlers(s.snippet, () =>
+                            setTemplateCode((c) => c + s.snippet)
+                          )}
+                          aria-label={`${s.label} einfügen`}
+                          title={devTitle(`Systemwert ${s.label} einfügen`)}
+                        >
+                          {s.label}
+                        </button>
                       </div>
+                    ))}
+                  </div>
+
+                  {extractedVars.length > 0 && (
+                    <div className="tce-vars-section">
+                      <div className="tce-vars-title">Im Template erkannt</div>
+                      {extractedVars.map((v) => (
+                        <div key={v} className="tce-var-row tce-var-row--detected">
+                          <span className="tce-var-code">{`{{${v}}}`}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
 
-                  <div className="snippet-group">
-                    <div className="snippet-group-title">Templates referenzieren</div>
-                    <div className="snippet-buttons">
-                      <button
-                        className="template-snippet-btn"
-                        {...createButtonHandlers('<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>', () => setTemplateCode(c => c + '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'))}
-                        title="Dynamisches Heading mit frei wählbarem Level"
-                      >
-                        Heading Dynamisch
-                      </button>
-                      {templates
-                        .filter(t => t.name !== templateName)
-                        .map(t => (
-                          <button 
-                            key={t.name} 
-                            className="template-snippet-btn template-snippet"
-                            title={devTitle(`Template-Referenz einfuegen: ${t.name}`)}
-                            aria-label={`Template-Referenz ${t.name} einfuegen`}
-                            {...createButtonHandlers(`{{template:${t.name}}}`, () => setTemplateCode(c => c + `{{template:${t.name}}}`))}
-                          >
-                            🧩 {t.name}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-
-                  <div className="snippet-group">
-                    <div className="snippet-group-title">Strukturvorschau</div>
-                    <TemplateStructurePreview code={templateCode} />
+                  <div className="tce-vars-section">
+                    <div className="tce-vars-title">Referenzen</div>
+                    <button
+                      className="tce-ref-btn"
+                      {...createButtonHandlers(
+                        '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>',
+                        () =>
+                          setTemplateCode(
+                            (c) => c + '<h{{headingLevel}}>{{headingText}}</h{{headingLevel}}>'
+                          )
+                      )}
+                      title="Dynamisches Heading"
+                    >
+                      Heading Dynamisch
+                    </button>
+                    {templates
+                      .filter((t) => t.name !== templateName)
+                      .map((t) => (
+                        <button
+                          key={t.name}
+                          className="tce-ref-btn"
+                          {...createButtonHandlers(
+                            `{{template:${t.name}}}`,
+                            () => setTemplateCode((c) => c + `{{template:${t.name}}}`)
+                          )}
+                          title={`{{template:${t.name}}}`}
+                          aria-label={`Template-Referenz ${t.name} einfügen`}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
                   </div>
                 </div>
-              </div>
+              )}
+
+              {rightTab === 'structure' && (
+                <div className="tce-structure-tab">
+                  <TemplateStructurePreview code={templateCode} />
+                </div>
+              )}
+
+              {rightTab === 'settings' && (
+                <div className="tce-settings-tab">
+                  <div className="tce-setting-group">
+                    <label className="tce-setting-label" htmlFor="tce-settings-name">
+                      Name
+                    </label>
+                    <input
+                      id="tce-settings-name"
+                      type="text"
+                      className="tce-setting-input"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                    />
+                  </div>
+                  <div className="tce-setting-group">
+                    <span className="tce-setting-label">Typ</span>
+                    <div className="tce-type-badge">BLOCK</div>
+                  </div>
+                </div>
+              )}
             </div>
-          </>
-        ) : (
-          <div className="editor-empty-state">
-            <Layout size={48} strokeWidth={1} />
-            <h3>Wähle ein Template zum Bearbeiten</h3>
-            <p>oder erstelle ein neues mit dem <Plus size={16} style={{verticalAlign: 'middle'}} /> Button</p>
           </div>
         )}
       </div>
