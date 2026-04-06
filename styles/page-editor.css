@@ -220,7 +220,7 @@
 
 .page-editor-workspace {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 300px 260px;
   gap: 14px;
   align-items: start;
   min-height: calc(100vh - 150px);
@@ -528,7 +528,7 @@
   box-shadow: 0 2px 8px var(--shadow);
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
   padding: 0;
 }
 
@@ -541,7 +541,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 7px 12px;
   background-color: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-color);
   transition: background-color 0.2s;
@@ -551,7 +551,7 @@
 .block-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .block-drag-handle {
@@ -587,27 +587,87 @@
   font-weight: 600;
 }
 
+.block-move-controls {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.block-move-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.block-move-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.block-move-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
 .block-card-body {
-  padding: 16px;
+  padding: 8px 10px;
 }
 
 .block-fields-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .block-fields-grid .field-item {
-  padding: 12px;
+  position: relative;
+  padding: 20px 8px 7px;
   background-color: var(--bg-tertiary);
   border-radius: 6px;
   border: 1px solid var(--border-color);
   margin-bottom: 0;
 }
 
+/* Label schwebt auf der oberen Borderlinie – wie ein fieldset-Legend */
+.block-fields-grid .field-item .field-label-xs,
+.field-item-textarea .field-label-xs {
+  position: absolute;
+  top: -1px;
+  left: 8px;
+  margin: 0;
+  padding: 0 5px;
+  background: var(--bg-tertiary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  line-height: 1.8;
+  border-radius: 0 0 3px 3px;
+}
+
 .field-item-textarea {
-  margin-bottom: 12px;
+  position: relative;
+  padding-top: 20px;
+  margin-bottom: 8px;
+}
+
+/* Quill-Editor im Block-Canvas kompakter als globaler Standard */
+.block-card-body .ql-container .ql-editor {
+  min-height: 80px;
 }
 
 .field-url-row {
@@ -654,10 +714,10 @@
 
 .page-block-index,
 .page-block-template-pill {
-  min-height: 28px;
-  padding: 0 10px;
+  min-height: 22px;
+  padding: 0 8px;
   border-radius: var(--radius-pill);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
@@ -728,7 +788,7 @@
   .page-editor-workspace > .page-editor-canvas {
     width: calc(100% - (var(--page-editor-outline-width) + var(--page-editor-inspector-width) + (var(--page-editor-gap) * 2)));
     max-width: calc(100% - (var(--page-editor-outline-width) + var(--page-editor-inspector-width) + (var(--page-editor-gap) * 2)));
-    margin-left: calc(var(--page-editor-outline-width) + var(--page-editor-gap));
+    margin-left: 0;
     margin-right: 0;
     min-width: 0;
     overflow-x: hidden;
@@ -736,22 +796,22 @@
     z-index: 1;
   }
 
-  .page-editor-outline {
-    position: fixed;
-    top: var(--page-editor-top-offset);
-    left: calc(240px + 20px);
-    width: var(--page-editor-outline-width);
-    height: calc(100vh - var(--page-editor-top-offset) - 12px);
-    z-index: 10;
-  }
-
   .page-editor-inspector {
     position: fixed;
     top: var(--page-editor-top-offset);
-    right: 20px;
+    right: calc(var(--page-editor-outline-width) + var(--page-editor-gap) + 20px);
     width: var(--page-editor-inspector-width);
     height: calc(100vh - var(--page-editor-top-offset) - 12px);
     z-index: 12;
+  }
+
+  .page-editor-outline {
+    position: fixed;
+    top: var(--page-editor-top-offset);
+    right: 20px;
+    width: var(--page-editor-outline-width);
+    height: calc(100vh - var(--page-editor-top-offset) - 12px);
+    z-index: 10;
   }
 
   .page-editor-canvas {
@@ -761,13 +821,13 @@
 
 @media (min-width: 1024px) and (max-width: 2099px) {
   .page-editor-workspace {
-    grid-template-columns: 240px minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 280px 240px;
   }
 
   .page-editor-outline,
   .page-editor-inspector {
     position: sticky;
-    top: 84px;
+    top: 20px;
     max-height: calc(100vh - 100px);
     overflow-y: auto;
   }
@@ -966,26 +1026,31 @@
 }
 
 .inspector-global-actions {
-  display: flex;
-  flex-direction: column;
+  /* Als Flex-Item von page-editor-inspector (flex-column): ans Ende schieben */
+  margin-top: auto;
+
+  /* Interne Layout-Logik: benanntes CSS-Grid für einfache Umsortierung */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    "newblock  kindblock"
+    "save      save"
+    "savview   savclose"
+    "vorschau  vorschau"
+    ".         delete";
   gap: 6px;
   padding: 12px 16px;
-  margin-top: auto;
+  border-top: 1px solid var(--border-color);
 }
-.inspector-sparkle-btn {
-  align-self: flex-end;
-  padding: 4px 10px;
-  font-size: 1rem;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--accent-primary);
-  opacity: 0.7;
-  transition: opacity 0.15s;
-}
-.inspector-sparkle-btn:hover {
-  opacity: 1;
-}
+
+/* Grid-Area-Zuweisungen — Reihenfolge im HTML ist irrelevant */
+.inspector-ga-newblock  { grid-area: newblock; }
+.inspector-ga-kindblock { grid-area: kindblock; }
+.inspector-ga-preview   { grid-area: vorschau; font-size: 0.76rem; }
+.inspector-ga-save      { grid-area: save;     font-size: 1rem; padding: 8px 12px; }
+.inspector-ga-savview   { grid-area: savview;  }
+.inspector-ga-savclose  { grid-area: savclose; }
+.inspector-ga-delete    { grid-area: delete;   }
 /* ─── Preview Panel ─── */
 .page-preview-panel {
   border-top: 2px solid var(--accent-primary);
