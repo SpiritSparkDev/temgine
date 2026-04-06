@@ -767,7 +767,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <div className="block-title-row">
               <Grid size={16} />
               <span className="page-block-index">Block {path.split('.').map(part => Number(part) + 1).join('.')}</span>
-              <span className="page-block-template-pill">{block.template || 'Freier Block'}</span>
+                            <input
+                type="text"
+                className="block-anchor-input"
+                placeholder="Anchor ID"
+                value={block.props?.anchorId || ''}
+                onChange={e => { e.stopPropagation(); updateNestedBlock(path, { anchorId: e.target.value }); }}
+                onClick={e => e.stopPropagation()}
+                title={devTitle('Feld: Anchor-ID')}
+                aria-label="Anchor-ID"
+              />
+              <select
+                value={block.template || ''}
+                onChange={e => { e.stopPropagation(); updateNestedBlockTemplate(path, e.target.value); }}
+                onClick={e => e.stopPropagation()}
+                className="block-template-select"
+                title={devTitle('Feld: Block-Template')}
+                aria-label="Block-Template"
+              >
+                <option value="">-- Template --</option>
+                {blockTemplateNames.map(tn => (
+                  <option key={tn} value={tn}>{tn}</option>
+                ))}
+              </select>
+
             </div>
           </div>
           <div className="block-header-right">
@@ -1069,50 +1092,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <>
 
 
-                      {/* Section 1: Metadaten & Konfiguration */}
-                      <div className="inspector-section">
-                        <button
-                          type="button"
-                          className="inspector-section-head"
-                          onClick={() => toggleSection('meta')}
-                          aria-expanded={!collapsedSections.has('meta')}
-                        >
-                          <span className="inspector-section-icon">⚙</span>
-                          <span className="inspector-section-label">Metadaten &amp; Konfiguration</span>
-                          {collapsedSections.has('meta') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                        </button>
-
-                        {!collapsedSections.has('meta') && (
-                          <div className="inspector-section-body">
-                            <label className="field-label-xs">Template</label>
-                            <select
-                              value={selectedBlock.template || ''}
-                              onChange={e => updateNestedBlockTemplate(selectedBlockPath, e.target.value)}
-                              className="input-field-small"
-                              title={devTitle('Feld: Block-Template')}
-                              aria-label="Block-Template"
-                            >
-                              <option value="">-- Kein Template --</option>
-                              {blockTemplateNames.map(tn => (
-                                <option key={tn} value={tn}>{tn}</option>
-                              ))}
-                            </select>
-
-                            <label className="field-label-xs" style={{ marginTop: 8 }}>Anchor ID</label>
-                            <input
-                              type="text"
-                              className="input-field-small"
-                              placeholder="z. B. section-intro"
-                              value={selectedBlock.props?.anchorId || ''}
-                              onChange={e => updateNestedBlock(selectedBlockPath, { anchorId: e.target.value })}
-                              title={devTitle('Feld: Anchor-ID fuer den ausgewaehlten Block')}
-                              aria-label="Anchor-ID fuer den ausgewaehlten Block"
-                            />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Section 2: Zugeordnete Felder */}
+                      {/* Zugeordnete Felder */}
                       <div className="inspector-section">
                         <button
                           type="button"

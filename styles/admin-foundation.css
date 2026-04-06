@@ -161,6 +161,7 @@
 .page-editor select {
   width: 100%;
   padding: 6px 12px;
+  height: 2rem;
   font-size: 0.9rem;
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
