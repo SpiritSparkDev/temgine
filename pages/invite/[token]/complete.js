@@ -52,86 +52,30 @@ export default function CompleteInvite() {
   }
 
   return (
-    <div className="invite-page">
-      <div className="invite-container">
+    <div className="auth-page">
+      <div className="auth-card">
         {processing && !error && (
-          <div className="invite-card success">
-            <CheckCircle size={64} color="#10b981" />
+          <div className="invite-success">
+            <CheckCircle size={56} color="#1d7a3a" />
             <h1>Account wird erstellt...</h1>
-            <p className="invite-text">
-              Sie werden gleich weitergeleitet.
-            </p>
+            <p className="auth-hint">Sie werden gleich weitergeleitet.</p>
           </div>
         )}
 
         {error && (
           <div className="error-card">
-            <AlertCircle size={48} color="#dc2626" />
+            <AlertCircle size={44} color="#9b2318" />
             <h1>Fehler</h1>
             <p>{error}</p>
-            <button 
-              className="btn-primary"
+            <button
+              className="auth-btn-primary"
               onClick={() => router.push('/login')}
-              style={{ marginTop: '1rem' }}
             >
               Zur Anmeldung
             </button>
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .invite-page {
-          min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 2rem;
-        }
-
-        .invite-container {
-          max-width: 500px;
-          width: 100%;
-        }
-
-        .invite-card,
-        .error-card {
-          background: white;
-          border-radius: 16px;
-          padding: 3rem;
-          text-align: center;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        h1 {
-          font-size: 2rem;
-          margin: 1rem 0;
-          color: #1f2937;
-        }
-
-        .invite-text {
-          color: #6b7280;
-          font-size: 1.125rem;
-        }
-
-        .btn-primary {
-          padding: 0.875rem 1.5rem;
-          border-radius: 8px;
-          font-size: 1rem;
-          font-weight: 600;
-          border: none;
-          cursor: pointer;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          transition: all 0.2s;
-        }
-
-        .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-      `}</style>
     </div>
   );
 }

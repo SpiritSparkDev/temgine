@@ -1,4 +1,5 @@
 import '../styles/global.css'
+import '../styles/auth.css'
 import '../styles/admin.css'
 import '../styles/admin-foundation.css'
 import '../styles/admin-feedback.css'

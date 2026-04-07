@@ -21,12 +21,12 @@ export default function SetupPage({ hasUsers }) {
   // Already set up – just show a message
   if (hasUsers) {
     return (
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <div style={styles.icon}>✅</div>
-          <h1 style={styles.title}>Setup abgeschlossen</h1>
-          <p style={styles.hint}>Es existiert bereits ein Benutzer-Account.</p>
-          <button style={styles.btn} onClick={() => router.push('/login')}>
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-icon">✅</div>
+          <h1>Setup abgeschlossen</h1>
+          <p className="auth-hint">Es existiert bereits ein Benutzer-Account.</p>
+          <button className="auth-btn-primary" onClick={() => router.push('/login')}>
             Zum Login
           </button>
         </div>
@@ -67,19 +67,18 @@ export default function SetupPage({ hasUsers }) {
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <div style={styles.icon}>🔧</div>
-        <h1 style={styles.title}>Ersteinrichtung</h1>
-        <p style={styles.hint}>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-icon">🔧</div>
+        <h1>Ersteinrichtung</h1>
+        <p className="auth-hint">
           Kein Benutzer gefunden. Lege jetzt den ersten Admin-Account an.
           Du benötigst den <strong>Setup-Token</strong> aus der Server-Konfiguration.
         </p>
 
-        <form onSubmit={handleSubmit} style={{ textAlign: 'left', marginTop: '1.5rem' }}>
+        <form onSubmit={handleSubmit} className="auth-form">
           <Field label="Setup-Token *">
             <input
-              style={styles.input}
               type="password"
               value={token}
               onChange={e => setToken(e.target.value)}
@@ -90,7 +89,6 @@ export default function SetupPage({ hasUsers }) {
 
           <Field label="Name *">
             <input
-              style={styles.input}
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
@@ -101,7 +99,6 @@ export default function SetupPage({ hasUsers }) {
 
           <Field label="E-Mail *">
             <input
-              style={styles.input}
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -112,7 +109,6 @@ export default function SetupPage({ hasUsers }) {
 
           <Field label="Passwort * (min. 8 Zeichen)">
             <input
-              style={styles.input}
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -123,7 +119,6 @@ export default function SetupPage({ hasUsers }) {
 
           <Field label="Passwort bestätigen *">
             <input
-              style={styles.input}
               type="password"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
@@ -132,11 +127,11 @@ export default function SetupPage({ hasUsers }) {
             />
           </Field>
 
-          {error && <div style={styles.error}>{error}</div>}
+          {error && <div className="auth-error">{error}</div>}
 
           <button
             type="submit"
-            style={{ ...styles.btn, marginTop: '1rem', opacity: loading ? 0.6 : 1 }}
+            className="auth-btn-primary"
             disabled={loading}
           >
             {loading ? 'Erstelle Account…' : 'Admin-Account anlegen'}
@@ -149,10 +144,8 @@ export default function SetupPage({ hasUsers }) {
 
 function Field({ label, children }) {
   return (
-    <div style={{ marginBottom: '1rem' }}>
-      <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.35rem', fontSize: '0.9rem', color: '#444' }}>
-        {label}
-      </label>
+    <div className="auth-field">
+      <label>{label}</label>
       {children}
     </div>
   );
@@ -169,68 +162,3 @@ export async function getServerSideProps() {
     return { props: { hasUsers: false } };
   }
 }
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    padding: '2rem',
-  },
-  card: {
-    background: 'white',
-    padding: '2.5rem',
-    borderRadius: '12px',
-    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-    maxWidth: '440px',
-    width: '100%',
-    textAlign: 'center',
-  },
-  icon: {
-    fontSize: '2.5rem',
-    marginBottom: '0.75rem',
-  },
-  title: {
-    margin: '0 0 0.5rem',
-    color: '#222',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-  },
-  hint: {
-    color: '#666',
-    fontSize: '0.9rem',
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  input: {
-    width: '100%',
-    padding: '0.65rem 0.75rem',
-    border: '1px solid #ccc',
-    borderRadius: '6px',
-    fontSize: '0.95rem',
-    boxSizing: 'border-box',
-  },
-  error: {
-    padding: '0.65rem 0.75rem',
-    background: '#fee2e2',
-    color: '#dc2626',
-    borderRadius: '6px',
-    fontSize: '0.88rem',
-    marginTop: '0.5rem',
-  },
-  btn: {
-    width: '100%',
-    padding: '0.75rem',
-    fontSize: '1rem',
-    fontWeight: 600,
-    background: '#667eea',
-    color: 'white',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
-};
