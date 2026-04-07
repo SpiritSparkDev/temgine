@@ -14,7 +14,15 @@
     "import-init": "node ./scripts/import-init.js"
   },
   "dependencies": {
+    "@babel/code-frame": "^7.29.0",
+    "@babel/core": "^7.29.0",
+    "@babel/generator": "^7.29.1",
+    "@babel/helpers": "^7.29.2",
+    "@babel/parser": "^7.29.2",
     "@babel/runtime": "^7.29.2",
+    "@babel/template": "^7.28.6",
+    "@babel/traverse": "^7.29.0",
+    "@babel/types": "^7.29.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@monaco-editor/react": "^4.7.0",
