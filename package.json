@@ -14,6 +14,7 @@
     "import-init": "node ./scripts/import-init.js"
   },
   "dependencies": {
+    "@babel/runtime": "^7.29.2",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@monaco-editor/react": "^4.7.0",
