@@ -119,6 +119,22 @@ model Snippet {
   updatedAt DateTime @updatedAt
 }
 
+enum NavType {
+  MAIN
+  PAGE
+  MOBILE
+}
+
+model Navigation {
+  id        String   @id @default(cuid())
+  name      String
+  type      NavType
+  code      String   @db.Text
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model ContentType {
   id        String         @id @default(cuid())
   name      String

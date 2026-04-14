@@ -1,0 +1,514 @@
+/* ── Navigation View ──────────────────────────────────────────────────────── */
+
+.admin-scope .nav-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Type Tabs ────────────────────────────────────────────────────────────── */
+
+.admin-scope .nav-type-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border-color);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-type-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.8rem 1.4rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.admin-scope .nav-type-tab:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.admin-scope .nav-type-tab.active {
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* ── Body layout ──────────────────────────────────────────────────────────── */
+
+.admin-scope .nav-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Left: list panel ─────────────────────────────────────────────────────── */
+
+.admin-scope .nav-list-panel {
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.admin-scope .nav-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-list-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+.admin-scope .btn-icon-label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.38rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.admin-scope .btn-icon-label:hover {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.admin-scope .nav-empty-hint {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.admin-scope .nav-empty-cta {
+  display: inline-block;
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.admin-scope .nav-template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.admin-scope .nav-template-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  margin-bottom: 0.4rem;
+  transition: border-color 0.18s, background 0.18s;
+}
+
+.admin-scope .nav-template-card:hover {
+  border-color: var(--accent-primary);
+}
+
+.admin-scope .nav-template-card.selected {
+  border-color: var(--accent-primary);
+  background: rgb(var(--accent-primary-rgb) / 0.06);
+}
+
+.admin-scope .nav-template-card.is-active .nav-card-name {
+  font-weight: 700;
+}
+
+.admin-scope .nav-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.admin-scope .nav-card-name {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-scope .nav-active-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--success-color, #1a7f3c);
+  background: rgb(26 127 60 / 0.12);
+  border-radius: 20px;
+  padding: 0.1rem 0.5rem;
+}
+
+.admin-scope .nav-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-card-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+}
+
+.admin-scope .nav-card-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.admin-scope .nav-card-btn.activate {
+  color: var(--success-color, #1a7f3c);
+  border-color: var(--success-color, #1a7f3c);
+}
+
+.admin-scope .nav-card-btn.activate:hover {
+  background: var(--success-color, #1a7f3c);
+  color: #fff;
+}
+
+.admin-scope .nav-card-btn.deactivate {
+  color: var(--text-tertiary);
+  border-color: var(--border-color);
+}
+
+.admin-scope .nav-card-btn.delete:hover {
+  background: #c0392b;
+  border-color: #c0392b;
+  color: #fff;
+}
+
+.admin-scope .nav-card-btn.save {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.admin-scope .nav-card-btn.save:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.admin-scope .nav-card-btn.save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Right: editor panel ──────────────────────────────────────────────────── */
+
+.admin-scope .nav-editor-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.admin-scope .nav-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.admin-scope .nav-name-input {
+  flex: 1;
+  min-width: 180px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition: border-color 0.18s;
+}
+
+.admin-scope .nav-name-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.admin-scope .nav-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* ── Preset Gallery ───────────────────────────────────────────────────────── */
+
+.admin-scope .nav-preset-gallery {
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-preset-gallery-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.6rem;
+}
+
+.admin-scope .preset-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 0.15rem;
+  display: flex;
+  align-items: center;
+}
+
+.admin-scope .nav-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+  gap: 0.5rem;
+}
+
+.admin-scope .nav-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+
+.admin-scope .nav-preset-card:hover {
+  border-color: var(--accent-primary);
+  background: rgb(var(--accent-primary-rgb) / 0.04);
+}
+
+.admin-scope .preset-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.admin-scope .preset-desc {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.admin-scope .preset-use {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.2rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+/* ── Editor / Preview Split ───────────────────────────────────────────────── */
+
+.admin-scope .nav-editor-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.admin-scope .nav-editor-code,
+.admin-scope .nav-editor-preview {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.admin-scope .nav-editor-code {
+  border-right: 1px solid var(--border-color);
+}
+
+.admin-scope .nav-panel-label {
+  padding: 0.45rem 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-monaco-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Preview container ────────────────────────────────────────────────────── */
+
+.admin-scope .nav-preview-container {
+  flex: 1;
+  overflow: auto;
+  padding: 1.25rem;
+  background: #fff;
+  min-height: 0;
+}
+
+.admin-scope.dark-mode .nav-preview-container {
+  background: #1e1e1e;
+}
+
+.admin-scope .nav-preview-hint {
+  padding: 0.4rem 0.9rem;
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+/* ── Placeholder reference strip ──────────────────────────────────────────── */
+
+.admin-scope .nav-placeholder-ref {
+  padding: 0.5rem 1rem;
+  font-size: 0.77rem;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.admin-scope .nav-placeholder-ref strong {
+  color: var(--text-secondary);
+}
+
+.admin-scope .nav-placeholder-ref code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.05rem 0.4rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+
+.admin-scope .nav-editor-empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  text-align: center;
+  gap: 0.75rem;
+  padding: 3rem;
+}
+
+.admin-scope .nav-editor-empty p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.admin-scope .nav-editor-empty-hint {
+  font-size: 0.82rem !important;
+  max-width: 420px;
+  line-height: 1.7;
+}
+
+.admin-scope .nav-editor-empty code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.8rem;
+  color: var(--accent-primary);
+}
+
+/* ── Dark mode overrides ──────────────────────────────────────────────────── */
+
+.admin-scope.dark-mode .nav-list-panel {
+  background: var(--bg-secondary);
+}
+
+.admin-scope.dark-mode .nav-template-card {
+  background: var(--bg-tertiary);
+}
+
+.admin-scope.dark-mode .nav-preset-card {
+  background: var(--bg-tertiary);
+}
+
+.admin-scope.dark-mode .nav-name-input {
+  background: var(--bg-tertiary);
+}

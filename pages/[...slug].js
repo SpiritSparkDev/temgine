@@ -108,9 +108,40 @@ export default function PageCatchAll() {
         // Load directly referenced templates
         await Promise.all(Array.from(templatesToLoad).map(fetchTemplate))
 
+        // Fetch active navigations (MAIN, PAGE, MOBILE) for nav:* placeholders in templates
+        let navigations = {};
+        try {
+          const navRes = await fetch(`/api/navigations?active=true&_t=${Date.now()}`);
+          if (navRes.ok) {
+            const activeNavs = await navRes.json();
+            if (Array.isArray(activeNavs)) {
+              // Build pages list for MAIN/MOBILE context (published pages, flat with slug+title)
+              const flatPages = [];
+              const flattenPages = (nodes, depth = 0) => {
+                for (const n of nodes) {
+                  flatPages.push({ slug: n.slug, title: n.title, depth });
+                  if (n.children && n.children.length > 0) flattenPages(n.children, depth + 1);
+                }
+              };
+              flattenPages(pages);
+
+              // Build anchor list for PAGE context from page.data.anchors (if set)
+              const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
+
+              for (const nav of activeNavs) {
+                const key = String(nav.type).toLowerCase(); // 'main' | 'page' | 'mobile'
+                const data = key === 'page' ? { anchors } : { pages: flatPages };
+                navigations[key] = { code: nav.code, data };
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Navigations konnten nicht geladen werden:', e.message);
+        }
+
         const html = renderPage(foundPage, templateCodes, {
           isChild: segments.length > 1
-        })
+        }, navigations)
         setHtml(html)
         setLoading(false)
       })

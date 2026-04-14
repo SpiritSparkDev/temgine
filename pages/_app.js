@@ -12,6 +12,7 @@ import '../styles/page-tree.css'
 import '../styles/editor-common.css'
 import '../styles/file-manager.css'
 import '../styles/users.css'
+import '../styles/navigation-view.css'
 import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
