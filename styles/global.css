@@ -14,12 +14,7 @@
     --background-color: #f0ebe4;
     --text-color: #1a150e;
 }
-body {
-    font-family: 'Fira Code', monospace;
-    background: #f0ebe4;
-    margin: 0;
-}
 
-h1, h2, h3, h4, h5, h6 {
-    font-family: 'Quantum', Arial, sans-serif;
-}
+/* No unscoped body or heading rules here.
+   Admin styles live under .admin-scope (admin.css).
+   Frontend styles come exclusively from user-managed extern_css files. */

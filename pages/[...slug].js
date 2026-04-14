@@ -82,7 +82,6 @@ export default function PageCatchAll() {
             if (tname) templatesToLoad.add(tname)
           })
         }
-        if (foundPage.template) templatesToLoad.add(foundPage.template)
 
         // Debug: show which templates we will try to load for this page
         // eslint-disable-next-line no-console
@@ -132,6 +131,21 @@ export default function PageCatchAll() {
                 const key = String(nav.type).toLowerCase(); // 'main' | 'page' | 'mobile'
                 const data = key === 'page' ? { anchors } : { pages: flatPages };
                 navigations[key] = { code: nav.code, data };
+              }
+
+              // If this page has a specific PAGE navigation assigned, override the global active one
+              if (foundPage.data?.pageNav) {
+                try {
+                  const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(foundPage.data.pageNav)}&_t=${Date.now()}`);
+                  if (pageNavRes.ok) {
+                    const pageNavData = await pageNavRes.json();
+                    if (pageNavData && pageNavData.code) {
+                      navigations['page'] = { code: pageNavData.code, data: { anchors } };
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message);
+                }
               }
             }
           }

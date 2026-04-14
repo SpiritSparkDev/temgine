@@ -55,6 +55,12 @@ export default async function handler(req, res) {
       // Return pages with minimal ordering (updatedAt desc) so recently modified appear first,
       // but rely on the client to send the full tree structure in the desired order on save.
       const pages = await prisma.page.findMany({ where })
+      // Restore user-defined sort order (stored as data._order on each top-level page)
+      pages.sort((a, b) => {
+        const ao = (a.data && typeof a.data._order === 'number') ? a.data._order : 99999
+        const bo = (b.data && typeof b.data._order === 'number') ? b.data._order : 99999
+        return ao !== bo ? ao - bo : (a.createdAt < b.createdAt ? -1 : 1)
+      })
       return res.status(200).json(pages)
     }
 
@@ -65,20 +71,25 @@ export default async function handler(req, res) {
       if (Array.isArray(body)) {
         const results = []
 
-        // helper: collect all slugs present in the provided tree (including children)
+        // helper: collect only TOP-LEVEL slugs from the provided array.
+        // Children are stored as JSON inside their parent's `children` column
+        // and do NOT have their own DB rows, so we must NOT recurse into them —
+        // otherwise a deleted top-level page whose slug still appears in another
+        // page's children JSON would never be removed from the DB.
         const collectSlugs = (nodes) => {
           const s = new Set()
-          const walk = (arr) => {
-            for (const n of arr || []) {
-              if (n && n.slug) s.add(String(n.slug))
-              if (n && n.children && Array.isArray(n.children)) walk(n.children)
-            }
+          for (const n of nodes || []) {
+            if (n && n.slug) s.add(String(n.slug))
           }
-          walk(nodes)
           return s
         }
 
         const providedSlugs = collectSlugs(body)
+
+        // Stamp top-level sort order into data so GET can restore it
+        for (let _i = 0; _i < body.length; _i++) {
+          if (body[_i]) body[_i].data = { ...(body[_i].data || {}), _order: _i }
+        }
 
         // Only upsert top-level nodes; children are stored in the parent's `children` JSON
         for (const p of body) {

@@ -18,7 +18,7 @@ import Toast from './Toast';
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   const [tree, setTree] = useState([]);
-  const [newTitle, setNewTitle] = useState('');  const [newTemplate, setNewTemplate] = useState('');  const [templates, setTemplates] = useState([]);
+  const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
 
@@ -27,19 +27,11 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   }, [pages]);
 
   useEffect(() => {
-    // Lade verfügbare Templates
-    fetch('/api/templates')
+    fetch('/api/navigations')
       .then(r => r.json())
-      .then(data => setTemplates(data || []))
-      .catch(err => console.error('Templates laden fehlgeschlagen:', err));
+      .then(data => setNavigations(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Navigationen laden fehlgeschlagen:', err));
   }, []);
-
-  // Normalisiere Template-Liste (unterstütze alte string-Listen und neue Objekt-Listen)
-  const templateObjs = Array.isArray(templates) ? templates : [];
-  const normalizedTemplates = templateObjs.map(t => (typeof t === 'string' ? { name: t, type: 'SITE' } : t));
-  const siteTemplateNames = normalizedTemplates
-    .filter(t => String(t.type || 'SITE').toUpperCase() === 'SITE')
-    .map(t => t.name);
 
   const treeStats = useMemo(() => {
     const visit = (nodes) => nodes.reduce((acc, node) => {
@@ -70,7 +62,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
 
     const filterNodes = (nodes) => nodes.reduce((acc, node) => {
       const children = filterNodes(node.children || []);
-      const haystack = [node.title, node.slug, node.template, node.status].filter(Boolean).join(' ').toLowerCase();
+      const nodeNav = navigations.find(n => n.id === node.data?.pageNav);
+      const haystack = [node.title, node.slug, nodeNav?.name, node.status].filter(Boolean).join(' ').toLowerCase();
       if (haystack.includes(term) || children.length > 0) {
         acc.push({ ...node, children });
       }
@@ -91,7 +84,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
         .replace(/-+/g, '-');
     };
     const title = newTitle || 'Neue Seite';
-    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', ...(newTemplate ? { template: newTemplate } : {}) };
+    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
@@ -103,7 +96,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
       onUpdate && onUpdate(updated);
     }
     setNewTitle('');
-    setNewTemplate('');
+    setNewNavigation('');
   }
 
   function handleDelete(id) {
@@ -191,13 +184,13 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     setToast({ message: node?.status === 'PUBLISHED' ? '✓ Seite veröffentlicht' : 'Seite auf Entwurf gesetzt', type: 'success' });
   }
 
-  function handleTemplateChange(nodeId, templateName) {
-    const updateTemplate = (nodes) => nodes.map(n => 
-      n.id === nodeId 
-        ? { ...n, template: templateName }
-        : { ...n, children: updateTemplate(n.children || []) }
+  function handleNavChange(nodeId, navId) {
+    const updateNav = (nodes) => nodes.map(n =>
+      n.id === nodeId
+        ? { ...n, data: { ...(n.data || {}), pageNav: navId } }
+        : { ...n, children: updateNav(n.children || []) }
     );
-    const updated = updateTemplate(tree);
+    const updated = updateNav(tree);
     setTree(updated);
     onUpdate && onUpdate(updated);
   }
@@ -211,9 +204,10 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
 
   function renderNodeMeta(node) {
     const childCount = (node.children || []).length;
+    const nav = navigations.find(n => n.id === node.data?.pageNav);
     return [
       `/${node.slug || ''}`,
-      `Template: ${node.template || 'Kein Template'}`,
+      nav ? `Nav: ${nav.name}` : 'Keine Navigation',
       childCount > 0 ? `${childCount} Unterseiten` : 'Keine Unterseiten',
     ].join(' · ');
   }
@@ -240,16 +234,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
             </div>
           </div>
           <div className="node-actions">
-            <select 
-              value={node.template || ''} 
-              onChange={(e) => handleTemplateChange(node.id, e.target.value)}
+            <select
+              value={node.data?.pageNav || ''}
+              onChange={(e) => handleNavChange(node.id, e.target.value)}
               className="inline-template-select"
-              title="Seiten-Template"
+              title="Seiten-Navigation"
             >
-              <option value="">Kein Template</option>
-                {siteTemplateNames.map(t => (
-                  <option key={t} value={t}>{t}</option>
-                ))}
+              <option value="">Keine Navigation</option>
+              {navigations.map(n => (
+                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
+              ))}
             </select>
             <div className="btn-group">
               <button
@@ -374,14 +368,14 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
               }}
             />
             <select
-              value={newTemplate}
-              onChange={e => setNewTemplate(e.target.value)}
-              aria-label="Template für neue Seite"
+              value={newNavigation}
+              onChange={e => setNewNavigation(e.target.value)}
+              aria-label="Navigation für neue Seite"
               style={{ fontSize: '0.85rem', padding: '6px 8px', border: '1px solid var(--border-color)', borderRadius: 6, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
             >
-              <option value="">— Template wählen —</option>
-              {siteTemplateNames.map(tn => (
-                <option key={tn} value={tn}>{tn}</option>
+              <option value="">— Navigation wählen —</option>
+              {navigations.map(n => (
+                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
               ))}
             </select>
             <button className="primary" onClick={() => handleAdd()}>

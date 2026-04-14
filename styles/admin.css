@@ -108,7 +108,7 @@
 }
 
 .admin-scope {
-  font-family: system-ui, sans-serif;
+  font-family: 'Fira Code', monospace;
   background: var(--bg-primary);
   color: var(--text-primary);
   margin: 0;
@@ -118,6 +118,15 @@
   flex-direction: column;
   overflow: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.admin-scope h1,
+.admin-scope h2,
+.admin-scope h3,
+.admin-scope h4,
+.admin-scope h5,
+.admin-scope h6 {
+  font-family: 'Quantum', Arial, sans-serif;
 }
 
 /* Top Navbar */

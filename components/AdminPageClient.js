@@ -285,6 +285,8 @@ export default function AdminPageClient() {
       if (!response.ok) {
         throw new Error('Speichern fehlgeschlagen');
       }
+      // Reload from API to confirm server state (fixes delete reappearance + order persistence)
+      await loadPagesFromApi();
       return true;
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
