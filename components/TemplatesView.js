@@ -1,7 +1,7 @@
 import React from 'react';
 import { createButtonHandlers } from '../lib/insertHelper'
 import dynamic from 'next/dynamic';
-import { GripVertical, Plus, Trash2, Download } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import TemplatePreviewIframe from './TemplatePreviewIframe';
 
@@ -20,6 +20,7 @@ export default function TemplatesView({
 }) {
   const [navigations, setNavigations] = React.useState([]);
   const [allTemplates, setAllTemplates] = React.useState([]);
+  const [refOpen, setRefOpen] = React.useState(false);
 
   // Lade Navigationen und Templates beim Start
   React.useEffect(() => {
@@ -278,6 +279,97 @@ export default function TemplatesView({
               </div>
             </div>
           )}
+
+          {/* Referenz-Panel */}
+          <div className="template-ref-section">
+            <button
+              className="template-ref-toggle"
+              onClick={() => setRefOpen(v => !v)}
+              aria-expanded={refOpen}
+            >
+              <span>📖 Referenz: Variablen &amp; Datentypen</span>
+              {refOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            {refOpen && (
+              <div className="template-ref-body">
+
+                {/* Mustache Syntax */}
+                <div className="template-ref-group">
+                  <p className="template-ref-heading">Mustache-Syntax</p>
+                  <table className="template-ref-table">
+                    <tbody>
+                      <tr><td><code>{'{{variable}}'}</code></td><td>Wert ausgeben (HTML-escaped)</td></tr>
+                      <tr><td><code>{'{{{'}<span>{'variable}'}</span>{'}'}</code></td><td>Roher HTML-Wert (nicht escaped)</td></tr>
+                      <tr><td><code>{'{{#section}}…{{/section}}'}</code></td><td>Abschnitt / Array-Schleife</td></tr>
+                      <tr><td><code>{'{{^inverted}}…{{/inverted}}'}</code></td><td>Negiert – rendert wenn falsy</td></tr>
+                      <tr><td><code>{'{{! Kommentar }}'}</code></td><td>Kommentar (wird nicht ausgegeben)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Typed variables */}
+                <div className="template-ref-group">
+                  <p className="template-ref-heading">Variablen-Typen <code>{'{{varName:typ}}'}</code></p>
+                  <table className="template-ref-table">
+                    <tbody>
+                      <tr><td><code>:text</code></td><td>Einzeiliges Textfeld <em>(Standard)</em></td></tr>
+                      <tr><td><code>:textarea</code></td><td>Mehrzeiliger Rich-Text-Editor (Quill)</td></tr>
+                      <tr><td><code>:number</code></td><td>Zahlenfeld — z.B. <code>{'{{level:number}}'}</code> → <code>{'<h{{level:number}}>'}</code></td></tr>
+                      <tr><td><code>:url</code></td><td>URL-Eingabe mit Datei-Picker</td></tr>
+                      <tr><td><code>:image</code></td><td>Bildpfad mit Datei-Picker</td></tr>
+                      <tr><td><code>:date</code></td><td>Datumsfeld</td></tr>
+                      <tr><td><code>:color</code></td><td>Farbauswahl</td></tr>
+                      <tr><td><code>:array</code></td><td>Liste (ein Wert pro Zeile)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* System variables */}
+                <div className="template-ref-group">
+                  <p className="template-ref-heading">Systemvariablen</p>
+                  <table className="template-ref-table">
+                    <tbody>
+                      <tr><td><code>{'{{page.title}}'}</code></td><td>Titel der aktuellen Seite</td></tr>
+                      <tr><td><code>{'{{page.slug}}'}</code></td><td>Slug der aktuellen Seite</td></tr>
+                      <tr><td><code>{'{{page.isChild}}'}</code></td><td>Wahr wenn Unterseite</td></tr>
+                      <tr><td><code>{'{{inner}}'}</code></td><td>Gerenderter Inhalt der Kind-Blöcke</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Navigation variables */}
+                <div className="template-ref-group">
+                  <p className="template-ref-heading">Navigations-Platzhalter</p>
+                  <table className="template-ref-table">
+                    <tbody>
+                      <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Aktive Hauptnavigation</td></tr>
+                      <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Aktive Seitennavigation</td></tr>
+                      <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Aktive Mobile-Navigation</td></tr>
+                      <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Navigation aus Seitenbaum (verschachtelt)</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Nav data context */}
+                <div className="template-ref-group">
+                  <p className="template-ref-heading">Datenkontext Navigations-Templates</p>
+                  <table className="template-ref-table">
+                    <thead><tr><th>Variable</th><th>Typ</th><th>Beschreibung</th></tr></thead>
+                    <tbody>
+                      <tr><td><code>{'{{#pages}}'}</code></td><td>Array</td><td>Alle veröffentlichten Seiten (für MAIN / MOBILE)</td></tr>
+                      <tr><td><code>{'{{slug}}'}</code></td><td>String</td><td>Vollständiger Pfad, z.B. <code>leistungen/webdesign</code></td></tr>
+                      <tr><td><code>{'{{title}}'}</code></td><td>String</td><td>Seitentitel</td></tr>
+                      <tr><td><code>{'{{hasChildren}}'}</code></td><td>Boolean</td><td>Wahr wenn Unterseiten vorhanden</td></tr>
+                      <tr><td><code>{'{{#children}}'}</code></td><td>Array</td><td>Unterseiten (gleiche Struktur)</td></tr>
+                      <tr><td><code>{'{{#anchors}}'}</code></td><td>Array</td><td>Anker-Links (für PAGE-Navigation)</td></tr>
+                      <tr><td><code>{'{{anchorId}}'}</code></td><td>String</td><td>Anker-ID des Abschnitts</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+              </div>
+            )}
+          </div>
 
           {/* Monaco Editor */}
           <div style={{ flex: 1, minHeight: 0, maxHeight: '600px', maxWidth: '100%', overflow: 'hidden' }}>

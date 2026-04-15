@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code2, Save } from 'lucide-react';
+import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen } from 'lucide-react';
 import { createButtonHandlers } from '../lib/insertHelper';
 import TemplateStructurePreview from './TemplateStructurePreview';
 
@@ -145,7 +145,16 @@ export default function TemplatesViewModern({ showToast }) {
           )}
         </div>
         <div className="tce-toolbar-right">
-          {isEditing ? (
+          <button
+            className="tce-btn tce-btn-ghost"
+            onClick={handleNew}
+            title={devTitle('Neues Template anlegen')}
+            aria-label="Neues Template anlegen"
+          >
+            <Plus size={13} aria-hidden="true" />
+            Neu
+          </button>
+          {isEditing && (
             <>
               <button
                 className="tce-btn tce-btn-ghost"
@@ -164,16 +173,6 @@ export default function TemplatesViewModern({ showToast }) {
                 {isSaving ? 'Speichern…' : 'Speichern'}
               </button>
             </>
-          ) : (
-            <button
-              className="tce-btn tce-btn-primary"
-              onClick={handleNew}
-              title={devTitle('Neues Template anlegen')}
-              aria-label="Neues Template anlegen"
-            >
-              <Plus size={13} aria-hidden="true" />
-              Neu
-            </button>
           )}
         </div>
       </div>
@@ -300,6 +299,15 @@ export default function TemplatesViewModern({ showToast }) {
               >
                 Settings
               </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'referenz'}
+                className={`tce-props-tab${rightTab === 'referenz' ? ' active' : ''}`}
+                onClick={() => setRightTab('referenz')}
+              >
+                <BookOpen size={11} aria-hidden="true" />
+                Referenz
+              </button>
             </div>
 
             <div className="tce-props-body">
@@ -340,6 +348,58 @@ export default function TemplatesViewModern({ showToast }) {
               {rightTab === 'structure' && (
                 <div className="tce-structure-tab">
                   <TemplateStructurePreview code={templateCode} />
+                </div>
+              )}
+
+              {rightTab === 'referenz' && (
+                <div className="tce-ref-tab">
+
+                  <div className="tce-ref-group">
+                    <div className="tce-ref-heading">Typen-Annotationen</div>
+                    <table className="tce-ref-table">
+                      <tbody>
+                        <tr><td><code>:text</code></td><td>Einzeiliges Textfeld</td></tr>
+                        <tr><td><code>:textarea</code></td><td>Richtext-Editor</td></tr>
+                        <tr><td><code>:number</code></td><td>Zahlenfeld</td></tr>
+                        <tr><td><code>:url</code></td><td>URL + Datei-Picker</td></tr>
+                        <tr><td><code>:image</code></td><td>Bildpfad-Picker</td></tr>
+                        <tr><td><code>:date</code></td><td>Datumsfeld</td></tr>
+                        <tr><td><code>:color</code></td><td>Farbauswahl</td></tr>
+                        <tr><td><code>:array</code></td><td>Liste (zeilenweise)</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="tce-ref-group">
+                    <div className="tce-ref-heading">Systemvariablen</div>
+                    <table className="tce-ref-table">
+                      <tbody>
+                        <tr><td><code>{'{{page.title}}'}</code></td><td>Seitentitel</td></tr>
+                        <tr><td><code>{'{{page.slug}}'}</code></td><td>Seiten-Slug</td></tr>
+                        <tr><td><code>{'{{inner}}'}</code></td><td>HTML der Kindblöcke</td></tr>
+                        <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Hauptnavigation (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Mobile-Navigation (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="tce-ref-group">
+                    <div className="tce-ref-heading">Mustache-Syntax</div>
+                    <table className="tce-ref-table">
+                      <tbody>
+                        <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped)</td></tr>
+                        <tr><td><code>{'{{{'}<span>{'var}'}</span>{'}'}</code></td><td>Variable (HTML roh)</td></tr>
+                        <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Abschnitt / Schleife</td></tr>
+                        <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Invertierter Abschnitt</td></tr>
+                        <tr><td><code>{'{{#hasChildren}}'}</code></td><td>Wenn Unterseiten existieren</td></tr>
+                        <tr><td><code>{'{{#children}}'}</code></td><td>Unterseiten iterieren</td></tr>
+                        <tr><td><code>{'{{#pages}}'}</code></td><td>Nav-Seiten iterieren</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
                 </div>
               )}
 

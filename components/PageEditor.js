@@ -4,7 +4,7 @@ import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { extractTemplateVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
@@ -252,9 +252,26 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
       try {
+        // extractTemplateVariables returns plain var name strings (used in existing field-key logic)
         out[name] = extractTemplateVariables(code) || [];
       } catch (e) {
         out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
+  // Maps template name → { varName: explicitType|null }
+  const templateTypeMapByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        const typed = extractTypedVariables(code) || [];
+        const map = {};
+        typed.forEach(({ varName, explicitType }) => { map[varName] = explicitType; });
+        out[name] = map;
+      } catch (e) {
+        out[name] = {};
       }
     });
     return out;
@@ -690,6 +707,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const renderBlockEditor = (block, path, depth = 0) => {
     const isTop = depth === 0;
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
+    const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
+    // Resolve effective input type: explicit annotation wins over guessed type
+    const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
 
     const containerProps = isTop ? {
       onDragOver: (e) => {
@@ -831,9 +851,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               {/* Grid layout for non-textarea fields */}
               <div className="block-fields-grid">
                 {templateVariables
-                  .filter(varName => guessInputType(varName) !== 'textarea')
+                  .filter(varName => resolveInputType(varName) !== 'textarea')
                   .map(varName => {
-                    const inputType = guessInputType(varName);
+                    const inputType = resolveInputType(varName);
                     const value = block.props[varName] || '';
                     const label = snippetLabels[block.template]?.[varName] || varName;
 
@@ -927,7 +947,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
               {/* Separate textarea fields (full width) - NACH dem Grid */}
               {templateVariables
-                .filter(varName => guessInputType(varName) === 'textarea')
+                .filter(varName => resolveInputType(varName) === 'textarea')
                 .map(varName => {
                   const value = block.props[varName] || '';
                   const label = snippetLabels[block.template]?.[varName] || varName;
@@ -1108,6 +1128,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <div className="inspector-section-body">
                             {(() => {
                               const vars = selectedBlock.template ? (templateVariablesByName[selectedBlock.template] || []) : [];
+                              const selTypeMap = selectedBlock.template ? (templateTypeMapByName[selectedBlock.template] || {}) : {};
                               if (!selectedBlock.template) {
                                 return <p className="inspector-fields-empty">Kein Template zugeordnet</p>;
                               }
@@ -1117,13 +1138,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               return (
                                 <ul className="inspector-field-list">
                                   {vars.map(varName => {
-                                    const inputType = guessInputType(varName);
+                                    const inputType = selTypeMap[varName] || guessInputType(varName);
                                     const isTextarea = inputType === 'textarea' || inputType === 'richtext';
                                     const label = (snippetLabels[selectedBlock.template]?.[varName]) || varName;
                                     return (
                                       <li key={varName} className="inspector-field-item">
-                                        <span className="inspector-field-icon">{isTextarea ? '≡' : 'T'}</span>
+                                        <span className="inspector-field-icon">{isTextarea ? '≡' : inputType === 'number' ? '#' : 'T'}</span>
                                         <span className="inspector-field-label">{label}</span>
+                                        {selTypeMap[varName] && <span className="inspector-field-type">{selTypeMap[varName]}</span>}
                                       </li>
                                     );
                                   })}

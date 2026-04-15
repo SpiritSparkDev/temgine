@@ -56,12 +56,15 @@ export default function Home() {
 
         // Sammle alle Templates
         const templatesToLoad = new Set()
-        if (homePage.blocks) {
-          homePage.blocks.forEach(block => {
+        const collectBlockTemplates = (blocks) => {
+          if (!Array.isArray(blocks)) return
+          for (const block of blocks) {
             const tname = block.template || block.type
             if (tname) templatesToLoad.add(tname)
-          })
+            if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
+          }
         }
+        collectBlockTemplates(homePage.blocks)
         if (homePage.template) templatesToLoad.add(homePage.template)
 
         // Lade alle Templates

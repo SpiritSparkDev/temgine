@@ -76,12 +76,15 @@ export default function PageCatchAll() {
         }
 
         const templatesToLoad = new Set()
-        if (foundPage.blocks) {
-          foundPage.blocks.forEach(block => {
+        const collectBlockTemplates = (blocks) => {
+          if (!Array.isArray(blocks)) return
+          for (const block of blocks) {
             const tname = block.template || block.type
             if (tname) templatesToLoad.add(tname)
-          })
+            if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
+          }
         }
+        collectBlockTemplates(foundPage.blocks)
 
         // Debug: show which templates we will try to load for this page
         // eslint-disable-next-line no-console
