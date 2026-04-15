@@ -16,6 +16,9 @@ node_modules/
 /public/uploads/
 /public/extern_css/
 
+# Static site imports (lokal, nicht versioniert)
+/static_imports/
+
 # Misc
 .DS_Store
 *.pem

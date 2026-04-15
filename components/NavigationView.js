@@ -8,11 +8,18 @@ const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 const SAMPLE_DATA = {
   main: {
     pages: [
-      { slug: 'startseite', title: 'Startseite' },
-      { slug: 'ueber-uns', title: 'Über uns' },
-      { slug: 'leistungen', title: 'Leistungen' },
-      { slug: 'blog', title: 'Blog' },
-      { slug: 'kontakt', title: 'Kontakt' },
+      { slug: 'startseite', title: 'Startseite', hasChildren: false, children: [] },
+      { slug: 'ueber-uns', title: 'Über uns', hasChildren: true, children: [
+        { slug: 'ueber-uns/team', title: 'Team', hasChildren: false, children: [] },
+        { slug: 'ueber-uns/geschichte', title: 'Geschichte', hasChildren: false, children: [] },
+      ]},
+      { slug: 'leistungen', title: 'Leistungen', hasChildren: true, children: [
+        { slug: 'leistungen/webdesign', title: 'Webdesign', hasChildren: false, children: [] },
+        { slug: 'leistungen/seo', title: 'SEO', hasChildren: false, children: [] },
+        { slug: 'leistungen/beratung', title: 'Beratung', hasChildren: false, children: [] },
+      ]},
+      { slug: 'blog', title: 'Blog', hasChildren: false, children: [] },
+      { slug: 'kontakt', title: 'Kontakt', hasChildren: false, children: [] },
     ],
   },
   page: {
@@ -25,10 +32,16 @@ const SAMPLE_DATA = {
   },
   mobile: {
     pages: [
-      { slug: 'startseite', title: 'Startseite' },
-      { slug: 'ueber-uns', title: 'Über uns' },
-      { slug: 'leistungen', title: 'Leistungen' },
-      { slug: 'kontakt', title: 'Kontakt' },
+      { slug: 'startseite', title: 'Startseite', hasChildren: false, children: [] },
+      { slug: 'ueber-uns', title: 'Über uns', hasChildren: true, children: [
+        { slug: 'ueber-uns/team', title: 'Team', hasChildren: false, children: [] },
+        { slug: 'ueber-uns/geschichte', title: 'Geschichte', hasChildren: false, children: [] },
+      ]},
+      { slug: 'leistungen', title: 'Leistungen', hasChildren: true, children: [
+        { slug: 'leistungen/webdesign', title: 'Webdesign', hasChildren: false, children: [] },
+        { slug: 'leistungen/seo', title: 'SEO', hasChildren: false, children: [] },
+      ]},
+      { slug: 'kontakt', title: 'Kontakt', hasChildren: false, children: [] },
     ],
   },
 };
@@ -38,26 +51,35 @@ const PRESETS = {
   MAIN: [
     {
       label: 'Horizontal Bar',
-      description: 'Klassische horizontale Navigation',
+      description: 'Klassische horizontale Navigation mit Untermenü',
       code: `<nav class="main-nav horizontal-nav">
   <ul class="nav-list">
-    {{#pages}}<li class="nav-item"><a class="nav-link" href="/{{slug}}">{{title}}</a></li>{{/pages}}
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li class="nav-sub-item"><a class="nav-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
   </ul>
 </nav>`,
     },
     {
       label: 'Dropdown Menu',
-      description: 'Navigation mit Dropdown-Untermenü-Unterstützung',
+      description: 'Navigation mit Dropdown-Untermenü',
       code: `<nav class="main-nav dropdown-nav">
   <ul class="nav-list">
     {{#pages}}
-    <li class="nav-item has-dropdown">
+    <li class="nav-item{{#hasChildren}} has-dropdown{{/hasChildren}}">
       <a class="nav-link" href="/{{slug}}">{{title}}</a>
-      {{#children}}
+      {{#hasChildren}}
       <ul class="dropdown-menu">
-        {{#.}}<li><a href="/{{slug}}">{{title}}</a></li>{{/.}}
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
       </ul>
-      {{/children}}
+      {{/hasChildren}}
     </li>
     {{/pages}}
   </ul>
@@ -68,29 +90,52 @@ const PRESETS = {
       description: 'Logo in der Mitte, Links links und rechts',
       code: `<nav class="main-nav centered-nav">
   <ul class="nav-left">
-    {{#pages}}<li class="nav-item"><a class="nav-link" href="/{{slug}}">{{title}}</a></li>{{/pages}}
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
   </ul>
   <a class="nav-logo" href="/">
     <span class="logo-text">Logo</span>
   </a>
   <ul class="nav-right">
-    {{#pages}}<li class="nav-item"><a class="nav-link" href="/{{slug}}">{{title}}</a></li>{{/pages}}
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
   </ul>
 </nav>`,
     },
     {
       label: 'Sidebar Vertical',
-      description: 'Vertikale Sidebar-Navigation',
+      description: 'Vertikale Sidebar-Navigation mit Unterebenen',
       code: `<nav class="main-nav sidebar-nav">
   <div class="sidebar-brand">
     <a href="/" class="brand-link">Marke</a>
   </div>
   <ul class="sidebar-list">
     {{#pages}}
-    <li class="sidebar-item">
+    <li class="sidebar-item{{#hasChildren}} has-children{{/hasChildren}}">
       <a class="sidebar-link" href="/{{slug}}">
         <span class="link-text">{{title}}</span>
       </a>
+      {{#hasChildren}}
+      <ul class="sidebar-sub">
+        {{#children}}<li class="sidebar-sub-item"><a class="sidebar-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
     </li>
     {{/pages}}
   </ul>
@@ -98,24 +143,23 @@ const PRESETS = {
     },
     {
       label: 'Mega Menu',
-      description: 'Breites Dropdown mit Spalten und Kategorie­gruppen',
+      description: 'Breites Dropdown mit Unterseiten als Spalten',
       code: `<nav class="main-nav mega-menu-nav">
   <ul class="mega-top-list">
     {{#pages}}
-    <li class="mega-top-item">
+    <li class="mega-top-item{{#hasChildren}} has-mega{{/hasChildren}}">
       <a class="mega-top-link" href="/{{slug}}">{{title}}</a>
-      {{#children}}
+      {{#hasChildren}}
       <div class="mega-panel">
         <div class="mega-panel-inner">
           <div class="mega-col">
-            <p class="mega-col-heading">{{title}}</p>
             <ul class="mega-col-list">
-              {{#.}}<li><a href="/{{slug}}">{{title}}</a></li>{{/.}}
+              {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
             </ul>
           </div>
         </div>
       </div>
-      {{/children}}
+      {{/hasChildren}}
     </li>
     {{/pages}}
   </ul>
@@ -131,6 +175,16 @@ const PRESETS = {
       <p class="footer-tagline">Kurze Beschreibung des Unternehmens.</p>
     </div>
     <nav class="footer-links" aria-label="Footer-Navigation">
+      {{#pages}}
+      {{#hasChildren}}
+      <div class="footer-col">
+        <p class="footer-col-heading">{{title}}</p>
+        <ul class="footer-col-list">
+          {{#children}}<li><a class="footer-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+      </div>
+      {{/hasChildren}}
+      {{/pages}}
       <div class="footer-col">
         <p class="footer-col-heading">Navigation</p>
         <ul class="footer-col-list">
@@ -257,7 +311,14 @@ const PRESETS = {
     <button class="overlay-close" aria-label="Menü schließen" onclick="this.closest('.mobile-nav').classList.remove('open')">✕</button>
     <ul class="fullscreen-list">
       {{#pages}}
-      <li><a class="fullscreen-link" href="/{{slug}}">{{title}}</a></li>
+      <li class="{{#hasChildren}}has-children{{/hasChildren}}">
+        <a class="fullscreen-link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="fullscreen-sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
       {{/pages}}
     </ul>
   </div>
@@ -276,7 +337,14 @@ const PRESETS = {
     </div>
     <ul class="drawer-list">
       {{#pages}}
-      <li class="drawer-item"><a class="drawer-link" href="/{{slug}}">{{title}}</a></li>
+      <li class="drawer-item{{#hasChildren}} has-children{{/hasChildren}}">
+        <a class="drawer-link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="drawer-sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
       {{/pages}}
     </ul>
   </aside>
@@ -300,12 +368,20 @@ const PRESETS = {
     },
     {
       label: 'Accordion',
-      description: 'Ausklappbare Sektion-Navigation',
+      description: 'Ausklappbare Sektion-Navigation mit Unterseiten',
       code: `<nav class="mobile-nav accordion-nav" aria-label="Hauptnavigation">
   <ul class="accordion-list">
     {{#pages}}
-    <li class="accordion-item">
-      <a class="accordion-link" href="/{{slug}}">{{title}}</a>
+    <li class="accordion-item{{#hasChildren}} has-children{{/hasChildren}}">
+      {{#hasChildren}}
+      <button class="accordion-toggle" onclick="this.closest('.accordion-item').classList.toggle('open')">
+        {{title}} <span class="accordion-arrow" aria-hidden="true">›</span>
+      </button>
+      <ul class="accordion-sub">
+        {{#children}}<li><a class="accordion-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+      {{^hasChildren}}<a class="accordion-link" href="/{{slug}}">{{title}}</a>{{/hasChildren}}
     </li>
     {{/pages}}
   </ul>

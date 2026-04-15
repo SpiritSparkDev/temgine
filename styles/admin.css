@@ -120,6 +120,11 @@
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+body { /* Einzige Ausnahme für den Scope*/
+  margin: 0;
+  padding: 0;
+} 
+
 .admin-scope h1,
 .admin-scope h2,
 .admin-scope h3,

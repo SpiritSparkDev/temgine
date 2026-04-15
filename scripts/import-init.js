@@ -63,16 +63,31 @@ async function run() {
 
     // Navigations (write to data/navigations) — non-destructive (skip existing files)
     const navPath = path.join(root, 'navigations.json');
-    const NAV_DIR = path.join(process.cwd(), 'data', 'navigations');
-    if (!fs.existsSync(NAV_DIR)) fs.mkdirSync(NAV_DIR, { recursive: true });
     if (fs.existsSync(navPath)) {
       const navs = JSON.parse(fs.readFileSync(navPath, 'utf-8')) || [];
       console.log('Importing navigations:', navs.length);
-      for (const n of navs) {
-        const filePath = path.join(NAV_DIR, `${n.name}.html`);
-        if (fs.existsSync(filePath)) { console.log('  skip nav (exists):', n.name); continue; }
-        fs.writeFileSync(filePath, n.code || '', 'utf-8');
-        console.log('  wrote nav:', n.name);
+      if (!prisma.navigation) {
+        console.log('  Prisma model `Navigation` not available — skip');
+      } else {
+        for (const n of navs) {
+          const type = (n.type || 'MAIN').toUpperCase();
+          await prisma.navigation.upsert({
+            where: { id: n.id || '__placeholder__' },
+            update: { name: n.name, code: n.code || '', type, isActive: n.isActive !== false },
+            create: { name: n.name, code: n.code || '', type, isActive: n.isActive !== false },
+          }).catch(async () => {
+            // upsert by id failed (no id in init data) — check by name instead
+            const existing = await prisma.navigation.findFirst({ where: { name: n.name } });
+            if (existing) {
+              await prisma.navigation.update({ where: { id: existing.id }, data: { code: n.code || '', type, isActive: n.isActive !== false } });
+              console.log('  updated nav:', n.name);
+            } else {
+              await prisma.navigation.create({ data: { name: n.name, code: n.code || '', type, isActive: n.isActive !== false } });
+              console.log('  created nav:', n.name);
+            }
+          });
+          console.log('  upserted nav:', n.name);
+        }
       }
     }
 

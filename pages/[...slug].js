@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
-import { renderPage } from '../lib/templateEngine'
+import { renderPage, buildNavHtml } from '../lib/templateEngine'
 
 export default function PageCatchAll() {
   const { query } = useRouter()
@@ -114,33 +114,38 @@ export default function PageCatchAll() {
           if (navRes.ok) {
             const activeNavs = await navRes.json();
             if (Array.isArray(activeNavs)) {
-              // Build pages list for MAIN/MOBILE context (published pages, flat with slug+title)
-              const flatPages = [];
-              const flattenPages = (nodes, depth = 0) => {
-                for (const n of nodes) {
-                  flatPages.push({ slug: n.slug, title: n.title, depth });
-                  if (n.children && n.children.length > 0) flattenPages(n.children, depth + 1);
-                }
-              };
-              flattenPages(pages);
+              // Build nested pages tree for MAIN/MOBILE nav context (published pages only)
+              const buildNestedPages = (nodes, parentPath = '') =>
+                (nodes || [])
+                  .filter(n => n.status === 'PUBLISHED' || n.isHomepage)
+                  .map(n => {
+                    const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
+                    const children = buildNestedPages(n.children || [], slug);
+                    return { slug, title: n.title, hasChildren: children.length > 0, children };
+                  });
+              const nestedPages = buildNestedPages(pages);
 
               // Build anchor list for PAGE context from page.data.anchors (if set)
               const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
 
               for (const nav of activeNavs) {
                 const key = String(nav.type).toLowerCase(); // 'main' | 'page' | 'mobile'
-                const data = key === 'page' ? { anchors } : { pages: flatPages };
+                const data = key === 'page' ? { anchors } : { pages: nestedPages };
                 navigations[key] = { code: nav.code, data };
               }
 
-              // If this page has a specific PAGE navigation assigned, override the global active one
+              // Auto-nav: auto-generated nested HTML mirroring the page hierarchy
+              const currentPath = segments.join('/');
+              navigations['auto'] = { code: buildNavHtml(pages, currentPath), data: {} };
+
+              // If this page has a specific navigation assigned, use it as the MAIN nav for this page
               if (foundPage.data?.pageNav) {
                 try {
                   const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(foundPage.data.pageNav)}&_t=${Date.now()}`);
                   if (pageNavRes.ok) {
                     const pageNavData = await pageNavRes.json();
                     if (pageNavData && pageNavData.code) {
-                      navigations['page'] = { code: pageNavData.code, data: { anchors } };
+                      navigations['main'] = { code: pageNavData.code, data: { pages: nestedPages } };
                     }
                   }
                 } catch (e) {
@@ -165,6 +170,21 @@ export default function PageCatchAll() {
       })
   }, [query.slug])
 
+  // Führe inline <script>-Tags im gerenderten HTML aus.
+  // React's dangerouslySetInnerHTML wertet Scripts nicht aus — dieser Effect holt das nach.
+  // Nur Scripts ohne src-Attribut werden ausgeführt (keine externen URLs).
+  useEffect(() => {
+    if (!html) return
+    const container = document.getElementById('page-html-output')
+    if (!container) return
+    container.querySelectorAll('script:not([src])').forEach(old => {
+      const s = document.createElement('script')
+      s.textContent = old.textContent
+      document.body.appendChild(s)
+      document.body.removeChild(s)
+    })
+  }, [html])
+
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
   const showDebug = params && params.get('debug') === '1'
 
@@ -173,7 +193,7 @@ export default function PageCatchAll() {
 
   return (
     <div>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+      <div id="page-html-output" dangerouslySetInnerHTML={{ __html: html }} />
       {showDebug && (
         <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
           <strong>Debug: rendered HTML (first 2000 chars)</strong>

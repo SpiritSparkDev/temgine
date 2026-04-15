@@ -80,18 +80,44 @@ export default function Home() {
           })
         )
 
-        // Lade Navigations-Templates
-        const navigationTemplates = {}
+        // Lade aktive Navigationen (gleiche Logik wie in [...slug].js)
+        const navigations = {}
         try {
-          const navRes = await fetch(`/api/navigations?_t=${Date.now()}`)
+          const navRes = await fetch(`/api/navigations?active=true&_t=${Date.now()}`)
           if (navRes.ok) {
-            const navData = await navRes.json()
-            const navList = navData.navigations || []
-            for (const navName of navList) {
-              const navDetailRes = await fetch(`/api/navigations?name=${encodeURIComponent(navName)}&_t=${Date.now()}`)
-              if (navDetailRes.ok) {
-                const navDetail = await navDetailRes.json()
-                navigationTemplates[navName] = navDetail.code
+            const activeNavs = await navRes.json()
+            if (Array.isArray(activeNavs)) {
+              const flatPages = []
+              const flattenPages = (nodes, parentPath = '', depth = 0) => {
+                for (const n of nodes) {
+                  const fullPath = parentPath ? `${parentPath}/${n.slug}` : n.slug
+                  flatPages.push({ slug: fullPath, title: n.title, depth })
+                  if (n.children && n.children.length > 0) flattenPages(n.children, fullPath, depth + 1)
+                }
+              }
+              flattenPages(pages)
+
+              const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
+
+              for (const nav of activeNavs) {
+                const key = String(nav.type).toLowerCase()
+                const data = key === 'page' ? { anchors } : { pages: flatPages }
+                navigations[key] = { code: nav.code, data }
+              }
+
+              // If this page has a specific navigation assigned, use it as the MAIN nav
+              if (homePage?.data?.pageNav) {
+                try {
+                  const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(homePage.data.pageNav)}&_t=${Date.now()}`)
+                  if (pageNavRes.ok) {
+                    const pageNavData = await pageNavRes.json()
+                    if (pageNavData && pageNavData.code) {
+                      navigations['main'] = { code: pageNavData.code, data: { pages: flatPages } }
+                    }
+                  }
+                } catch (e) {
+                  console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message)
+                }
               }
             }
           }
@@ -100,8 +126,7 @@ export default function Home() {
         }
 
         // Rendere Seite
-        const pageTemplateCode = homePage.template ? templateCodes[homePage.template] : null
-        const html = renderPage(homePage, templateCodes, pageTemplateCode, pages, navigationTemplates)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations)
         setHtml(html)
         setLoading(false)
       })

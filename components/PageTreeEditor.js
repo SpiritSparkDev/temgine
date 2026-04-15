@@ -6,8 +6,9 @@ import {
   Eye,
   EyeOff,
   FileText,
-  FolderTree,
   Globe,
+  Indent,
+  Outdent,
   Plus,
   Search,
   Trash2,
@@ -21,6 +22,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
+  const [iframeLoaded, setIframeLoaded] = useState({});
 
   useEffect(() => {
     setTree(pages || []);
@@ -195,6 +197,45 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     onUpdate && onUpdate(updated);
   }
 
+  function handleIndent(nodeId) {
+    // Make node a child of its preceding sibling
+    const indent = (nodes) => {
+      const index = nodes.findIndex(n => n.id === nodeId);
+      if (index > 0) {
+        const updated = [...nodes];
+        const [moved] = updated.splice(index, 1);
+        const prevSibling = { ...updated[index - 1], children: [...(updated[index - 1].children || []), moved] };
+        updated[index - 1] = prevSibling;
+        return updated;
+      }
+      return nodes.map(n => ({ ...n, children: indent(n.children || []) }));
+    };
+    const updated = indent(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+  }
+
+  function handleOutdent(nodeId) {
+    // Promote node one level up (sibling of its parent)
+    const outdent = (nodes) => {
+      for (let i = 0; i < nodes.length; i++) {
+        const childIdx = (nodes[i].children || []).findIndex(c => c.id === nodeId);
+        if (childIdx >= 0) {
+          const newChildren = (nodes[i].children || []).filter((_, j) => j !== childIdx);
+          const movedNode = nodes[i].children[childIdx];
+          const result = [...nodes];
+          result[i] = { ...nodes[i], children: newChildren };
+          result.splice(i + 1, 0, movedNode);
+          return result;
+        }
+      }
+      return nodes.map(n => ({ ...n, children: outdent(n.children || []) }));
+    };
+    const updated = outdent(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+  }
+
   function getStatusLabel(node) {
     if (node.isHomepage) return 'Homepage';
     if (node.redirectType === '404') return '404-Seite';
@@ -203,112 +244,174 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
   }
 
   function renderNodeMeta(node) {
-    const childCount = (node.children || []).length;
     const nav = navigations.find(n => n.id === node.data?.pageNav);
     return [
       `/${node.slug || ''}`,
-      nav ? `Nav: ${nav.name}` : 'Keine Navigation',
-      childCount > 0 ? `${childCount} Unterseiten` : 'Keine Unterseiten',
+      nav ? `Nav: ${nav.name}` : 'Keine Nav',
     ].join(' · ');
   }
 
-  function renderTree(nodes, parentId = null) {
-    return nodes.map((node, index) => (
-      <div key={node.id} className="tree-node">
-        <div className="node-row">
-          <div className="node-title">
-            <div className="page-node-leading">
-              <span className="page-node-icon">
-                {parentId ? <FolderTree size={16} /> : <Globe size={16} />}
-              </span>
-              <div className="page-node-copy">
-                <a href={`/${node.slug}`} target="_blank" rel="noopener noreferrer">{node.title}</a>
-                <p>{renderNodeMeta(node)}</p>
+  function renderCardGrid(nodes, depth = 0) {
+    return (
+      <div className={`page-card-row depth-${depth}`}>
+        {nodes.map((node, index) => {
+          const nav = navigations.find(n => n.id === node.data?.pageNav);
+          const hasChildren = (node.children || []).length > 0;
+          const isLoaded = iframeLoaded[node.id];
+
+          return (
+            <div key={node.id} className="page-card-group">
+              <div
+                className={`page-card${node.status === 'PUBLISHED' ? ' published' : ''}`}
+                onMouseEnter={() => setIframeLoaded(prev => ({ ...prev, [node.id]: true }))}
+              >
+                {/* Thumbnail */}
+                <div className="page-card-thumb">
+                  {node.status === 'PUBLISHED' && isLoaded ? (
+                    <div className="page-card-iframe-wrap">
+                      <iframe
+                        src={`/${node.slug}`}
+                        title={node.title}
+                        tabIndex={-1}
+                        scrolling="no"
+                        sandbox="allow-same-origin allow-scripts"
+                      />
+                    </div>
+                  ) : (
+                    <div className="page-card-thumb-placeholder">
+                      {node.status === 'DRAFT' ? <FileText size={28} /> : <Globe size={28} />}
+                      <span>{node.status === 'DRAFT' ? 'Entwurf' : 'Hover für Vorschau'}</span>
+                    </div>
+                  )}
+                  <div className="page-card-badges">
+                    <span className={`page-badge ${node.status === 'PUBLISHED' ? 'page-badge-published' : 'page-badge-neutral'}`}>
+                      {getStatusLabel(node)}
+                    </span>
+                    {node.isHomepage && <span className="page-badge badge-home">🏠</span>}
+                    {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
+                    {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
+                  </div>
+                </div>
+
+                {/* Body */}
+                <div className="page-card-body">
+                  <a
+                    href={`/${node.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="page-card-title"
+                    title={node.title}
+                  >
+                    {node.title}
+                  </a>
+                  <p className="page-card-meta">{renderNodeMeta(node)}</p>
+                  <select
+                    value={node.data?.pageNav || ''}
+                    onChange={(e) => handleNavChange(node.id, e.target.value)}
+                    className="page-card-nav-select"
+                    title="Seiten-Navigation"
+                  >
+                    <option value="">Keine Navigation</option>
+                    {navigations.map(n => (
+                      <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Actions */}
+                <div className="page-card-actions">
+                  <div className="card-btn-group">
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleMoveUp(node.id)}
+                      disabled={index === 0}
+                      title="Nach oben"
+                      aria-label={`${node.title} nach oben`}
+                    >
+                      <ChevronUp size={15} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleMoveDown(node.id)}
+                      disabled={index === nodes.length - 1}
+                      title="Nach unten"
+                      aria-label={`${node.title} nach unten`}
+                    >
+                      <ChevronDown size={15} />
+                    </button>
+                  </div>
+                  <div className="card-btn-group">
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleIndent(node.id)}
+                      disabled={index === 0}
+                      title="Einrücken (Unterseite des Vorgängers)"
+                      aria-label="Einrücken"
+                    >
+                      <Indent size={15} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleOutdent(node.id)}
+                      disabled={depth === 0}
+                      title="Ausrücken (eine Ebene höher)"
+                      aria-label="Ausrücken"
+                    >
+                      <Outdent size={15} />
+                    </button>
+                  </div>
+                  <div className="card-btn-group">
+                    <button
+                      className={`icon-btn${node.status === 'PUBLISHED' ? ' active' : ''}`}
+                      onClick={() => handleToggleStatus(node.id)}
+                      title={node.status === 'PUBLISHED' ? 'Auf Entwurf setzen' : 'Veröffentlichen'}
+                      style={{ color: node.status === 'PUBLISHED' ? '#22c55e' : '#94a3b8' }}
+                    >
+                      {node.status === 'PUBLISHED' ? <Eye size={15} /> : <EyeOff size={15} />}
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => onSelect && onSelect(node.id)}
+                      title="Bearbeiten"
+                      aria-label={`${node.title} bearbeiten`}
+                    >
+                      <Edit size={15} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleAdd(node.id)}
+                      title="Unterseite hinzufügen"
+                      aria-label={`Unterseite unter ${node.title} hinzufügen`}
+                    >
+                      <Plus size={15} />
+                    </button>
+                  </div>
+                  <div className="card-btn-group">
+                    <button
+                      className="icon-btn delete"
+                      onClick={() => handleDelete(node.id)}
+                      disabled={node.id === 'demo-home'}
+                      title={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : 'Löschen'}
+                      aria-label={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : `${node.title} löschen`}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div className="page-node-badges">
-              <span className={`page-badge ${node.status === 'PUBLISHED' ? 'page-badge-published' : 'page-badge-neutral'}`}>{getStatusLabel(node)}</span>
-              {node.isHomepage && <span className="page-badge badge-home">🏠 Homepage</span>}
-              {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
-              {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
-            </div>
-          </div>
-          <div className="node-actions">
-            <select
-              value={node.data?.pageNav || ''}
-              onChange={(e) => handleNavChange(node.id, e.target.value)}
-              className="inline-template-select"
-              title="Seiten-Navigation"
-            >
-              <option value="">Keine Navigation</option>
-              {navigations.map(n => (
-                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
-              ))}
-            </select>
-            <div className="btn-group">
-              <button
-                className="icon-btn"
-                onClick={() => handleMoveUp(node.id)}
-                disabled={index === 0}
-                style={{ opacity: index === 0 ? 0.3 : 1 }}
-                title="Nach oben"
-                aria-label={`${node.title} nach oben verschieben`}
-              >
-                <ChevronUp size={16} />
-              </button>
-              <button
-                className="icon-btn"
-                onClick={() => handleMoveDown(node.id)}
-                disabled={index === nodes.length - 1}
-                style={{ opacity: index === nodes.length - 1 ? 0.3 : 1 }}
-                title="Nach unten"
-                aria-label={`${node.title} nach unten verschieben`}
-              >
-                <ChevronDown size={16} />
-              </button>
-            </div>
-            <div className="btn-group">
-              <button
-                className={`icon-btn${node.status === 'PUBLISHED' ? ' active' : ''}`}
-                onClick={() => handleToggleStatus(node.id)}
-                title={node.status === 'PUBLISHED' ? 'Veröffentlicht – klicken um auf Entwurf zu setzen' : 'Entwurf – klicken um zu veröffentlichen'}
-                aria-label={node.status === 'PUBLISHED' ? 'Veröffentlichung aufheben' : 'Veröffentlichen'}
-                style={{ color: node.status === 'PUBLISHED' ? '#22c55e' : '#94a3b8' }}
-              >
-                {node.status === 'PUBLISHED' ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-              <button className="icon-btn" onClick={() => onSelect && onSelect(node.id)} title="Bearbeiten" aria-label={`${node.title} bearbeiten`}>
-                <Edit size={16} />
-              </button>
-              <button className="icon-btn" onClick={() => handleAdd(node.id)} title="Unterseite hinzufügen" aria-label={`Unterseite unter ${node.title} hinzufügen`}>
-                <Plus size={16} />
-              </button>
-            </div>
-            <div className="btn-group">
-              <button 
-                className="icon-btn delete" 
-                onClick={() => handleDelete(node.id)} 
-                disabled={node.id === 'demo-home'}
-                style={{ opacity: node.id === 'demo-home' ? 0.3 : 1 }}
-                title={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : 'Löschen'}
-                aria-label={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : `${node.title} löschen`}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
 
-
-        </div>
-        {node.children && node.children.length > 0 && (
-          <div className="children">
-            {renderTree(node.children, node.id)}
-          </div>
-        )}
+              {/* Children with connector */}
+              {hasChildren && (
+                <div className="page-card-children">
+                  {renderCardGrid(node.children, depth + 1)}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-    ));
+    );
   }
-
   return (
     <div className="page-tree">
       {toast && (
@@ -325,8 +428,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
             <span className="page-tree-eyebrow">Pages</span>
             <h2>Seiten strukturieren und pflegen</h2>
             <p>
-              Verwalte Seitenhierarchie, Templates und Bearbeitungsschritte an einer Stelle.
-              Suche und Aktionen sind jetzt direkter erreichbar.
+              Verwalte Seitenhierarchie, Navigationen und Bearbeitungsschritte. Hover über eine Karte für die Live-Vorschau.
             </p>
           </div>
 
@@ -351,7 +453,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
             <Search size={16} />
             <input
               type="text"
-              placeholder="Seiten, Slugs oder Templates durchsuchen"
+              placeholder="Seiten, Slugs oder Navigationen durchsuchen"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
@@ -385,9 +487,9 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
           </div>
         </div>
 
-        <div className="page-tree-list">
+        <div className="page-grid-root">
           {filteredTree.length > 0 ? (
-            renderTree(filteredTree)
+            renderCardGrid(filteredTree)
           ) : (
             <div className="page-tree-empty-state">
               <FileText size={20} />
