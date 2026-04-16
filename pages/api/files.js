@@ -200,17 +200,30 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Fehler beim Erstellen des Ordners: ' + error.message });
     }
   } else if (req.method === 'DELETE') {
-    // Datei lÃ¶schen
+    // Datei oder Ordner löschen
     try {
       // Parse JSON body manuell, da bodyParser deaktiviert ist
       let body = '';
       for await (const chunk of req) {
         body += chunk.toString();
       }
-      const { filename } = JSON.parse(body);
+      const { filename, folderPath } = JSON.parse(body);
+
+      // Ordner löschen
+      if (folderPath !== undefined) {
+        const { resolved: folderAbs } = resolveSafeDir(folderPath);
+        if (!folderAbs.startsWith(UPLOAD_DIR)) {
+          return res.status(400).json({ error: 'Ungültiger Pfad' });
+        }
+        if (!fs.existsSync(folderAbs)) {
+          return res.status(404).json({ error: 'Ordner nicht gefunden' });
+        }
+        fs.rmSync(folderAbs, { recursive: true, force: true });
+        return res.status(200).json({ success: true });
+      }
 
       if (!filename) {
-        return res.status(400).json({ error: 'Dateiname erforderlich' });
+        return res.status(400).json({ error: 'Dateiname oder Ordnerpfad erforderlich' });
       }
 
       // Bestimme den richtigen Pfad (normales uploads/ oder uploads/images/)
