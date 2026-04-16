@@ -53,30 +53,16 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
     const componentOptOut = !!(Component && Component.noExternCss);
     const propsOptOut = !!(pageProps && pageProps.noExternCss);
 
-    const loadFonts = async () => {
-      try {
-        const res = await fetch('/api/fonts');
-        const data = await res.json();
-        const fontList = (data.fonts || []).filter(f => f.enabled !== false);
+    const loadFonts = () => {
+      // Remove any previously injected font link
+      const existing = document.getElementById('temgine-font-face');
+      if (existing) existing.remove();
 
-        // Remove previously injected font-face style
-        const existing = document.getElementById('temgine-font-face');
-        if (existing) existing.remove();
-
-        if (fontList.length === 0) return;
-
-        const rules = fontList.map(f => {
-          const familyBase = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-          return `@font-face { font-family: "${familyBase}"; src: url("${f.href}") format("${f.format}"); font-display: swap; }`;
-        }).join('\n');
-
-        const style = document.createElement('style');
-        style.id = 'temgine-font-face';
-        style.textContent = rules;
-        document.head.appendChild(style);
-      } catch (error) {
-        console.error('Fehler beim Laden der Fonts:', error);
-      }
+      const link = document.createElement('link');
+      link.id = 'temgine-font-face';
+      link.rel = 'stylesheet';
+      link.href = '/api/fonts-css';
+      document.head.appendChild(link);
     };
 
     if (!isBackend && !componentOptOut && !propsOptOut) {
