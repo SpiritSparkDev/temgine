@@ -1,6 +1,7 @@
 import { prisma } from '../../../lib/prisma'
 import fs from 'fs'
 import path from 'path'
+import JSZip from 'jszip'
 
 async function loadCSSFiles() {
   const cssDir = path.join(process.cwd(), 'public', 'extern_css')
@@ -82,6 +83,8 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') return res.status(405).end()
 
+    const wantZip = req.query.format === 'zip'
+
     // Fetch all data in parallel
     const [pages, templates, snippets, css, navigations] = await Promise.all([
       prisma.page.findMany({ orderBy: { createdAt: 'asc' } }),
@@ -136,13 +139,52 @@ export default async function handler(req, res) {
 
     const json = JSON.stringify(backup, null, 2)
     const fileSize = Buffer.byteLength(json, 'utf-8')
-    
+
     // Generate filename with timestamp
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-    
+    const baseName = `temgine-backup-${dateStr}-${timeStr}`
+
+    if (wantZip) {
+      const zip = new JSZip()
+
+      // Full JSON backup
+      zip.file(`${baseName}.json`, json)
+
+      // Templates as individual HTML files
+      const tplFolder = zip.folder('templates')
+      for (const tpl of templates) {
+        const safeName = (tpl.name || `template-${tpl.id}`).replace(/[^\w.-]/g, '_')
+        tplFolder.file(`${safeName}.html`, tpl.code || '')
+      }
+
+      // Navigations as individual HTML files
+      const navFolder = zip.folder('navigations')
+      for (const nav of navigations) {
+        const safeName = (nav.name || nav.filename || 'navigation').replace(/[^\w.-]/g, '_')
+        navFolder.file(`${safeName}.html`, nav.code || '')
+      }
+
+      // CSS files individually + merged
+      const cssFolder = zip.folder('css')
+      const mergedParts = []
+      for (const cssFile of css) {
+        cssFolder.file(cssFile.filename, cssFile.content || '')
+        mergedParts.push(`/* === ${cssFile.filename} === */\n${cssFile.content || ''}`)
+      }
+      if (mergedParts.length > 0) {
+        cssFolder.file('merged.css', mergedParts.join('\n\n'))
+      }
+
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
+      res.setHeader('Content-Type', 'application/zip')
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}.zip"`)
+      res.setHeader('Content-Length', zipBuffer.length)
+      return res.status(200).send(zipBuffer)
+    }
+
     res.setHeader('Content-Type', 'application/json')
-    res.setHeader('Content-Disposition', `attachment; filename="temgine-backup-${dateStr}-${timeStr}.json"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.json"`)
     res.setHeader('X-Backup-Size', fileSize)
     res.status(200).send(json)
   } catch (e) {

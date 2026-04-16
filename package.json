@@ -20,6 +20,7 @@
     "dotenv": "^16.3.1",
     "emmet-monaco-es": "^5.7.0",
     "formidable": "^3.5.1",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.263.1",
     "mustache": "^4.2.0",
     "next": "^14.2.35",

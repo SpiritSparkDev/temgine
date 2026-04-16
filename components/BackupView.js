@@ -6,6 +6,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportingZip, setExportingZip] = useState(false)
   const [importing, setImporting] = useState(false)
   const [restoreStrategy, setRestoreStrategy] = useState('merge')
   const [backupSizeLimit, setBackupSizeLimit] = useState(5) // MB
@@ -42,7 +43,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
     }
   }
 
-  // Export backup
+  // Export backup (JSON)
   const handleExport = async () => {
     setExporting(true)
     try {
@@ -83,6 +84,36 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       notify('error', `Export fehlgeschlagen: ${e.message}`)
     } finally {
       setExporting(false)
+    }
+  }
+
+  // Export backup as ZIP (separate files per template/navigation/CSS)
+  const handleExportZip = async () => {
+    setExportingZip(true)
+    try {
+      const res = await fetch('/api/admin/export?format=zip')
+      if (!res.ok) throw new Error('ZIP Export failed')
+
+      let filename = 'temgine-backup.zip'
+      const disposition = res.headers.get('content-disposition')
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/)
+        if (match) filename = match[1]
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+
+      notify('success', 'ZIP exportiert (enthält Templates, Navigations, CSS als separate Dateien)')
+    } catch (e) {
+      notify('error', `ZIP Export fehlgeschlagen: ${e.message}`)
+    } finally {
+      setExportingZip(false)
     }
   }
 
@@ -621,15 +652,18 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           Erstelle ein vollständiges Backup aller Templates, Snippets, Seiten, CSS-Dateien, Navigationen sowie der CSS- und Font-Aktivierungskonfiguration.
         </div>
         <div className="backup-buttons">
-          <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting}>
+          <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip}>
             {exporting ? (
-              <>
-                <RefreshCw size={16} className="spinner" /> Wird exportiert...
-              </>
+              <><RefreshCw size={16} className="spinner" /> Wird exportiert...</>
             ) : (
-              <>
-                <Download size={16} /> Backup Herunterladen
-              </>
+              <><Download size={16} /> JSON Backup</>
+            )}
+          </button>
+          <button className="backup-btn" onClick={handleExportZip} disabled={exporting || exportingZip}>
+            {exportingZip ? (
+              <><RefreshCw size={16} className="spinner" /> ZIP wird erstellt...</>
+            ) : (
+              <><Download size={16} /> ZIP (Templates + CSS)</>
             )}
           </button>
           <button className="backup-btn" onClick={() => setShowSizeSettings(!showSizeSettings)}>
