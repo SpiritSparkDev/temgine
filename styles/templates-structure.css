@@ -2270,3 +2270,234 @@
   white-space: nowrap;
 }
 .template-ref-table em { color: var(--text-tertiary); font-style: normal; }
+
+/* ── Preset Gallery & CSS Dialog ───────────────────────── */
+
+/* Active state for the Presets toolbar button */
+.tce-btn-active {
+  color: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  background: rgb(var(--accent-primary-rgb, 99 102 241) / 0.08) !important;
+}
+
+/* Full-screen overlay sitting above tce-root */
+.tce-preset-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+/* Centered panel */
+.tce-preset-panel {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 820px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+}
+
+/* Header row: title + category tabs + close button */
+.tce-preset-header {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.tce-preset-title {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.tce-preset-cats {
+  display: flex;
+  gap: .375rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.tce-preset-cat {
+  padding: .3rem .75rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: .75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.tce-preset-cat:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.tce-preset-cat.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+.tce-preset-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.tce-preset-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Grid of preset cards */
+.tce-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: .75rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
+.tce-preset-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .375rem;
+  padding: 1rem 1rem .875rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s, border-color .15s, box-shadow .15s;
+}
+.tce-preset-card:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border-color: var(--accent-primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+}
+
+.tce-preset-card__label {
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.tce-preset-card__desc {
+  font-size: .75rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.tce-preset-card__css-badge {
+  display: inline-block;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: #fff;
+  background: var(--accent-primary);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-top: auto;
+}
+
+.tce-preset-card__arrow {
+  position: absolute;
+  right: .875rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  opacity: .5;
+  transition: opacity .15s, transform .15s;
+}
+.tce-preset-card:hover .tce-preset-card__arrow {
+  opacity: 1;
+  transform: translateY(-50%) translateX(2px);
+}
+
+/* ── CSS Confirm Dialog ─────────────────────────────────── */
+.tce-css-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.tce-css-dialog {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 2rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.tce-css-dialog__icon {
+  color: var(--accent-primary);
+  margin-bottom: .875rem;
+  display: flex;
+  justify-content: center;
+}
+
+.tce-css-dialog__title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 .625rem;
+}
+
+.tce-css-dialog__text {
+  font-size: .875rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.5rem;
+}
+
+.tce-css-dialog__text code {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: .8rem;
+  color: var(--accent-primary);
+}
+
+.tce-css-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+}

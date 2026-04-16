@@ -746,6 +746,106 @@
   resize: vertical;
 }
 
+/* ── Repeater field ({{#each:name}}) ──────────────────────────────── */
+.field-item-repeater {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.field-repeater-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.field-repeater-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--accent-primary);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.repeater-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repeater-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.repeater-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.repeater-subfield {
+  flex: 1;
+  min-width: 120px;
+}
+
+.repeater-subfield-wide {
+  flex: 1 1 100%;
+}
+
+.repeater-subfield .field-label-xs {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.repeater-row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 18px;
+}
+
+.repeater-row-duplicate,
+.repeater-row-delete {
+  background: transparent;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 3px 7px;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.repeater-row-duplicate:hover {
+  background: rgba(102, 126, 234, 0.15);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.repeater-row-delete:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border-color: #ef4444;
+}
+
+.repeater-add-btn {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+/* ─────────────────────────────────────────────────────────────────── */
+
 .gallery-add-btn {
   margin-bottom: 10px;
 }

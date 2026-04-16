@@ -4,7 +4,7 @@ import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
 import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps } from '../lib/templateParser';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
@@ -272,6 +272,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         out[name] = map;
       } catch (e) {
         out[name] = {};
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
+  // Maps template name → repeater blocks [{ sectionName, subFields: [{ name, type }] }]
+  const templateRepeatersByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = extractRepeaterBlocks(code) || [];
+      } catch (e) {
+        out[name] = [];
       }
     });
     return out;
@@ -960,6 +973,128 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </div>
                   )
                 })}
+
+              {/* Repeater fields: {{#each:name}}...{{/each:name}} */}
+              {(templateRepeatersByName[block.template] || []).map(({ sectionName, subFields }) => {
+                const rows = Array.isArray(block.props[sectionName]) ? block.props[sectionName] : [];
+                return (
+                  <div key={sectionName} className="field-item field-item-repeater">
+                    <div className="field-repeater-header">
+                      <label className="field-label-xs field-repeater-label">{sectionName}</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
+                        }}
+                        className="btn-modern-small repeater-add-btn"
+                        title={`Eintrag zu ${sectionName} hinzufügen`}
+                      >
+                        <Plus size={12} /> Eintrag hinzufügen
+                      </button>
+                    </div>
+                    <div className="repeater-rows">
+                      {rows.map((row, rowIdx) => (
+                        <div key={rowIdx} className="repeater-row">
+                          <div className="repeater-row-fields">
+                            {subFields.map(sf => {
+                              const sfVal = row[sf.name] !== undefined ? row[sf.name] : '';
+                              if (sf.type === 'textarea') {
+                                return (
+                                  <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
+                                    <label className="field-label-xs">{sf.name}</label>
+                                    <textarea
+                                      value={sfVal}
+                                      placeholder={sf.name}
+                                      onChange={e => {
+                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
+                                        updateNestedBlock(path, { [sectionName]: next });
+                                      }}
+                                      rows={2}
+                                      className="input-field-small field-input-full"
+                                    />
+                                  </div>
+                                );
+                              }
+                              if (sf.type === 'image' || sf.type === 'url') {
+                                return (
+                                  <div key={sf.name} className="repeater-subfield">
+                                    <label className="field-label-xs">{sf.name}</label>
+                                    <div className="field-url-row">
+                                      <input
+                                        type="text"
+                                        placeholder={sf.name}
+                                        value={sfVal}
+                                        onChange={e => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        }}
+                                        className="input-field-small field-input-full"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => openFileModal((url) => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: url } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        })}
+                                        className="btn-modern-small"
+                                        title={`Datei für ${sf.name} auswählen`}
+                                        aria-label={`Datei für ${sf.name} auswählen`}
+                                      >📁</button>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div key={sf.name} className="repeater-subfield">
+                                  <label className="field-label-xs">{sf.name}</label>
+                                  <input
+                                    type={sf.type === 'number' ? 'number' : 'text'}
+                                    placeholder={sf.name}
+                                    value={sfVal}
+                                    onChange={e => {
+                                      const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
+                                      updateNestedBlock(path, { [sectionName]: next });
+                                    }}
+                                    className="input-field-small field-input-full"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="repeater-row-actions">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = { ...row };
+                                const next = [
+                                  ...rows.slice(0, rowIdx + 1),
+                                  copy,
+                                  ...rows.slice(rowIdx + 1)
+                                ];
+                                updateNestedBlock(path, { [sectionName]: next });
+                              }}
+                              className="repeater-row-duplicate"
+                              title={`Eintrag ${rowIdx + 1} duplizieren`}
+                              aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} duplizieren`}
+                            >⧉</button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = rows.filter((_, i) => i !== rowIdx);
+                                updateNestedBlock(path, { [sectionName]: next });
+                              }}
+                              className="repeater-row-delete"
+                              title={`Eintrag ${rowIdx + 1} entfernen`}
+                              aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} entfernen`}
+                            >✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 

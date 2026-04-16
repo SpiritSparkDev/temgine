@@ -1,10 +1,297 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen } from 'lucide-react';
+import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen, Sparkles, X, ChevronRight } from 'lucide-react';
 import { createButtonHandlers } from '../lib/insertHelper';
 import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
+
+const PRESET_CATEGORY_LABELS = {
+  HERO: 'Hero / Banner',
+  TEXT: 'Text-Blöcke',
+  CARDS: 'Cards / Grid',
+  LIST: 'Listen / Repeater',
+};
+
+const TEMPLATE_PRESETS = {
+  HERO: [
+    {
+      label: 'Fullscreen Hero',
+      description: 'Vollbild-Hero mit Titel, Untertitel und CTA-Button',
+      code: `<section class="hero-fullscreen">
+  <div class="hero-fullscreen__inner">
+    {{#headline}}<h1 class="hero-fullscreen__title">{{headline}}</h1>{{/headline}}
+    {{#subline}}<p class="hero-fullscreen__sub">{{subline}}</p>{{/subline}}
+    {{#cta}}<a href="{{ctaUrl:url}}" class="hero-fullscreen__cta">{{cta}}</a>{{/cta}}
+  </div>
+</section>`,
+      css: `.hero-fullscreen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  color: #f1f5f9;
+  text-align: center;
+  padding: 2rem;
+}
+.hero-fullscreen__inner { max-width: 800px; margin: 0 auto; }
+.hero-fullscreen__title { font-size: clamp(2rem, 6vw, 4.5rem); font-weight: 800; margin: 0 0 1rem; line-height: 1.1; }
+.hero-fullscreen__sub { font-size: 1.25rem; opacity: .75; margin: 0 0 2rem; }
+.hero-fullscreen__cta { display: inline-block; padding: .875rem 2.5rem; background: #6366f1; color: #fff; border-radius: 50px; text-decoration: none; font-weight: 600; transition: background .2s; }
+.hero-fullscreen__cta:hover { background: #4f46e5; }`,
+    },
+    {
+      label: 'Split Hero',
+      description: 'Text links, Bild rechts – zweispaltig',
+      code: `<section class="hero-split">
+  <div class="hero-split__text">
+    {{#headline}}<h1 class="hero-split__title">{{headline}}</h1>{{/headline}}
+    {{#subline}}<p class="hero-split__sub">{{subline}}</p>{{/subline}}
+    {{#cta}}<a href="{{ctaUrl:url}}" class="hero-split__cta">{{cta}}</a>{{/cta}}
+  </div>
+  <div class="hero-split__image">
+    {{#image}}<img src="{{image:image}}" alt="{{headline}}" class="hero-split__img">{{/image}}
+  </div>
+</section>`,
+      css: `.hero-split { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; padding: 5rem 2rem; max-width: 1200px; margin: 0 auto; }
+.hero-split__title { font-size: clamp(1.75rem, 4vw, 3rem); font-weight: 800; margin: 0 0 1rem; line-height: 1.15; }
+.hero-split__sub { font-size: 1.1rem; color: #6b7280; margin: 0 0 2rem; }
+.hero-split__cta { display: inline-block; padding: .75rem 2rem; background: #6366f1; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; transition: background .2s; }
+.hero-split__cta:hover { background: #4f46e5; }
+.hero-split__img { width: 100%; border-radius: 12px; object-fit: cover; }
+@media (max-width: 768px) { .hero-split { grid-template-columns: 1fr; } }`,
+    },
+    {
+      label: 'Minimal Banner',
+      description: 'Schmales zentriertes Banner mit Eyebrow-Label',
+      code: `<section class="banner-minimal">
+  <div class="banner-minimal__inner">
+    {{#eyebrow}}<span class="banner-minimal__eyebrow">{{eyebrow}}</span>{{/eyebrow}}
+    {{#headline}}<h2 class="banner-minimal__title">{{headline}}</h2>{{/headline}}
+    {{#subline}}<p class="banner-minimal__sub">{{subline}}</p>{{/subline}}
+  </div>
+</section>`,
+      css: `.banner-minimal { padding: 4rem 2rem; text-align: center; border-bottom: 1px solid #e5e7eb; }
+.banner-minimal__inner { max-width: 640px; margin: 0 auto; }
+.banner-minimal__eyebrow { display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #6366f1; margin-bottom: .75rem; }
+.banner-minimal__title { font-size: clamp(1.5rem, 3.5vw, 2.5rem); font-weight: 800; margin: 0 0 .75rem; }
+.banner-minimal__sub { font-size: 1.05rem; color: #6b7280; margin: 0; }`,
+    },
+  ],
+  TEXT: [
+    {
+      label: 'Text + Bild',
+      description: 'Zweispaltiger Block mit Rich-Text und Bild',
+      code: `<section class="text-image-block">
+  <div class="text-image-block__text">
+    {{#headline}}<h2 class="text-image-block__title">{{headline}}</h2>{{/headline}}
+    <div class="text-image-block__body">{{{content:textarea}}}</div>
+  </div>
+  <div class="text-image-block__media">
+    {{#image}}<img src="{{image:image}}" alt="{{imageAlt}}" class="text-image-block__img">{{/image}}
+  </div>
+</section>`,
+      css: `.text-image-block { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; }
+.text-image-block__title { font-size: 1.75rem; font-weight: 800; margin: 0 0 1rem; }
+.text-image-block__body { color: #374151; line-height: 1.7; }
+.text-image-block__img { width: 100%; border-radius: 10px; object-fit: cover; }
+@media (max-width: 768px) { .text-image-block { grid-template-columns: 1fr; } }`,
+    },
+    {
+      label: 'Zitat / Quote',
+      description: 'Hervorgehobenes Blockzitat mit Autorenzeile',
+      code: `<section class="quote-block">
+  <blockquote class="quote-block__quote">
+    {{{quote:textarea}}}
+  </blockquote>
+  {{#author}}<cite class="quote-block__author">— {{author}}</cite>{{/author}}
+</section>`,
+      css: `.quote-block { padding: 3rem 2rem; text-align: center; }
+.quote-block__quote { font-size: clamp(1.25rem, 2.5vw, 2rem); font-style: italic; color: #374151; max-width: 800px; margin: 0 auto 1.5rem; }
+.quote-block__author { font-size: .95rem; font-weight: 600; color: #9ca3af; font-style: normal; }`,
+    },
+    {
+      label: 'Schritte / Steps',
+      description: 'Nummerierte Schritt-Anleitung (Repeater)',
+      code: `<section class="steps-block">
+  {{#headline}}<h2 class="steps-block__title">{{headline}}</h2>{{/headline}}
+  <ol class="steps-block__list">
+    {{#each:steps}}
+    <li class="steps-block__item">
+      <div class="steps-block__num">{{number}}</div>
+      <div class="steps-block__content">
+        <h3 class="steps-block__step-title">{{title}}</h3>
+        <p class="steps-block__step-text">{{description}}</p>
+      </div>
+    </li>
+    {{/each:steps}}
+  </ol>
+</section>`,
+      css: `.steps-block { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; }
+.steps-block__title { font-size: 2rem; font-weight: 800; margin: 0 0 2.5rem; text-align: center; }
+.steps-block__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2rem; }
+.steps-block__item { display: flex; gap: 1.5rem; align-items: flex-start; }
+.steps-block__num { width: 3rem; height: 3rem; border-radius: 50%; background: #6366f1; color: #fff; font-weight: 800; font-size: 1.1rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.steps-block__step-title { font-size: 1.1rem; font-weight: 700; margin: .25rem 0 .5rem; }
+.steps-block__step-text { color: #6b7280; margin: 0; line-height: 1.6; }`,
+    },
+  ],
+  CARDS: [
+    {
+      label: 'Feature Cards',
+      description: '3-spaltiges Feature-Grid mit Icon, Titel, Text (Repeater)',
+      code: `<section class="feature-cards">
+  {{#headline}}<h2 class="feature-cards__title">{{headline}}</h2>{{/headline}}
+  {{#subline}}<p class="feature-cards__sub">{{subline}}</p>{{/subline}}
+  <div class="feature-cards__grid">
+    {{#each:features}}
+    <div class="feature-card">
+      {{#icon}}<div class="feature-card__icon">{{icon}}</div>{{/icon}}
+      <h3 class="feature-card__title">{{title}}</h3>
+      <p class="feature-card__text">{{description}}</p>
+    </div>
+    {{/each:features}}
+  </div>
+</section>`,
+      css: `.feature-cards { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; text-align: center; }
+.feature-cards__title { font-size: 2rem; font-weight: 800; margin: 0 0 .75rem; }
+.feature-cards__sub { color: #6b7280; margin: 0 0 3rem; font-size: 1.05rem; }
+.feature-cards__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+.feature-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 2rem; text-align: left; transition: box-shadow .2s; }
+.feature-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.08); }
+.feature-card__icon { font-size: 2rem; margin-bottom: 1rem; }
+.feature-card__title { font-size: 1.1rem; font-weight: 700; margin: 0 0 .5rem; }
+.feature-card__text { color: #6b7280; margin: 0; line-height: 1.6; font-size: .95rem; }`,
+    },
+    {
+      label: 'Preise / Pricing',
+      description: 'Preistabelle mit mehreren Plänen (Repeater)',
+      code: `<section class="pricing-section">
+  {{#headline}}<h2 class="pricing-section__title">{{headline}}</h2>{{/headline}}
+  <div class="pricing-grid">
+    {{#each:plans}}
+    <div class="pricing-card">
+      <div class="pricing-card__name">{{name}}</div>
+      <div class="pricing-card__price">{{price}}</div>
+      <p class="pricing-card__desc">{{description}}</p>
+      {{#cta}}<a href="{{ctaUrl:url}}" class="pricing-card__cta">{{cta}}</a>{{/cta}}
+    </div>
+    {{/each:plans}}
+  </div>
+</section>`,
+      css: `.pricing-section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; text-align: center; }
+.pricing-section__title { font-size: 2rem; font-weight: 800; margin: 0 0 3rem; }
+.pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+.pricing-card { background: #fff; border: 2px solid #e5e7eb; border-radius: 16px; padding: 2.5rem 2rem; display: flex; flex-direction: column; gap: .75rem; }
+.pricing-card__name { font-size: .875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6366f1; }
+.pricing-card__price { font-size: 2.5rem; font-weight: 900; margin: .25rem 0; }
+.pricing-card__desc { color: #6b7280; font-size: .95rem; margin: 0; flex: 1; }
+.pricing-card__cta { display: block; padding: .75rem 1.5rem; background: #6366f1; color: #fff; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 1rem; transition: background .2s; }
+.pricing-card__cta:hover { background: #4f46e5; }`,
+    },
+    {
+      label: 'Team-Grid',
+      description: 'Team-Mitglieder als Karten-Grid (Repeater)',
+      code: `<section class="team-grid-section">
+  {{#headline}}<h2 class="team-grid-section__title">{{headline}}</h2>{{/headline}}
+  <div class="team-grid">
+    {{#each:members}}
+    <div class="team-card">
+      {{#photo}}<img src="{{photo:image}}" alt="{{name}}" class="team-card__photo">{{/photo}}
+      <div class="team-card__name">{{name}}</div>
+      <div class="team-card__role">{{role}}</div>
+    </div>
+    {{/each:members}}
+  </div>
+</section>`,
+      css: `.team-grid-section { padding: 4rem 2rem; max-width: 1200px; margin: 0 auto; text-align: center; }
+.team-grid-section__title { font-size: 2rem; font-weight: 800; margin: 0 0 3rem; }
+.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem; }
+.team-card { display: flex; flex-direction: column; align-items: center; gap: .75rem; }
+.team-card__photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 4px solid #e5e7eb; }
+.team-card__name { font-weight: 700; font-size: 1rem; }
+.team-card__role { font-size: .875rem; color: #9ca3af; }`,
+    },
+  ],
+  LIST: [
+    {
+      label: 'Icon-Liste',
+      description: 'Vertikale Liste mit Icons und Beschreibung (Repeater)',
+      code: `<section class="icon-list-section">
+  {{#headline}}<h2 class="icon-list-section__title">{{headline}}</h2>{{/headline}}
+  <ul class="icon-list">
+    {{#each:items}}
+    <li class="icon-list__item">
+      <span class="icon-list__icon">{{icon}}</span>
+      <div class="icon-list__content">
+        <strong class="icon-list__title">{{title}}</strong>
+        <p class="icon-list__text">{{description}}</p>
+      </div>
+    </li>
+    {{/each:items}}
+  </ul>
+</section>`,
+      css: `.icon-list-section { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; }
+.icon-list-section__title { font-size: 2rem; font-weight: 800; margin: 0 0 2rem; }
+.icon-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1.5rem; }
+.icon-list__item { display: flex; gap: 1.25rem; align-items: flex-start; }
+.icon-list__icon { font-size: 1.75rem; flex-shrink: 0; line-height: 1; }
+.icon-list__title { display: block; font-weight: 700; margin-bottom: .25rem; }
+.icon-list__text { color: #6b7280; margin: 0; line-height: 1.6; }`,
+    },
+    {
+      label: 'FAQ',
+      description: 'Häufige Fragen & Antworten (Repeater)',
+      code: `<section class="faq-section">
+  {{#headline}}<h2 class="faq-section__title">{{headline}}</h2>{{/headline}}
+  <div class="faq-list">
+    {{#each:faqs}}
+    <div class="faq-item">
+      <h3 class="faq-item__question">{{question}}</h3>
+      <div class="faq-item__answer">{{{answer:textarea}}}</div>
+    </div>
+    {{/each:faqs}}
+  </div>
+</section>`,
+      css: `.faq-section { padding: 4rem 2rem; max-width: 800px; margin: 0 auto; }
+.faq-section__title { font-size: 2rem; font-weight: 800; margin: 0 0 2.5rem; text-align: center; }
+.faq-list { display: flex; flex-direction: column; gap: .75rem; }
+.faq-item { border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.5rem; }
+.faq-item__question { font-size: 1.05rem; font-weight: 700; margin: 0 0 .75rem; }
+.faq-item__answer { color: #374151; line-height: 1.7; }
+.faq-item__answer p { margin: 0; }`,
+    },
+    {
+      label: 'Timeline',
+      description: 'Vertikale Zeitleiste mit Datum und Ereignis (Repeater)',
+      code: `<section class="timeline-section">
+  {{#headline}}<h2 class="timeline-section__title">{{headline}}</h2>{{/headline}}
+  <div class="timeline">
+    {{#each:events}}
+    <div class="timeline__item">
+      <div class="timeline__marker"></div>
+      <div class="timeline__content">
+        <span class="timeline__date">{{date}}</span>
+        <h3 class="timeline__title">{{title}}</h3>
+        <p class="timeline__text">{{description}}</p>
+      </div>
+    </div>
+    {{/each:events}}
+  </div>
+</section>`,
+      css: `.timeline-section { padding: 4rem 2rem; max-width: 700px; margin: 0 auto; }
+.timeline-section__title { font-size: 2rem; font-weight: 800; margin: 0 0 3rem; text-align: center; }
+.timeline { position: relative; padding-left: 2rem; }
+.timeline::before { content: ''; position: absolute; left: .5rem; top: 0; bottom: 0; width: 2px; background: #e5e7eb; }
+.timeline__item { position: relative; padding-bottom: 2.5rem; }
+.timeline__marker { position: absolute; left: -1.625rem; top: .25rem; width: 1rem; height: 1rem; border-radius: 50%; background: #6366f1; border: 3px solid #fff; box-shadow: 0 0 0 2px #6366f1; }
+.timeline__date { font-size: .8rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; }
+.timeline__title { font-size: 1.05rem; font-weight: 700; margin: .25rem 0 .5rem; }
+.timeline__text { color: #6b7280; margin: 0; line-height: 1.6; font-size: .95rem; }`,
+    },
+  ],
+};
 
 const SYSTEM_PLACEHOLDERS = [
   { label: 'Titel', snippet: '{{title}}' },
@@ -37,6 +324,11 @@ export default function TemplatesViewModern({ showToast }) {
   const [isEditing, setIsEditing] = useState(false);
   const [rightTab, setRightTab] = useState('variables');
   const [isSaving, setIsSaving] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [presetCategory, setPresetCategory] = useState('HERO');
+  const [pendingPresetCss, setPendingPresetCss] = useState(null);
+  const [pendingPresetLabel, setPendingPresetLabel] = useState('');
+  const [showCssDialog, setShowCssDialog] = useState(false);
 
   useEffect(() => {
     loadTemplates();
@@ -118,6 +410,47 @@ export default function TemplatesViewModern({ showToast }) {
     setTemplateCode('');
   }
 
+  function applyPreset(preset) {
+    setTemplateCode(preset.code);
+    if (!templateName) setTemplateName(preset.label);
+    setIsEditing(true);
+    setShowPresets(false);
+    if (preset.css) {
+      setPendingPresetCss(preset.css);
+      setPendingPresetLabel(preset.label);
+      setShowCssDialog(true);
+    }
+  }
+
+  async function handleSaveCss() {
+    try {
+      let existingContent = '';
+      const getRes = await fetch('/api/css?file=generic.css');
+      if (getRes.ok) {
+        const data = await getRes.json();
+        existingContent = data.content || '';
+      }
+      const separator = existingContent.trim()
+        ? `\n\n/* --- Preset: ${pendingPresetLabel} --- */\n`
+        : `/* --- Preset: ${pendingPresetLabel} --- */\n`;
+      const combined = existingContent.trim()
+        ? existingContent + separator + pendingPresetCss
+        : separator + pendingPresetCss;
+      await fetch('/api/css', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: 'generic.css', content: combined }),
+      });
+      showToast('CSS in generic.css gespeichert!', 'success');
+    } catch (e) {
+      showToast('CSS konnte nicht gespeichert werden: ' + e.message, 'error');
+    } finally {
+      setShowCssDialog(false);
+      setPendingPresetCss(null);
+      setPendingPresetLabel('');
+    }
+  }
+
   const extractedVars = isEditing ? extractVars(templateCode) : [];
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const filteredTemplates = templates.filter(
@@ -125,6 +458,7 @@ export default function TemplatesViewModern({ showToast }) {
   );
 
   return (
+    <>
     <div className="tce-root">
       {/* TOP TOOLBAR */}
       <div className="tce-toolbar">
@@ -145,6 +479,15 @@ export default function TemplatesViewModern({ showToast }) {
           )}
         </div>
         <div className="tce-toolbar-right">
+          <button
+            className={`tce-btn tce-btn-ghost${showPresets ? ' tce-btn-active' : ''}`}
+            onClick={() => setShowPresets(v => !v)}
+            title="Preset-Galerie öffnen"
+            aria-label="Preset-Galerie öffnen"
+          >
+            <Sparkles size={13} aria-hidden="true" />
+            Presets
+          </button>
           <button
             className="tce-btn tce-btn-ghost"
             onClick={handleNew}
@@ -428,5 +771,78 @@ export default function TemplatesViewModern({ showToast }) {
         )}
       </div>
     </div>
+
+      {/* Preset Gallery Overlay */}
+      {showPresets && (
+        <div className="tce-preset-overlay" role="dialog" aria-modal="true" aria-label="Template-Presets">
+          <div className="tce-preset-panel">
+            <div className="tce-preset-header">
+              <div className="tce-preset-title">
+                <Sparkles size={15} aria-hidden="true" />
+                Template-Presets
+              </div>
+              <div className="tce-preset-cats">
+                {Object.entries(PRESET_CATEGORY_LABELS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={`tce-preset-cat${presetCategory === key ? ' active' : ''}`}
+                    onClick={() => setPresetCategory(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="tce-preset-close"
+                onClick={() => setShowPresets(false)}
+                aria-label="Presets schließen"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="tce-preset-grid">
+              {(TEMPLATE_PRESETS[presetCategory] || []).map((preset, i) => (
+                <button
+                  key={i}
+                  className="tce-preset-card"
+                  onClick={() => applyPreset(preset)}
+                  title={`Preset "${preset.label}" anwenden`}
+                >
+                  <div className="tce-preset-card__label">{preset.label}</div>
+                  <div className="tce-preset-card__desc">{preset.description}</div>
+                  {preset.css && <span className="tce-preset-card__css-badge">CSS</span>}
+                  <ChevronRight size={14} className="tce-preset-card__arrow" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSS Confirm Dialog */}
+      {showCssDialog && (
+        <div className="tce-css-dialog-overlay" role="dialog" aria-modal="true">
+          <div className="tce-css-dialog">
+            <div className="tce-css-dialog__icon"><Sparkles size={22} /></div>
+            <h3 className="tce-css-dialog__title">CSS generieren?</h3>
+            <p className="tce-css-dialog__text">
+              Soll passendes CSS für <strong>{pendingPresetLabel}</strong> an{' '}
+              <code>generic.css</code> angehängt werden?
+            </p>
+            <div className="tce-css-dialog__actions">
+              <button className="tce-btn tce-btn-primary" onClick={handleSaveCss}>
+                Ja, generieren
+              </button>
+              <button
+                className="tce-btn tce-btn-ghost"
+                onClick={() => { setShowCssDialog(false); setPendingPresetCss(null); setPendingPresetLabel(''); }}
+              >
+                Nein, danke
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
