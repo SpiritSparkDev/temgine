@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
@@ -26,6 +26,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [fileModalTab, setFileModalTab] = useState('gallery');
+  const [fileModalFolder, setFileModalFolder] = useState('');
+  const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
@@ -304,7 +307,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
+    setFileModalTab('gallery');
+    setFileModalFolder('');
+    setFileModalFolderContents({ files: [], folders: [] });
     setShowFileModal(true);
+  };
+
+  const loadFolderContents = async (folder) => {
+    const safe = folder || '';
+    setFileModalFolder(safe);
+    try {
+      const res = await fetch(`/api/files?folder=${encodeURIComponent(safe)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFileModalFolderContents({ files: data.files || [], folders: data.folders || [] });
+      }
+    } catch (e) {
+      console.error('Ordner laden fehlgeschlagen:', e);
+    }
   };
 
   const selectFile = (fileUrl) => {
@@ -1462,48 +1482,145 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
 
-            <div className="file-modal-grid">
-              {uploadedFiles.length === 0 ? (
-                <div className="file-modal-empty">
-                  Keine Dateien hochgeladen
-                </div>
-              ) : (
-                uploadedFiles.map(file => {
-                  const filename = file.filename || file.name;
-                  const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
-                  const preview = isImage ? file.url : getFilePreview(file);
+            {/* Tabs */}
+            <div className="file-modal-tabs">
+              <button
+                className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
+                onClick={() => setFileModalTab('gallery')}
+              >
+                <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                Galerie
+              </button>
+              <button
+                className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
+                onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
+              >
+                <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                Ordner
+              </button>
+            </div>
 
-                  return (
-                    <div
-                      key={file.url}
-                      onClick={() => selectFile(file.url)}
-                      title={devTitle(`Datei auswaehlen: ${filename}`)}
-                      aria-label={`Datei auswaehlen: ${filename}`}
-                      className="file-modal-item"
-                    >
-                      <div className="file-modal-thumb">
-                        {isImage ? (
-                          <img
-                            src={file.url}
-                            alt={filename}
-                          />
-                        ) : (
-                          <span className="file-modal-icon">{preview}</span>
+            {/* Gallery Tab */}
+            {fileModalTab === 'gallery' && (
+              <div className="file-modal-grid">
+                {uploadedFiles.length === 0 ? (
+                  <div className="file-modal-empty">
+                    Keine Dateien hochgeladen
+                  </div>
+                ) : (
+                  uploadedFiles.map(file => {
+                    const filename = file.filename || file.name;
+                    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
+                    const preview = isImage ? file.url : getFilePreview(file);
+
+                    return (
+                      <div
+                        key={file.url}
+                        onClick={() => selectFile(file.url)}
+                        title={devTitle(`Datei auswaehlen: ${filename}`)}
+                        aria-label={`Datei auswaehlen: ${filename}`}
+                        className="file-modal-item"
+                      >
+                        <div className="file-modal-thumb">
+                          {isImage ? (
+                            <img
+                              src={file.url}
+                              alt={filename}
+                            />
+                          ) : (
+                            <span className="file-modal-icon">{preview}</span>
+                          )}
+                        </div>
+                        <div className="file-modal-filename">
+                          {filename}
+                        </div>
+                        {file.size && (
+                          <div className="file-modal-filesize">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </div>
                         )}
                       </div>
-                      <div className="file-modal-filename">
-                        {filename}
-                      </div>
-                      {file.size && (
-                        <div className="file-modal-filesize">
-                          {(file.size / 1024).toFixed(1)} KB
-                        </div>
-                      )}
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Ordner Tab */}
+            {fileModalTab === 'folders' && (
+              <>
+                {/* Breadcrumb */}
+                <div className="file-modal-breadcrumb">
+                  <button className="bc-btn" onClick={() => loadFolderContents('')}>uploads</button>
+                  {fileModalFolder && fileModalFolder.split('/').map((part, i, arr) => (
+                    <span key={i}>
+                      <span className="bc-sep">/</span>
+                      <button className="bc-btn" onClick={() => loadFolderContents(arr.slice(0, i + 1).join('/'))}>{part}</button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="file-modal-grid">
+                  {/* Zurück-Button */}
+                  {fileModalFolder && (
+                    <div
+                      className="file-modal-item file-modal-folder-item"
+                      onClick={() => {
+                        const parts = fileModalFolder.split('/');
+                        parts.pop();
+                        loadFolderContents(parts.join('/'));
+                      }}
+                    >
+                      <div className="file-modal-thumb"><ArrowLeft size={40} /></div>
+                      <div className="file-modal-filename">..</div>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  )}
+
+                  {/* Unterordner */}
+                  {fileModalFolderContents.folders.map(f => (
+                    <div
+                      key={f.name}
+                      className="file-modal-item file-modal-folder-item"
+                      onClick={() => loadFolderContents(fileModalFolder ? `${fileModalFolder}/${f.name}` : f.name)}
+                    >
+                      <div className="file-modal-thumb"><Folder size={48} /></div>
+                      <div className="file-modal-filename">{f.name}</div>
+                    </div>
+                  ))}
+
+                  {/* Dateien */}
+                  {fileModalFolderContents.files.map(file => {
+                    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name);
+                    return (
+                      <div
+                        key={file.url}
+                        className="file-modal-item"
+                        onClick={() => selectFile(file.url)}
+                        title={file.name}
+                        aria-label={`Datei auswählen: ${file.name}`}
+                      >
+                        <div className="file-modal-thumb">
+                          {isImage
+                            ? <img src={file.url} alt={file.name} />
+                            : <span className="file-modal-icon">📎</span>}
+                        </div>
+                        <div className="file-modal-filename">{file.name}</div>
+                        {file.size && (
+                          <div className="file-modal-filesize">{(file.size / 1024).toFixed(1)} KB</div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {fileModalFolderContents.folders.length === 0 && fileModalFolderContents.files.length === 0 && !fileModalFolder && (
+                    <div className="file-modal-empty">Bitte oben auf einen Ordner klicken</div>
+                  )}
+                  {fileModalFolderContents.folders.length === 0 && fileModalFolderContents.files.length === 0 && fileModalFolder && (
+                    <div className="file-modal-empty">Ordner ist leer</div>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="file-modal-footer">
               <button

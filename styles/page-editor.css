@@ -1384,3 +1384,74 @@
   cursor: pointer;
   font-size: 14px;
 }
+
+/* File modal tabs */
+.file-modal-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.file-modal-tab {
+  padding: 7px 18px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.file-modal-tab.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.file-modal-tab:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* Breadcrumb */
+.file-modal-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.file-modal-breadcrumb .bc-btn {
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 13px;
+}
+
+.file-modal-breadcrumb .bc-btn:hover { text-decoration: underline; }
+
+.file-modal-breadcrumb .bc-sep {
+  color: var(--text-tertiary);
+  margin: 0 2px;
+}
+
+/* Folder item in modal */
+.file-modal-folder-item {
+  opacity: 0.9;
+}
+
+.file-modal-folder-item .file-modal-thumb {
+  color: var(--accent-primary);
+}

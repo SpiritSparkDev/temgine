@@ -64,49 +64,31 @@ export default async function handler(req, res) {
     try {
       const fileList = [];
 
-      if (fs.existsSync(UPLOAD_DIR)) {
-        const files = fs.readdirSync(UPLOAD_DIR);
-        files.forEach(filename => {
-          const filePath = path.join(UPLOAD_DIR, filename);
-          if (fs.statSync(filePath).isFile()) {
-            const stats = fs.statSync(filePath);
+      const SIZE_VARIANTS = ['_thumbnail', '_small', '_medium', '_large'];
+
+      function walkDir(dir) {
+        if (!fs.existsSync(dir)) return;
+        fs.readdirSync(dir).forEach(item => {
+          const abs = path.join(dir, item);
+          const stat = fs.statSync(abs);
+          if (stat.isDirectory()) {
+            walkDir(abs);
+          } else {
+            if (SIZE_VARIANTS.some(v => item.includes(v))) return;
+            const rel = path.relative(UPLOAD_DIR, abs).replace(/\\/g, '/');
             fileList.push({
-              name: filename,
-              size: stats.size,
-              modified: stats.mtime,
-              type: path.extname(filename).toLowerCase(),
-              url: `/uploads/${filename}`
+              name: item,
+              filename: rel,
+              size: stat.size,
+              modified: stat.mtime,
+              type: path.extname(item).toLowerCase(),
+              url: `/uploads/${rel}`
             });
           }
         });
       }
 
-      // Bilder aus uploads/images/ lesen (nur Originale, keine _small, _medium, etc.)
-      const imageDir = path.join(process.cwd(), 'public', 'uploads', 'images');
-      if (fs.existsSync(imageDir)) {
-        const imageFiles = fs.readdirSync(imageDir);
-        imageFiles.forEach(filename => {
-          // Ãœberspringe GrÃ¶ÃŸen-Varianten
-          if (filename.includes('_thumbnail') || filename.includes('_small') ||
-              filename.includes('_medium') || filename.includes('_large')) {
-            return;
-          }
-
-          const filePath = path.join(imageDir, filename);
-          if (fs.statSync(filePath).isFile()) {
-            const stats = fs.statSync(filePath);
-            fileList.push({
-              name: filename,
-              size: stats.size,
-              modified: stats.mtime,
-              type: path.extname(filename).toLowerCase(),
-              url: `/uploads/images/${filename}`,
-              isOptimized: true
-            });
-          }
-        });
-      }
-
+      walkDir(UPLOAD_DIR);
       res.status(200).json({ files: fileList });
     } catch (error) {
       console.error('List files error:', error);
