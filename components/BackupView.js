@@ -106,7 +106,9 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
           snippets: data.snippets?.length || 0,
           pages: data.pages?.length || 0,
           cssFiles: data.css?.length || 0,
-          navigations: data.navigations?.length || 0
+          navigations: data.navigations?.length || 0,
+          cssConfig: data.cssConfig ? 1 : 0,
+          fontsConfig: data.fontsConfig ? 1 : 0
         }
 
         const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'} - Werden importiert:\n
@@ -115,6 +117,8 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 • ${itemCounts.pages} Seiten
 • ${itemCounts.cssFiles} CSS-Dateien
 • ${itemCounts.navigations} Navigationen
+• CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
+• Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}
 
 ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!' : ''}`
 
@@ -604,7 +608,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
       <div className="backup-hero">
         <div>
           <h2 className="backup-title">Backup & Wiederherstellung</h2>
-          <p className="backup-subtitle">Sichere Templates, Snippets, Seiten, CSS und Navigationen in einem Schritt.</p>
+          <p className="backup-subtitle">Sichere Templates, Snippets, Seiten, CSS, Fonts und Navigationen in einem Schritt.</p>
         </div>
         <span className="backup-chip">Sicherungszentrale</span>
       </div>
@@ -614,7 +618,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         <h3><Download className="backup-section-icon" /> Export</h3>
         <div className="backup-info">
           <Info size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-          Erstelle ein vollständiges Backup aller Templates, Snippets, Seiten, CSS-Dateien und Navigationen.
+          Erstelle ein vollständiges Backup aller Templates, Snippets, Seiten, CSS-Dateien, Navigationen sowie der CSS- und Font-Aktivierungskonfiguration.
         </div>
         <div className="backup-buttons">
           <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting}>
@@ -690,7 +694,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         {restoreStrategy === 'replace' && (
           <div className="backup-warning">
             <AlertCircle size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-            <strong>WARNUNG:</strong> Die "Ersetzen"-Strategie wird alle bestehenden Templates, Snippets, Seiten, CSS-Dateien und Navigationen löschen!
+            <strong>WARNUNG:</strong> Die "Ersetzen"-Strategie wird alle bestehenden Templates, Snippets, Seiten, CSS-Dateien, Navigationen und Aktivierungskonfigurationen löschen!
           </div>
         )}
 

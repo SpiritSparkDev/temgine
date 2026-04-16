@@ -46,6 +46,30 @@ async function importCSSFiles(cssFiles = [], strategy = 'merge') {
   }
 }
 
+function importJsonConfig(filename, data, strategy = 'merge') {
+  if (!data || typeof data !== 'object') return
+  const filePath = path.join(process.cwd(), 'data', filename)
+  try {
+    const dataDir = path.join(process.cwd(), 'data')
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true })
+
+    if (strategy === 'merge' && fs.existsSync(filePath)) {
+      // Merge: combine disabled arrays, keeping unique entries
+      const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+      const merged = Array.from(new Set([
+        ...(Array.isArray(existing.disabled) ? existing.disabled : []),
+        ...(Array.isArray(data.disabled) ? data.disabled : [])
+      ]))
+      fs.writeFileSync(filePath, JSON.stringify({ ...existing, ...data, disabled: merged }, null, 2), 'utf-8')
+    } else {
+      // Replace: write as-is
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+    }
+  } catch (e) {
+    console.warn(`Failed to write ${filename}:`, e.message)
+  }
+}
+
 async function importNavigations(navigations = [], strategy = 'merge') {
   const navDir = path.join(process.cwd(), 'data', 'navigations')
   if (!fs.existsSync(navDir)) fs.mkdirSync(navDir, { recursive: true })
@@ -92,6 +116,8 @@ export default async function handler(req, res) {
     const pages = Array.isArray(backup.pages) ? backup.pages : []
     const css = Array.isArray(backup.css) ? backup.css : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
+    const cssConfig = backup.cssConfig || null
+    const fontsConfig = backup.fontsConfig || null
 
     let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, errors: [] }
 
@@ -207,6 +233,24 @@ export default async function handler(req, res) {
       importStats.navigations = navigations.length
     } catch (e) {
       importStats.errors.push(`Navigations import failed: ${e.message}`)
+    }
+
+    // Restore CSS enabled/disabled config
+    if (cssConfig) {
+      try {
+        importJsonConfig('css-config.json', cssConfig, strategy)
+      } catch (e) {
+        importStats.errors.push(`CSS-Config import failed: ${e.message}`)
+      }
+    }
+
+    // Restore Fonts enabled/disabled config
+    if (fontsConfig) {
+      try {
+        importJsonConfig('fonts-config.json', fontsConfig, strategy)
+      } catch (e) {
+        importStats.errors.push(`Fonts-Config import failed: ${e.message}`)
+      }
     }
 
     return res.status(200).json({

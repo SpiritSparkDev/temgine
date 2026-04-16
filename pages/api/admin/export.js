@@ -41,6 +41,18 @@ async function loadCSSFiles() {
   return files
 }
 
+function loadJsonConfig(filename) {
+  const filePath = path.join(process.cwd(), 'data', filename)
+  try {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    }
+  } catch (e) {
+    console.warn(`Failed to read ${filename}:`, e.message)
+  }
+  return null
+}
+
 async function loadNavigations() {
   const navDir = path.join(process.cwd(), 'data', 'navigations')
   const navigations = []
@@ -79,6 +91,9 @@ export default async function handler(req, res) {
       loadNavigations()
     ])
 
+    const cssConfig = loadJsonConfig('css-config.json')
+    const fontsConfig = loadJsonConfig('fonts-config.json')
+
     // Map snippets to their original JSON shape when possible
     const mappedSnippets = snippets.map(s => {
       const raw = s.value || ''
@@ -92,17 +107,19 @@ export default async function handler(req, res) {
 
     const now = new Date()
     const backupMetadata = {
-      version: '1.0',
+      version: '1.1',
       exportedAt: now.toISOString(),
       exportedDate: now.toLocaleDateString('de-DE'),
       exportedTime: now.toLocaleTimeString('de-DE'),
-      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations'],
+      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'cssConfig', 'fontsConfig'],
       itemCounts: {
         templates: templates.length,
         snippets: mappedSnippets.length,
         pages: pages.length,
         cssFiles: css.length,
-        navigations: navigations.length
+        navigations: navigations.length,
+        cssConfig: cssConfig ? 1 : 0,
+        fontsConfig: fontsConfig ? 1 : 0
       }
     }
 
@@ -112,7 +129,9 @@ export default async function handler(req, res) {
       snippets: mappedSnippets,
       pages,
       css,
-      navigations
+      navigations,
+      cssConfig: cssConfig || null,
+      fontsConfig: fontsConfig || null
     }
 
     const json = JSON.stringify(backup, null, 2)
