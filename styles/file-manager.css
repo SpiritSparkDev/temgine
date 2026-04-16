@@ -160,3 +160,71 @@
   color: var(--text-tertiary);
   font-size: 16px;
 }
+
+/* Breadcrumb navigation */
+.file-manager-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.breadcrumb-item {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.breadcrumb-item:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.breadcrumb-item.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  cursor: default;
+}
+
+.breadcrumb-sep {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* New folder input row */
+.file-manager-new-folder {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.file-manager-new-folder .input-field-small {
+  flex: 1;
+}
+
+/* Folder card variant */
+.file-card-folder {
+  opacity: 0.95;
+}
+
+.file-card-folder:hover {
+  opacity: 1;
+  border-color: var(--accent-primary);
+}
+
+.file-card-folder .file-icon {
+  color: var(--accent-primary, #e07b1a);
+}
+

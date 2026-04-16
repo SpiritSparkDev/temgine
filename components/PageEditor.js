@@ -892,6 +892,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       )
                     }
 
+                    if (inputType === 'image') {
+                      return (
+                        <div key={varName} className="field-item">
+                          <label className="field-label-xs">{label}</label>
+                          <div className="field-url-row">
+                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="Bild-URL" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
+                          </div>
+                        </div>
+                      )
+                    }
+
                     if (isUrlVariable(varName)) {
                       return (
                         <div key={varName} className="field-item">
