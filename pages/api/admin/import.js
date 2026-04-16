@@ -23,23 +23,30 @@ async function importCSSFiles(cssFiles = [], strategy = 'merge') {
   }
 
   // Write new CSS files
-  const order = []
+  const newFilenames = []
   for (const file of cssFiles) {
     const filename = file.filename || 'style.css'
     const content = file.content || ''
     const filePath = path.join(cssDir, filename)
     try {
       fs.writeFileSync(filePath, content, 'utf-8')
-      order.push(filename)
+      newFilenames.push(filename)
     } catch (e) {
       console.warn(`Failed to write CSS file ${filename}:`, e.message)
     }
   }
 
-  // Update .order.json
-  if (order.length > 0) {
+  // Update .order.json — merge with existing order so non-imported files keep their position
+  if (newFilenames.length > 0) {
     try {
-      fs.writeFileSync(path.join(cssDir, '.order.json'), JSON.stringify({ order }, null, 2), 'utf-8')
+      const orderPath = path.join(cssDir, '.order.json')
+      let existingOrder = []
+      if (strategy === 'merge' && fs.existsSync(orderPath)) {
+        try { existingOrder = JSON.parse(fs.readFileSync(orderPath, 'utf-8')).order || [] } catch (e) {}
+      }
+      // Append new filenames that aren't already in the order
+      const merged = [...existingOrder, ...newFilenames.filter(f => !existingOrder.includes(f))]
+      fs.writeFileSync(orderPath, JSON.stringify({ order: merged }, null, 2), 'utf-8')
     } catch (e) {
       console.warn('Failed to write .order.json:', e.message)
     }
@@ -201,6 +208,7 @@ export default async function handler(req, res) {
             children: p.children || [],
             template: p.template || null,
             status: p.status || 'DRAFT',
+            publishAt: p.publishAt ? new Date(p.publishAt) : null,
             isHomepage: p.isHomepage || false
           },
           update: {
@@ -210,6 +218,7 @@ export default async function handler(req, res) {
             children: p.children || [],
             template: p.template,
             status: p.status || 'DRAFT',
+            publishAt: p.publishAt ? new Date(p.publishAt) : null,
             isHomepage: p.isHomepage || false
           }
         })
