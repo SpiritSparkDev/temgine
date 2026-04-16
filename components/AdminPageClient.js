@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass } from 'lucide-react';
+import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -18,6 +18,7 @@ import ContentModelsView from './ContentModelsView';
 import ImporterView from './ImporterView';
 import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
+import FontManagerView from './FontManagerView';
 
 export default function AdminPageClient() {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -474,6 +475,7 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
+              <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
               <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
               <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Settings</button></li>
@@ -569,6 +571,7 @@ export default function AdminPageClient() {
           )}
           {view === 'files' && <FileManagerView showToast={showToast} />}
           {view === 'css' && <CSSManagerViewModern showToast={showToast} />}
+          {view === 'fonts' && <FontManagerView showToast={showToast} />}
           {view === 'navigation' && <NavigationView showToast={showToast} />}
           {view === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

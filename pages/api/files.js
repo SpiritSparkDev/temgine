@@ -116,11 +116,9 @@ export default async function handler(req, res) {
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       filename: (name, ext, part) => {
-        // Bereinige Dateinamen
-        const cleanName = part.originalFilename
-          .replace(/[^a-zA-Z0-9._-]/g, '_')
-          .toLowerCase();
-        return `${Date.now()}_${cleanName}`;
+        // Bereinige Dateinamen, Originalname bleibt erhalten
+        return (part.originalFilename || 'upload')
+          .replace(/[^a-zA-Z0-9._\-\u00C0-\u024F]/g, '_');
       }
     });
 

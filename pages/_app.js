@@ -32,11 +32,11 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
         // Entferne alte externe CSS Links
         document.querySelectorAll('link[data-extern-css]').forEach(link => link.remove());
         
-        // Füge <link> Tags in der angegebenen Reihenfolge hinzu
-        files.forEach((file) => {
+        // Füge <link> Tags in der angegebenen Reihenfolge hinzu (nur aktivierte Dateien)
+        files.filter(f => f.enabled !== false).forEach((f) => {
           const link = document.createElement('link');
           link.rel = 'stylesheet';
-          link.href = `/extern_css/${file}`;
+          link.href = typeof f === 'string' ? `/extern_css/${f}` : f.href;
           link.dataset.externCss = 'true';
           document.head.appendChild(link);
         });
@@ -53,8 +53,35 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
     const componentOptOut = !!(Component && Component.noExternCss);
     const propsOptOut = !!(pageProps && pageProps.noExternCss);
 
+    const loadFonts = async () => {
+      try {
+        const res = await fetch('/api/fonts');
+        const data = await res.json();
+        const fontList = (data.fonts || []).filter(f => f.enabled !== false);
+
+        // Remove previously injected font-face style
+        const existing = document.getElementById('temgine-font-face');
+        if (existing) existing.remove();
+
+        if (fontList.length === 0) return;
+
+        const rules = fontList.map(f => {
+          const familyBase = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+          return `@font-face { font-family: "${familyBase}"; src: url("${f.href}") format("${f.format}"); font-display: swap; }`;
+        }).join('\n');
+
+        const style = document.createElement('style');
+        style.id = 'temgine-font-face';
+        style.textContent = rules;
+        document.head.appendChild(style);
+      } catch (error) {
+        console.error('Fehler beim Laden der Fonts:', error);
+      }
+    };
+
     if (!isBackend && !componentOptOut && !propsOptOut) {
       loadExternalCSS();
+      loadFonts();
     }
   }, [router && router.pathname, Component, pageProps]);
 
