@@ -1609,6 +1609,45 @@
   background: rgba(231, 76, 60, 0.1);
 }
 
+/* ── Template list: drag-and-drop + order buttons ─────── */
+
+.tce-item-grip {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  cursor: grab;
+  opacity: .4;
+  transition: opacity .1s;
+}
+.tce-list-item:hover .tce-item-grip { opacity: 1; }
+.tce-list-item--drag-over { border-top: 2px solid var(--accent-primary); }
+.tce-list-item--dragging { opacity: .35; }
+
+.tce-item-order-btns {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.tce-list-item:hover .tce-item-order-btns { display: flex; }
+
+.tce-item-order-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 2px;
+  line-height: 1;
+}
+.tce-item-order-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-tertiary, rgba(0,0,0,.08));
+}
+.tce-item-order-btn:disabled { opacity: .25; cursor: default; }
+
 /* ── Column 2: Code editor ──────────────────────────────── */
 .tce-code-panel {
   flex: 1;
@@ -2500,4 +2539,154 @@
   justify-content: center;
   gap: .75rem;
   flex-wrap: wrap;
+}
+
+/* ── CSS Class Registry Tab ─────────────────────────────── */
+
+.tce-class-registry {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  padding: .75rem .875rem;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.tce-class-registry-toolbar {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+}
+
+.tce-class-search {
+  flex: 1;
+  padding: .325rem .6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: .78rem;
+  outline: none;
+  transition: border-color .15s;
+}
+.tce-class-search:focus { border-color: var(--accent-primary); }
+
+.tce-class-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.tce-class-refresh-btn:hover { background: var(--bg-secondary); color: var(--text-primary); }
+.tce-class-refresh-btn:disabled { opacity: .5; cursor: default; }
+
+@keyframes tce-spin {
+  to { transform: rotate(360deg); }
+}
+.tce-spin { animation: tce-spin .7s linear infinite; }
+
+.tce-class-loading,
+.tce-class-empty {
+  font-size: .78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.tce-class-file-section {
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+}
+
+.tce-class-file-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.tce-class-file-name {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'Fira Code', monospace;
+}
+
+.tce-class-count {
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0 5px;
+  line-height: 1.6;
+}
+
+.tce-class-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+}
+
+.tce-class-section-label {
+  font-size: .68rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: .125rem 0;
+  opacity: .8;
+}
+
+.tce-class-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+}
+
+.tce-class-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: .72rem;
+  font-family: 'Fira Code', monospace;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  white-space: nowrap;
+}
+.tce-class-chip:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border-color: var(--accent-primary);
+}
+
+.tce-class-chip--duplicate {
+  border-color: #f59e0b;
+  color: #b45309;
+}
+.tce-class-chip--duplicate:hover {
+  background: rgb(245 158 11 / 0.1);
+  border-color: #d97706;
+}
+
+.tce-class-chip--copied {
+  background: rgb(var(--accent-primary-rgb, 99 102 241) / 0.15) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+  font-weight: 600;
 }

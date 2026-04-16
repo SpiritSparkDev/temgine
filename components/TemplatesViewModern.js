@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen, Sparkles, X, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { createButtonHandlers } from '../lib/insertHelper';
 import TemplateStructurePreview from './TemplateStructurePreview';
 
@@ -313,7 +313,7 @@ function extractVars(code) {
   return [...vars];
 }
 
-export default function TemplatesViewModern({ showToast }) {
+export default function TemplatesViewModern({ showToast, onSaved }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [templates, setTemplates] = useState([]);
@@ -329,22 +329,58 @@ export default function TemplatesViewModern({ showToast }) {
   const [pendingPresetCss, setPendingPresetCss] = useState(null);
   const [pendingPresetLabel, setPendingPresetLabel] = useState('');
   const [showCssDialog, setShowCssDialog] = useState(false);
+  const [classRegistry, setClassRegistry] = useState(null);
+  const [classRegistryLoading, setClassRegistryLoading] = useState(false);
+  const [classSearch, setClassSearch] = useState('');
+  const [copiedClass, setCopiedClass] = useState(null);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   useEffect(() => {
     loadTemplates();
   }, []);
 
   function loadTemplates() {
-    fetch('/api/templates')
-      .then(r => r.json())
-      .then(data => {
-        let list = Array.isArray(data) ? data : [];
-        if (list.length > 0 && typeof list[0] === 'string') {
-          list = list.map(n => ({ name: n, type: 'BLOCK' }));
-        }
-        setTemplates(list);
-      })
-      .catch(() => setTemplates([]));
+    Promise.all([
+      fetch('/api/templates').then(r => r.json()),
+      fetch('/api/templates/order').then(r => r.json()).catch(() => ({ order: [] })),
+    ]).then(([data, orderData]) => {
+      let list = Array.isArray(data) ? data : [];
+      if (list.length > 0 && typeof list[0] === 'string') {
+        list = list.map(n => ({ name: n, type: 'BLOCK' }));
+      }
+      const order = Array.isArray(orderData.order) ? orderData.order : [];
+      if (order.length > 0) {
+        const ordered = [];
+        order.forEach(name => {
+          const t = list.find(x => x.name === name);
+          if (t) ordered.push(t);
+        });
+        list.forEach(t => { if (!ordered.find(x => x.name === t.name)) ordered.push(t); });
+        list = ordered;
+      }
+      setTemplates(list);
+    }).catch(() => setTemplates([]));
+  }
+
+  function saveOrder(list) {
+    fetch('/api/templates/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: list.map(t => t.name) }),
+    }).catch(() => {});
+  }
+
+  function moveTemplate(fromIdx, toIdx) {
+    if (fromIdx === toIdx || toIdx < 0 || toIdx >= templates.length) return;
+    const next = [...templates];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setTemplates(next);
+    if (selectedTemplate === fromIdx) setSelectedTemplate(toIdx);
+    else if (selectedTemplate === toIdx) setSelectedTemplate(fromIdx);
+    saveOrder(next);
+    onSaved?.();
   }
 
   function handleNew() {
@@ -381,6 +417,7 @@ export default function TemplatesViewModern({ showToast }) {
       .then(() => {
         showToast('Template gespeichert!', 'success');
         loadTemplates();
+        onSaved?.();
       })
       .catch(err => showToast('Fehler: ' + err.message, 'error'))
       .finally(() => setIsSaving(false));
@@ -395,6 +432,7 @@ export default function TemplatesViewModern({ showToast }) {
       .then(() => {
         showToast('Template gelöscht', 'success');
         loadTemplates();
+        onSaved?.();
         if (selectedTemplate === index) {
           setIsEditing(false);
           setSelectedTemplate(null);
@@ -449,6 +487,32 @@ export default function TemplatesViewModern({ showToast }) {
       setPendingPresetCss(null);
       setPendingPresetLabel('');
     }
+  }
+
+  async function loadClassRegistry() {
+    setClassRegistryLoading(true);
+    try {
+      const res = await fetch('/api/css/classes');
+      if (res.ok) {
+        const data = await res.json();
+        setClassRegistry(data);
+      } else {
+        showToast('CSS-Klassen konnten nicht geladen werden', 'error');
+      }
+    } catch (e) {
+      showToast('Fehler beim Laden der CSS-Klassen: ' + e.message, 'error');
+    } finally {
+      setClassRegistryLoading(false);
+    }
+  }
+
+  function handleCopyClass(className) {
+    navigator.clipboard.writeText(className).then(() => {
+      setCopiedClass(className);
+      setTimeout(() => setCopiedClass(null), 1500);
+    }).catch(() => {
+      showToast('Kopieren nicht möglich', 'error');
+    });
   }
 
   const extractedVars = isEditing ? extractVars(templateCode) : [];
@@ -542,15 +606,23 @@ export default function TemplatesViewModern({ showToast }) {
             ) : (
               filteredTemplates.map((t) => {
                 const index = templates.findIndex((x) => x.name === t.name);
+                const canReorder = !normalizedSearch;
+                const isDragging = dragIndex === index;
+                const isDragOver = canReorder && dragOverIndex === index && dragIndex !== index;
                 return (
                   <div
                     key={t.name}
-                    className={`tce-list-item${selectedTemplate === index && isEditing ? ' active' : ''}`}
+                    className={`tce-list-item${selectedTemplate === index && isEditing ? ' active' : ''}${isDragging ? ' tce-list-item--dragging' : ''}${isDragOver ? ' tce-list-item--drag-over' : ''}`}
                     onClick={() => handleEdit(t.name, index)}
                     role="button"
                     tabIndex={0}
                     aria-label={`Template ${t.name} bearbeiten`}
                     title={devTitle(`Template ${t.name} öffnen`)}
+                    draggable={canReorder}
+                    onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; setDragIndex(index); }}
+                    onDragOver={(e) => { if (canReorder) { e.preventDefault(); setDragOverIndex(index); } }}
+                    onDrop={(e) => { e.preventDefault(); if (dragIndex !== null) moveTemplate(dragIndex, index); setDragIndex(null); setDragOverIndex(null); }}
+                    onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
@@ -558,8 +630,33 @@ export default function TemplatesViewModern({ showToast }) {
                       }
                     }}
                   >
-                    <Grid size={12} className="tce-item-icon" aria-hidden="true" />
+                    {canReorder
+                      ? <GripVertical size={12} className="tce-item-grip" aria-hidden="true" />
+                      : <Grid size={12} className="tce-item-icon" aria-hidden="true" />
+                    }
                     <span className="tce-item-name">{t.name}</span>
+                    {canReorder && (
+                      <span className="tce-item-order-btns" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="tce-item-order-btn"
+                          onClick={() => moveTemplate(index, index - 1)}
+                          disabled={index === 0}
+                          aria-label="Nach oben"
+                          title="Nach oben"
+                        >
+                          <ChevronUp size={10} />
+                        </button>
+                        <button
+                          className="tce-item-order-btn"
+                          onClick={() => moveTemplate(index, index + 1)}
+                          disabled={index === templates.length - 1}
+                          aria-label="Nach unten"
+                          title="Nach unten"
+                        >
+                          <ChevronDown size={10} />
+                        </button>
+                      </span>
+                    )}
                     <button
                       className="tce-item-delete"
                       onClick={(e) => {
@@ -650,6 +747,18 @@ export default function TemplatesViewModern({ showToast }) {
               >
                 <BookOpen size={11} aria-hidden="true" />
                 Referenz
+              </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'klassen'}
+                className={`tce-props-tab${rightTab === 'klassen' ? ' active' : ''}`}
+                onClick={() => {
+                  setRightTab('klassen');
+                  if (!classRegistry) loadClassRegistry();
+                }}
+              >
+                <Copy size={11} aria-hidden="true" />
+                Klassen
               </button>
             </div>
 
@@ -764,6 +873,108 @@ export default function TemplatesViewModern({ showToast }) {
                     <span className="tce-setting-label">Typ</span>
                     <div className="tce-type-badge">BLOCK</div>
                   </div>
+                </div>
+              )}
+
+              {rightTab === 'klassen' && (
+                <div className="tce-class-registry">
+                  <div className="tce-class-registry-toolbar">
+                    <input
+                      type="text"
+                      className="tce-class-search"
+                      placeholder="Klasse suchen…"
+                      value={classSearch}
+                      onChange={(e) => setClassSearch(e.target.value)}
+                      aria-label="CSS-Klasse suchen"
+                    />
+                    <button
+                      className="tce-class-refresh-btn"
+                      onClick={loadClassRegistry}
+                      disabled={classRegistryLoading}
+                      aria-label="Klassen neu laden"
+                      title="Aktualisieren"
+                    >
+                      <RefreshCw size={13} className={classRegistryLoading ? 'tce-spin' : ''} />
+                    </button>
+                  </div>
+
+                  {classRegistryLoading && (
+                    <div className="tce-class-loading">Lade CSS-Klassen…</div>
+                  )}
+
+                  {!classRegistryLoading && classRegistry && (() => {
+                    const q = classSearch.trim().toLowerCase();
+                    const duplicateSet = new Set(
+                      (classRegistry.duplicates || []).map((d) => d.className)
+                    );
+                    const duplicateFiles = Object.fromEntries(
+                      (classRegistry.duplicates || []).map((d) => [d.className, d.files])
+                    );
+
+                    const filteredFiles = classRegistry.files
+                      .map((f) => ({
+                        ...f,
+                        classes: f.classes.filter(
+                          ({ className }) => !q || className.toLowerCase().includes(q)
+                        ),
+                      }))
+                      .filter((f) => f.classes.length > 0);
+
+                    if (filteredFiles.length === 0) {
+                      return (
+                        <div className="tce-class-empty">
+                          {q ? `Keine Klassen für „${classSearch}"` : 'Keine CSS-Klassen gefunden'}
+                        </div>
+                      );
+                    }
+
+                    return filteredFiles.map((file) => {
+                      // Group by section (Preset comments)
+                      const bySection = {};
+                      for (const item of file.classes) {
+                        const sec = item.section || '__root__';
+                        if (!bySection[sec]) bySection[sec] = [];
+                        bySection[sec].push(item.className);
+                      }
+
+                      return (
+                        <div key={file.name} className="tce-class-file-section">
+                          <div className="tce-class-file-heading">
+                            <span className="tce-class-file-name">{file.name}</span>
+                            <span className="tce-class-count">{file.classes.length}</span>
+                          </div>
+                          {Object.entries(bySection).map(([section, classes]) => (
+                            <div key={section} className="tce-class-subsection">
+                              {section !== '__root__' && (
+                                <div className="tce-class-section-label">{section}</div>
+                              )}
+                              <div className="tce-class-chips">
+                                {classes.map((cls) => {
+                                  const isDup = duplicateSet.has(cls);
+                                  const isCopied = copiedClass === cls;
+                                  return (
+                                    <button
+                                      key={cls}
+                                      className={`tce-class-chip${isDup ? ' tce-class-chip--duplicate' : ''}${isCopied ? ' tce-class-chip--copied' : ''}`}
+                                      onClick={() => handleCopyClass(cls)}
+                                      title={isDup ? `Auch in: ${duplicateFiles[cls].filter((f) => f !== file.name).join(', ')}` : 'Klick zum Kopieren'}
+                                    >
+                                      {isCopied ? '✓' : isDup ? <AlertTriangle size={9} aria-hidden="true" /> : null}
+                                      {isCopied ? 'Kopiert!' : cls}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
+
+                  {!classRegistryLoading && !classRegistry && (
+                    <div className="tce-class-empty">Klassen werden beim ersten Öffnen geladen.</div>
+                  )}
                 </div>
               )}
             </div>

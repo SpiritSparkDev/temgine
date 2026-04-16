@@ -231,6 +231,21 @@ export default function AdminPageClient() {
     localStorage.setItem('darkMode', newMode.toString());
   };
 
+  async function refreshTemplateList() {
+    try {
+      const tRes = await fetch('/api/templates');
+      if (!tRes.ok) throw new Error(`API error: ${tRes.status}`);
+      const t = await tRes.json();
+      let list = Array.isArray(t) ? t : [];
+      if (list.length > 0 && typeof list[0] === 'string') {
+        list = list.map(n => ({ name: n, type: 'BLOCK' }));
+      }
+      setTemplateList(list);
+    } catch (e) {
+      console.error('[admin] Error loading templates:', e);
+    }
+  }
+
   useEffect(() => {
     let isMounted = true;
 
@@ -238,16 +253,8 @@ export default function AdminPageClient() {
       const warnings = [];
 
       try {
-        const tRes = await fetch('/api/templates');
-        if (!tRes.ok) throw new Error(`API error: ${tRes.status}`);
-        const t = await tRes.json();
-        let list = Array.isArray(t) ? t : [];
-        if (list.length > 0 && typeof list[0] === 'string') {
-          list = list.map(n => ({ name: n, type: 'BLOCK' }));
-        }
-        if (isMounted) setTemplateList(list);
-      } catch (e) { 
-        console.error('[admin] Error loading templates:', e);
+        await refreshTemplateList();
+      } catch (e) {
         warnings.push('Templates konnten nicht geladen werden.');
         if (isMounted) setTemplateList([]);
       }
@@ -492,7 +499,7 @@ export default function AdminPageClient() {
             <div className="builder-shell">
 
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} />}
+                {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} onSaved={refreshTemplateList} />}
                 {builderTab === 'content-models' && <ContentModelsView />}
                 {builderTab === 'importer' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
               </div>

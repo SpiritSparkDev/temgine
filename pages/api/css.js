@@ -12,11 +12,42 @@ export const config = {
 };
 
 const CSS_DIR = path.join(process.cwd(), 'public', 'extern_css');
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
 const ORDER_FILE = path.join(CSS_DIR, '.order.json');
+const CONFIG_FILE = path.join(process.cwd(), 'data', 'css-config.json');
 
 // Verzeichnis erstellen falls nicht vorhanden
 if (!fs.existsSync(CSS_DIR)) {
   fs.mkdirSync(CSS_DIR, { recursive: true });
+}
+
+function loadDisabledSet() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
+      return new Set(Array.isArray(data.disabled) ? data.disabled : []);
+    }
+  } catch (e) {}
+  return new Set();
+}
+
+function scanUploadsForCss(dir, relBase, results = []) {
+  if (!fs.existsSync(dir)) return results;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const entryRel = relBase ? `${relBase}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        scanUploadsForCss(path.join(dir, entry.name), entryRel, results);
+      } else if (entry.name.toLowerCase().endsWith('.css')) {
+        const id = `uploads/${entryRel}`;
+        const absPath = path.join(dir, entry.name);
+        // path traversal check
+        if (!absPath.startsWith(UPLOADS_DIR)) continue;
+        results.push({ id, name: entry.name, source: 'uploads', href: `/uploads/${entryRel}` });
+      }
+    }
+  } catch (e) {}
+  return results;
 }
 
 export default async function handler(req, res) {
@@ -91,7 +122,7 @@ export default async function handler(req, res) {
       }
     } else {
       try {
-        let files = fs.readdirSync(CSS_DIR).filter(f => f.endsWith('.css'));
+        let fileNames = fs.readdirSync(CSS_DIR).filter(f => f.endsWith('.css'));
         
         // Lade gespeicherte Reihenfolge
         if (fs.existsSync(ORDER_FILE)) {
@@ -102,36 +133,62 @@ export default async function handler(req, res) {
             // Sortiere Dateien nach gespeicherter Reihenfolge
             const orderedFiles = [];
             order.forEach(file => {
-              if (files.includes(file)) {
+              if (fileNames.includes(file)) {
                 orderedFiles.push(file);
               }
             });
             
             // Füge neue Dateien hinzu, die nicht in der Reihenfolge sind
-            files.forEach(file => {
+            fileNames.forEach(file => {
               if (!orderedFiles.includes(file)) {
                 orderedFiles.push(file);
               }
             });
             
-            files = orderedFiles;
+            fileNames = orderedFiles;
           } catch (e) {
             // Falls Order-Datei korrupt ist, nutze alphabetische Sortierung
-            files.sort();
+            fileNames.sort();
           }
         } else {
-          files.sort();
+          fileNames.sort();
         }
+
+        const disabled = loadDisabledSet();
+
+        const externFiles = fileNames.map(name => ({
+          id: `extern_css/${name}`,
+          name,
+          source: 'extern_css',
+          href: `/extern_css/${name}`,
+          enabled: !disabled.has(`extern_css/${name}`),
+        }));
+
+        const uploadFiles = scanUploadsForCss(UPLOADS_DIR, '', []).map(f => ({
+          ...f,
+          enabled: !disabled.has(f.id),
+        }));
         
-        res.status(200).json({ files });
+        res.status(200).json({ files: [...externFiles, ...uploadFiles] });
       } catch (error) {
         res.status(500).json({ error: 'Fehler beim Laden der Dateiliste' });
       }
     }
   } else if (req.method === 'POST') {
+    // Sonderfall: disabled-Liste speichern
+    const payload = parsedBody || {};
+    if (!payload.filename && Array.isArray(payload.disabled)) {
+      try {
+        const dataDir = path.dirname(CONFIG_FILE);
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify({ disabled: payload.disabled }, null, 2), 'utf-8');
+        return res.status(200).json({ success: true });
+      } catch (error) {
+        return res.status(500).json({ error: 'Fehler beim Speichern der Konfiguration' });
+      }
+    }
     // CSS-Datei speichern (or upload via JSON payload)
     try {
-      const payload = parsedBody || req.body || {}
       const { filename, content } = payload;
 
       if (!filename || !filename.endsWith('.css')) {
@@ -151,7 +208,7 @@ export default async function handler(req, res) {
   } else if (req.method === 'DELETE') {
     // CSS-Datei löschen
     try {
-      const { filename } = parsedBody || req.body || {};
+      const { filename } = parsedBody || {};
 
       if (!filename) {
         return res.status(400).json({ error: 'Dateiname erforderlich' });
