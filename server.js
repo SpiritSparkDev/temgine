@@ -14,7 +14,10 @@ const path = require('path');
 const next = require('next');
 
 const port = process.env.PORT || 3000;
-const dev = process.env.NODE_ENV !== 'production';
+// Use dev mode only when NODE_ENV is explicitly 'development'.
+// Plesk often leaves NODE_ENV unset; defaulting to dev mode here would cause
+// Next.js to ignore the production build in .next and return HTML for JS bundle requests.
+const dev = process.env.NODE_ENV === 'development';
 
 // Run database migrations on startup (Plesk: ENV vars are only available here, not in npm scripts)
 if (process.env.DATABASE_URL) {

@@ -1,5 +1,9 @@
 const path = require('path');
-const isDev = process.env.NODE_ENV !== 'production';
+// Use development mode only when NODE_ENV is explicitly 'development'.
+// On Plesk/production hosts NODE_ENV is often unset — defaulting to dev mode
+// would make the server look for built assets in '.next-dev' while the build
+// (which always runs with NODE_ENV=production) wrote them to '.next'.
+const isDev = process.env.NODE_ENV === 'development';
 
 /**
  * Ensure a single instance of CodeMirror packages is resolved by webpack.
