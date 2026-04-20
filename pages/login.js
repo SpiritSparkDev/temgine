@@ -1,6 +1,6 @@
 import { signIn, useSession, getProviders } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function Login({ providers }) {
   const { data: session, status } = useSession();
@@ -8,9 +8,11 @@ export default function Login({ providers }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const redirectingRef = useRef(false);
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status === 'authenticated' && !redirectingRef.current) {
+      redirectingRef.current = true;
       router.push('/admin');
     }
   }, [status, router]);
@@ -27,9 +29,8 @@ export default function Login({ providers }) {
 
     if (result?.error) {
       setError('Falscher Benutzername oder Passwort');
-    } else {
-      router.push('/admin');
     }
+    // Navigation handled by useEffect once status becomes 'authenticated'
   };
 
   return (
