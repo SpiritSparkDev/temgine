@@ -228,6 +228,84 @@
   color: #9a8070;
 }
 
+/* ── Health check panel ──────────────────────────────────────────────────────── */
+.health-panel {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--secondary-color);
+  padding-top: 1rem;
+  text-align: left;
+}
+
+.health-toggle {
+  background: none;
+  border: 1px solid var(--secondary-color);
+  border-radius: 6px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  color: #7a6558;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  width: 100%;
+}
+
+.health-toggle:hover:not(:disabled) {
+  background: #f0ebe4;
+  border-color: #9a8070;
+}
+
+.health-toggle:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.health-results {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.health-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.health-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 3px;
+}
+
+.health-dot.ok   { background: #3a9e5f; }
+.health-dot.fail { background: #c0392b; }
+
+.health-label {
+  font-weight: 600;
+  color: #4f3d2c;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.health-msg {
+  color: #6b5647;
+  word-break: break-all;
+}
+
+.health-error {
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  background: #fce8e6;
+  color: #9b2318;
+  border: 1px solid #f2c0bb;
+  border-radius: 6px;
+  font-size: 0.82rem;
+}
+
 /* ─── Invite-specific ─────────────────────────────────────────────────────────── */
 
 /* Invite detail box */

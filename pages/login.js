@@ -2,6 +2,16 @@ import { signIn, useSession, getProviders } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { useEffect, useState, useRef } from 'react';
 
+function HealthRow({ label, ok, message, extra }) {
+  return (
+    <div className="health-row">
+      <span className={`health-dot ${ok ? 'ok' : 'fail'}`} />
+      <span className="health-label">{label}</span>
+      <span className="health-msg">{message}{extra ? ` — ${extra}` : ''}</span>
+    </div>
+  );
+}
+
 export default function Login({ providers }) {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -10,6 +20,21 @@ export default function Login({ providers }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const redirectingRef = useRef(false);
+  const [health, setHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  const runHealthCheck = async () => {
+    setHealthLoading(true);
+    try {
+      const res = await fetch('/api/health');
+      const data = await res.json();
+      setHealth(data);
+    } catch (e) {
+      setHealth({ error: 'Health-Check nicht erreichbar: ' + e.message });
+    } finally {
+      setHealthLoading(false);
+    }
+  };
 
   // Resolve a safe redirect target from ?callbackUrl — only allow same-origin paths
   const getSafeCallbackUrl = () => {
@@ -122,6 +147,42 @@ export default function Login({ providers }) {
         <p className="auth-footer-hint">
           Bitte verwenden Sie ein angelegtes Benutzerkonto oder OAuth.
         </p>
+
+        <div className="health-panel">
+          <button
+            type="button"
+            className="health-toggle"
+            onClick={runHealthCheck}
+            disabled={healthLoading}
+          >
+            {healthLoading ? 'Prüfe…' : 'System-Status prüfen'}
+          </button>
+
+          {health && !health.error && (
+            <div className="health-results">
+              <HealthRow
+                label="Umgebung"
+                ok={health.env?.ok}
+                message={health.env?.message}
+              />
+              <HealthRow
+                label="Datenbank"
+                ok={health.database?.ok}
+                message={health.database?.message}
+              />
+              <HealthRow
+                label="Schema"
+                ok={health.schema?.ok}
+                message={health.schema?.message}
+                extra={health.schema?.userCount !== undefined ? `${health.schema.userCount} Benutzer` : undefined}
+              />
+            </div>
+          )}
+
+          {health?.error && (
+            <div className="health-error">{health.error}</div>
+          )}
+        </div>
       </div>
     </div>
   );
