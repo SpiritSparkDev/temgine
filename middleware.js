@@ -27,6 +27,8 @@ export async function middleware(req) {
   return NextResponse.next();
 }
 
+// Auth for /admin is handled in getServerSideProps (Node.js context)
+// to avoid edge-runtime env issues on Plesk hosting.
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: [],
 };
