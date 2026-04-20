@@ -8,29 +8,54 @@ export default function Login({ providers }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const redirectingRef = useRef(false);
+
+  // Resolve a safe redirect target from ?callbackUrl — only allow same-origin paths
+  const getSafeCallbackUrl = () => {
+    const raw = router.query.callbackUrl;
+    if (typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')) {
+      return raw;
+    }
+    return '/admin';
+  };
 
   useEffect(() => {
     if (status === 'authenticated' && !redirectingRef.current) {
       redirectingRef.current = true;
-      router.push('/admin');
+      router.push(getSafeCallbackUrl());
     }
   }, [status, router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     
-    const result = await signIn('credentials', {
-      username,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn('credentials', {
+        username,
+        password,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      setError('Falscher Benutzername oder Passwort');
+      if (result?.error) {
+        setError('Falscher Benutzername oder Passwort');
+      } else if (result?.ok) {
+        // Explicit redirect — does not rely on session status update
+        if (!redirectingRef.current) {
+          redirectingRef.current = true;
+          router.push(getSafeCallbackUrl());
+        }
+      } else {
+        setError('Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
+    } finally {
+      setLoading(false);
     }
-    // Navigation handled by useEffect once status becomes 'authenticated'
   };
 
   return (
@@ -69,8 +94,8 @@ export default function Login({ providers }) {
 
           {error && <div className="auth-error">{error}</div>}
 
-          <button type="submit" className="auth-btn-primary">
-            Anmelden
+          <button type="submit" className="auth-btn-primary" disabled={loading}>
+            {loading ? 'Anmelden...' : 'Anmelden'}
           </button>
         </form>
 
