@@ -203,16 +203,6 @@ npm run check-env    # Umgebungsvariablen prüfen
 
 ---
 
-## Dokumentation
-
-- [DEPLOYMENT.md](./DEPLOYMENT.md) — Ausführlicher Plesk-Deployment-Guide
-- [OAUTH_SETUP.md](./OAUTH_SETUP.md) — GitHub OAuth einrichten
-- [SECURITY_SETUP.md](./SECURITY_SETUP.md) — Sicherheits- und DB-Konfiguration
-- [USER_INVITATION_SYSTEM.md](./USER_INVITATION_SYSTEM.md) — Einladungssystem
-- [CHANGELOG.md](./CHANGELOG.md) — Änderungshistorie
-
----
-
 ## Lizenz
 
 Proprietär — alle Rechte vorbehalten.
