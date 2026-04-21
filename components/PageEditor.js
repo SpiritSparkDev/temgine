@@ -34,6 +34,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
+  const [enabledCssFiles, setEnabledCssFiles] = useState([]);
   const [toast, setToast] = useState(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -244,6 +245,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     };
     loadFiles();
+  }, []);
+
+  useEffect(() => {
+    // Lade aktivierte CSS-Dateien für Vorschau
+    fetch('/api/css')
+      .then(r => r.json())
+      .then(data => {
+        const files = (data.files || []).filter(f => f.enabled !== false);
+        setEnabledCssFiles(files);
+      })
+      .catch(() => {});
   }, []);
 
   // Prüfe ob Variable einen URL-Bezug hat
@@ -677,7 +689,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         {}
       );
 
-      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title || 'Vorschau'}</title></head><body>${rendered}</body></html>`;
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title || 'Vorschau'}</title>\n${cssLinkTags}</head><body>${rendered}</body></html>`;
     } catch (e) {
       console.error('buildPreviewHtml failed:', e);
       return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;

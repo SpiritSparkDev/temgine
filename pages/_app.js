@@ -69,7 +69,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       loadExternalCSS();
       loadFonts();
     }
-  }, [router && router.pathname, Component, pageProps]);
+  }, [router && router.pathname, Component]);
 
   return (
     <SessionProvider session={session}>
