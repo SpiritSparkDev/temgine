@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
@@ -1549,6 +1550,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
           )}
 
+          {typeof window !== 'undefined' && document.getElementById('page-editor-inspector-portal') ? createPortal(
           <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
             {(() => {
               const toggleSection = (id) => setCollapsedSections(prev => {
@@ -1742,6 +1744,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               );
             })()}
           </aside>
+          , document.getElementById('page-editor-inspector-portal')) : null}
         </div>
       </div>
 

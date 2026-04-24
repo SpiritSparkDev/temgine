@@ -507,6 +507,8 @@ export default function AdminPageClient() {
           </nav>
         </aside>
 
+        <aside id="page-editor-inspector-portal" className="page-editor-inspector-portal" aria-label="Seiten-Inspektor" />
+
         <main className="admin-editor">
           {initialLoading && (
             <div className="admin-view-loading" role="status" aria-live="polite">

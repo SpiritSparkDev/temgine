@@ -220,8 +220,8 @@
 
 .page-editor-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 0 14px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
   align-items: start;
   min-height: 0;
   overflow: visible;
@@ -951,16 +951,7 @@
 
 @media (min-width: 1024px) and (max-width: 2099px) {
   .page-editor-workspace {
-    grid-template-columns: minmax(0, 1fr) 280px;
-  }
-
-  .page-editor-inspector {
-    position: sticky;
-    top: 0;
-    height: calc(100vh - 48px);
-    overflow-y: auto;
-    border-radius: var(--radius-2xl) 0 0 var(--radius-2xl);
-    border-right: none;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
