@@ -1,0 +1,22 @@
+{
+  "models": [
+    {
+      "contentTypeSlug": "blog-post",
+      "filter": {
+        "template": ["Seiten"]
+      },
+      "mappings": {
+        "title": "page.title",
+        "slug": "page.slug",
+        "excerpt": "page.data.text",
+        "body": "page.data.content",
+        "publishedAt": "page.publishAt"
+      },
+      "static": {
+        "origin": "legacy-page"
+      },
+      "matchBy": "slug",
+      "titleField": "title"
+    }
+  ]
+}

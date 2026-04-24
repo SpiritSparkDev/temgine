@@ -66,6 +66,12 @@ export const authOptions = {
     signIn: '/login',
   },
   callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = user.role;
+      }
+      return token;
+    },
     async signIn({ user, account, profile }) {
       // Benutzer in Datenbank speichern (bei OAuth-Login)
       if (account && (account.provider === 'github' || account.provider === 'google')) {
@@ -98,6 +104,7 @@ export const authOptions = {
     async session({ session, token }) {
       // Session-Daten erweitern falls nötig
       session.user.id = token.sub;
+      session.user.role = token.role;
       return session;
     },
   },

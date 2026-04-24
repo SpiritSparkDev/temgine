@@ -582,6 +582,11 @@ export default function AdminPageClient() {
               handleUpdatePages={handleUpdatePages}
               editorDirty={editorDirty}
               setEditorDirty={setEditorDirty}
+              userRole={
+                process.env.NEXT_PUBLIC_DEV_MODE === 'true'
+                  ? 'ADMIN'
+                  : (session?.user?.role || 'EDITOR')
+              }
             />
           )}
           {view === 'dashboard' && (

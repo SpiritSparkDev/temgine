@@ -60,6 +60,8 @@ model Page {
 
 enum PageStatus {
   DRAFT
+  REVIEW
+  APPROVED
   PUBLISHED
   SCHEDULED
 }
@@ -149,6 +151,7 @@ model ContentType {
   slug      String         @unique
   description String?
   fields    ContentField[]
+  entries   ContentEntry[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 }
@@ -163,4 +166,16 @@ model ContentField {
   options     Json?
   required    Boolean  @default(false)
   sortOrder    Int      @default(0)
+}
+
+model ContentEntry {
+  id            String   @id @default(cuid())
+  contentTypeId String
+  contentType   ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+  data          Json     @default("{}")
+  title         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([contentTypeId])
 }

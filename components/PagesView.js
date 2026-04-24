@@ -10,7 +10,8 @@ export default function PagesView({
   setEditingPage, 
   handleUpdatePages,
   editorDirty = false,
-  setEditorDirty = () => {}
+  setEditorDirty = () => {},
+  userRole,
 }) {
   const [toast, setToast] = useState(null);
 
@@ -33,6 +34,7 @@ export default function PagesView({
           page={editingPage} 
           templates={templateList}
           allPages={pages}
+          userRole={userRole}
           onSave={async (updatedPage, options) => {
             try {
               // Ensure options is an object

@@ -3,15 +3,19 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import RevisionHistoryPanel from './RevisionHistoryPanel';
 import SeoPanel from './SeoPanel';
+import WorkflowPanel from './WorkflowPanel';
+import DOMCanvas from './DOMCanvas';
+import ElementPropertyEditor from './ElementPropertyEditor';
+import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -41,6 +45,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [toast, setToast] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('gespeichert');
+  const [useDOMEditor, setUseDOMEditor] = useState(false);
+  const [domLayout, setDomLayout] = useState([]);
+  const [selectedElementId, setSelectedElementId] = useState(null);
+  const [pageStatus, setPageStatus] = useState((page?.status || 'DRAFT').toUpperCase());
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
   const initialSnapshotRef = useRef('');
@@ -141,6 +149,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectUrl(initialRedirectUrl);
       setIsHomepage(initialIsHomepage);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
+
+      // Check if page needs DOM migration and migrate if necessary
+      if (pageNeedsMigration(page)) {
+        try {
+          const domMigrated = migratePage(page);
+          if (domMigrated && Array.isArray(domMigrated.layout)) {
+            setDomLayout(domMigrated.layout);
+            setUseDOMEditor(true);
+          }
+        } catch (e) {
+          console.error('DOM migration failed:', e);
+        }
+      }
 
       initialSnapshotRef.current = buildSnapshot({
         title: initialTitle,
@@ -840,6 +861,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     delete normalizedPageData.blockSlots;
     delete normalizedPageData.__blockSlots;
 
+    // Store DOM layout if in DOM editor mode
+    if (useDOMEditor && domLayout.length > 0) {
+      normalizedPageData.domLayout = domLayout;
+    }
+
     const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
     const updatedPage = {
@@ -1391,28 +1417,88 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       <div className="tab-content blocks-tab">
 
         <div className="page-editor-workspace">
-          <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
-            <div className="blocks-container">
-              {blocks.length > 0 ? renderBlocksList() : (
-                <div className="page-block-empty-state">
-                  <strong>Noch keine Blöcke vorhanden</strong>
-                  <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
-                  <button
-                    type="button"
-                    className="btn-modern"
-                    onClick={() => {
-                      handleAddBlock('content');
-                      setSelectedBlockPath('0');
+          {useDOMEditor ? (
+            // DOM Editor View
+            <div className="page-editor-canvas" title={devTitle('DOM-Layout-Editor')}>
+              <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
+                <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid #ddd', padding: '16px' }}>
+                  <h4 style={{ marginBottom: '12px' }}>DOM-Elemente</h4>
+                  <DOMCanvas
+                    pageLayout={domLayout}
+                    selectedElementId={selectedElementId}
+                    onAddElement={() => {
+                      const newElement = {
+                        id: `elem-${Date.now()}`,
+                        tag: 'div',
+                        attrs: {},
+                        children: []
+                      };
+                      setDomLayout([...domLayout, newElement]);
                     }}
-                    title={devTitle('Ersten Inhaltsblock anlegen')}
-                    aria-label="Ersten Inhaltsblock anlegen"
-                  >
-                    Ersten Block hinzufügen
-                  </button>
+                    onDeleteElement={(elementId) => {
+                      const filterElements = (els) =>
+                        els.filter(el => el.id !== elementId).map(el => ({
+                          ...el,
+                          children: el.children ? filterElements(el.children) : el.children
+                        }));
+                      setDomLayout(filterElements(domLayout));
+                    }}
+                    onSelectElement={setSelectedElementId}
+                    onUpdateElement={(elementId, updates) => {
+                      const updateElements = (els) =>
+                        els.map(el =>
+                          el.id === elementId
+                            ? { ...el, ...updates }
+                            : { ...el, children: el.children ? updateElements(el.children) : el.children }
+                        );
+                      setDomLayout(updateElements(domLayout));
+                    }}
+                  />
                 </div>
-              )}
+                {selectedElementId && (
+                  <div style={{ flex: 0.3, overflowY: 'auto', borderLeft: '1px solid #ddd', padding: '16px' }}>
+                    <h4 style={{ marginBottom: '12px' }}>Element Properties</h4>
+                    <ElementPropertyEditor
+                      element={domLayout.find(el => el.id === selectedElementId)}
+                      onChange={(updates) => {
+                        const updateElements = (els) =>
+                          els.map(el =>
+                            el.id === selectedElementId
+                              ? { ...el, ...updates }
+                              : { ...el, children: el.children ? updateElements(el.children) : el.children }
+                          );
+                        setDomLayout(updateElements(domLayout));
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            // Legacy Blocks Editor View
+            <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
+              <div className="blocks-container">
+                {blocks.length > 0 ? renderBlocksList() : (
+                  <div className="page-block-empty-state">
+                    <strong>Noch keine Blöcke vorhanden</strong>
+                    <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
+                    <button
+                      type="button"
+                      className="btn-modern"
+                      onClick={() => {
+                        handleAddBlock('content');
+                        setSelectedBlockPath('0');
+                      }}
+                      title={devTitle('Ersten Inhaltsblock anlegen')}
+                      aria-label="Ersten Inhaltsblock anlegen"
+                    >
+                      Ersten Block hinzufügen
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
             {(() => {
@@ -1441,6 +1527,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
                   {/* Global Actions — Reihenfolge wird durch CSS grid-template-areas gesteuert */}
                   <div className="inspector-global-actions">
+                    {domLayout.length > 0 && (
+                      <button
+                        type="button"
+                        className={`btn-modern-small ${useDOMEditor ? 'green' : 'hollow'}`}
+                        onClick={() => setUseDOMEditor(!useDOMEditor)}
+                        title={useDOMEditor ? 'Zu Block-Editor wechseln' : 'Zu DOM-Editor wechseln'}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Layers size={14} />
+                        {useDOMEditor ? 'DOM' : 'Blöcke'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-modern-small inspector-ga-newblock"
@@ -1630,6 +1728,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 pageData={pageData}
                 slug={slug}
                 onChange={setPageData}
+              />
+
+              <WorkflowPanel
+                pageId={page?.id}
+                status={pageStatus}
+                userRole={userRole}
+                onTransition={(newStatus) => setPageStatus(newStatus.toUpperCase())}
               />
             </div>
 
