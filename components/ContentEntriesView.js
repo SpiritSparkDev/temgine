@@ -1,12 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, ChevronLeft } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, ChevronLeft, FileText, Clock, Hash } from 'lucide-react';
 import ContentEntryEditor from './ContentEntryEditor';
 import Toast from './Toast';
 
-/**
- * ContentEntriesView - Manage content entries for a specific model
- * Shows list of entries and allows creating/editing/deleting entries
- */
 export default function ContentEntriesView({
   model = null,
   onClose = null,
@@ -18,11 +14,8 @@ export default function ContentEntriesView({
   const [isCreating, setIsCreating] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Load entries from API
   useEffect(() => {
-    if (model?.id) {
-      loadEntries();
-    }
+    if (model?.id) loadEntries();
   }, [model?.id]);
 
   const loadEntries = async () => {
@@ -36,16 +29,13 @@ export default function ContentEntriesView({
         showToast('Fehler beim Laden der Einträge', 'error');
       }
     } catch (error) {
-      console.error('Error loading entries:', error);
       showToast(`Fehler beim Laden: ${error.message}`, 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const showToast = (message, type = 'info') => {
-    setToast({ message, type });
-  };
+  const showToast = (message, type = 'info') => setToast({ message, type });
 
   const handleSaveEntry = async (entry) => {
     try {
@@ -81,7 +71,6 @@ export default function ContentEntriesView({
       setIsCreating(false);
       return true;
     } catch (error) {
-      console.error('Error saving entry:', error);
       showToast(`Fehler beim Speichern: ${error.message}`, 'error');
       return false;
     }
@@ -89,56 +78,41 @@ export default function ContentEntriesView({
 
   const handleDeleteEntry = async (entryId) => {
     try {
-      const res = await fetch(`/api/content-entries/${entryId}`, {
-        method: 'DELETE',
-      });
-
+      const res = await fetch(`/api/content-entries/${entryId}`, { method: 'DELETE' });
       if (!res.ok) {
         const error = await res.json();
         showToast(`Fehler: ${error.error}`, 'error');
         return false;
       }
-
       setEntries(prev => prev.filter(e => e.id !== entryId));
       setSelectedEntry(null);
       return true;
     } catch (error) {
-      console.error('Error deleting entry:', error);
       showToast(`Fehler beim Löschen: ${error.message}`, 'error');
       return false;
     }
   };
 
   const filteredEntries = entries.filter(entry => {
-    const query = searchQuery.toLowerCase();
-    // Search in common fields: title, name, slug
+    const q = searchQuery.toLowerCase();
     return (
-      (entry.title && entry.title.toLowerCase().includes(query)) ||
-      (entry.name && entry.name.toLowerCase().includes(query)) ||
-      (entry.slug && entry.slug.toLowerCase().includes(query)) ||
-      (entry.id && entry.id.toLowerCase().includes(query))
+      (entry.title && entry.title.toLowerCase().includes(q)) ||
+      (entry.name && entry.name.toLowerCase().includes(q)) ||
+      (entry.slug && entry.slug.toLowerCase().includes(q)) ||
+      (entry.id && entry.id.toLowerCase().includes(q))
     );
   });
 
-  // If editing or creating an entry, show the editor
+  // ── Editor view ──────────────────────────────────────────────────────────
   if (selectedEntry || isCreating) {
     return (
-      <div className="content-entries-view">
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            onClose={() => setToast(null)}
-          />
-        )}
+      <div className="cev-root">
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
         <ContentEntryEditor
           model={model}
           entry={selectedEntry}
           onSave={handleSaveEntry}
-          onCancel={() => {
-            setSelectedEntry(null);
-            setIsCreating(false);
-          }}
+          onCancel={() => { setSelectedEntry(null); setIsCreating(false); }}
           onDelete={handleDeleteEntry}
           showToast={showToast}
         />
@@ -146,311 +120,382 @@ export default function ContentEntriesView({
     );
   }
 
-  // Show entries list
-  return (
-    <div className="content-entries-view">
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+  // ── List view ────────────────────────────────────────────────────────────
+  const getEntryTitle = (entry) => entry.title || entry.name || entry.headline || null;
+  const getEntryMeta = (entry) => entry.slug || entry.id?.slice(0, 12) + '…' || '';
 
-      <div className="entries-header">
-        <div className="entries-header-left">
-          <button
-            type="button"
-            className="btn-icon-only"
-            onClick={onClose}
-            title="Zurück"
-          >
-            <ChevronLeft size={20} />
+  return (
+    <div className="cev-root">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Header */}
+      <div className="cev-header">
+        <div className="cev-header-left">
+          <button className="cev-back-btn" onClick={onClose} title="Zurück">
+            <ChevronLeft size={18} />
           </button>
           <div>
-            <h2>{model?.name || 'Content Entries'}</h2>
-            <p className="entries-subtitle">{entries.length} Einträge</p>
+            <h2 className="cev-title">{model?.name || 'Content Entries'}</h2>
+            <p className="cev-subtitle">{entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'}</p>
           </div>
         </div>
-        <button
-          type="button"
-          className="btn-modern green"
-          onClick={() => setIsCreating(true)}
-          title="Neuer Eintrag"
-        >
-          <Plus size={16} /> Neuer Eintrag
+        <button className="cev-btn-primary" onClick={() => setIsCreating(true)}>
+          <Plus size={15} /> Neuer Eintrag
         </button>
       </div>
 
-      <div className="entries-toolbar">
-        <div className="search-box">
-          <Search size={16} />
+      {/* Search bar */}
+      <div className="cev-toolbar">
+        <div className="cev-search">
+          <Search size={15} />
           <input
             type="text"
-            placeholder="Einträge durchsuchen..."
+            placeholder="Einträge durchsuchen…"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
+          {searchQuery && (
+            <button className="cev-search-clear" onClick={() => setSearchQuery('')}>×</button>
+          )}
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="entries-loading">
-          <p>Lädt...</p>
-        </div>
-      ) : filteredEntries.length === 0 ? (
-        <div className="entries-empty">
-          <p>
-            {entries.length === 0
-              ? 'Noch keine Einträge für dieses Modell'
-              : 'Keine Einträge gefunden'}
-          </p>
-          {entries.length === 0 && (
-            <button
-              type="button"
-              className="btn-modern"
-              onClick={() => setIsCreating(true)}
-            >
-              <Plus size={14} /> Ersten Eintrag erstellen
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="entries-list">
-          {filteredEntries.map(entry => (
-            <div
-              key={entry.id}
-              className="entry-card"
-              onClick={() => setSelectedEntry(entry)}
-            >
-              <div className="entry-card-content">
-                <div className="entry-title">
-                  {entry.title || entry.name || entry.id}
-                </div>
-                {entry.slug && (
-                  <div className="entry-meta">
-                    <code>{entry.slug}</code>
+      {/* Content */}
+      <div className="cev-body">
+        {isLoading ? (
+          <div className="cev-state">
+            <div className="cev-spinner" />
+            <p>Lade Einträge…</p>
+          </div>
+        ) : filteredEntries.length === 0 ? (
+          <div className="cev-state">
+            <FileText size={40} strokeWidth={1} style={{ opacity: 0.3 }} />
+            <p>{entries.length === 0 ? 'Noch keine Einträge vorhanden' : 'Keine Einträge gefunden'}</p>
+            {entries.length === 0 && (
+              <button className="cev-btn-primary" onClick={() => setIsCreating(true)}>
+                <Plus size={14} /> Ersten Eintrag erstellen
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="cev-list">
+            {filteredEntries.map(entry => {
+              const title = getEntryTitle(entry);
+              const meta = getEntryMeta(entry);
+              const updatedAt = entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString('de-DE') : null;
+              return (
+                <div key={entry.id} className="cev-card" onClick={() => setSelectedEntry(entry)}>
+                  <div className="cev-card-icon">
+                    <FileText size={18} />
                   </div>
-                )}
-                {entry.excerpt && (
-                  <div className="entry-excerpt">{entry.excerpt}</div>
-                )}
-              </div>
-              <div className="entry-card-actions">
-                <button
-                  type="button"
-                  className="btn-icon-only hover-primary"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setSelectedEntry(entry);
-                  }}
-                  title="Bearbeiten"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="btn-icon-only hover-danger"
-                  onClick={e => {
-                    e.stopPropagation();
-                    if (window.confirm(`${entry.title || entry.name || 'Eintrag'} wirklich löschen?`)) {
-                      handleDeleteEntry(entry.id);
-                    }
-                  }}
-                  title="Löschen"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+                  <div className="cev-card-body">
+                    <div className="cev-card-title">{title || <span className="cev-no-title">Ohne Titel</span>}</div>
+                    <div className="cev-card-meta">
+                      {entry.slug && (
+                        <span className="cev-card-meta-item">
+                          <Hash size={11} /> {entry.slug}
+                        </span>
+                      )}
+                      {updatedAt && (
+                        <span className="cev-card-meta-item">
+                          <Clock size={11} /> {updatedAt}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="cev-card-actions" onClick={e => e.stopPropagation()}>
+                    <button
+                      className="cev-icon-btn"
+                      onClick={() => setSelectedEntry(entry)}
+                      title="Bearbeiten"
+                    >
+                      <Edit2 size={15} />
+                    </button>
+                    <button
+                      className="cev-icon-btn danger"
+                      onClick={() => {
+                        if (window.confirm(`"${title || 'Eintrag'}" wirklich löschen?`)) {
+                          handleDeleteEntry(entry.id);
+                        }
+                      }}
+                      title="Löschen"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <style jsx>{`
-        .content-entries-view {
+        .cev-root {
           display: flex;
           flex-direction: column;
           height: 100%;
-          gap: 0;
+          overflow: hidden;
           background: var(--bg-primary);
           color: var(--text-primary);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
 
-        .entries-header {
+        .cev-header {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          gap: 16px;
-          padding: 16px;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 20px;
           border-bottom: 1px solid var(--border-color);
           background: var(--bg-secondary);
+          flex-shrink: 0;
         }
 
-        .entries-header-left {
+        .cev-header-left {
           display: flex;
           align-items: center;
-          gap: 16px;
-        }
-
-        .entries-header-left h2 {
-          margin: 0 0 4px 0;
-          font-size: 1.5rem;
-          font-weight: 600;
-        }
-
-        .entries-subtitle {
-          margin: 0;
-          font-size: 0.85rem;
-          opacity: 0.7;
-        }
-
-        .entries-toolbar {
-          display: flex;
           gap: 12px;
-          padding: 12px 16px;
-          background: var(--bg-tertiary);
-          border-bottom: 1px solid var(--border-color);
         }
 
-        .search-box {
+        .cev-title {
+          margin: 0 0 2px;
+          font-size: 1.1rem;
+          font-weight: 700;
+        }
+
+        .cev-subtitle {
+          margin: 0;
+          font-size: 0.8rem;
+          opacity: 0.55;
+        }
+
+        .cev-back-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 34px;
+          height: 34px;
+          border: 1px solid var(--border-color);
+          border-radius: 7px;
+          background: var(--bg-primary);
+          cursor: pointer;
+          color: var(--text-primary);
+          transition: all 0.15s;
+          flex-shrink: 0;
+        }
+
+        .cev-back-btn:hover {
+          border-color: #6366f1;
+          background: rgba(99,102,241,0.08);
+          color: #6366f1;
+        }
+
+        .cev-toolbar {
+          padding: 10px 20px;
+          border-bottom: 1px solid var(--border-color);
+          background: var(--bg-secondary);
+          flex-shrink: 0;
+        }
+
+        .cev-search {
           display: flex;
           align-items: center;
           gap: 8px;
-          padding: 6px 12px;
-          background: var(--bg-secondary);
+          padding: 7px 12px;
+          background: var(--bg-primary);
           border: 1px solid var(--border-color);
-          border-radius: 4px;
-          flex: 1;
-          max-width: 400px;
-          opacity: 0.7;
+          border-radius: 7px;
+          max-width: 420px;
+          transition: border-color 0.15s;
         }
 
-        .search-box input {
+        .cev-search:focus-within {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+        }
+
+        .cev-search input {
           flex: 1;
           border: none;
           background: transparent;
           outline: none;
-          font-size: 0.95rem;
+          font-size: 0.9rem;
           color: var(--text-primary);
+          font-family: inherit;
         }
 
-        .search-box input::placeholder {
-          color: #999;
+        .cev-search input::placeholder { color: #9ca3af; }
+
+        .cev-search-clear {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: #9ca3af;
+          font-size: 1rem;
+          padding: 0 2px;
+          line-height: 1;
         }
 
-        .search-box:focus-within {
-          opacity: 1;
-          border-color: #667eea;
+        .cev-search-clear:hover { color: var(--text-primary); }
+
+        .cev-body {
+          flex: 1;
+          overflow-y: auto;
+          padding: 16px 20px;
         }
 
-        .entries-loading,
-        .entries-empty {
+        .cev-state {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          flex: 1;
-          gap: 16px;
+          gap: 14px;
+          padding: 60px 20px;
+          text-align: center;
           opacity: 0.6;
+          font-size: 0.9rem;
         }
 
-        .entries-list {
-          flex: 1;
-          overflow-y: auto;
+        .cev-spinner {
+          width: 28px;
+          height: 28px;
+          border: 3px solid var(--border-color);
+          border-top-color: #6366f1;
+          border-radius: 50%;
+          animation: cev-spin 0.7s linear infinite;
+        }
+
+        @keyframes cev-spin { to { transform: rotate(360deg); } }
+
+        .cev-list {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          padding: 16px;
         }
 
-        .entry-card {
+        .cev-card {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          padding: 12px 16px;
-          background: var(--bg-secondary);
+          gap: 12px;
+          padding: 12px 14px;
           border: 1px solid var(--border-color);
-          border-radius: 6px;
+          border-radius: 9px;
+          background: var(--bg-secondary);
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.15s;
         }
 
-        .entry-card:hover {
-          border-color: #667eea;
-          background: rgba(102, 126, 234, 0.04);
-          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        .cev-card:hover {
+          border-color: rgba(99,102,241,0.4);
+          background: rgba(99,102,241,0.04);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+          transform: translateY(-1px);
         }
 
-        .entry-card-content {
+        .cev-card-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          background: rgba(99,102,241,0.1);
+          color: #6366f1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .cev-card-body {
           flex: 1;
+          min-width: 0;
           display: flex;
           flex-direction: column;
           gap: 4px;
-          min-width: 0;
         }
 
-        .entry-title {
+        .cev-card-title {
           font-weight: 600;
+          font-size: 0.9rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .entry-meta {
-          font-size: 0.8rem;
-          opacity: 0.7;
+        .cev-no-title {
+          font-style: italic;
+          opacity: 0.45;
+          font-weight: 400;
         }
 
-        .entry-meta code {
-          background: rgba(0, 0, 0, 0.05);
-          padding: 2px 6px;
-          border-radius: 3px;
-          font-size: 0.75rem;
-          font-family: 'Courier New', monospace;
-        }
-
-        .entry-excerpt {
-          font-size: 0.85rem;
-          opacity: 0.6;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .entry-card-actions {
-          display: flex;
-          gap: 8px;
-          margin-left: 12px;
-        }
-
-        .btn-icon-only {
-          width: 32px;
-          height: 32px;
-          padding: 6px;
-          border: 1px solid transparent;
-          background: transparent;
-          border-radius: 4px;
-          cursor: pointer;
+        .cev-card-meta {
           display: flex;
           align-items: center;
+          gap: 12px;
+        }
+
+        .cev-card-meta-item {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 0.75rem;
+          opacity: 0.55;
+          font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+
+        .cev-card-actions {
+          display: flex;
+          gap: 6px;
+          flex-shrink: 0;
+          opacity: 0;
+          transition: opacity 0.15s;
+        }
+
+        .cev-card:hover .cev-card-actions { opacity: 1; }
+
+        .cev-icon-btn {
+          display: inline-flex;
+          align-items: center;
           justify-content: center;
-          transition: all 0.2s;
+          width: 30px;
+          height: 30px;
+          border: 1px solid transparent;
+          border-radius: 6px;
+          background: transparent;
+          cursor: pointer;
           color: var(--text-primary);
+          transition: all 0.15s;
         }
 
-        .btn-icon-only:hover {
-          background: rgba(102, 126, 234, 0.1);
-          border-color: #667eea;
+        .cev-icon-btn:hover {
+          background: rgba(99,102,241,0.1);
+          border-color: rgba(99,102,241,0.25);
+          color: #6366f1;
         }
 
-        .btn-icon-only.hover-primary:hover {
-          color: #667eea;
+        .cev-icon-btn.danger:hover {
+          background: rgba(239,68,68,0.1);
+          border-color: rgba(239,68,68,0.25);
+          color: #ef4444;
         }
 
-        .btn-icon-only.hover-danger:hover {
-          color: #c62828;
+        .cev-btn-primary {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 14px;
+          background: #6366f1;
+          color: #fff;
+          border: none;
+          border-radius: 7px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: background 0.15s;
+          font-family: inherit;
+          flex-shrink: 0;
         }
+
+        .cev-btn-primary:hover { background: #4f46e5; }
       `}</style>
     </div>
   );

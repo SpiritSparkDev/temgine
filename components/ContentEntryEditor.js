@@ -195,14 +195,30 @@ export default function ContentEntryEditor({
     const hasError = Boolean(errors[field.key]);
     const errorMessages = errors[field.key] || [];
 
-    const commonProps = {
-      value,
-      onChange: e => handleFieldChange(field.key, e.target.value),
-      className: `form-input ${hasError ? 'error' : ''}`,
-      disabled: isSaving,
-    };
+    const inputCls = `cee-input${hasError ? ' cee-input-error' : ''}`;
+    const containerCls = `cee-field${hasError ? ' cee-field-has-error' : ''}`;
 
-    const containerClass = `form-field ${hasError ? 'has-error' : ''}`;
+    const FieldLabel = () => (
+      <label className="cee-field-label">
+        {field.name}
+        {field.required && <span className="cee-field-required">*</span>}
+        <span className="cee-field-type-badge">{field.type}</span>
+      </label>
+    );
+
+    const FieldErrors = () => hasError ? (
+      <div className="cee-field-errors">
+        {errorMessages.map((msg, i) => (
+          <div key={i} className="cee-field-error-item">
+            <AlertCircle size={12} /> {msg}
+          </div>
+        ))}
+      </div>
+    ) : null;
+
+    const FieldHelp = () => field.helpText ? (
+      <div className="cee-field-help">{field.helpText}</div>
+    ) : null;
 
     switch (field.type) {
       case 'text':
@@ -210,44 +226,36 @@ export default function ContentEntryEditor({
       case 'slug':
       case 'url':
         return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
             <input
               type={field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'}
-              {...commonProps}
-              placeholder={field.placeholder || `Geben Sie ${field.name.toLowerCase()} ein`}
+              className={inputCls}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
+              placeholder={field.placeholder || field.name}
               pattern={field.type === 'slug' ? '[a-z0-9-]*' : undefined}
             />
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
+            <FieldErrors />
+            <FieldHelp />
           </div>
         );
 
       case 'number':
         return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
             <input
               type="number"
-              {...commonProps}
+              className={inputCls}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
               min={field.min}
               max={field.max}
               step={field.step || '1'}
-              placeholder={field.placeholder || `Geben Sie eine Zahl ein`}
+              placeholder={field.placeholder || '0'}
             />
             {hasError && (
               <div className="field-errors">
@@ -264,37 +272,26 @@ export default function ContentEntryEditor({
 
       case 'textarea':
         return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
             <textarea
-              {...commonProps}
+              className={`${inputCls} cee-textarea`}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
               rows={field.rows || 4}
-              placeholder={field.placeholder || `Geben Sie Text ein`}
+              placeholder={field.placeholder || field.name}
             />
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
+            <FieldErrors />
+            <FieldHelp />
           </div>
         );
 
       case 'richtext':
         return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
-            <div className="form-richtext-wrapper">
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
+            <div className="cee-richtext-wrap">
               <ReactQuill
                 value={value}
                 onChange={v => handleFieldChange(field.key, v)}
@@ -310,6 +307,91 @@ export default function ContentEntryEditor({
                   ],
                 }}
               />
+            </div>
+            <FieldErrors />
+            <FieldHelp />
+          </div>
+        );
+
+      case 'date':
+        return (
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
+            <input
+              type="date"
+              className={inputCls}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
+            />
+            <FieldErrors />
+            <FieldHelp />
+          </div>
+        );
+
+      case 'select':
+        return (
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
+            <select
+              className={inputCls}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
+            >
+              <option value="">-- Bitte auswählen --</option>
+              {(field.options || []).map(opt => {
+                const v = typeof opt === 'string' ? opt : (opt.value ?? opt);
+                const l = typeof opt === 'string' ? opt : (opt.label ?? opt.value ?? opt);
+                return <option key={v} value={v}>{l}</option>;
+              })}
+            </select>
+            <FieldErrors />
+            <FieldHelp />
+          </div>
+        );
+
+      case 'checkbox':
+      case 'boolean':
+        return (
+          <div key={field.key} className={containerCls}>
+            <label className="cee-field-label">
+              {field.name}
+              {field.required && <span className="cee-field-required">*</span>}
+              <span className="cee-field-type-badge">{field.type}</span>
+            </label>
+            <label className="cee-checkbox-row">
+              <input
+                type="checkbox"
+                checked={Boolean(value)}
+                onChange={e => handleFieldChange(field.key, e.target.checked)}
+                disabled={isSaving}
+              />
+              <span>{value ? 'Ja' : 'Nein'}</span>
+            </label>
+            <FieldErrors />
+            <FieldHelp />
+          </div>
+        );
+
+      default:
+        return (
+          <div key={field.key} className={containerCls}>
+            <FieldLabel />
+            <input
+              type="text"
+              className={inputCls}
+              value={value}
+              onChange={e => handleFieldChange(field.key, e.target.value)}
+              disabled={isSaving}
+              placeholder={field.placeholder || field.name}
+            />
+            <FieldErrors />
+            <FieldHelp />
+          </div>
+        );
+    }
+  };
             </div>
             {hasError && (
               <div className="field-errors">
@@ -420,67 +502,353 @@ export default function ContentEntryEditor({
 
   if (!model) {
     return (
-      <div className="content-entry-editor-empty">
+      <div className="cee-root cee-empty">
         <p>Kein Content Model ausgewählt</p>
       </div>
     );
   }
 
   return (
-    <div className="content-entry-editor">
+    <div className="cee-root">
       {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
       )}
 
-      <div className="editor-header">
-        <div>
-          <h2>{model.name}</h2>
-          <p className="editor-subtitle">
-            {entry?.id ? `Bearbeiten: ${entry.title || entry.name || entry.id}` : 'Neuer Eintrag'}
+      {/* ── Header ── */}
+      <div className="cee-header">
+        <div className="cee-header-info">
+          <h2 className="cee-header-title">
+            {entry?.id
+              ? (entry.title || entry.name || 'Eintrag bearbeiten')
+              : `Neuer ${model.name}`}
+          </h2>
+          <p className="cee-header-sub">
+            {entry?.id ? `${model.name} · bearbeiten` : `${model.name} · neuer Eintrag`}
           </p>
         </div>
-        <div className="editor-actions">
+        <div className="cee-header-actions">
           {entry?.id && onDelete && (
             <button
               type="button"
-              className="btn-modern-small red hollow"
+              className="cee-btn cee-btn-danger"
               onClick={handleDelete}
               disabled={isSaving}
-              title="Eintrag löschen"
             >
               <Trash2 size={14} /> Löschen
             </button>
           )}
           <button
             type="button"
-            className="btn-modern-small"
+            className="cee-btn cee-btn-ghost"
             onClick={onCancel}
             disabled={isSaving}
-            title="Abbrechen"
           >
             <X size={14} /> Abbrechen
           </button>
           <button
             type="button"
-            className="btn-modern-small green"
+            className="cee-btn cee-btn-primary"
             onClick={handleSave}
             disabled={isSaving || !isDirty}
-            title={isDirty ? 'Änderungen speichern' : 'Keine Änderungen'}
+            title={!isDirty ? 'Keine Änderungen' : undefined}
           >
-            <Save size={14} /> {isSaving ? 'Speichert...' : 'Speichern'}
+            <Save size={14} /> {isSaving ? 'Speichert…' : 'Speichern'}
           </button>
         </div>
       </div>
 
-      <div className="editor-form">
-        {(model.fields || []).map(field => renderFieldInput(field))}
+      {/* ── Form ── */}
+      <div className="cee-form">
+        {(model.fields || []).length === 0 ? (
+          <div className="cee-form-empty">
+            Dieses Modell hat keine Felder.
+          </div>
+        ) : (
+          (model.fields || []).map(field => renderFieldInput(field))
+        )}
       </div>
 
       <style jsx>{`
+        .cee-root {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          overflow: hidden;
+        }
+
+        .cee-empty {
+          align-items: center;
+          justify-content: center;
+          opacity: 0.5;
+          font-size: 0.9rem;
+        }
+
+        /* ── Header ── */
+        .cee-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 16px;
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--border-color);
+          background: var(--bg-secondary);
+          flex-shrink: 0;
+          flex-wrap: wrap;
+        }
+
+        .cee-header-info {
+          min-width: 0;
+        }
+
+        .cee-header-title {
+          margin: 0 0 3px;
+          font-size: 1.1rem;
+          font-weight: 700;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .cee-header-sub {
+          margin: 0;
+          font-size: 0.8rem;
+          opacity: 0.5;
+        }
+
+        .cee-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-shrink: 0;
+        }
+
+        /* ── Form ── */
+        .cee-form {
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+        }
+
+        .cee-form-empty {
+          text-align: center;
+          padding: 40px;
+          opacity: 0.5;
+          font-size: 0.9rem;
+        }
+
+        /* ── Field shared styles (applied via global to child renderFieldInput output) ── */
+        .cee-root :global(.cee-field) {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .cee-root :global(.cee-field-label) {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 600;
+          font-size: 0.875rem;
+        }
+
+        .cee-root :global(.cee-field-required) {
+          color: #ef4444;
+          font-size: 0.8rem;
+        }
+
+        .cee-root :global(.cee-field-type-badge) {
+          font-size: 0.7rem;
+          padding: 1px 7px;
+          border-radius: 10px;
+          background: rgba(99,102,241,0.1);
+          color: #6366f1;
+          font-weight: 500;
+          margin-left: auto;
+        }
+
+        .cee-root :global(.cee-input) {
+          padding: 9px 12px;
+          font-size: 0.9rem;
+          border: 1.5px solid var(--border-color);
+          border-radius: 7px;
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+          font-family: inherit;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          width: 100%;
+          box-sizing: border-box;
+        }
+
+        .cee-root :global(.cee-input:focus) {
+          outline: none;
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        }
+
+        .cee-root :global(.cee-input.cee-input-error) {
+          border-color: #ef4444;
+          box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
+        }
+
+        .cee-root :global(.cee-input:disabled) {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .cee-root :global(.cee-textarea) {
+          resize: vertical;
+          min-height: 100px;
+        }
+
+        .cee-root :global(.cee-richtext-wrap) {
+          border: 1.5px solid var(--border-color);
+          border-radius: 7px;
+          overflow: hidden;
+          transition: border-color 0.15s;
+        }
+
+        .cee-root :global(.cee-richtext-wrap:focus-within) {
+          border-color: #6366f1;
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        }
+
+        .cee-root :global(.cee-richtext-wrap .ql-toolbar) {
+          background: var(--bg-secondary);
+          border: none;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .cee-root :global(.cee-richtext-wrap .ql-container) {
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          font-family: inherit;
+          font-size: 0.9rem;
+        }
+
+        .cee-root :global(.cee-richtext-wrap .ql-editor) {
+          min-height: 180px;
+          padding: 12px;
+        }
+
+        .cee-root :global(.cee-richtext-wrap .ql-editor.ql-blank::before) {
+          color: #9ca3af;
+          font-style: italic;
+        }
+
+        .cee-root :global(.cee-checkbox-row) {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 12px;
+          border: 1.5px solid var(--border-color);
+          border-radius: 7px;
+          background: var(--bg-secondary);
+          cursor: pointer;
+          transition: border-color 0.15s;
+          user-select: none;
+        }
+
+        .cee-root :global(.cee-checkbox-row:hover) {
+          border-color: #6366f1;
+        }
+
+        .cee-root :global(.cee-checkbox-row input[type="checkbox"]) {
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+          accent-color: #6366f1;
+        }
+
+        .cee-root :global(.cee-field-errors) {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .cee-root :global(.cee-field-error-item) {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 0.82rem;
+          color: #ef4444;
+          padding: 4px 8px;
+          background: rgba(239,68,68,0.06);
+          border-radius: 5px;
+        }
+
+        .cee-root :global(.cee-field-help) {
+          font-size: 0.78rem;
+          color: #9ca3af;
+          padding: 0 2px;
+        }
+
+        /* ── Error state on field container ── */
+        .cee-root :global(.cee-field.cee-field-has-error .cee-field-label) {
+          color: #ef4444;
+        }
+
+        /* ── Buttons ── */
+        .cee-btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 14px;
+          border-radius: 7px;
+          font-size: 0.875rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.15s;
+          font-family: inherit;
+          border: 1.5px solid transparent;
+        }
+
+        .cee-btn:disabled {
+          opacity: 0.45;
+          cursor: not-allowed;
+        }
+
+        .cee-btn-primary {
+          background: #6366f1;
+          color: #fff;
+          border-color: #6366f1;
+        }
+
+        .cee-btn-primary:not(:disabled):hover {
+          background: #4f46e5;
+          border-color: #4f46e5;
+        }
+
+        .cee-btn-ghost {
+          background: transparent;
+          color: var(--text-primary);
+          border-color: var(--border-color);
+        }
+
+        .cee-btn-ghost:not(:disabled):hover {
+          background: var(--hover-bg, rgba(0,0,0,0.05));
+          border-color: #9ca3af;
+        }
+
+        .cee-btn-danger {
+          background: transparent;
+          color: #ef4444;
+          border-color: rgba(239,68,68,0.35);
+        }
+
+        .cee-btn-danger:not(:disabled):hover {
+          background: rgba(239,68,68,0.08);
+          border-color: #ef4444;
+        }
+      `}</style>
+    </div>
+  );
+}
         .content-entry-editor {
           display: flex;
           flex-direction: column;

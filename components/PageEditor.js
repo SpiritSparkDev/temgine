@@ -38,6 +38,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
+  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -1418,6 +1419,52 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       <div className="tab-content blocks-tab">
 
+        {/* ── Sticky Toolbar ──────────────────────────────────────────── */}
+        <div className="pe-toolbar">
+          <div className="pe-toolbar-left">
+            <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
+            <span className="pe-toolbar-slug">/{slug || '—'}</span>
+          </div>
+          <div className="pe-toolbar-actions">
+            {domLayout.length > 0 && (
+              <button
+                type="button"
+                className={`pe-tb-btn ${useDOMEditor ? 'active' : ''}`}
+                onClick={() => setUseDOMEditor(!useDOMEditor)}
+                title={useDOMEditor ? 'Zu Block-Editor wechseln' : 'Zu DOM-Editor wechseln'}
+              >
+                <Layers size={14} /> {useDOMEditor ? 'DOM' : 'Blöcke'}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`pe-tb-btn${showPreview ? ' pe-tb-btn-active' : ''}`}
+              onClick={handleTogglePreview}
+              title={devTitle('Live-Vorschau ein-/ausblenden')}
+            >
+              <Eye size={14} /> Vorschau
+            </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={() => setShowRevisions(true)}
+              title="Versionsverlauf anzeigen"
+            >
+              <History size={14} /> Verlauf
+            </button>
+            <div className="pe-toolbar-sep" />
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
+            <span
+              className={`pe-autosave-indicator${autosaveStatus === 'fehler' ? ' error' : autosaveStatus === 'speichert' ? ' saving' : ''}`}
+              aria-live="polite"
+            >
+              {autosaveStatus === 'speichert' ? 'speichert…' : autosaveStatus === 'fehler' ? '⚠ Fehler' : '✓'}
+            </span>
+          </div>
+        </div>
+
         <div className="page-editor-workspace">
           {useDOMEditor ? (
             // DOM Editor View
@@ -1527,66 +1574,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     )}
                   </div>
 
-                  {/* Global Actions — Reihenfolge wird durch CSS grid-template-areas gesteuert */}
-                  <div className="inspector-global-actions">
-                    {domLayout.length > 0 && (
-                      <button
-                        type="button"
-                        className={`btn-modern-small ${useDOMEditor ? 'green' : 'hollow'}`}
-                        onClick={() => setUseDOMEditor(!useDOMEditor)}
-                        title={useDOMEditor ? 'Zu Block-Editor wechseln' : 'Zu DOM-Editor wechseln'}
-                        style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <Layers size={14} />
-                        {useDOMEditor ? 'DOM' : 'Blöcke'}
-                      </button>
-                    )}
+                  {/* Block Actions */}
+                  <div className="inspector-block-bar">
                     <button
                       type="button"
-                      className="btn-modern-small inspector-ga-newblock"
+                      className="pe-tb-btn pe-tb-btn-primary inspector-ga-newblock"
                       onClick={() => { const p = String((blocks || []).length); handleAddBlock('content'); setSelectedBlockPath(p); }}
                       title={devTitle('Neuen Top-Level-Block anlegen')}
                     >
-                      + Neuer Block
-                    </button>
-                    <button type="button" className="inspector-action-btn inspector-ga-kindblock" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)} title={devTitle('Unterblock anlegen')}>
-                      <Plus size={13} /> Kind hinzufügen
-                    </button>
-                    <button type="button" className="btn-modern-small green inspector-ga-save" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
-                    <button type="button" className="btn-modern-small green hollow inspector-ga-savview" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
-                    <button type="button" className="btn-modern-small green hollow inspector-ga-savclose" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: autosaveStatus === 'fehler' ? '#c62828' : autosaveStatus === 'speichert' ? '#ef6c00' : '#2e7d32',
-                        padding: '4px 8px',
-                        borderRadius: '999px',
-                        background: 'var(--bg-tertiary)'
-                      }}
-                      aria-live="polite"
-                    >
-                      Autosave: {autosaveStatus === 'speichert' ? 'speichert...' : autosaveStatus}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn-modern-small hollow btn-icon-row"
-                      onClick={() => setShowRevisions(true)}
-                      title="Versionsverlauf anzeigen"
-                    >
-                      <History size={13} /> Verlauf
+                      <Plus size={13} /> Neuer Block
                     </button>
                     <button
                       type="button"
-                      className={`btn-modern-small btn-icon-row inspector-ga-preview${showPreview ? ' green' : ' hollow'}`}
-                      onClick={handleTogglePreview}
-                      title={devTitle('Live-Vorschau ein-/ausblenden')}
+                      className="pe-tb-btn"
+                      onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
+                      title={devTitle('Unterblock anlegen')}
                     >
-                      <Eye size={13} /> Vorschau
+                      <Plus size={13} /> Kind
                     </button>
                     <button
                       type="button"
-                      className="inspector-action-btn danger inspector-ga-delete"
+                      className="pe-tb-btn pe-tb-btn-danger"
                       onClick={() => {
                         const currentPath = selectedBlockPath;
                         handleDeleteBlock(currentPath);
@@ -1595,7 +1603,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       }}
                       title={devTitle('Ausgewaehlten Block loeschen')}
                     >
-                      <Trash2 size={13} /> Block löschen
+                      <Trash2 size={13} />
                     </button>
                   </div>
 
@@ -1654,109 +1662,85 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </>
                   )}
 
+                  {/* ── Seite ─────────────────────────────── */}
+                  <div className="inspector-section-divider" />
+
+                  {/* Einstellungen */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-settings') ? n.delete('outline-settings') : n.add('outline-settings'); return n; })} aria-expanded={!outlineCollapsed.has('outline-settings')}>
+                      <span className="inspector-section-icon">⚙</span>
+                      <span className="inspector-section-label">Einstellungen</span>
+                      {outlineCollapsed.has('outline-settings') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-settings') && (
+                      <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Seitentitel</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Seitentitel" className="input-field-small" aria-label="Seitentitel" />
+                        <label className="field-label-xs">Slug</label>
+                        <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="seiten-url" className="input-field-small" aria-label="URL-Slug" />
+                        <label className="field-label-xs">Weiterleitung</label>
+                        <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
+                          <option value="none">Keine</option>
+                          <option value="404">404</option>
+                          <option value="503">503</option>
+                          <option value="external">Externe URL</option>
+                        </select>
+                        {redirectType === 'external' && (
+                          <input type="url" value={redirectUrl} onChange={e => setRedirectUrl(e.target.value)} placeholder="https://example.com" className="input-field-small" aria-label="Ziel-URL" />
+                        )}
+                        <label className="page-editor-outline-toggle">
+                          <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
+                          Als Startseite
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SEO */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-seo') ? n.delete('outline-seo') : n.add('outline-seo'); return n; })} aria-expanded={!outlineCollapsed.has('outline-seo')}>
+                      <span className="inspector-section-icon">◎</span>
+                      <span className="inspector-section-label">SEO</span>
+                      {outlineCollapsed.has('outline-seo') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-seo') && (
+                      <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
+                        <SeoPanel pageData={pageData} slug={slug} onChange={setPageData} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Workflow */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-workflow') ? n.delete('outline-workflow') : n.add('outline-workflow'); return n; })} aria-expanded={!outlineCollapsed.has('outline-workflow')}>
+                      <span className="inspector-section-icon">◈</span>
+                      <span className="inspector-section-label">Workflow</span>
+                      {outlineCollapsed.has('outline-workflow') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-workflow') && (
+                      <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
+                        <WorkflowPanel pageId={page?.id} status={pageStatus} userRole={userRole} onTransition={(s) => setPageStatus(s.toUpperCase())} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Strukturvorschau */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-structure') ? n.delete('outline-structure') : n.add('outline-structure'); return n; })} aria-expanded={!outlineCollapsed.has('outline-structure')}>
+                      <span className="inspector-section-icon">▦</span>
+                      <span className="inspector-section-label">Strukturvorschau</span>
+                      {outlineCollapsed.has('outline-structure') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-structure') && (
+                      <div className="page-editor-outline-structure">
+                        <TemplateStructurePreview blocks={blocks} activeBlockPath={selectedBlockPath} onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null} />
+                      </div>
+                    )}
+                  </div>
 
                 </>
               );
             })()}
-          </aside>
-
-          <aside className="page-editor-outline" title={devTitle('Bereich: Seiteneinstellungen und Strukturvorschau')}>
-            <div className="page-editor-outline-head">
-              <span className="page-editor-outline-eyebrow">Aktuelle Seite</span>
-              {showDevHints && <div className="page-editor-panel-hint">Bereich: Seiteneinstellungen und Struktur</div>}
-              <strong>{title || page?.title || 'Unbenannte Seite'}</strong>
-              <span>/{slug || 'seiten-url'}</span>
-            </div>
-
-            <div className="page-editor-outline-settings">
-              <label className="field-label-xs">Seitentitel</label>
-              <input
-                type="text"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="Seitentitel"
-                className="input-field-small"
-                title={devTitle('Feld: Seitentitel')}
-                aria-label="Seitentitel"
-              />
-
-              <label className="field-label-xs">Slug</label>
-              <input
-                type="text"
-                value={slug}
-                onChange={e => setSlug(e.target.value)}
-                placeholder="seiten-url"
-                className="input-field-small"
-                title={devTitle('Feld: URL-Slug')}
-                aria-label="URL-Slug"
-              />
-
-              <label className="field-label-xs">Weiterleitung</label>
-              <select
-                value={redirectType}
-                onChange={e => setRedirectType(e.target.value)}
-                className="input-field-small"
-                title={devTitle('Feld: Weiterleitungstyp')}
-                aria-label="Weiterleitungstyp"
-              >
-                <option value="none">Keine</option>
-                <option value="404">404</option>
-                <option value="503">503</option>
-                <option value="external">Externe URL</option>
-              </select>
-
-              {redirectType === 'external' && (
-                <input
-                  type="url"
-                  value={redirectUrl}
-                  onChange={e => setRedirectUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="input-field-small"
-                  title={devTitle('Feld: Ziel-URL fuer externe Weiterleitung')}
-                  aria-label="Ziel-URL fuer externe Weiterleitung"
-                />
-              )}
-
-              <label className="page-editor-outline-toggle" title={devTitle('Option: Diese Seite als Startseite markieren')}>
-                <input
-                  type="checkbox"
-                  checked={isHomepage}
-                  onChange={e => setIsHomepage(e.target.checked)}
-                />
-                Als Startseite
-              </label>
-
-              <SeoPanel
-                pageData={pageData}
-                slug={slug}
-                onChange={setPageData}
-              />
-
-              <WorkflowPanel
-                pageId={page?.id}
-                status={pageStatus}
-                userRole={userRole}
-                onTransition={(newStatus) => setPageStatus(newStatus.toUpperCase())}
-              />
-            </div>
-
-            <div className="page-editor-outline-structure">
-              <div className="page-editor-outline-structure-head">
-                {showDevHints && <div className="page-editor-panel-hint">Komponente: Strukturvorschau, Funktion: Blöcke anzeigen und anspringen</div>}
-                <strong>Strukturvorschau</strong>
-                <span>
-                  {blocks.length > 0
-                    ? 'Klicke auf einen Block zum Springen'
-                    : 'Lege zuerst einen Block an'}
-                </span>
-              </div>
-
-              <TemplateStructurePreview
-                blocks={blocks}
-                activeBlockPath={selectedBlockPath}
-                onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
-              />
-            </div>
           </aside>
         </div>
       </div>
