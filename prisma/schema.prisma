@@ -43,19 +43,20 @@ model UserInvitation {
 }
 
 model Page {
-  id        String         @id @default(cuid())
-  slug      String         @unique
-  title     String
-  blocks    Json           @default("[]")
-  template  String?
-  data      Json           @default("{}")
-  children  Json           @default("[]")
-  revisions PageRevision[]
-  status    PageStatus     @default(DRAFT)
-  publishAt DateTime?
-  isHomepage Boolean        @default(false)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id             String               @id @default(cuid())
+  slug           String               @unique
+  title          String
+  blocks         Json                 @default("[]")
+  template       String?
+  data           Json                 @default("{}")
+  children       Json                 @default("[]")
+  revisions      PageRevision[]
+  workflowEvents PageWorkflowEvent[]
+  status         PageStatus           @default(DRAFT)
+  publishAt      DateTime?
+  isHomepage     Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 }
 
 enum PageStatus {
@@ -178,4 +179,29 @@ model ContentEntry {
   updatedAt     DateTime @updatedAt
 
   @@index([contentTypeId])
+}
+
+model PageWorkflowEvent {
+  id         String     @id @default(cuid())
+  pageId     String
+  page       Page       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  fromStatus PageStatus
+  toStatus   PageStatus
+  comment    String?    @db.Text
+  createdBy  String?
+  createdAt  DateTime   @default(now())
+
+  @@index([pageId])
+}
+
+model FileMetadata {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  altText   String?
+  copyright String?
+  caption   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([url])
 }

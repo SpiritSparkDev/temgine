@@ -2,6 +2,8 @@ import { prisma } from '../../../lib/prisma';
 import { requireAuth } from '../../../lib/auth';
 import { logAudit } from '../../../lib/audit';
 import { canTransition } from '../../../lib/workflow';
+import { validate, rules } from '../../../lib/validate';
+import { rateLimit } from '../../../lib/rateLimit';
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -9,17 +11,25 @@ const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) 
   return [status, response];
 };
 
+const VALID_STATUSES = ['DRAFT', 'REVIEW', 'APPROVED', 'PUBLISHED', 'SCHEDULED'];
+// 30 Workflow-Aktionen pro Minute pro IP
+const limiter = rateLimit({ windowMs: 60_000, max: 30 });
+
 /**
  * POST /api/pages/workflow
  * Body: { pageId, toStatus, note? }
- *
- * Löst einen validierten Statusübergang für eine Seite aus.
- * Rechte werden anhand der Workflow-Regeln aus lib/workflow.js geprüft.
  */
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
       const [s, r] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
+      return res.status(s).json(r);
+    }
+
+    const { ok: rlOk, retryAfter } = limiter.check(req);
+    if (!rlOk) {
+      res.setHeader('Retry-After', String(retryAfter));
+      const [s, r] = errorResponse(429, 'Zu viele Anfragen', 'RATE_LIMIT_EXCEEDED', { retryAfter });
       return res.status(s).json(r);
     }
 
@@ -29,21 +39,21 @@ export default async function handler(req, res) {
       return res.status(s).json(r);
     }
 
-    const { pageId, toStatus, note } = req.body || {};
+    const body = req.body || {};
+    // Normalize toStatus before validation
+    if (body.toStatus) body.toStatus = String(body.toStatus).toUpperCase();
 
-    if (!pageId || typeof pageId !== 'string') {
-      const [s, r] = errorResponse(400, 'pageId fehlt oder ist ungültig', 'VALIDATION_ERROR', { missing: ['pageId'] });
+    const [ok, errors] = validate(body, {
+      pageId:   [rules.required(), rules.string(), rules.maxLen(128)],
+      toStatus: [rules.required(), rules.oneOf(VALID_STATUSES)],
+      note:     [rules.string(), rules.maxLen(1000)],
+    });
+    if (!ok) {
+      const [s, r] = errorResponse(400, 'Ungültige Eingabe', 'VALIDATION_ERROR', errors);
       return res.status(s).json(r);
     }
 
-    const validStatuses = ['DRAFT', 'REVIEW', 'APPROVED', 'PUBLISHED', 'SCHEDULED'];
-    if (!toStatus || !validStatuses.includes(String(toStatus).toUpperCase())) {
-      const [s, r] = errorResponse(400, 'toStatus ist ungültig', 'VALIDATION_ERROR', {
-        missing: ['toStatus'],
-        allowed: validStatuses,
-      });
-      return res.status(s).json(r);
-    }
+    const { pageId, toStatus, note } = body;
 
     const page = await prisma.page.findUnique({ where: { id: pageId } });
     if (!page) {
@@ -67,7 +77,22 @@ export default async function handler(req, res) {
       data: { status: targetStatus },
     });
 
-    // Revision für Audit-Trail anlegen
+    // Workflow-Event für Freigabeverlauf speichern
+    try {
+      await prisma.pageWorkflowEvent.create({
+        data: {
+          pageId:     updated.id,
+          fromStatus: page.status,
+          toStatus:   targetStatus,
+          comment:    note ? String(note).slice(0, 2000) : null,
+          createdBy:  auth.user.email,
+        },
+      });
+    } catch (_e) {
+      console.warn('[workflow] PageWorkflowEvent create failed:', _e.message);
+    }
+
+    // Revision für Autosave-Verlauf anlegen
     try {
       await prisma.pageRevision.create({
         data: {

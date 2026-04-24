@@ -587,6 +587,7 @@ export default function AdminPageClient() {
                   ? 'ADMIN'
                   : (session?.user?.role || 'EDITOR')
               }
+              onRefreshPages={loadPagesFromApi}
             />
           )}
           {view === 'dashboard' && (

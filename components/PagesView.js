@@ -12,6 +12,7 @@ export default function PagesView({
   editorDirty = false,
   setEditorDirty = () => {},
   userRole,
+  onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
 
@@ -126,7 +127,9 @@ export default function PagesView({
             const page = findPage(pages, id);
             if (page) setEditingPage(page);
           }} 
-          onUpdate={handleUpdatePages} 
+          onUpdate={handleUpdatePages}
+          userRole={userRole}
+          onRefreshPages={onRefreshPages}
         />
       )}
     </div>

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { availableTransitions, STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
+import WorkflowHistoryPanel from './WorkflowHistoryPanel';
+import { History } from 'lucide-react';
 
 const TRANSITION_LABELS = {
   DRAFT:     'Zurück zu Entwurf',
@@ -29,6 +31,8 @@ const BADGE_STYLES = {
 export default function WorkflowPanel({ pageId, status, userRole, onTransition }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [comment, setComment] = useState('');
+  const [showHistory, setShowHistory] = useState(false);
 
   const currentStatus = (status || 'DRAFT').toUpperCase();
   const role = (userRole || 'EDITOR').toUpperCase();
@@ -47,12 +51,13 @@ export default function WorkflowPanel({ pageId, status, userRole, onTransition }
       const res = await fetch('/api/pages/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId, toStatus }),
+        body: JSON.stringify({ pageId, toStatus, note: comment.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Fehler beim Statuswechsel.');
       } else {
+        setComment('');
         onTransition && onTransition(toStatus);
       }
     } catch (_e) {
@@ -64,7 +69,24 @@ export default function WorkflowPanel({ pageId, status, userRole, onTransition }
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <label className="field-label-xs">Workflow-Status</label>
+      {showHistory && pageId && (
+        <WorkflowHistoryPanel pageId={pageId} onClose={() => setShowHistory(false)} />
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+        <label className="field-label-xs" style={{ margin: 0, flex: 1 }}>Workflow-Status</label>
+        {pageId && (
+          <button
+            type="button"
+            onClick={() => setShowHistory(true)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.72rem', color: 'var(--text-secondary, #757575)' }}
+            title="Freigabeverlauf anzeigen"
+          >
+            <History size={12} /> Verlauf
+          </button>
+        )}
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span
           style={{
@@ -81,20 +103,42 @@ export default function WorkflowPanel({ pageId, status, userRole, onTransition }
       </div>
 
       {available.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {available.map((toStatus) => (
-            <button
-              key={toStatus}
-              type="button"
-              className={`btn-modern-small${toStatus === 'PUBLISHED' ? ' green' : toStatus === 'DRAFT' ? '' : ' hollow'}`}
-              disabled={loading}
-              onClick={() => handleTransition(toStatus)}
-              title={`Status ändern zu: ${STATUS_LABELS[toStatus] || toStatus}`}
-            >
-              {loading ? '...' : (TRANSITION_LABELS[toStatus] || toStatus)}
-            </button>
-          ))}
-        </div>
+        <>
+          <textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Kommentar (optional)"
+            rows={2}
+            maxLength={2000}
+            style={{
+              width: '100%',
+              fontSize: '0.78rem',
+              padding: '6px 8px',
+              borderRadius: 6,
+              border: '1px solid var(--border-color, #e0e0e0)',
+              resize: 'vertical',
+              marginBottom: 6,
+              background: 'var(--bg-primary, #fff)',
+              color: 'var(--text-primary, #212121)',
+              boxSizing: 'border-box',
+            }}
+            aria-label="Kommentar zum Statuswechsel"
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {available.map((toStatus) => (
+              <button
+                key={toStatus}
+                type="button"
+                className={`btn-modern-small${toStatus === 'PUBLISHED' ? ' green' : toStatus === 'DRAFT' ? '' : ' hollow'}`}
+                disabled={loading}
+                onClick={() => handleTransition(toStatus)}
+                title={`Status ändern zu: ${STATUS_LABELS[toStatus] || toStatus}`}
+              >
+                {loading ? '...' : (TRANSITION_LABELS[toStatus] || toStatus)}
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {error && (

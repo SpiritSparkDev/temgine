@@ -172,6 +172,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectUrl: initialRedirectUrl,
         isHomepage: initialIsHomepage,
       });
+      setPageStatus((page.status || 'DRAFT').toUpperCase());
       setIsDirty(false);
       setAutosaveStatus('gespeichert');
       onDirtyChange?.(false);
@@ -876,7 +877,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       data: normalizedPageData,
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
-      isHomepage
+      isHomepage,
+      status: pageStatus,
     };
 
     try {

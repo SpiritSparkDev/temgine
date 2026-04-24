@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
+import { validate, rules } from '../../lib/validate'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -240,6 +241,16 @@ export default async function handler(req, res) {
         const [status, resp] = errorResponse(400, 'Slug erforderlich', 'VALIDATION_ERROR', { missing: ['slug'] });
         return res.status(status).json(resp);
       }
+      // Validate single page fields
+      const [pageOk, pageErrors] = validate(p, {
+        slug:   [rules.required(), rules.string(), rules.maxLen(255)],
+        title:  [rules.string(), rules.maxLen(300)],
+        status: [rules.oneOf(['DRAFT','REVIEW','APPROVED','PUBLISHED','SCHEDULED'])],
+      });
+      if (!pageOk) {
+        const [status, resp] = errorResponse(400, 'Ungültige Seitendaten', 'VALIDATION_ERROR', pageErrors);
+        return res.status(status).json(resp);
+      }
       const up = await prisma.page.upsert({
         where: { slug: String(p.slug) },
         create: {
@@ -248,14 +259,20 @@ export default async function handler(req, res) {
           blocks: p.blocks || [],
           children: p.children || [],
           template: p.template || null,
-          data: p.data || {}
+          data: p.data || {},
+          status: p.status || 'DRAFT',
+          publishAt: p.publishAt || null,
+          isHomepage: p.isHomepage || false,
         },
         update: {
           title: p.title || undefined,
           blocks: p.blocks || undefined,
           children: p.children || undefined,
           template: p.template || undefined,
-          data: p.data || undefined
+          data: p.data || undefined,
+          status: p.status || undefined,
+          publishAt: p.publishAt !== undefined ? (p.publishAt || null) : undefined,
+          isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
         }
       })
       // create a revision for this upsert

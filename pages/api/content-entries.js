@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma';
+import { validate, rules } from '../../lib/validate';
 
 /**
  * API endpoint for managing content entries
