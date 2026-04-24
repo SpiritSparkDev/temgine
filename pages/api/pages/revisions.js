@@ -58,17 +58,42 @@ export default async function handler(req, res) {
       const rev = await prisma.pageRevision.findUnique({ where: { id: String(revisionId) } })
       if (!rev) return res.status(404).json({ error: 'Revision nicht gefunden' })
 
-      // Expect rev.data to contain fields for Page (title, blocks, children, slug optional)
       const data = rev.data || {}
       const pageId = rev.pageId
+
+      // Aktuellen Seitenzustand als Backup-Revision sichern, bevor wir wiederherstellen
+      const currentPage = await prisma.page.findUnique({ where: { id: pageId } })
+      if (currentPage) {
+        await prisma.pageRevision.create({
+          data: {
+            pageId,
+            data: {
+              title: currentPage.title,
+              slug: currentPage.slug,
+              blocks: currentPage.blocks,
+              children: currentPage.children,
+              template: currentPage.template,
+              status: currentPage.status,
+              publishAt: currentPage.publishAt,
+              data: currentPage.data,
+            },
+            note: 'Automatisches Backup vor Wiederherstellung',
+            createdBy: null,
+          },
+        })
+      }
 
       const updated = await prisma.page.update({
         where: { id: pageId },
         data: {
-          title: data.title || undefined,
-          blocks: data.blocks || undefined,
-          children: data.children || undefined
-        }
+          ...(data.title !== undefined && { title: data.title }),
+          ...(data.blocks !== undefined && { blocks: data.blocks }),
+          ...(data.children !== undefined && { children: data.children }),
+          ...(data.template !== undefined && { template: data.template }),
+          ...(data.status !== undefined && { status: data.status }),
+          ...(data.publishAt !== undefined && { publishAt: data.publishAt ? new Date(data.publishAt) : null }),
+          ...(data.data !== undefined && { data: data.data }),
+        },
       })
 
       try {
@@ -76,6 +101,23 @@ export default async function handler(req, res) {
       } catch (e) {}
 
       return res.status(200).json({ ok: true, page: updated })
+    }
+
+    // DELETE: einzelne Revision löschen { revisionId }
+    if (req.method === 'DELETE') {
+      const { revisionId } = req.body || {}
+      if (!revisionId) return res.status(400).json({ error: 'revisionId erforderlich' })
+
+      const rev = await prisma.pageRevision.findUnique({ where: { id: String(revisionId) } })
+      if (!rev) return res.status(404).json({ error: 'Revision nicht gefunden' })
+
+      await prisma.pageRevision.delete({ where: { id: String(revisionId) } })
+
+      try {
+        await logAudit({ action: 'delete_revision', resource: 'page', resourceId: rev.pageId, userId: null, details: { revisionId } })
+      } catch (e) {}
+
+      return res.status(200).json({ ok: true })
     }
 
     res.status(405).json({ error: 'Method not allowed' })

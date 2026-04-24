@@ -3,15 +3,17 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
+import RevisionHistoryPanel from './RevisionHistoryPanel';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
+  const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
 
@@ -1197,6 +1199,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         />
       )}
 
+      {showRevisions && (
+        <RevisionHistoryPanel
+          pageId={page && page.id}
+          pageName={title}
+          onClose={() => setShowRevisions(false)}
+          onRestored={() => setShowRevisions(false)}
+          showToast={showToast}
+        />
+      )}
+
 
       <div className="tab-content blocks-tab">
 
@@ -1265,6 +1277,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <button type="button" className="btn-modern-small green inspector-ga-save" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
                     <button type="button" className="btn-modern-small green hollow inspector-ga-savview" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
                     <button type="button" className="btn-modern-small green hollow inspector-ga-savclose" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
+                    <button
+                      type="button"
+                      className="btn-modern-small hollow btn-icon-row"
+                      onClick={() => setShowRevisions(true)}
+                      title="Versionsverlauf anzeigen"
+                    >
+                      <History size={13} /> Verlauf
+                    </button>
                     <button
                       type="button"
                       className={`btn-modern-small btn-icon-row inspector-ga-preview${showPreview ? ' green' : ' hollow'}`}

@@ -2,6 +2,21 @@ import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
 
+// Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
+async function pruneRevisions(pageId) {
+  try {
+    const setting = await prisma.setting.findUnique({ where: { key: 'revisionRetentionDays' } })
+    const days = setting ? parseInt(setting.value, 10) : 7
+    if (isNaN(days) || days < 0) return
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    await prisma.pageRevision.deleteMany({
+      where: { pageId: String(pageId), createdAt: { lt: cutoff } },
+    })
+  } catch (e) {
+    console.error('Revision pruning failed', e)
+  }
+}
+
 // API-Route für Seiten: Daten kommen jetzt ausschließlich aus der Datenbank
 export default async function handler(req, res) {
   try {
@@ -157,6 +172,7 @@ export default async function handler(req, res) {
                 publishAt: up.publishAt
               }
             } })
+            await pruneRevisions(up.id)
           } catch (e) {
             console.error('Revision create failed', e)
           }
@@ -241,6 +257,7 @@ export default async function handler(req, res) {
             data: up.data
           }
         } })
+        await pruneRevisions(up.id)
       } catch (e) {
         console.error('Revision create failed', e)
       }

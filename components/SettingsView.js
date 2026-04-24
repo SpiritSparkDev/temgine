@@ -1,10 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function SettingsView({ showToast }) {
   const [dbConnectionString, setDbConnectionString] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState(null);
+  const [revisionRetentionDays, setRevisionRetentionDays] = useState('7');
+  const [isSavingRetention, setIsSavingRetention] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.revisionRetentionDays !== undefined) {
+          setRevisionRetentionDays(data.revisionRetentionDays);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveRetention = async () => {
+    const val = parseInt(revisionRetentionDays, 10);
+    if (isNaN(val) || val < 0) {
+      showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
+      return;
+    }
+    setIsSavingRetention(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'revisionRetentionDays', value: String(val) }),
+      });
+      if (res.ok) {
+        showToast('Einstellung gespeichert', 'success');
+      } else {
+        const d = await res.json();
+        showToast(d.error || 'Fehler beim Speichern', 'error');
+      }
+    } catch (e) {
+      showToast('Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingRetention(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     if (!dbConnectionString.trim()) {
@@ -163,8 +202,52 @@ export default function SettingsView({ showToast }) {
         </section>
 
         <section>
-          <h3 style={{ marginBottom: '1rem' }}>Weitere Einstellungen</h3>
-          <p style={{ color: '#666' }}>Weitere Konfigurationsoptionen folgen...</p>
+          <h3 style={{ marginBottom: '1rem' }}>Versionierung</h3>
+          <p style={{ marginBottom: '1.5rem', color: '#666' }}>
+            Legt fest, wie viele Tage alte Seitenversionen gespeichert bleiben. Nach Ablauf der Frist werden ältere Versionen beim nächsten Speichern automatisch gelöscht. Setze den Wert auf <strong>0</strong>, um alle alten Versionen sofort zu löschen.
+          </p>
+
+          <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Aufbewahrungsdauer (Tage)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={revisionRetentionDays}
+                onChange={e => setRevisionRetentionDays(e.target.value)}
+                style={{
+                  width: '120px',
+                  padding: '0.6rem 0.75rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '1rem',
+                }}
+              />
+            </div>
+
+            <button
+              onClick={handleSaveRetention}
+              disabled={isSavingRetention}
+              style={{
+                marginTop: '1.4rem',
+                padding: '0.6rem 1.5rem',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: isSavingRetention ? 'not-allowed' : 'pointer',
+                opacity: isSavingRetention ? 0.6 : 1,
+              }}
+            >
+              {isSavingRetention ? 'Speichern…' : 'Speichern'}
+            </button>
+          </div>
+
+          <small style={{ color: '#6b7280' }}>
+            Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
+          </small>
         </section>
       </div>
     </div>
