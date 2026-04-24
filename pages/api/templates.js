@@ -1,5 +1,11 @@
 import { prisma } from '../../lib/prisma'
 
+const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
+  const response = { error: message, code };
+  if (details) response.details = details;
+  return [status, response];
+};
+
 export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
@@ -7,7 +13,10 @@ export default async function handler(req, res) {
       if (name) {
         // Case-insensitive lookup so client casing differences don't break rendering
         const t = await prisma.template.findFirst({ where: { name: { equals: String(name), mode: 'insensitive' } } })
-        if (!t) return res.status(404).json({ error: 'Template nicht gefunden' })
+        if (!t) {
+          const [status, resp] = errorResponse(404, 'Template nicht gefunden', 'TEMPLATE_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
         return res.status(200).json({ name: t.name, code: t.code, type: t.type })
       }
 
@@ -20,7 +29,13 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const { name, code, type } = req.body || {}
-      if (!name || !code) return res.status(400).json({ error: 'Name und Code erforderlich' })
+      if (!name || !code) {
+        const missing = [];
+        if (!name) missing.push('name');
+        if (!code) missing.push('code');
+        const [status, resp] = errorResponse(400, 'Name und Code erforderlich', 'VALIDATION_ERROR', { missing });
+        return res.status(status).json(resp);
+      }
       // normalize type — always BLOCK
       const ttype = 'BLOCK'
       const up = await prisma.template.upsert({
@@ -33,14 +48,27 @@ export default async function handler(req, res) {
 
     if (req.method === 'DELETE') {
       const { name } = req.body || {}
-      if (!name) return res.status(400).json({ error: 'Name erforderlich' })
-      await prisma.template.delete({ where: { name: String(name) } })
-      return res.status(200).json({ ok: true })
+      if (!name) {
+        const [status, resp] = errorResponse(400, 'Name erforderlich', 'VALIDATION_ERROR', { missing: ['name'] });
+        return res.status(status).json(resp);
+      }
+      try {
+        await prisma.template.delete({ where: { name: String(name) } })
+        return res.status(200).json({ ok: true })
+      } catch (e) {
+        if (e.code === 'P2025') {
+          const [status, resp] = errorResponse(404, 'Template nicht gefunden', 'TEMPLATE_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
+        throw e;
+      }
     }
 
-    res.status(405).json({ error: 'Method not allowed' })
+    const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
+    return res.status(status).json(resp);
   } catch (e) {
     console.error('[/api/templates Error]', e.message, e.stack)
-    res.status(500).json({ error: 'Server Fehler', details: e.message })
+    const [status, resp] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', { message: process.env.NODE_ENV === 'production' ? undefined : e.message });
+    return res.status(status).json(resp);
   }
 }

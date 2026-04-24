@@ -9,8 +9,9 @@ import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import RevisionHistoryPanel from './RevisionHistoryPanel';
+import SeoPanel from './SeoPanel';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -38,8 +39,31 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
   const [toast, setToast] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState('gespeichert');
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
+  const initialSnapshotRef = useRef('');
+  const autosaveTimerRef = useRef(null);
+  const autosaveInFlightRef = useRef(false);
+
+  const buildSnapshot = ({
+    title,
+    slug,
+    blocks,
+    pageData,
+    redirectType,
+    redirectUrl,
+    isHomepage,
+  }) => JSON.stringify({
+    title: title || '',
+    slug: slug || '',
+    blocks: Array.isArray(blocks) ? blocks : [],
+    pageData: pageData || {},
+    redirectType: redirectType || 'none',
+    redirectUrl: redirectUrl || '',
+    isHomepage: Boolean(isHomepage),
+  });
 
   const normalizeSlotName = (value) => {
     if (value === undefined || value === null) return '';
@@ -101,16 +125,84 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (page) {
       const initialBlocks = Array.isArray(page.blocks) ? page.blocks : [];
       const migration = migrateLegacySlotMapToBlocks(initialBlocks, page.data || {});
+      const migratedBlocks = migration.blocks || [];
+      const initialTitle = page.title || '';
+      const initialSlug = page.slug || '';
+      const initialRedirectType = page.redirectType || 'none';
+      const initialRedirectUrl = page.redirectUrl || '';
+      const initialIsHomepage = page.isHomepage || false;
+      const initialPageData = page.data || {};
+
       setTitle(page.title || '');
       setSlug(page.slug || '');
-      setBlocks(migration.blocks || []);
+      setBlocks(migratedBlocks);
       setPageData(page.data || {});
-      setRedirectType(page.redirectType || 'none');
-      setRedirectUrl(page.redirectUrl || '');
-      setIsHomepage(page.isHomepage || false);
-      setSelectedBlockPath((migration.blocks || []).length > 0 ? '0' : '');
+      setRedirectType(initialRedirectType);
+      setRedirectUrl(initialRedirectUrl);
+      setIsHomepage(initialIsHomepage);
+      setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
+
+      initialSnapshotRef.current = buildSnapshot({
+        title: initialTitle,
+        slug: initialSlug,
+        blocks: migratedBlocks,
+        pageData: initialPageData,
+        redirectType: initialRedirectType,
+        redirectUrl: initialRedirectUrl,
+        isHomepage: initialIsHomepage,
+      });
+      setIsDirty(false);
+      setAutosaveStatus('gespeichert');
+      onDirtyChange?.(false);
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!initialSnapshotRef.current) {
+      initialSnapshotRef.current = buildSnapshot({
+        title,
+        slug,
+        blocks,
+        pageData,
+        redirectType,
+        redirectUrl,
+        isHomepage,
+      });
+    }
+
+    const currentSnapshot = buildSnapshot({
+      title,
+      slug,
+      blocks,
+      pageData,
+      redirectType,
+      redirectUrl,
+      isHomepage,
+    });
+    const dirty = currentSnapshot !== initialSnapshotRef.current;
+    setIsDirty(dirty);
+    onDirtyChange?.(dirty);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isDirty) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!Array.isArray(blocks) || blocks.length === 0) {
@@ -709,7 +801,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setShowPreview(p => !p);
   }
 
-  function handleSave(options = {}) {
+  async function handleSave(options = {}) {
+    const opts = {
+      close: false,
+      view: false,
+      silent: false,
+      autosave: false,
+      ...options,
+    };
+
+    if (opts.autosave && autosaveInFlightRef.current) {
+      return false;
+    }
+
     // Prüfe ob bereits eine andere 404-Seite existiert
     if (redirectType === '404' && allPages) {
       const find404Page = (nodes) => {
@@ -724,8 +828,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       };
       const existing404 = find404Page(allPages);
       if (existing404) {
-        showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
-        return;
+        if (!opts.silent) {
+          showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
+        }
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
       }
     }
 
@@ -733,25 +840,96 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     delete normalizedPageData.blockSlots;
     delete normalizedPageData.__blockSlots;
 
+    const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
     const updatedPage = {
       ...page,
       title,
-      slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      slug: normalizedSlug,
       blocks,
       data: normalizedPageData,
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage
     };
-    onSave && onSave(updatedPage, options);
+
+    try {
+      if (opts.autosave) {
+        autosaveInFlightRef.current = true;
+      }
+
+      const saveOk = onSave ? await onSave(updatedPage, opts) : true;
+      if (!saveOk) {
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
+      }
+
+      if (!slug && normalizedSlug) {
+        setSlug(normalizedSlug);
+      }
+
+      initialSnapshotRef.current = buildSnapshot({
+        title,
+        slug: normalizedSlug,
+        blocks,
+        pageData: normalizedPageData,
+        redirectType,
+        redirectUrl,
+        isHomepage,
+      });
+      setIsDirty(false);
+      setAutosaveStatus('gespeichert');
+      onDirtyChange?.(false);
+      return true;
+    } catch (error) {
+      if (!opts.silent) {
+        showToast('Speichern fehlgeschlagen. Bitte Eingaben pruefen und erneut speichern. Details: ' + (error.message || 'Unbekannter Fehler'), 'error');
+      }
+      if (opts.autosave) setAutosaveStatus('fehler');
+      return false;
+    } finally {
+      if (opts.autosave) {
+        autosaveInFlightRef.current = false;
+      }
+    }
   }
 
-  function handleSaveAndClose() {
-    handleSave({ close: true });
+  async function handleSaveAndClose() {
+    await handleSave({ close: true });
   }
 
-  function handleSaveAndView() {
-    handleSave({ view: true });
+  async function handleSaveAndView() {
+    await handleSave({ view: true });
+  }
+
+  useEffect(() => {
+    if (!page?.id || !isDirty) {
+      if (!isDirty) setAutosaveStatus('gespeichert');
+      return undefined;
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      setAutosaveStatus('speichert');
+      await handleSave({ silent: true, autosave: true });
+    }, 1200);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage]);
+
+  function handleCancelClick() {
+    if (isDirty) {
+      const confirmed = window.confirm('Du hast ungespeicherte Aenderungen. Wirklich verwerfen und Editor verlassen?');
+      if (!confirmed) return;
+    }
+    onCancel?.();
   }
 
   // Render helpers for nested block editor
@@ -1277,6 +1455,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <button type="button" className="btn-modern-small green inspector-ga-save" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
                     <button type="button" className="btn-modern-small green hollow inspector-ga-savview" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
                     <button type="button" className="btn-modern-small green hollow inspector-ga-savclose" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: autosaveStatus === 'fehler' ? '#c62828' : autosaveStatus === 'speichert' ? '#ef6c00' : '#2e7d32',
+                        padding: '4px 8px',
+                        borderRadius: '999px',
+                        background: 'var(--bg-tertiary)'
+                      }}
+                      aria-live="polite"
+                    >
+                      Autosave: {autosaveStatus === 'speichert' ? 'speichert...' : autosaveStatus}
+                    </span>
                     <button
                       type="button"
                       className="btn-modern-small hollow btn-icon-row"
@@ -1434,6 +1625,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 />
                 Als Startseite
               </label>
+
+              <SeoPanel
+                pageData={pageData}
+                slug={slug}
+                onChange={setPageData}
+              />
             </div>
 
             <div className="page-editor-outline-structure">

@@ -29,6 +29,7 @@ export default function AdminPageClient() {
   const [templateCode, setTemplateCode] = useState('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
   const [pages, setPages] = useState([]);
   const [editingPage, setEditingPage] = useState(null);
+  const [editorDirty, setEditorDirty] = useState(false);
   const [view, setView] = useState('dashboard');
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
@@ -100,6 +101,12 @@ export default function AdminPageClient() {
   }, []);
 
   const handleSelectView = (nextView) => {
+    if (view === 'pages' && editingPage && editorDirty && nextView !== 'pages') {
+      const confirmed = window.confirm('Du hast ungespeicherte Aenderungen im Seiten-Editor. Trotzdem Bereich wechseln?');
+      if (!confirmed) return;
+      setEditorDirty(false);
+      setEditingPage(null);
+    }
     setView(nextView);
     setMobileNavOpen(false);
   };
@@ -291,14 +298,28 @@ export default function AdminPageClient() {
         body: JSON.stringify(updated) 
       });
       if (!response.ok) {
-        throw new Error('Speichern fehlgeschlagen');
+        let detail = '';
+        try {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const payload = await response.json();
+            detail = payload.error || payload.message || '';
+          } else {
+            detail = await response.text();
+          }
+        } catch (e) {
+          // ignore parse errors and fallback to status below
+        }
+        const hint = 'Bitte pruefe Pflichtfelder (Titel/Slug), gueltige Redirect-Werte und versuche es erneut.';
+        const statusInfo = `HTTP ${response.status}`;
+        throw new Error([statusInfo, detail, hint].filter(Boolean).join(' - '));
       }
       // Reload from API to confirm server state (fixes delete reappearance + order persistence)
       await loadPagesFromApi();
       return true;
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
-      showToast('Fehler beim Speichern der Seite!', 'error');
+      showToast('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'), 'error');
       return false;
     }
   }
@@ -559,6 +580,8 @@ export default function AdminPageClient() {
               editingPage={editingPage}
               setEditingPage={setEditingPage}
               handleUpdatePages={handleUpdatePages}
+              editorDirty={editorDirty}
+              setEditorDirty={setEditorDirty}
             />
           )}
           {view === 'dashboard' && (
