@@ -35,29 +35,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       .catch(err => console.error('Navigationen laden fehlgeschlagen:', err));
   }, []);
 
-  const treeStats = useMemo(() => {
-    const visit = (nodes) => nodes.reduce((acc, node) => {
-      acc.total += 1;
-      if (node.isHomepage) acc.homepages += 1;
-      if ((node.children || []).length > 0) acc.withChildren += 1;
-      if (node.status === 'DRAFT') acc.drafts += 1;
-      return visit(node.children || []).reduce((nestedAcc, key) => nestedAcc, acc);
-    }, { total: 0, drafts: 0, homepages: 0, withChildren: 0 });
-
-    const mergeVisit = (nodes, acc = { total: 0, drafts: 0, homepages: 0, withChildren: 0 }) => {
-      for (const node of nodes) {
-        acc.total += 1;
-        if (node.isHomepage) acc.homepages += 1;
-        if ((node.children || []).length > 0) acc.withChildren += 1;
-        if (node.status === 'DRAFT') acc.drafts += 1;
-        mergeVisit(node.children || [], acc);
-      }
-      return acc;
-    };
-
-    return mergeVisit(tree);
-  }, [tree]);
-
   const filteredTree = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return tree;
@@ -456,31 +433,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       )}
 
       <div className="page-tree-shell">
-        <div className="page-tree-hero">
-          <div className="page-tree-hero-copy">
-            <span className="page-tree-eyebrow">Pages</span>
-            <h2>Seiten strukturieren und pflegen</h2>
-            <p>
-              Verwalte Seitenhierarchie, Navigationen und Bearbeitungsschritte. Hover über eine Karte für die Live-Vorschau.
-            </p>
-          </div>
-
-          <div className="page-tree-stats">
-            <div className="page-tree-stat">
-              <strong>{treeStats.total}</strong>
-              <span>Seiten gesamt</span>
-            </div>
-            <div className="page-tree-stat">
-              <strong>{treeStats.withChildren}</strong>
-              <span>mit Unterseiten</span>
-            </div>
-            <div className="page-tree-stat">
-              <strong>{treeStats.homepages}</strong>
-              <span>Systemseiten</span>
-            </div>
-          </div>
-        </div>
-
         <div className="page-tree-toolbar">
           <label className="page-tree-search">
             <Search size={16} />

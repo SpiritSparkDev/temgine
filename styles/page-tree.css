@@ -10,73 +10,6 @@
     linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
 }
 
-.page-tree-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgb(var(--accent-primary-rgb) / 0.12);
-  color: var(--accent-primary);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.page-tree-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 24px;
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgb(var(--accent-primary-rgb) / 0.12), rgb(var(--accent-primary-rgb) / 0.06));
-  box-shadow: 0 14px 30px var(--shadow);
-}
-
-.page-tree h2 {
-  margin: 12px 0 10px;
-  font-size: clamp(1.8rem, 2.6vw, 2.4rem);
-  line-height: 1.1;
-  color: var(--text-primary);
-}
-
-.page-tree-hero p {
-  margin: 0;
-  max-width: 58ch;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.page-tree-stats {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.page-tree-stat {
-  min-width: 120px;
-  padding: 14px 16px;
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
-  box-shadow: 0 10px 24px var(--shadow);
-}
-
-.page-tree-stat strong {
-  display: block;
-  font-size: 1.4rem;
-  color: var(--text-primary);
-}
-
-.page-tree-stat span {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
 .page-tree-toolbar {
   display: flex;
   align-items: stretch;
@@ -423,17 +356,8 @@
     padding: 18px;
   }
 
-  .page-tree-hero,
   .page-tree-toolbar {
     flex-direction: column;
-  }
-
-  .page-tree-stats {
-    width: 100%;
-  }
-
-  .page-tree-stat {
-    flex: 1 1 140px;
   }
 
   .page-tree .controls {
@@ -477,11 +401,6 @@
 @media (max-width: 767px) {
   .page-tree-shell {
     padding: 14px;
-  }
-
-  .page-tree-hero {
-    padding: 16px;
-    border-radius: 16px;
   }
 
   .page-card-row {
