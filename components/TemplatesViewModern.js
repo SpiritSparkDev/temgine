@@ -2,7 +2,6 @@
 import dynamic from 'next/dynamic';
 import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { createButtonHandlers } from '../lib/insertHelper';
-import TemplateStructurePreview from './TemplateStructurePreview';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -725,14 +724,6 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
               </button>
               <button
                 role="tab"
-                aria-selected={rightTab === 'structure'}
-                className={`tce-props-tab${rightTab === 'structure' ? ' active' : ''}`}
-                onClick={() => setRightTab('structure')}
-              >
-                Struktur
-              </button>
-              <button
-                role="tab"
                 aria-selected={rightTab === 'settings'}
                 className={`tce-props-tab${rightTab === 'settings' ? ' active' : ''}`}
                 onClick={() => setRightTab('settings')}
@@ -768,19 +759,18 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                   <div className="tce-vars-section">
                     <div className="tce-vars-title">Systemwerte</div>
                     {SYSTEM_PLACEHOLDERS.map((s) => (
-                      <div key={s.label} className="tce-var-row">
+                      <button
+                        key={s.label}
+                        className="tce-var-row"
+                        {...createButtonHandlers(s.snippet, () =>
+                          setTemplateCode((c) => c + s.snippet)
+                        )}
+                        aria-label={`${s.label} einfügen`}
+                        title={`${s.label} einfügen`}
+                      >
                         <span className="tce-var-code">{s.snippet}</span>
-                        <button
-                          className="tce-var-insert-btn"
-                          {...createButtonHandlers(s.snippet, () =>
-                            setTemplateCode((c) => c + s.snippet)
-                          )}
-                          aria-label={`${s.label} einfügen`}
-                          title={devTitle(`Systemwert ${s.label} einfügen`)}
-                        >
-                          {s.label}
-                        </button>
-                      </div>
+                        <span className="tce-var-label">{s.label}</span>
+                      </button>
                     ))}
                   </div>
 
@@ -788,18 +778,19 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                     <div className="tce-vars-section">
                       <div className="tce-vars-title">Im Template erkannt</div>
                       {extractedVars.map((v) => (
-                        <div key={v} className="tce-var-row tce-var-row--detected">
+                        <button
+                          key={v}
+                          className="tce-var-row tce-var-row--detected"
+                          onClick={() => setTemplateCode((c) => c + `{{${v}}}`)}
+                          aria-label={`{{${v}}} einfügen`}
+                          title={`{{${v}}} einfügen`}
+                        >
                           <span className="tce-var-code">{`{{${v}}}`}</span>
-                        </div>
+                          <span className="tce-var-label">einfügen</span>
+                        </button>
                       ))}
                     </div>
                   )}
-                </div>
-              )}
-
-              {rightTab === 'structure' && (
-                <div className="tce-structure-tab">
-                  <TemplateStructurePreview code={templateCode} />
                 </div>
               )}
 

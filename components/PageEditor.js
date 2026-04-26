@@ -938,6 +938,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       return undefined;
     }
 
+    const autosaveEnabled = localStorage.getItem('temphelix_autosave_enabled') !== 'false';
+    if (!autosaveEnabled) return undefined;
+
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }

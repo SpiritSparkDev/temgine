@@ -33,15 +33,13 @@ export default function AdminPageClient() {
   const [view, setView] = useState('dashboard');
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
-  const [settingsTab, setSettingsTab] = useState('database');
+  const [settingsTab, setSettingsTab] = useState('users');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [alphaTab, setAlphaTab] = useState('content-models');
 
   useEffect(() => {
     if (view === 'users') {
       setSettingsTab('users');
-    } else if (view === 'settings') {
-      setSettingsTab('database');
     }
   }, [view]);
   
@@ -628,30 +626,7 @@ export default function AdminPageClient() {
               </div>
             </div>
           )}
-          {view === 'settings' && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div className="settings-tabs-wrapper">
-                <div className="settings-tabs">
-                  <button
-                    onClick={() => setSettingsTab('database')}
-                    className={`settings-tab-btn ${settingsTab === 'database' ? 'active' : ''}`}
-                  >
-                    Datenbank
-                  </button>
-                  <button
-                    onClick={() => setSettingsTab('css')}
-                    className={`settings-tab-btn ${settingsTab === 'css' ? 'active' : ''}`}
-                  >
-                    CSS-Dateien
-                  </button>
-                </div>
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {settingsTab === 'database' && <SettingsView showToast={showToast} />}
-                {settingsTab === 'css' && <CSSManagerViewModern showToast={showToast} />}
-              </div>
-            </div>
-          )}
+          {view === 'settings' && <SettingsView showToast={showToast} />}
           {view === 'backup' && (
             <ErrorBoundary>
               <BackupView onToast={showToastForBackup} onConfirm={showConfirmForBackup} />

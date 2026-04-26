@@ -306,39 +306,7 @@
   box-shadow: inset 0 1px 0 var(--shadow);
 }
 
-.codeeditor-root {
-  min-height: 100%;
-  height: 100%;
-  background: var(--bg-secondary) !important;
-}
 
-.codeeditor-root textarea,
-.codeeditor-root pre {
-  min-height: 100% !important;
-  box-sizing: border-box;
-  font-family: Consolas, "SFMono-Regular", Menlo, Monaco, monospace !important;
-  line-height: 1.5 !important;
-}
-
-.codeeditor-root textarea {
-  color: var(--text-primary) !important;
-  caret-color: var(--accent-primary);
-  background: transparent !important;
-}
-
-.codeeditor-root textarea:focus {
-  outline: none;
-}
-
-.codeeditor-root pre,
-.codeeditor-pre,
-.codeeditor-highlight {
-  background: transparent !important;
-}
-
-.codeeditor-root ::selection {
-  background: rgba(124, 145, 255, 0.28);
-}
 
 .templates-editor-columns .editor-snippets-panel {
   border-top: none;

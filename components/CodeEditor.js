@@ -2,67 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import MonacoEditor from '@monaco-editor/react'
 import { registerEditorApi } from '../lib/insertHelper'
 
-// ─── Mustache completion provider ────────────────────────────────────────────
-const MUSTACHE_SYSTEM_TOKENS = [
-  { label: '{{{blocks}}}',        detail: 'Child-Blöcke (HTML unescaped)',  insert: '{{{blocks}}}' },
-  { label: '{{title}}',           detail: 'Seiten-Titel',                   insert: '{{title}}' },
-  { label: '{{text}}',            detail: 'Text-Inhalt',                    insert: '{{text}}' },
-  { label: '{{navigation:main}}', detail: 'Navigation: main',               insert: '{{navigation:main}}' },
-  { label: '{{#name}}…{{/name}}', detail: 'Bedingter Block',                insert: '{{#${1:name}}}$0{{/${1:name}}}', snippet: true },
-]
-const SYSTEM_VAR_NAMES = new Set(['blocks', 'title', 'text'])
-
-function registerMustacheProvider(monaco) {
-  monaco.languages.registerCompletionItemProvider('html', {
-    triggerCharacters: ['{'],
-    provideCompletionItems(model, position) {
-      const before = model.getLineContent(position.lineNumber).slice(0, position.column - 1)
-      const m = before.match(/\{+$/)
-      if (!m) return { suggestions: [] }
-      const range = {
-        startLineNumber: position.lineNumber, startColumn: position.column - m[0].length,
-        endLineNumber:   position.lineNumber, endColumn:   position.column,
-      }
-      const userVars = new Set()
-      for (const [, name] of model.getValue().matchAll(/\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/g))
-        userVars.add(name)
-      const suggestions = MUSTACHE_SYSTEM_TOKENS.map(t => ({
-        label: t.label, kind: monaco.languages.CompletionItemKind.Snippet,
-        detail: t.detail, insertText: t.insert,
-        insertTextRules: t.snippet
-          ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
-          : undefined,
-        range, sortText: '0' + t.label,
-      }))
-      for (const name of userVars) {
-        if (!SYSTEM_VAR_NAMES.has(name))
-          suggestions.push({
-            label: `{{${name}}}`, kind: monaco.languages.CompletionItemKind.Variable,
-            detail: 'Template-Variable (gefunden)', insertText: `{{${name}}}`,
-            range, sortText: '1' + name,
-          })
-      }
-      return { suggestions }
-    },
-  })
-}
-
-async function registerEmmet(monaco) {
-  try {
-    const { emmetHTML, emmetCSS } = await import('emmet-monaco-es')
-    emmetHTML(monaco)
-    emmetCSS(monaco)
-  } catch (e) {}
-}
-
-function registerProviders(monaco) {
-  if (monaco.__temgineProviders) return
-  monaco.__temgineProviders = true
-  registerMustacheProvider(monaco)
-  registerEmmet(monaco) // async, fire-and-forget
-}
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function CodeEditor({ value = '', onChange = () => {}, language = 'html', height = '400px', options = {}, registerInserter = null }) {
   const editorRef = useRef(null)
   const apiRef = useRef(null)
@@ -89,21 +28,14 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
 
   function handleMount(editor, monaco) {
     editorRef.current = editor
-    registerProviders(monaco)
 
-    // Explicit layout: observe the wrapper and call layout() with fixed px values.
-    // automaticLayout:false + this pattern is the standard way to avoid Monaco's grow-loop.
+    // Keep Monaco's hidden keyboard textarea non-visible and non-resizable,
+    // without touching the rendered cursor layer.
     try {
-      const wrapper = editor.getDomNode()?.closest('.codeeditor-wrapper')
-      if (wrapper && typeof ResizeObserver !== 'undefined') {
-        const ro = new ResizeObserver(() => {
-          try {
-            const { width, height } = wrapper.getBoundingClientRect()
-            if (width > 0 && height > 0) editor.layout({ width, height })
-          } catch (e) {}
-        })
-        ro.observe(wrapper)
-        editor.onDidDispose(() => ro.disconnect())
+      const input = editor.getDomNode()?.querySelector('textarea.inputarea')
+      if (input) {
+        input.style.resize = 'none'
+        input.style.boxShadow = 'none'
       }
     } catch (e) {}
     const api = {
@@ -140,11 +72,14 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
     lineHeight: 22,
     fontFamily: 'monospace',
     minimap: { enabled: false },
+    quickSuggestions: true,
+    suggestOnTriggerCharacters: true,
+    tabCompletion: 'on',
     wordWrap: 'on',
     tabSize: 2,
     scrollBeyondLastLine: false,
     padding: { top: 10, bottom: 10 },
-    automaticLayout: false,
+    automaticLayout: true,
     ...options,
   }
 
