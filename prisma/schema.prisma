@@ -43,23 +43,26 @@ model UserInvitation {
 }
 
 model Page {
-  id        String         @id @default(cuid())
-  slug      String         @unique
-  title     String
-  blocks    Json           @default("[]")
-  template  String?
-  data      Json           @default("{}")
-  children  Json           @default("[]")
-  revisions PageRevision[]
-  status    PageStatus     @default(DRAFT)
-  publishAt DateTime?
-  isHomepage Boolean        @default(false)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id             String               @id @default(cuid())
+  slug           String               @unique
+  title          String
+  blocks         Json                 @default("[]")
+  template       String?
+  data           Json                 @default("{}")
+  children       Json                 @default("[]")
+  revisions      PageRevision[]
+  workflowEvents PageWorkflowEvent[]
+  status         PageStatus           @default(DRAFT)
+  publishAt      DateTime?
+  isHomepage     Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 }
 
 enum PageStatus {
   DRAFT
+  REVIEW
+  APPROVED
   PUBLISHED
   SCHEDULED
 }
@@ -119,6 +122,14 @@ model Snippet {
   updatedAt DateTime @updatedAt
 }
 
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum NavType {
   MAIN
   PAGE
@@ -141,6 +152,7 @@ model ContentType {
   slug      String         @unique
   description String?
   fields    ContentField[]
+  entries   ContentEntry[]
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 }
@@ -155,4 +167,41 @@ model ContentField {
   options     Json?
   required    Boolean  @default(false)
   sortOrder    Int      @default(0)
+}
+
+model ContentEntry {
+  id            String   @id @default(cuid())
+  contentTypeId String
+  contentType   ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+  data          Json     @default("{}")
+  title         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([contentTypeId])
+}
+
+model PageWorkflowEvent {
+  id         String     @id @default(cuid())
+  pageId     String
+  page       Page       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  fromStatus PageStatus
+  toStatus   PageStatus
+  comment    String?    @db.Text
+  createdBy  String?
+  createdAt  DateTime   @default(now())
+
+  @@index([pageId])
+}
+
+model FileMetadata {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  altText   String?
+  copyright String?
+  caption   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([url])
 }

@@ -43,8 +43,23 @@ Migriert Snippets zur JSON-Datei.
 ### `publish-scheduled.js`
 Veröffentlicht Seiten, die für einen bestimmten Zeitpunkt geplant sind.
 
+### `migrate-models.js`
+Migriert bestehende Seiten in `ContentEntry`-Datensätze auf Basis einer JSON-Mapping-Datei.
+Standard ist Dry-Run; echte Änderungen werden nur mit `--write` ausgeführt.
+```bash
+node scripts/migrate-models.js --config init/content-entry-migration.example.json
+node scripts/migrate-models.js --config init/content-entry-migration.example.json --write
+```
+
+### `rollback-model-migration.js`
+Stellt Änderungen einer zuvor ausgeführten Model-Migration anhand der Backup-Datei wieder her.
+```bash
+node scripts/rollback-model-migration.js --backup data/backups/content-model-migration-2026-04-24T16-30-00-000Z.json
+```
+
 ## Hinweise
 
 - Alle `.mjs` Scripts verwenden ES-Module-Syntax
 - Scripts sollten aus dem Hauptverzeichnis ausgeführt werden
 - Backup-Dateien befinden sich in `data/backups/`
+- Beispiel-Mappings für B-03 liegen in `init/content-entry-migration.example.json`

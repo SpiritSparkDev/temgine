@@ -9,7 +9,11 @@ const mockPrisma = {
     updateMany: jest.fn().mockResolvedValue({ count: 0 })
   },
   pageRevision: {
-    create: jest.fn().mockResolvedValue({ id: 'rev-1' })
+    create: jest.fn().mockResolvedValue({ id: 'rev-1' }),
+    deleteMany: jest.fn().mockResolvedValue({ count: 0 })
+  },
+  setting: {
+    findUnique: jest.fn().mockResolvedValue(null)
   }
 };
 
@@ -88,7 +92,11 @@ describe('/api/pages slot sanitization', () => {
     await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Slug erforderlich' });
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Slug erforderlich',
+      code: 'VALIDATION_ERROR',
+      details: { missing: ['slug'] }
+    });
     expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
   });
 });

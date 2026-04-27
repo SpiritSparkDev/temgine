@@ -8,7 +8,11 @@ export default function PagesView({
   templateList, 
   editingPage, 
   setEditingPage, 
-  handleUpdatePages 
+  handleUpdatePages,
+  editorDirty = false,
+  setEditorDirty = () => {},
+  userRole,
+  onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
 
@@ -31,10 +35,12 @@ export default function PagesView({
           page={editingPage} 
           templates={templateList}
           allPages={pages}
+          userRole={userRole}
           onSave={async (updatedPage, options) => {
             try {
               // Ensure options is an object
               const opts = options || {};
+              const isSilent = opts.silent === true;
               
               const updatePageInTree = (nodes) => 
                 nodes.map(n => 
@@ -47,16 +53,20 @@ export default function PagesView({
               
               if (!saved) {
                 // Fehler wurde bereits durch handleUpdatePages angezeigt
-                return;
+                return false;
+              }
+
+              setEditorDirty(false);
+              
+              if (!isSilent) {
+                showToast('Seite erfolgreich gespeichert!', 'success');
               }
               
-              showToast('Seite erfolgreich gespeichert!', 'success');
-              
               // Verarbeite Optionen - nur wenn explizit gesetzt
-              if (opts.close === true) {
+              if (!isSilent && opts.close === true) {
                 // Schließe Editor und kehre zur Seitenverwaltung zurück
                 setEditingPage(null);
-              } else if (opts.view === true) {
+              } else if (!isSilent && opts.view === true) {
                 // Versuche, die Seite in einem bestehenden Tab zu fokussieren oder öffne einen neuen
                 const pageUrl = `/${updatedPage.slug}`;
                 let opened = false;
@@ -84,11 +94,23 @@ export default function PagesView({
                 // Normal (oder wenn options nicht gesetzt): Speichern nur, Editor bleibt offen mit aktualisierten Daten
                 setEditingPage(updatedPage);
               }
+              return true;
             } catch (error) {
-              showToast('Fehler beim Speichern: ' + error.message, 'error');
+              if (!(options && options.silent === true)) {
+                showToast('Speichern fehlgeschlagen. Bitte Eingaben pruefen und erneut speichern. Details: ' + error.message, 'error');
+              }
+              return false;
             }
           }}
-          onCancel={() => setEditingPage(null)}
+          onDirtyChange={setEditorDirty}
+          onCancel={() => {
+            if (editorDirty) {
+              const confirmed = window.confirm('Du hast ungespeicherte Aenderungen. Wirklich ohne Speichern schliessen?');
+              if (!confirmed) return;
+            }
+            setEditorDirty(false);
+            setEditingPage(null);
+          }}
         />
       ) : (
         <PageTreeEditor 
@@ -105,7 +127,9 @@ export default function PagesView({
             const page = findPage(pages, id);
             if (page) setEditingPage(page);
           }} 
-          onUpdate={handleUpdatePages} 
+          onUpdate={handleUpdatePages}
+          userRole={userRole}
+          onRefreshPages={onRefreshPages}
         />
       )}
     </div>

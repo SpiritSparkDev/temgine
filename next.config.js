@@ -5,6 +5,43 @@ const path = require('path');
 // (which always runs with NODE_ENV=production) wrote them to '.next'.
 const isDev = process.env.NODE_ENV === 'development';
 
+// ── Security Headers (F-03) ──────────────────────────────────────────────────
+const securityHeaders = [
+  // Verhindert Clickjacking
+  { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+  // Verhindert MIME-Type-Sniffing
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // Verhindert Referrer-Leakage bei cross-origin Navigation
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  // Aktiviert HTTPS-Enforcing (nur in Produktion sinnvoll, aber schadet nicht)
+  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+  // Deaktiviert DNS-Prefetch
+  { key: 'X-DNS-Prefetch-Control', value: 'on' },
+  // Verhindert Adobe-Flash und PDF-Cross-Site-Zugriffe
+  { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
+  // Permissions Policy: deaktiviert nicht benötigte Browser-APIs
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+  // Content-Security-Policy – moderat: erlaubt inline scripts für Next.js und CodeMirror
+  {
+    key: 'Content-Security-Policy',
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net", // Next.js + Monaco loader brauchen eval + CDN
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https:",
+      "media-src 'self' blob:",
+      "connect-src 'self' https://cdn.jsdelivr.net",
+      "frame-src 'self'",
+      "worker-src blob: 'self' https://cdn.jsdelivr.net",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "upgrade-insecure-requests",
+    ].join('; '),
+  },
+];
+
 /**
  * Ensure a single instance of CodeMirror packages is resolved by webpack.
  * This avoids "Unrecognized extension value" errors caused by multiple
@@ -12,6 +49,15 @@ const isDev = process.env.NODE_ENV === 'development';
  */
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
+  async headers() {
+    return [
+      {
+        // Sicherheits-Header für alle Routen
+        source: '/(.*)',
+        headers: securityHeaders,
+      },
+    ];
+  },
   webpack: (config) => {
     config.resolve.alias = config.resolve.alias || {};
     const pkgRoot = path.resolve(__dirname, 'node_modules');

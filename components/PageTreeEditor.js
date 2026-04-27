@@ -14,10 +14,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import Toast from './Toast';
+import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 
 
-
-export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
+export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
   const [tree, setTree] = useState([]);
   const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -34,29 +34,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
       .then(data => setNavigations(Array.isArray(data) ? data : []))
       .catch(err => console.error('Navigationen laden fehlgeschlagen:', err));
   }, []);
-
-  const treeStats = useMemo(() => {
-    const visit = (nodes) => nodes.reduce((acc, node) => {
-      acc.total += 1;
-      if (node.isHomepage) acc.homepages += 1;
-      if ((node.children || []).length > 0) acc.withChildren += 1;
-      if (node.status === 'DRAFT') acc.drafts += 1;
-      return visit(node.children || []).reduce((nestedAcc, key) => nestedAcc, acc);
-    }, { total: 0, drafts: 0, homepages: 0, withChildren: 0 });
-
-    const mergeVisit = (nodes, acc = { total: 0, drafts: 0, homepages: 0, withChildren: 0 }) => {
-      for (const node of nodes) {
-        acc.total += 1;
-        if (node.isHomepage) acc.homepages += 1;
-        if ((node.children || []).length > 0) acc.withChildren += 1;
-        if (node.status === 'DRAFT') acc.drafts += 1;
-        mergeVisit(node.children || [], acc);
-      }
-      return acc;
-    };
-
-    return mergeVisit(tree);
-  }, [tree]);
 
   const filteredTree = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
@@ -173,17 +150,50 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     }
   }
 
-  function handleToggleStatus(nodeId) {
-    const toggleNode = (nodes) => nodes.map(n =>
-      n.id === nodeId
-        ? { ...n, status: n.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED' }
-        : { ...n, children: toggleNode(n.children || []) }
-    );
-    const updated = toggleNode(tree);
-    setTree(updated);
-    onUpdate && onUpdate(updated);
-    const node = (() => { const find = (nodes) => { for (const n of nodes) { if (n.id === nodeId) return n; const f = find(n.children || []); if (f) return f; } }; return find(updated); })();
-    setToast({ message: node?.status === 'PUBLISHED' ? '✓ Seite veröffentlicht' : 'Seite auf Entwurf gesetzt', type: 'success' });
+  async function handleToggleStatus(nodeId) {
+    const findNode = (nodes) => {
+      for (const n of nodes) {
+        if (n.id === nodeId) return n;
+        const found = findNode(n.children || []);
+        if (found) return found;
+      }
+    };
+    const node = findNode(tree);
+    if (!node) return;
+
+    // Zielstatus: PUBLISHED → DRAFT, alles andere → PUBLISHED
+    const targetStatus = node.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+
+    try {
+      const res = await fetch('/api/pages/workflow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId: node.id, toStatus: targetStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setToast({ message: data.error || 'Statuswechsel fehlgeschlagen.', type: 'error' });
+      } else {
+        setToast({
+          message: `Status geändert: ${STATUS_LABELS[targetStatus] || targetStatus}`,
+          type: 'success',
+        });
+        // Seiten neu laden damit die Liste den aktuellen Status zeigt
+        if (onRefreshPages) {
+          await onRefreshPages();
+        } else {
+          // Fallback: lokalen Baum aktualisieren
+          const updateTree = (nodes) => nodes.map(n =>
+            n.id === nodeId
+              ? { ...n, status: targetStatus }
+              : { ...n, children: updateTree(n.children || []) }
+          );
+          setTree(updateTree(tree));
+        }
+      }
+    } catch (_e) {
+      setToast({ message: 'Netzwerkfehler beim Statuswechsel.', type: 'error' });
+    }
   }
 
   function handleNavChange(nodeId, navId) {
@@ -240,7 +250,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
     if (node.isHomepage) return 'Homepage';
     if (node.redirectType === '404') return '404-Seite';
     if (node.redirectType === '503') return '503-Seite';
-    return node.status === 'DRAFT' ? 'Entwurf' : 'Veröffentlicht';
+    return STATUS_LABELS[node.status] || node.status || 'Entwurf';
   }
 
   function renderNodeMeta(node) {
@@ -279,12 +289,12 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
                     </div>
                   ) : (
                     <div className="page-card-thumb-placeholder">
-                      {node.status === 'DRAFT' ? <FileText size={28} /> : <Globe size={28} />}
-                      <span>{node.status === 'DRAFT' ? 'Entwurf' : 'Hover für Vorschau'}</span>
+                      {node.status === 'PUBLISHED' ? <Globe size={28} /> : <FileText size={28} />}
+                      <span>{STATUS_LABELS[node.status] || 'Entwurf'}</span>
                     </div>
                   )}
                   <div className="page-card-badges">
-                    <span className={`page-badge ${node.status === 'PUBLISHED' ? 'page-badge-published' : 'page-badge-neutral'}`}>
+                    <span className={`page-badge page-badge-${(STATUS_COLORS[node.status] || 'badge-gray').replace('badge-', '')}`}>
                       {getStatusLabel(node)}
                     </span>
                     {node.isHomepage && <span className="page-badge badge-home">🏠</span>}
@@ -423,31 +433,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate }) {
       )}
 
       <div className="page-tree-shell">
-        <div className="page-tree-hero">
-          <div className="page-tree-hero-copy">
-            <span className="page-tree-eyebrow">Pages</span>
-            <h2>Seiten strukturieren und pflegen</h2>
-            <p>
-              Verwalte Seitenhierarchie, Navigationen und Bearbeitungsschritte. Hover über eine Karte für die Live-Vorschau.
-            </p>
-          </div>
-
-          <div className="page-tree-stats">
-            <div className="page-tree-stat">
-              <strong>{treeStats.total}</strong>
-              <span>Seiten gesamt</span>
-            </div>
-            <div className="page-tree-stat">
-              <strong>{treeStats.withChildren}</strong>
-              <span>mit Unterseiten</span>
-            </div>
-            <div className="page-tree-stat">
-              <strong>{treeStats.homepages}</strong>
-              <span>Systemseiten</span>
-            </div>
-          </div>
-        </div>
-
         <div className="page-tree-toolbar">
           <label className="page-tree-search">
             <Search size={16} />

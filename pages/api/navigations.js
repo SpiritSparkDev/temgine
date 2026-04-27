@@ -4,6 +4,12 @@ import { logAudit } from '../../lib/audit';
 
 const VALID_TYPES = ['MAIN', 'PAGE', 'MOBILE'];
 
+const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
+  const response = { error: message, code };
+  if (details) response.details = details;
+  return [status, response];
+};
+
 export default async function handler(req, res) {
   try {
     // ── GET ──────────────────────────────────────────────────────────────────
@@ -13,7 +19,10 @@ export default async function handler(req, res) {
       // Single item (with code) — used by editor
       if (id) {
         const nav = await prisma.navigation.findUnique({ where: { id: String(id) } });
-        if (!nav) return res.status(404).json({ error: 'Navigation nicht gefunden' });
+        if (!nav) {
+          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
         return res.status(200).json(nav);
       }
 
@@ -37,17 +46,24 @@ export default async function handler(req, res) {
     // ── Mutations — require MODERATOR or higher ───────────────────────────────
     const authResult = await requireAuth(req, res, ['ADMIN', 'MODERATOR']);
     if (!authResult.authorized) {
-      return res.status(authResult.status || 403).json({ error: authResult.error });
+      const [status, resp] = errorResponse(authResult.status || 403, authResult.error, 'UNAUTHORIZED');
+      return res.status(status).json(resp);
     }
 
     // ── POST (create) ─────────────────────────────────────────────────────────
     if (req.method === 'POST') {
       const { name, type, code } = req.body || {};
       if (!name || !type || !code) {
-        return res.status(400).json({ error: 'name, type und code sind erforderlich' });
+        const missing = [];
+        if (!name) missing.push('name');
+        if (!type) missing.push('type');
+        if (!code) missing.push('code');
+        const [status, resp] = errorResponse(400, 'name, type und code sind erforderlich', 'VALIDATION_ERROR', { missing });
+        return res.status(status).json(resp);
       }
       if (!VALID_TYPES.includes(type)) {
-        return res.status(400).json({ error: `type muss einer von ${VALID_TYPES.join(', ')} sein` });
+        const [status, resp] = errorResponse(400, `type muss einer von ${VALID_TYPES.join(', ')} sein`, 'VALIDATION_ERROR', { invalid: ['type'], value: type, valid: VALID_TYPES });
+        return res.status(status).json(resp);
       }
 
       const nav = await prisma.navigation.create({
@@ -61,49 +77,79 @@ export default async function handler(req, res) {
     // ── PUT (update) ──────────────────────────────────────────────────────────
     if (req.method === 'PUT') {
       const { id, name, code, isActive } = req.body || {};
-      if (!id) return res.status(400).json({ error: 'id ist erforderlich' });
-
-      const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
-      if (!existing) return res.status(404).json({ error: 'Navigation nicht gefunden' });
-
-      // If activating: deactivate all other navs of the same type first
-      if (isActive === true) {
-        await prisma.navigation.updateMany({
-          where: { type: existing.type, isActive: true, id: { not: String(id) } },
-          data: { isActive: false },
-        });
+      if (!id) {
+        const [status, resp] = errorResponse(400, 'id ist erforderlich', 'VALIDATION_ERROR', { missing: ['id'] });
+        return res.status(status).json(resp);
       }
 
-      const updated = await prisma.navigation.update({
-        where: { id: String(id) },
-        data: {
-          ...(name !== undefined && { name: String(name) }),
-          ...(code !== undefined && { code: String(code) }),
-          ...(isActive !== undefined && { isActive: Boolean(isActive) }),
-        },
-      });
+      try {
+        const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
+        if (!existing) {
+          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
 
-      await logAudit({ action: 'UPDATE', resource: 'navigation', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
-      return res.status(200).json(updated);
+        // If activating: deactivate all other navs of the same type first
+        if (isActive === true) {
+          await prisma.navigation.updateMany({
+            where: { type: existing.type, isActive: true, id: { not: String(id) } },
+            data: { isActive: false },
+          });
+        }
+
+        const updated = await prisma.navigation.update({
+          where: { id: String(id) },
+          data: {
+            ...(name !== undefined && { name: String(name) }),
+            ...(code !== undefined && { code: String(code) }),
+            ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+          },
+        });
+
+        await logAudit({ action: 'UPDATE', resource: 'navigation', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
+        return res.status(200).json(updated);
+      } catch (e) {
+        if (e.code === 'P2025') {
+          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
+        throw e;
+      }
     }
 
     // ── DELETE ────────────────────────────────────────────────────────────────
     if (req.method === 'DELETE') {
       const { id } = req.body || {};
-      if (!id) return res.status(400).json({ error: 'id ist erforderlich' });
+      if (!id) {
+        const [status, resp] = errorResponse(400, 'id ist erforderlich', 'VALIDATION_ERROR', { missing: ['id'] });
+        return res.status(status).json(resp);
+      }
 
-      const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
-      if (!existing) return res.status(404).json({ error: 'Navigation nicht gefunden' });
+      try {
+        const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
+        if (!existing) {
+          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
 
-      await prisma.navigation.delete({ where: { id: String(id) } });
-      await logAudit({ action: 'DELETE', resource: 'navigation', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
-      return res.status(200).json({ ok: true });
+        await prisma.navigation.delete({ where: { id: String(id) } });
+        await logAudit({ action: 'DELETE', resource: 'navigation', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
+        return res.status(200).json({ ok: true });
+      } catch (e) {
+        if (e.code === 'P2025') {
+          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
+        throw e;
+      }
     }
 
-    return res.status(405).json({ error: 'Methode nicht erlaubt' });
+    const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
+    return res.status(status).json(resp);
   } catch (e) {
     console.error('[/api/navigations Error]', e.message, e.stack);
-    return res.status(500).json({ error: 'Server Fehler', details: e.message });
+    const [status, resp] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', { message: process.env.NODE_ENV === 'production' ? undefined : e.message });
+    return res.status(status).json(resp);
   }
 }
 

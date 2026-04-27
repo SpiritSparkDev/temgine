@@ -1,17 +1,25 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
 import { renderPage } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
+import RevisionHistoryPanel from './RevisionHistoryPanel';
+import SeoPanel from './SeoPanel';
+import WorkflowPanel from './WorkflowPanel';
+import DOMCanvas from './DOMCanvas';
+import ElementPropertyEditor from './ElementPropertyEditor';
+import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
+  const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
 
@@ -31,13 +39,41 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
+  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
   const [toast, setToast] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState('gespeichert');
+  const [useDOMEditor, setUseDOMEditor] = useState(false);
+  const [domLayout, setDomLayout] = useState([]);
+  const [selectedElementId, setSelectedElementId] = useState(null);
+  const [pageStatus, setPageStatus] = useState((page?.status || 'DRAFT').toUpperCase());
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
+  const initialSnapshotRef = useRef('');
+  const autosaveTimerRef = useRef(null);
+  const autosaveInFlightRef = useRef(false);
+
+  const buildSnapshot = ({
+    title,
+    slug,
+    blocks,
+    pageData,
+    redirectType,
+    redirectUrl,
+    isHomepage,
+  }) => JSON.stringify({
+    title: title || '',
+    slug: slug || '',
+    blocks: Array.isArray(blocks) ? blocks : [],
+    pageData: pageData || {},
+    redirectType: redirectType || 'none',
+    redirectUrl: redirectUrl || '',
+    isHomepage: Boolean(isHomepage),
+  });
 
   const normalizeSlotName = (value) => {
     if (value === undefined || value === null) return '';
@@ -99,16 +135,98 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (page) {
       const initialBlocks = Array.isArray(page.blocks) ? page.blocks : [];
       const migration = migrateLegacySlotMapToBlocks(initialBlocks, page.data || {});
+      const migratedBlocks = migration.blocks || [];
+      const initialTitle = page.title || '';
+      const initialSlug = page.slug || '';
+      const initialRedirectType = page.redirectType || 'none';
+      const initialRedirectUrl = page.redirectUrl || '';
+      const initialIsHomepage = page.isHomepage || false;
+      const initialPageData = page.data || {};
+
       setTitle(page.title || '');
       setSlug(page.slug || '');
-      setBlocks(migration.blocks || []);
+      setBlocks(migratedBlocks);
       setPageData(page.data || {});
-      setRedirectType(page.redirectType || 'none');
-      setRedirectUrl(page.redirectUrl || '');
-      setIsHomepage(page.isHomepage || false);
-      setSelectedBlockPath((migration.blocks || []).length > 0 ? '0' : '');
+      setRedirectType(initialRedirectType);
+      setRedirectUrl(initialRedirectUrl);
+      setIsHomepage(initialIsHomepage);
+      setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
+
+      // Check if page needs DOM migration and migrate if necessary
+      if (pageNeedsMigration(page)) {
+        try {
+          const domMigrated = migratePage(page);
+          if (domMigrated && Array.isArray(domMigrated.layout)) {
+            setDomLayout(domMigrated.layout);
+            setUseDOMEditor(true);
+          }
+        } catch (e) {
+          console.error('DOM migration failed:', e);
+        }
+      }
+
+      initialSnapshotRef.current = buildSnapshot({
+        title: initialTitle,
+        slug: initialSlug,
+        blocks: migratedBlocks,
+        pageData: initialPageData,
+        redirectType: initialRedirectType,
+        redirectUrl: initialRedirectUrl,
+        isHomepage: initialIsHomepage,
+      });
+      setPageStatus((page.status || 'DRAFT').toUpperCase());
+      setIsDirty(false);
+      setAutosaveStatus('gespeichert');
+      onDirtyChange?.(false);
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!initialSnapshotRef.current) {
+      initialSnapshotRef.current = buildSnapshot({
+        title,
+        slug,
+        blocks,
+        pageData,
+        redirectType,
+        redirectUrl,
+        isHomepage,
+      });
+    }
+
+    const currentSnapshot = buildSnapshot({
+      title,
+      slug,
+      blocks,
+      pageData,
+      redirectType,
+      redirectUrl,
+      isHomepage,
+    });
+    const dirty = currentSnapshot !== initialSnapshotRef.current;
+    setIsDirty(dirty);
+    onDirtyChange?.(dirty);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isDirty) return undefined;
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!Array.isArray(blocks) || blocks.length === 0) {
@@ -707,7 +825,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setShowPreview(p => !p);
   }
 
-  function handleSave(options = {}) {
+  async function handleSave(options = {}) {
+    const opts = {
+      close: false,
+      view: false,
+      silent: false,
+      autosave: false,
+      ...options,
+    };
+
+    if (opts.autosave && autosaveInFlightRef.current) {
+      return false;
+    }
+
     // Prüfe ob bereits eine andere 404-Seite existiert
     if (redirectType === '404' && allPages) {
       const find404Page = (nodes) => {
@@ -722,8 +852,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       };
       const existing404 = find404Page(allPages);
       if (existing404) {
-        showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
-        return;
+        if (!opts.silent) {
+          showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
+        }
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
       }
     }
 
@@ -731,25 +864,105 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     delete normalizedPageData.blockSlots;
     delete normalizedPageData.__blockSlots;
 
+    // Store DOM layout if in DOM editor mode
+    if (useDOMEditor && domLayout.length > 0) {
+      normalizedPageData.domLayout = domLayout;
+    }
+
+    const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
     const updatedPage = {
       ...page,
       title,
-      slug: slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      slug: normalizedSlug,
       blocks,
       data: normalizedPageData,
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
-      isHomepage
+      isHomepage,
+      status: pageStatus,
     };
-    onSave && onSave(updatedPage, options);
+
+    try {
+      if (opts.autosave) {
+        autosaveInFlightRef.current = true;
+      }
+
+      const saveOk = onSave ? await onSave(updatedPage, opts) : true;
+      if (!saveOk) {
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
+      }
+
+      if (!slug && normalizedSlug) {
+        setSlug(normalizedSlug);
+      }
+
+      initialSnapshotRef.current = buildSnapshot({
+        title,
+        slug: normalizedSlug,
+        blocks,
+        pageData: normalizedPageData,
+        redirectType,
+        redirectUrl,
+        isHomepage,
+      });
+      setIsDirty(false);
+      setAutosaveStatus('gespeichert');
+      onDirtyChange?.(false);
+      return true;
+    } catch (error) {
+      if (!opts.silent) {
+        showToast('Speichern fehlgeschlagen. Bitte Eingaben pruefen und erneut speichern. Details: ' + (error.message || 'Unbekannter Fehler'), 'error');
+      }
+      if (opts.autosave) setAutosaveStatus('fehler');
+      return false;
+    } finally {
+      if (opts.autosave) {
+        autosaveInFlightRef.current = false;
+      }
+    }
   }
 
-  function handleSaveAndClose() {
-    handleSave({ close: true });
+  async function handleSaveAndClose() {
+    await handleSave({ close: true });
   }
 
-  function handleSaveAndView() {
-    handleSave({ view: true });
+  async function handleSaveAndView() {
+    await handleSave({ view: true });
+  }
+
+  useEffect(() => {
+    if (!page?.id || !isDirty) {
+      if (!isDirty) setAutosaveStatus('gespeichert');
+      return undefined;
+    }
+
+    const autosaveEnabled = localStorage.getItem('temphelix_autosave_enabled') !== 'false';
+    if (!autosaveEnabled) return undefined;
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      setAutosaveStatus('speichert');
+      await handleSave({ silent: true, autosave: true });
+    }, 1200);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage]);
+
+  function handleCancelClick() {
+    if (isDirty) {
+      const confirmed = window.confirm('Du hast ungespeicherte Aenderungen. Wirklich verwerfen und Editor verlassen?');
+      if (!confirmed) return;
+    }
+    onCancel?.();
   }
 
   // Render helpers for nested block editor
@@ -1197,33 +1410,150 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         />
       )}
 
+      {showRevisions && (
+        <RevisionHistoryPanel
+          pageId={page && page.id}
+          pageName={title}
+          onClose={() => setShowRevisions(false)}
+          onRestored={() => setShowRevisions(false)}
+          showToast={showToast}
+        />
+      )}
+
 
       <div className="tab-content blocks-tab">
 
-        <div className="page-editor-workspace">
-          <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
-            <div className="blocks-container">
-              {blocks.length > 0 ? renderBlocksList() : (
-                <div className="page-block-empty-state">
-                  <strong>Noch keine Blöcke vorhanden</strong>
-                  <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
-                  <button
-                    type="button"
-                    className="btn-modern"
-                    onClick={() => {
-                      handleAddBlock('content');
-                      setSelectedBlockPath('0');
-                    }}
-                    title={devTitle('Ersten Inhaltsblock anlegen')}
-                    aria-label="Ersten Inhaltsblock anlegen"
-                  >
-                    Ersten Block hinzufügen
-                  </button>
-                </div>
-              )}
-            </div>
+        {/* ── Sticky Toolbar ──────────────────────────────────────────── */}
+        <div className="pe-toolbar">
+          <div className="pe-toolbar-left">
+            <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
+            <span className="pe-toolbar-slug">/{slug || '—'}</span>
           </div>
+          <div className="pe-toolbar-actions">
+            {domLayout.length > 0 && (
+              <button
+                type="button"
+                className={`pe-tb-btn ${useDOMEditor ? 'active' : ''}`}
+                onClick={() => setUseDOMEditor(!useDOMEditor)}
+                title={useDOMEditor ? 'Zu Block-Editor wechseln' : 'Zu DOM-Editor wechseln'}
+              >
+                <Layers size={14} /> {useDOMEditor ? 'DOM' : 'Blöcke'}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`pe-tb-btn${showPreview ? ' pe-tb-btn-active' : ''}`}
+              onClick={handleTogglePreview}
+              title={devTitle('Live-Vorschau ein-/ausblenden')}
+            >
+              <Eye size={14} /> Vorschau
+            </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={() => setShowRevisions(true)}
+              title="Versionsverlauf anzeigen"
+            >
+              <History size={14} /> Verlauf
+            </button>
+            <div className="pe-toolbar-sep" />
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
+            <span
+              className={`pe-autosave-indicator${autosaveStatus === 'fehler' ? ' error' : autosaveStatus === 'speichert' ? ' saving' : ''}`}
+              aria-live="polite"
+            >
+              {autosaveStatus === 'speichert' ? 'speichert…' : autosaveStatus === 'fehler' ? '⚠ Fehler' : '✓'}
+            </span>
+          </div>
+        </div>
 
+        <div className="page-editor-workspace">
+          {useDOMEditor ? (
+            // DOM Editor View
+            <div className="page-editor-canvas" title={devTitle('DOM-Layout-Editor')}>
+              <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
+                <div style={{ flex: 1, overflowY: 'auto', borderRight: '1px solid #ddd', padding: '16px' }}>
+                  <h4 style={{ marginBottom: '12px' }}>DOM-Elemente</h4>
+                  <DOMCanvas
+                    pageLayout={domLayout}
+                    selectedElementId={selectedElementId}
+                    onAddElement={() => {
+                      const newElement = {
+                        id: `elem-${Date.now()}`,
+                        tag: 'div',
+                        attrs: {},
+                        children: []
+                      };
+                      setDomLayout([...domLayout, newElement]);
+                    }}
+                    onDeleteElement={(elementId) => {
+                      const filterElements = (els) =>
+                        els.filter(el => el.id !== elementId).map(el => ({
+                          ...el,
+                          children: el.children ? filterElements(el.children) : el.children
+                        }));
+                      setDomLayout(filterElements(domLayout));
+                    }}
+                    onSelectElement={setSelectedElementId}
+                    onUpdateElement={(elementId, updates) => {
+                      const updateElements = (els) =>
+                        els.map(el =>
+                          el.id === elementId
+                            ? { ...el, ...updates }
+                            : { ...el, children: el.children ? updateElements(el.children) : el.children }
+                        );
+                      setDomLayout(updateElements(domLayout));
+                    }}
+                  />
+                </div>
+                {selectedElementId && (
+                  <div style={{ flex: 0.3, overflowY: 'auto', borderLeft: '1px solid #ddd', padding: '16px' }}>
+                    <h4 style={{ marginBottom: '12px' }}>Element Properties</h4>
+                    <ElementPropertyEditor
+                      element={domLayout.find(el => el.id === selectedElementId)}
+                      onChange={(updates) => {
+                        const updateElements = (els) =>
+                          els.map(el =>
+                            el.id === selectedElementId
+                              ? { ...el, ...updates }
+                              : { ...el, children: el.children ? updateElements(el.children) : el.children }
+                          );
+                        setDomLayout(updateElements(domLayout));
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            // Legacy Blocks Editor View
+            <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
+              <div className="blocks-container">
+                {blocks.length > 0 ? renderBlocksList() : (
+                  <div className="page-block-empty-state">
+                    <strong>Noch keine Blöcke vorhanden</strong>
+                    <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
+                    <button
+                      type="button"
+                      className="btn-modern"
+                      onClick={() => {
+                        handleAddBlock('content');
+                        setSelectedBlockPath('0');
+                      }}
+                      title={devTitle('Ersten Inhaltsblock anlegen')}
+                      aria-label="Ersten Inhaltsblock anlegen"
+                    >
+                      Ersten Block hinzufügen
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {typeof window !== 'undefined' && document.getElementById('page-editor-inspector-portal') ? createPortal(
           <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
             {(() => {
               const toggleSection = (id) => setCollapsedSections(prev => {
@@ -1249,33 +1579,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     )}
                   </div>
 
-                  {/* Global Actions — Reihenfolge wird durch CSS grid-template-areas gesteuert */}
-                  <div className="inspector-global-actions">
+                  {/* Block Actions */}
+                  <div className="inspector-block-bar">
                     <button
                       type="button"
-                      className="btn-modern-small inspector-ga-newblock"
+                      className="pe-tb-btn pe-tb-btn-primary inspector-ga-newblock"
                       onClick={() => { const p = String((blocks || []).length); handleAddBlock('content'); setSelectedBlockPath(p); }}
                       title={devTitle('Neuen Top-Level-Block anlegen')}
                     >
-                      + Neuer Block
+                      <Plus size={13} /> Neuer Block
                     </button>
-                    <button type="button" className="inspector-action-btn inspector-ga-kindblock" onClick={() => addNestedBlock(selectedBlockPath, 'content', true)} title={devTitle('Unterblock anlegen')}>
-                      <Plus size={13} /> Kind hinzufügen
-                    </button>
-                    <button type="button" className="btn-modern-small green inspector-ga-save" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
-                    <button type="button" className="btn-modern-small green hollow inspector-ga-savview" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
-                    <button type="button" className="btn-modern-small green hollow inspector-ga-savclose" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
                     <button
                       type="button"
-                      className={`btn-modern-small btn-icon-row inspector-ga-preview${showPreview ? ' green' : ' hollow'}`}
-                      onClick={handleTogglePreview}
-                      title={devTitle('Live-Vorschau ein-/ausblenden')}
+                      className="pe-tb-btn"
+                      onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
+                      title={devTitle('Unterblock anlegen')}
                     >
-                      <Eye size={13} /> Vorschau
+                      <Plus size={13} /> Kind
                     </button>
                     <button
                       type="button"
-                      className="inspector-action-btn danger inspector-ga-delete"
+                      className="pe-tb-btn pe-tb-btn-danger"
                       onClick={() => {
                         const currentPath = selectedBlockPath;
                         handleDeleteBlock(currentPath);
@@ -1284,7 +1608,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       }}
                       title={devTitle('Ausgewaehlten Block loeschen')}
                     >
-                      <Trash2 size={13} /> Block löschen
+                      <Trash2 size={13} />
                     </button>
                   </div>
 
@@ -1343,97 +1667,87 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </>
                   )}
 
+                  {/* ── Seite ─────────────────────────────── */}
+                  <div className="inspector-section-divider" />
+
+                  {/* Einstellungen */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-settings') ? n.delete('outline-settings') : n.add('outline-settings'); return n; })} aria-expanded={!outlineCollapsed.has('outline-settings')}>
+                      <span className="inspector-section-icon">⚙</span>
+                      <span className="inspector-section-label">Einstellungen</span>
+                      {outlineCollapsed.has('outline-settings') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-settings') && (
+                      <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Seitentitel</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Seitentitel" className="input-field-small" aria-label="Seitentitel" />
+                        <label className="field-label-xs">Slug</label>
+                        <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="seiten-url" className="input-field-small" aria-label="URL-Slug" />
+                        <label className="field-label-xs">Weiterleitung</label>
+                        <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
+                          <option value="none">Keine</option>
+                          <option value="404">404</option>
+                          <option value="503">503</option>
+                          <option value="external">Externe URL</option>
+                        </select>
+                        {redirectType === 'external' && (
+                          <input type="url" value={redirectUrl} onChange={e => setRedirectUrl(e.target.value)} placeholder="https://example.com" className="input-field-small" aria-label="Ziel-URL" />
+                        )}
+                        <label className="page-editor-outline-toggle">
+                          <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
+                          Als Startseite
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SEO */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-seo') ? n.delete('outline-seo') : n.add('outline-seo'); return n; })} aria-expanded={!outlineCollapsed.has('outline-seo')}>
+                      <span className="inspector-section-icon">◎</span>
+                      <span className="inspector-section-label">SEO</span>
+                      {outlineCollapsed.has('outline-seo') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-seo') && (
+                      <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
+                        <SeoPanel pageData={pageData} slug={slug} onChange={setPageData} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Workflow */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-workflow') ? n.delete('outline-workflow') : n.add('outline-workflow'); return n; })} aria-expanded={!outlineCollapsed.has('outline-workflow')}>
+                      <span className="inspector-section-icon">◈</span>
+                      <span className="inspector-section-label">Workflow</span>
+                      {outlineCollapsed.has('outline-workflow') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-workflow') && (
+                      <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
+                        <WorkflowPanel pageId={page?.id} status={pageStatus} userRole={userRole} onTransition={(s) => setPageStatus(s.toUpperCase())} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Strukturvorschau */}
+                  <div className="inspector-section">
+                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-structure') ? n.delete('outline-structure') : n.add('outline-structure'); return n; })} aria-expanded={!outlineCollapsed.has('outline-structure')}>
+                      <span className="inspector-section-icon">▦</span>
+                      <span className="inspector-section-label">Strukturvorschau</span>
+                      {outlineCollapsed.has('outline-structure') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    {!outlineCollapsed.has('outline-structure') && (
+                      <div className="page-editor-outline-structure">
+                        <TemplateStructurePreview blocks={blocks} activeBlockPath={selectedBlockPath} onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null} />
+                      </div>
+                    )}
+                  </div>
 
                 </>
               );
             })()}
           </aside>
-
-          <aside className="page-editor-outline" title={devTitle('Bereich: Seiteneinstellungen und Strukturvorschau')}>
-            <div className="page-editor-outline-head">
-              <span className="page-editor-outline-eyebrow">Aktuelle Seite</span>
-              {showDevHints && <div className="page-editor-panel-hint">Bereich: Seiteneinstellungen und Struktur</div>}
-              <strong>{title || page?.title || 'Unbenannte Seite'}</strong>
-              <span>/{slug || 'seiten-url'}</span>
-            </div>
-
-            <div className="page-editor-outline-settings">
-              <label className="field-label-xs">Seitentitel</label>
-              <input
-                type="text"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="Seitentitel"
-                className="input-field-small"
-                title={devTitle('Feld: Seitentitel')}
-                aria-label="Seitentitel"
-              />
-
-              <label className="field-label-xs">Slug</label>
-              <input
-                type="text"
-                value={slug}
-                onChange={e => setSlug(e.target.value)}
-                placeholder="seiten-url"
-                className="input-field-small"
-                title={devTitle('Feld: URL-Slug')}
-                aria-label="URL-Slug"
-              />
-
-              <label className="field-label-xs">Weiterleitung</label>
-              <select
-                value={redirectType}
-                onChange={e => setRedirectType(e.target.value)}
-                className="input-field-small"
-                title={devTitle('Feld: Weiterleitungstyp')}
-                aria-label="Weiterleitungstyp"
-              >
-                <option value="none">Keine</option>
-                <option value="404">404</option>
-                <option value="503">503</option>
-                <option value="external">Externe URL</option>
-              </select>
-
-              {redirectType === 'external' && (
-                <input
-                  type="url"
-                  value={redirectUrl}
-                  onChange={e => setRedirectUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="input-field-small"
-                  title={devTitle('Feld: Ziel-URL fuer externe Weiterleitung')}
-                  aria-label="Ziel-URL fuer externe Weiterleitung"
-                />
-              )}
-
-              <label className="page-editor-outline-toggle" title={devTitle('Option: Diese Seite als Startseite markieren')}>
-                <input
-                  type="checkbox"
-                  checked={isHomepage}
-                  onChange={e => setIsHomepage(e.target.checked)}
-                />
-                Als Startseite
-              </label>
-            </div>
-
-            <div className="page-editor-outline-structure">
-              <div className="page-editor-outline-structure-head">
-                {showDevHints && <div className="page-editor-panel-hint">Komponente: Strukturvorschau, Funktion: Blöcke anzeigen und anspringen</div>}
-                <strong>Strukturvorschau</strong>
-                <span>
-                  {blocks.length > 0
-                    ? 'Klicke auf einen Block zum Springen'
-                    : 'Lege zuerst einen Block an'}
-                </span>
-              </div>
-
-              <TemplateStructurePreview
-                blocks={blocks}
-                activeBlockPath={selectedBlockPath}
-                onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
-              />
-            </div>
-          </aside>
+          , document.getElementById('page-editor-inspector-portal')) : null}
         </div>
       </div>
 

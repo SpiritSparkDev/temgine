@@ -64,3 +64,5 @@ docs/
 # Backups (werden nicht versioniert)
 data/backups/
 development_docs
+
+*.md

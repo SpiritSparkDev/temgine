@@ -26,6 +26,20 @@ NextAuth.js stellt automatisch folgende Endpunkte bereit:
 
 ## Seiten (Pages)
 
+### API-Vertrag (verbindlich)
+
+- `GET /api/pages`: Lesen (Liste oder Einzelseite per `slug`).
+- `POST /api/pages`: Speichern.
+  - Mit Array-Body: Vollstaendige Baum-Synchronisierung (inkl. Entfernen fehlender Top-Level-Seiten).
+  - Mit Objekt-Body: Einzelseiten-Upsert.
+- `POST /api/pages/publish`: Statuswechsel (`publish`, `unpublish`, `schedule`).
+- `DELETE /api/pages`: Loeschen per `slug`.
+
+Hinweis zu Seiteneffekten:
+- Beim Array-POST werden Top-Level-Seiten, die nicht mehr im Payload enthalten sind, aus der Datenbank entfernt.
+- `children` werden als JSON im Parent gespeichert; nur Top-Level-Seiten sind DB-Zeilen.
+- Bei `isHomepage: true` wird diese Seite exklusiv als Homepage gesetzt.
+
 ### GET /api/pages
 
 Alle Seiten oder eine einzelne Seite abrufen.
@@ -71,6 +85,20 @@ Alle Seiten oder eine einzelne Seite abrufen.
 ### POST /api/pages
 
 Seiten anlegen oder aktualisieren (Upsert).
+
+#### Variante A: Vollsync per Array (Tree-Save)
+
+- Erwartet ein Array von Top-Level-Seiten.
+- Fuehrt Upsert fuer jede Top-Level-Seite aus.
+- Entfernt Top-Level-Seiten, die nicht mehr im Payload enthalten sind.
+- Erstellt fuer gespeicherte Seiten Revisionsdaten.
+
+#### Variante B: Einzelseiten-Upsert per Objekt
+
+- Erwartet genau ein Seitenobjekt.
+- Fuehrt Upsert fuer diese Seite aus.
+- Erstellt eine Revision fuer den gespeicherten Stand.
+- Kein implizites Loeschen anderer Seiten.
 
 **Body (Array für Batch-Update):**
 ```json
@@ -122,12 +150,37 @@ Seiten anlegen oder aktualisieren (Upsert).
 
 **Funktionalität:**
 - Erstellt automatisch PageRevisions
-- Löscht Seiten, die nicht mehr im Array sind
+- Loescht Seiten, die nicht mehr im Array sind (nur bei Array-POST)
 - Setzt `isHomepage: false` für alle anderen Seiten wenn eine als Homepage markiert wird
 - Sanitiert HTML-Input
 
 **Fehler:**
-- `400` - Slug fehlt
+- `400` - Slug fehlt (Single-Objekt)
+- `500` - Server-Fehler
+
+### POST /api/pages/publish
+
+Statuswechsel fuer bestehende Seiten.
+
+**Body:**
+```json
+{
+  "id": "cuid-oder-id",
+  "action": "publish"
+}
+```
+
+Alternativ kann statt `id` auch `slug` gesendet werden.
+
+**Erlaubte Actions:**
+- `publish` -> `status = PUBLISHED`
+- `unpublish` -> `status = DRAFT`
+- `schedule` -> `status = SCHEDULED` (mit gueltigem `publishAt`)
+
+**Fehler:**
+- `400` - Ungueltige oder fehlende Parameter
+- `404` - Seite nicht gefunden
+- `405` - Methode nicht erlaubt
 - `500` - Server-Fehler
 
 ### DELETE /api/pages

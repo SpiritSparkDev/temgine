@@ -1,5 +1,96 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Trash2, Image as ImageIcon, FileText, Download, Copy, FolderPlus, Folder, ChevronRight, Clock } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, FileText, Download, Copy, FolderPlus, Folder, ChevronRight, Clock, CheckSquare, Square, AlertTriangle, Tag, X, Info } from 'lucide-react';
+
+// ── XHR-Upload mit Fortschritts-Callback ────────────────────────────────────
+function xhrUpload(url, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText || '{}'));
+      } else {
+        let msg = 'Upload fehlgeschlagen';
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch (_e) {}
+        reject(new Error(msg));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Netzwerkfehler'));
+    xhr.send(formData);
+  });
+}
+
+// ── MetadataModal ────────────────────────────────────────────────────────────
+function isImageFile(filename) {
+  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
+}
+
+function MetadataModal({ file, metadata, onSave, onClose }) {
+  const [altText,   setAltText]   = useState(metadata?.altText   || '');
+  const [copyright, setCopyright] = useState(metadata?.copyright || '');
+  const [caption,   setCaption]   = useState(metadata?.caption   || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave({ url: file.url, altText, copyright, caption });
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: 'var(--bg-primary, #fff)', borderRadius: 12, padding: 28, width: 440, maxWidth: '95vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Tag size={16} />
+          <strong style={{ flex: 1 }}>Metadaten: {file.name}</strong>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={16} /></button>
+        </div>
+
+        {isImageFile(file.name) && (
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '0.8rem', color: '#c62828' }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+            Alt-Text ist für Barrierefreiheit und SEO Pflicht.
+          </div>
+        )}
+
+        <label className="field-label-xs">Alt-Text {isImageFile(file.name) && <span style={{ color: '#c62828' }}>*</span>}</label>
+        <input type="text" value={altText} onChange={e => setAltText(e.target.value)}
+          placeholder="Beschreibt das Bild für Screenreader und SEO"
+          maxLength={500} className="input-field-small"
+          style={{ width: '100%', marginBottom: 12, boxSizing: 'border-box' }} autoFocus={isImageFile(file.name)} />
+
+        <label className="field-label-xs">Copyright / Quelle</label>
+        <input type="text" value={copyright} onChange={e => setCopyright(e.target.value)}
+          placeholder="z.B. © Max Mustermann, Unsplash"
+          maxLength={200} className="input-field-small"
+          style={{ width: '100%', marginBottom: 12, boxSizing: 'border-box' }} />
+
+        <label className="field-label-xs">Bildunterschrift</label>
+        <input type="text" value={caption} onChange={e => setCaption(e.target.value)}
+          placeholder="Optionale Bildunterschrift"
+          maxLength={500} className="input-field-small"
+          style={{ width: '100%', marginBottom: 20, boxSizing: 'border-box' }} />
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={handleSave}
+            disabled={saving || (isImageFile(file.name) && !altText.trim())}>
+            {saving ? 'Speichern…' : 'Speichern'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Haupt-Komponente ─────────────────────────────────────────────────────────
 
 export default function FileManagerView({ showToast }) {
   const [files, setFiles] = useState([]);
@@ -9,8 +100,16 @@ export default function FileManagerView({ showToast }) {
   const [showNewFolderInput, setShowNewFolderInput] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [dragging, setDragging] = useState(false);
-  const [uploadQueue, setUploadQueue] = useState([]); // [{ id, name, done, error }]
+  // uploadQueue: [{ id, name, done, error, progress }]
+  const [uploadQueue, setUploadQueue] = useState([]);
   const [failedImages, setFailedImages] = useState(new Set());
+  // Batch-Selektion
+  const [selectedUrls, setSelectedUrls] = useState(new Set());
+  const [batchMode, setBatchMode] = useState(false);
+  // Metadaten: url → { altText, copyright, caption }
+  const [metadataMap, setMetadataMap] = useState({});
+  const [metaModalFile, setMetaModalFile] = useState(null);
+
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -19,19 +118,47 @@ export default function FileManagerView({ showToast }) {
     loadFiles();
   }, [currentFolder]);
 
-  function loadFiles() {
-    fetch(`/api/files?folder=${encodeURIComponent(currentFolder)}`)
-      .then(r => r.json())
-      .then(data => {
-        setFiles(data.files || []);
-        setFolders(data.folders || []);
-      })
-      .catch(() => { setFiles([]); setFolders([]); });
+  async function loadFiles() {
+    try {
+      const res = await fetch(`/api/files?folder=${encodeURIComponent(currentFolder)}`);
+      const data = await res.json();
+      const fileList = data.files || [];
+      setFiles(fileList);
+      setFolders(data.folders || []);
+      if (fileList.length > 0) loadMetadata(fileList.map(f => f.url));
+    } catch (_e) { setFiles([]); setFolders([]); }
+  }
+
+  async function loadMetadata(urls) {
+    if (!urls.length) return;
+    try {
+      const res = await fetch(`/api/files/metadata?urls=${encodeURIComponent(urls.join(','))}`);
+      const data = await res.json();
+      if (data.metadata) setMetadataMap(prev => ({ ...prev, ...data.metadata }));
+    } catch (_e) {}
+  }
+
+  async function saveMetadata(entry) {
+    try {
+      const res = await fetch('/api/files/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(entry),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMetadataMap(prev => ({ ...prev, [entry.url]: data.metadata }));
+        showToast('Metadaten gespeichert', 'success');
+      } else {
+        showToast(data.error || 'Fehler beim Speichern', 'error');
+      }
+    } catch (_e) { showToast('Netzwerkfehler', 'error'); }
   }
 
   function navigateInto(folderName) {
     setCurrentFolder(prev => prev ? `${prev}/${folderName}` : folderName);
     setFilter('all');
+    setSelectedUrls(new Set());
   }
 
   function navigateUp() {
@@ -41,6 +168,7 @@ export default function FileManagerView({ showToast }) {
       return parts.join('/');
     });
     setFilter('all');
+    setSelectedUrls(new Set());
   }
 
   async function handleCreateFolder() {
@@ -66,42 +194,31 @@ export default function FileManagerView({ showToast }) {
     }
   }
 
-  // Upload a single file as a regular file
-  async function uploadFile(file, queueId) {
-    const formData = new FormData();
-    formData.append('file', file);
-    const folderParam = currentFolder ? `?folder=${encodeURIComponent(currentFolder)}` : '';
-    const res = await fetch(`/api/files${folderParam}`, { method: 'POST', body: formData });
-    if (!res.ok) throw new Error((await res.json()).error || 'Upload fehlgeschlagen');
-  }
-
-  // Upload a single file as optimized image
-  async function uploadImageFile(file, queueId) {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch('/api/images/process', { method: 'POST', body: formData });
-    if (!res.ok) throw new Error((await res.json()).error || 'Verarbeitung fehlgeschlagen');
-  }
-
+  // Upload-Verarbeitung via XHR mit Fortschritt
   async function processFileList(fileList, asImage = false, neverOptimize = false) {
     const entries = Array.from(fileList).map(f => ({
-      id: Math.random().toString(36).slice(2),
-      name: f.name,
-      done: false,
-      error: false
+      id:       Math.random().toString(36).slice(2),
+      name:     f.name,
+      done:     false,
+      error:    false,
+      progress: 0,
     }));
     setUploadQueue(prev => [...prev, ...entries]);
 
     await Promise.all(
       Array.from(fileList).map(async (file, i) => {
         const id = entries[i].id;
+        const updateProgress = (p) =>
+          setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, progress: p } : e));
         try {
-          if (!neverOptimize && (asImage || (file.type && file.type.startsWith('image/')))) {
-            await uploadImageFile(file, id);
-          } else {
-            await uploadFile(file, id);
-          }
-          setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, done: true } : e));
+          const useImage = !neverOptimize && (asImage || (file.type && file.type.startsWith('image/')));
+          const formData = new FormData();
+          formData.append('file', file);
+          const url = useImage
+            ? '/api/images/process'
+            : `/api/files${currentFolder ? `?folder=${encodeURIComponent(currentFolder)}` : ''}`;
+          await xhrUpload(url, formData, updateProgress);
+          setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, done: true, progress: 100 } : e));
         } catch (err) {
           setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, done: true, error: true } : e));
           showToast(`Fehler bei "${file.name}": ${err.message}`, 'error');
@@ -109,9 +226,11 @@ export default function FileManagerView({ showToast }) {
       })
     );
 
-    setUploadQueue(prev => prev.filter(e => !entries.some(en => en.id === e.id)));
+    setTimeout(() => {
+      setUploadQueue(prev => prev.filter(e => !entries.some(en => en.id === e.id)));
+    }, 1500);
     loadFiles();
-    showToast(`${entries.length === 1 ? 'Datei' : entries.length + ' Dateien'} hochgeladen`, 'success');
+    showToast(`${entries.length === 1 ? '1 Datei' : `${entries.length} Dateien`} hochgeladen`, 'success');
   }
 
   function handleFileInputChange(e) {
@@ -160,6 +279,7 @@ export default function FileManagerView({ showToast }) {
       const data = await res.json();
       if (data.success) {
         showToast('Datei gelöscht', 'success');
+        setSelectedUrls(prev => { const n = new Set(prev); n.delete(fileUrl); return n; });
         loadFiles();
       } else {
         showToast(data.error || 'Fehler beim Löschen', 'error');
@@ -169,13 +289,61 @@ export default function FileManagerView({ showToast }) {
     }
   }
 
+  // ── Batch-Aktionen ───────────────────────────────────────────────────────
+
+  function toggleSelect(url) {
+    setSelectedUrls(prev => {
+      const n = new Set(prev);
+      if (n.has(url)) n.delete(url); else n.add(url);
+      return n;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedUrls.size === filteredFiles.length) {
+      setSelectedUrls(new Set());
+    } else {
+      setSelectedUrls(new Set(filteredFiles.map(f => f.url)));
+    }
+  }
+
+  async function handleBatchDelete() {
+    const toDelete = [...selectedUrls];
+    if (!toDelete.length) return;
+    if (!confirm(`${toDelete.length} Datei(en) löschen?`)) return;
+    let deleted = 0;
+    for (const url of toDelete) {
+      try {
+        const res = await fetch('/api/files', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: url })
+        });
+        const data = await res.json();
+        if (data.success) deleted++;
+      } catch (_e) {}
+    }
+    showToast(`${deleted} Datei(en) gelöscht`, deleted === toDelete.length ? 'success' : 'warning');
+    setSelectedUrls(new Set());
+    loadFiles();
+  }
+
+  async function handleBatchCopyUrls() {
+    try {
+      await navigator.clipboard.writeText([...selectedUrls].join('\n'));
+      showToast(`${selectedUrls.size} URL(s) kopiert`, 'success');
+    } catch (_e) {
+      showToast('Kopieren fehlgeschlagen', 'error');
+    }
+  }
+
   function copyToClipboard(url) {
     navigator.clipboard.writeText(url);
-    showToast('URL in Zwischenablage kopiert!', 'success');
+    showToast('URL kopiert', 'success');
   }
 
   function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
+    if (!bytes || bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -183,7 +351,7 @@ export default function FileManagerView({ showToast }) {
   }
 
   function isImage(filename) {
-    return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
+    return isImageFile(filename);
   }
 
   function handleImageError(url) {
@@ -191,11 +359,13 @@ export default function FileManagerView({ showToast }) {
   }
 
   const filteredFiles = files.filter(file => {
-    if (filter === 'images') return isImage(file.name);
-    if (filter === 'documents') return !isImage(file.name);
+    if (filter === 'images')      return isImage(file.name);
+    if (filter === 'documents')   return !isImage(file.name);
+    if (filter === 'missing-alt') return isImage(file.name) && !metadataMap[file.url]?.altText;
     return true;
   });
 
+  const missingAltCount = files.filter(f => isImage(f.name) && !metadataMap[f.url]?.altText).length;
   const breadcrumbParts = currentFolder ? currentFolder.split('/') : [];
   const isUploading = uploadQueue.length > 0;
 
@@ -217,6 +387,16 @@ export default function FileManagerView({ showToast }) {
         </div>
       )}
 
+      {/* Metadaten-Modal */}
+      {metaModalFile && (
+        <MetadataModal
+          file={metaModalFile}
+          metadata={metadataMap[metaModalFile.url] || null}
+          onSave={saveMetadata}
+          onClose={() => setMetaModalFile(null)}
+        />
+      )}
+
       <div className="file-manager-header">
         <h2>Dateimanagement</h2>
 
@@ -229,6 +409,16 @@ export default function FileManagerView({ showToast }) {
           >
             <FolderPlus size={16} />
             Neuer Ordner
+          </button>
+
+          <button
+            className={`btn-secondary${batchMode ? ' active' : ''}`}
+            onClick={() => { setBatchMode(v => !v); setSelectedUrls(new Set()); }}
+            title="Mehrfachauswahl"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <CheckSquare size={16} />
+            Auswahl
           </button>
 
           <label className="btn-primary upload-btn" title="Mehrere Dateien möglich">
@@ -277,6 +467,46 @@ export default function FileManagerView({ showToast }) {
         </div>
       )}
 
+      {/* Batch-Aktionen-Toolbar */}
+      {batchMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 14px', borderBottom: '1px solid var(--border-color, #e0e0e0)', marginBottom: 12 }}>
+          <button type="button" className="btn-secondary"
+            onClick={toggleSelectAll}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}
+          >
+            {selectedUrls.size === filteredFiles.length && filteredFiles.length > 0
+              ? <CheckSquare size={14} />
+              : <Square size={14} />}
+            Alle {selectedUrls.size > 0 ? `(${selectedUrls.size})` : ''}
+          </button>
+          {selectedUrls.size > 0 && (
+            <>
+              <button type="button" className="btn-secondary" onClick={handleBatchCopyUrls}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem' }}>
+                <Copy size={14} /> URLs kopieren
+              </button>
+              <button type="button" className="btn-secondary" onClick={handleBatchDelete}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.82rem', color: '#c62828' }}>
+                <Trash2 size={14} /> {selectedUrls.size} löschen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Fehlende Alt-Text Warnung */}
+      {missingAltCount > 0 && (
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', marginBottom: 12, borderRadius: 8, background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', fontSize: '0.82rem', color: '#92400e', cursor: 'pointer' }}
+          onClick={() => setFilter('missing-alt')}
+          title="Klicken um nur diese Bilder anzuzeigen"
+        >
+          <AlertTriangle size={14} />
+          <strong>{missingAltCount} Bild{missingAltCount > 1 ? 'er' : ''} ohne Alt-Text</strong>
+          — klicken zum Filtern
+        </div>
+      )}
+
       <div className="file-manager-breadcrumb">
         <button
           className={`breadcrumb-item${currentFolder === '' ? ' active' : ''}`}
@@ -307,6 +537,13 @@ export default function FileManagerView({ showToast }) {
         <button className={`filter-btn ${filter === 'documents' ? 'active' : ''}`} onClick={() => setFilter('documents')}>
           Dokumente ({files.filter(f => !isImage(f.name)).length})
         </button>
+        {missingAltCount > 0 && (
+          <button className={`filter-btn ${filter === 'missing-alt' ? 'active' : ''}`}
+            onClick={() => setFilter('missing-alt')}
+            style={{ color: '#b45309' }}>
+            ⚠ Alt-Text fehlt ({missingAltCount})
+          </button>
+        )}
       </div>
 
       <div className="file-grid">
@@ -364,7 +601,7 @@ export default function FileManagerView({ showToast }) {
           </div>
         ))}
 
-        {/* Upload-Queue: Karten für laufende Uploads */}
+        {/* Upload-Queue: Fortschrittsbalken */}
         {uploadQueue.map(entry => (
           <div key={entry.id} className={`file-card file-card-uploading${entry.error ? ' file-card-error' : ''}`}>
             <div className="file-preview">
@@ -377,7 +614,12 @@ export default function FileManagerView({ showToast }) {
             </div>
             <div className="file-info">
               <div className="file-name" title={entry.name}>{entry.name}</div>
-              <div className="file-meta">{entry.error ? 'Fehler' : 'Wird hochgeladen…'}</div>
+              <div className="file-meta">{entry.error ? 'Fehler' : `${entry.progress ?? 0}%`}</div>
+              {!entry.error && (
+                <div style={{ height: 4, borderRadius: 2, background: 'var(--border-color, #e0e0e0)', marginTop: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${entry.progress ?? 0}%`, background: '#22c55e', borderRadius: 2, transition: 'width 0.2s ease' }} />
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -390,7 +632,7 @@ export default function FileManagerView({ showToast }) {
             <p style={{ fontSize: 13, marginTop: 4 }}>Dateien hier hineinziehen oder oben hochladen</p>
           </div>
         )}
-        {filteredFiles.length === 0 && filter !== 'all' && (
+        {filteredFiles.length === 0 && filter !== 'all' && uploadQueue.length === 0 && (
           <div className="empty-state">
             <p>Keine Dateien in dieser Kategorie</p>
           </div>
@@ -398,36 +640,61 @@ export default function FileManagerView({ showToast }) {
 
         {/* Datei-Karten */}
         {filteredFiles.map((file, index) => {
-          const imgFailed = failedImages.has(file.url);
+          const imgFailed  = failedImages.has(file.url);
+          const isSelected = selectedUrls.has(file.url);
+          const meta       = metadataMap[file.url];
+          const missingAlt = isImage(file.name) && !meta?.altText;
           return (
-            <div key={index} className="file-card">
-              <div className="file-preview">
+            <div key={index} className={`file-card${isSelected ? ' file-card-selected' : ''}`} style={{ position: 'relative' }}>
+
+              {/* Selektion-Checkbox (Batch-Modus) */}
+              {batchMode && (
+                <div onClick={() => toggleSelect(file.url)}
+                  style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, cursor: 'pointer', background: 'rgba(255,255,255,0.9)', borderRadius: 4, padding: 2, display: 'flex' }}>
+                  {isSelected
+                    ? <CheckSquare size={18} style={{ color: '#2563eb' }} />
+                    : <Square size={18} style={{ color: '#9ca3af' }} />}
+                </div>
+              )}
+
+              {/* Alt-Text fehlt Badge */}
+              {missingAlt && (
+                <div onClick={() => setMetaModalFile(file)}
+                  title="Alt-Text fehlt – klicken zum Bearbeiten"
+                  style={{ position: 'absolute', top: 6, right: 6, zIndex: 2, background: 'rgba(245,158,11,0.9)', color: '#fff', borderRadius: 4, padding: '2px 6px', fontSize: '0.65rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+                  <AlertTriangle size={10} /> Alt
+                </div>
+              )}
+
+              <div className="file-preview"
+                onClick={batchMode ? () => toggleSelect(file.url) : undefined}
+                style={batchMode ? { cursor: 'pointer' } : undefined}>
                 {isImage(file.name) && !imgFailed ? (
-                  <img
-                    src={file.url}
-                    alt={file.name}
-                    onError={() => handleImageError(file.url)}
-                  />
+                  <img src={file.url} alt={meta?.altText || file.name} onError={() => handleImageError(file.url)} />
                 ) : isImage(file.name) && imgFailed ? (
-                  <div className="file-not-ready">
-                    <Clock size={28} />
-                    <span>Wird verarbeitet</span>
-                  </div>
+                  <div className="file-not-ready"><Clock size={28} /><span>Wird verarbeitet</span></div>
                 ) : (
-                  <div className="file-icon">
-                    <FileText size={48} />
-                  </div>
+                  <div className="file-icon"><FileText size={48} /></div>
                 )}
               </div>
 
               <div className="file-info">
                 <div className="file-name" title={file.name}>{file.name}</div>
                 <div className="file-meta">{formatFileSize(file.size)}</div>
+                {meta?.altText && (
+                  <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary, #757575)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Info size={9} style={{ display: 'inline', marginRight: 3 }} />
+                    {meta.altText}
+                  </div>
+                )}
               </div>
 
               <div className="file-actions">
                 <button className="icon-btn-small" onClick={() => copyToClipboard(file.url)} title="URL kopieren">
                   <Copy size={14} />
+                </button>
+                <button className="icon-btn-small" onClick={() => setMetaModalFile(file)} title="Metadaten bearbeiten">
+                  <Tag size={14} />
                 </button>
                 <a href={file.url} download className="icon-btn-small" title="Herunterladen">
                   <Download size={14} />

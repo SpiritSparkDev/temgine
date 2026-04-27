@@ -238,6 +238,31 @@ body { /* Einzige Ausnahme für den Scope*/
   overflow: hidden;
 }
 
+/* Inspector portal sidebar — rendered as DOM sibling of admin-sidebar + admin-editor */
+.page-editor-inspector-portal {
+  width: 300px;
+  flex-shrink: 0;
+  order: 3;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  height: 100%;
+  overflow-y: auto;
+  display: none; /* hidden when empty */
+}
+
+.page-editor-inspector-portal:not(:empty) {
+  display: block;
+}
+
+.page-editor-inspector-portal .page-editor-inspector {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  height: 100%;
+  overflow-y: auto;
+}
+
 .admin-sidebar {
   width: 240px;
   background: var(--bg-secondary);

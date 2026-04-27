@@ -1,6 +1,29 @@
 import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
+import { validate, rules } from '../../lib/validate'
+
+// Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
+async function pruneRevisions(pageId) {
+  try {
+    const setting = await prisma.setting.findUnique({ where: { key: 'revisionRetentionDays' } })
+    const days = setting ? parseInt(setting.value, 10) : 7
+    if (isNaN(days) || days < 0) return
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    await prisma.pageRevision.deleteMany({
+      where: { pageId: String(pageId), createdAt: { lt: cutoff } },
+    })
+  } catch (e) {
+    console.error('Revision pruning failed', e)
+  }
+}
+
+// Standardized error response helper
+const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
+  const response = { error: message, code };
+  if (details) response.details = details;
+  return [status, response];
+};
 
 // API-Route für Seiten: Daten kommen jetzt ausschließlich aus der Datenbank
 export default async function handler(req, res) {
@@ -40,8 +63,14 @@ export default async function handler(req, res) {
       const includeDrafts = req.query && (req.query.includeDrafts === 'true' || req.query.includeDrafts === true)
       if (slug) {
         const page = await prisma.page.findUnique({ where: { slug: String(slug) } })
-        if (!page) return res.status(404).json({ error: 'Seite nicht gefunden' })
-        if (!includeDrafts && page.status !== 'PUBLISHED') return res.status(404).json({ error: 'Seite nicht gefunden' })
+        if (!page) {
+          const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
+        if (!includeDrafts && page.status !== 'PUBLISHED') {
+          const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
         return res.status(200).json(page)
       }
 
@@ -157,6 +186,7 @@ export default async function handler(req, res) {
                 publishAt: up.publishAt
               }
             } })
+            await pruneRevisions(up.id)
           } catch (e) {
             console.error('Revision create failed', e)
           }
@@ -207,7 +237,20 @@ export default async function handler(req, res) {
       } catch (e) {
         console.warn('Failed to sanitize incoming single page payload', e)
       }
-      if (!p.slug) return res.status(400).json({ error: 'Slug erforderlich' })
+      if (!p.slug) {
+        const [status, resp] = errorResponse(400, 'Slug erforderlich', 'VALIDATION_ERROR', { missing: ['slug'] });
+        return res.status(status).json(resp);
+      }
+      // Validate single page fields
+      const [pageOk, pageErrors] = validate(p, {
+        slug:   [rules.required(), rules.string(), rules.maxLen(255)],
+        title:  [rules.string(), rules.maxLen(300)],
+        status: [rules.oneOf(['DRAFT','REVIEW','APPROVED','PUBLISHED','SCHEDULED'])],
+      });
+      if (!pageOk) {
+        const [status, resp] = errorResponse(400, 'Ungültige Seitendaten', 'VALIDATION_ERROR', pageErrors);
+        return res.status(status).json(resp);
+      }
       const up = await prisma.page.upsert({
         where: { slug: String(p.slug) },
         create: {
@@ -216,14 +259,20 @@ export default async function handler(req, res) {
           blocks: p.blocks || [],
           children: p.children || [],
           template: p.template || null,
-          data: p.data || {}
+          data: p.data || {},
+          status: p.status || 'DRAFT',
+          publishAt: p.publishAt || null,
+          isHomepage: p.isHomepage || false,
         },
         update: {
           title: p.title || undefined,
           blocks: p.blocks || undefined,
           children: p.children || undefined,
           template: p.template || undefined,
-          data: p.data || undefined
+          data: p.data || undefined,
+          status: p.status || undefined,
+          publishAt: p.publishAt !== undefined ? (p.publishAt || null) : undefined,
+          isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
         }
       })
       // create a revision for this upsert
@@ -241,6 +290,7 @@ export default async function handler(req, res) {
             data: up.data
           }
         } })
+        await pruneRevisions(up.id)
       } catch (e) {
         console.error('Revision create failed', e)
       }
@@ -251,15 +301,28 @@ export default async function handler(req, res) {
     // DELETE: Seite per slug löschen
     if (req.method === 'DELETE') {
       const { slug } = req.body || {}
-      if (!slug) return res.status(400).json({ error: 'Slug erforderlich' })
-      const deleted = await prisma.page.delete({ where: { slug: String(slug) } })
-      try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: null, details: { slug } }) } catch (e) {}
-      return res.status(200).json({ ok: true })
+      if (!slug) {
+        const [status, resp] = errorResponse(400, 'Slug erforderlich', 'VALIDATION_ERROR', { missing: ['slug'] });
+        return res.status(status).json(resp);
+      }
+      try {
+        const deleted = await prisma.page.delete({ where: { slug: String(slug) } })
+        try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: null, details: { slug } }) } catch (e) {}
+        return res.status(200).json({ ok: true })
+      } catch (e) {
+        if (e.code === 'P2025') {
+          const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
+          return res.status(status).json(resp);
+        }
+        throw e;
+      }
     }
 
-    res.status(405).json({ error: 'Method not allowed' })
+    const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
+    return res.status(status).json(resp);
   } catch (e) {
-    console.error(e)
-    res.status(500).json({ error: 'Server Fehler' })
+    console.error('[/api/pages Error]', e.message, e.stack)
+    const [status, resp] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', { message: process.env.NODE_ENV === 'production' ? undefined : e.message });
+    return res.status(status).json(resp);
   }
 }

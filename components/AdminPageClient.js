@@ -29,18 +29,17 @@ export default function AdminPageClient() {
   const [templateCode, setTemplateCode] = useState('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
   const [pages, setPages] = useState([]);
   const [editingPage, setEditingPage] = useState(null);
+  const [editorDirty, setEditorDirty] = useState(false);
   const [view, setView] = useState('dashboard');
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
-  const [settingsTab, setSettingsTab] = useState('database');
+  const [settingsTab, setSettingsTab] = useState('users');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [alphaTab, setAlphaTab] = useState('content-models');
 
   useEffect(() => {
     if (view === 'users') {
       setSettingsTab('users');
-    } else if (view === 'settings') {
-      setSettingsTab('database');
     }
   }, [view]);
   
@@ -100,6 +99,12 @@ export default function AdminPageClient() {
   }, []);
 
   const handleSelectView = (nextView) => {
+    if (view === 'pages' && editingPage && editorDirty && nextView !== 'pages') {
+      const confirmed = window.confirm('Du hast ungespeicherte Aenderungen im Seiten-Editor. Trotzdem Bereich wechseln?');
+      if (!confirmed) return;
+      setEditorDirty(false);
+      setEditingPage(null);
+    }
     setView(nextView);
     setMobileNavOpen(false);
   };
@@ -291,14 +296,28 @@ export default function AdminPageClient() {
         body: JSON.stringify(updated) 
       });
       if (!response.ok) {
-        throw new Error('Speichern fehlgeschlagen');
+        let detail = '';
+        try {
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const payload = await response.json();
+            detail = payload.error || payload.message || '';
+          } else {
+            detail = await response.text();
+          }
+        } catch (e) {
+          // ignore parse errors and fallback to status below
+        }
+        const hint = 'Bitte pruefe Pflichtfelder (Titel/Slug), gueltige Redirect-Werte und versuche es erneut.';
+        const statusInfo = `HTTP ${response.status}`;
+        throw new Error([statusInfo, detail, hint].filter(Boolean).join(' - '));
       }
       // Reload from API to confirm server state (fixes delete reappearance + order persistence)
       await loadPagesFromApi();
       return true;
     } catch (error) {
       console.error('Fehler beim Speichern:', error);
-      showToast('Fehler beim Speichern der Seite!', 'error');
+      showToast('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'), 'error');
       return false;
     }
   }
@@ -486,6 +505,8 @@ export default function AdminPageClient() {
           </nav>
         </aside>
 
+        <aside id="page-editor-inspector-portal" className="page-editor-inspector-portal" aria-label="Seiten-Inspektor" />
+
         <main className="admin-editor">
           {initialLoading && (
             <div className="admin-view-loading" role="status" aria-live="polite">
@@ -559,6 +580,14 @@ export default function AdminPageClient() {
               editingPage={editingPage}
               setEditingPage={setEditingPage}
               handleUpdatePages={handleUpdatePages}
+              editorDirty={editorDirty}
+              setEditorDirty={setEditorDirty}
+              userRole={
+                process.env.NEXT_PUBLIC_DEV_MODE === 'true'
+                  ? 'ADMIN'
+                  : (session?.user?.role || 'EDITOR')
+              }
+              onRefreshPages={loadPagesFromApi}
             />
           )}
           {view === 'dashboard' && (
@@ -597,30 +626,7 @@ export default function AdminPageClient() {
               </div>
             </div>
           )}
-          {view === 'settings' && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div className="settings-tabs-wrapper">
-                <div className="settings-tabs">
-                  <button
-                    onClick={() => setSettingsTab('database')}
-                    className={`settings-tab-btn ${settingsTab === 'database' ? 'active' : ''}`}
-                  >
-                    Datenbank
-                  </button>
-                  <button
-                    onClick={() => setSettingsTab('css')}
-                    className={`settings-tab-btn ${settingsTab === 'css' ? 'active' : ''}`}
-                  >
-                    CSS-Dateien
-                  </button>
-                </div>
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {settingsTab === 'database' && <SettingsView showToast={showToast} />}
-                {settingsTab === 'css' && <CSSManagerViewModern showToast={showToast} />}
-              </div>
-            </div>
-          )}
+          {view === 'settings' && <SettingsView showToast={showToast} />}
           {view === 'backup' && (
             <ErrorBoundary>
               <BackupView onToast={showToastForBackup} onConfirm={showConfirmForBackup} />

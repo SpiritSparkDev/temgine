@@ -1,6 +1,7 @@
 ﻿import fs from 'fs';
 import path from 'path';
 import formidable from 'formidable';
+import { rateLimit } from '../../lib/rateLimit';
 
 export const config = {
   api: {
@@ -16,6 +17,9 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // Validates a folder param and returns an absolute path within UPLOAD_DIR
+// 20 Uploads pro Minute pro IP
+const uploadLimiter = rateLimit({ windowMs: 60_000, max: 20 });
+
 function resolveSafeDir(folderParam) {
   const safe = (folderParam || '').replace(/\.\./g, '').replace(/^\/+/, '').replace(/\/+$/, '');
   const resolved = path.resolve(UPLOAD_DIR, safe);
@@ -95,7 +99,14 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Fehler beim Laden der Dateien' });
     }
   } else if (req.method === 'POST') {
-    // Datei hochladen â€” optional: ?folder=subfolder fÃ¼r Upload in Unterordner
+    // Rate-Limit für Uploads
+    const { ok: rlOk, retryAfter } = uploadLimiter.check(req);
+    if (!rlOk) {
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({ error: 'Zu viele Anfragen', code: 'RATE_LIMIT_EXCEEDED', retryAfter });
+    }
+
+    // Datei hochladen – optional: ?folder=subfolder für Upload in Unterordner
     const { folder: uploadFolder } = req.query || {};
     let targetUploadDir = UPLOAD_DIR;
 

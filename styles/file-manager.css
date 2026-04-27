@@ -333,3 +333,38 @@
   50%       { opacity: 0.9; }
 }
 
+/* ── Batch-Selektion ─────────────────────────────── */
+.file-card-selected {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
+}
+
+.file-card-selected .file-preview {
+  opacity: 0.85;
+}
+
+/* ── Metadaten-Tag-Button ────────────────────────── */
+.icon-btn-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+}
+
+.icon-btn-small:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.icon-btn-small.delete:hover {
+  background: rgba(239,68,68,0.1);
+  color: #dc2626;
+}
+

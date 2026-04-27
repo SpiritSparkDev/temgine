@@ -1,71 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 
 export default function SettingsView({ showToast }) {
-  const [dbConnectionString, setDbConnectionString] = useState('');
-  const [isTesting, setIsTesting] = useState(false);
-  const [isMigrating, setIsMigrating] = useState(false);
-  const [migrationStatus, setMigrationStatus] = useState(null);
+  const [revisionRetentionDays, setRevisionRetentionDays] = useState('7');
+  const [isSavingRetention, setIsSavingRetention] = useState(false);
+  const [autosaveEnabled, setAutosaveEnabled] = useState(true);
 
-  const handleTestConnection = async () => {
-    if (!dbConnectionString.trim()) {
-      showToast('Bitte geben Sie einen Connection String ein', 'error');
-      return;
-    }
+  useEffect(() => {
+    const stored = localStorage.getItem(AUTOSAVE_KEY);
+    if (stored !== null) setAutosaveEnabled(stored !== 'false');
+  }, []);
 
-    setIsTesting(true);
-    try {
-      const res = await fetch('/api/database/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionString: dbConnectionString }),
-      });
-
-      const data = await res.json();
-      
-      if (res.ok) {
-        showToast('Datenbankverbindung erfolgreich!', 'success');
-      } else {
-        showToast(`Fehler: ${data.error}`, 'error');
-      }
-    } catch (error) {
-      showToast('Verbindungsfehler: ' + error.message, 'error');
-    } finally {
-      setIsTesting(false);
-    }
+  const handleAutosaveToggle = (enabled) => {
+    setAutosaveEnabled(enabled);
+    localStorage.setItem(AUTOSAVE_KEY, String(enabled));
+    showToast(enabled ? 'Autospeichern aktiviert' : 'Autospeichern deaktiviert', 'success');
   };
 
-  const handleMigrate = async () => {
-    if (!dbConnectionString.trim()) {
-      showToast('Bitte geben Sie einen Connection String ein', 'error');
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.revisionRetentionDays !== undefined) {
+          setRevisionRetentionDays(data.revisionRetentionDays);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveRetention = async () => {
+    const val = parseInt(revisionRetentionDays, 10);
+    if (isNaN(val) || val < 0) {
+      showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
       return;
     }
-
-    // Bestätigung wird durch UI-Interaktion impliziert
-
-    setIsMigrating(true);
-    setMigrationStatus({ status: 'running', log: [] });
-
+    setIsSavingRetention(true);
     try {
-      const res = await fetch('/api/database/migrate', {
-        method: 'POST',
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connectionString: dbConnectionString }),
+        body: JSON.stringify({ key: 'revisionRetentionDays', value: String(val) }),
       });
-
-      const data = await res.json();
-      
       if (res.ok) {
-        setMigrationStatus({ status: 'success', log: data.log });
-        showToast('Migration erfolgreich abgeschlossen!', 'success');
+        showToast('Einstellung gespeichert', 'success');
       } else {
-        setMigrationStatus({ status: 'error', log: data.log || [data.error] });
-        showToast(`Migrationsfehler: ${data.error}`, 'error');
+        const d = await res.json();
+        showToast(d.error || 'Fehler beim Speichern', 'error');
       }
-    } catch (error) {
-      setMigrationStatus({ status: 'error', log: [error.message] });
-      showToast('Migrationsfehler: ' + error.message, 'error');
+    } catch (e) {
+      showToast('Fehler beim Speichern', 'error');
     } finally {
-      setIsMigrating(false);
+      setIsSavingRetention(false);
     }
   };
 
@@ -75,96 +61,93 @@ export default function SettingsView({ showToast }) {
         <h2 style={{ marginBottom: '2rem' }}>Einstellungen</h2>
         
         <section style={{ marginBottom: '3rem' }}>
-          <h3 style={{ marginBottom: '1rem' }}>Datenbank Migration</h3>
+          <h3 style={{ marginBottom: '1rem' }}>Editor</h3>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: '8px', border: '1px solid var(--border-color)', maxWidth: '520px' }}>
+            <div>
+              <strong style={{ display: 'block', fontSize: '0.95rem' }}>Autospeichern</strong>
+              <small style={{ color: 'var(--text-secondary)' }}>Änderungen werden automatisch nach 1,2 Sekunden gespeichert.</small>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleAutosaveToggle(!autosaveEnabled)}
+              style={{
+                position: 'relative',
+                width: '44px',
+                height: '24px',
+                borderRadius: '999px',
+                border: 'none',
+                cursor: 'pointer',
+                background: autosaveEnabled ? 'var(--accent-primary)' : 'var(--border-color)',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+              }}
+              aria-checked={autosaveEnabled}
+              role="switch"
+              aria-label="Autospeichern ein-/ausschalten"
+            >
+              <span style={{
+                position: 'absolute',
+                top: '3px',
+                left: autosaveEnabled ? '23px' : '3px',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: '#fff',
+                transition: 'left 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+              }} />
+            </button>
+          </div>
+        </section>
+
+        <section>
+          <h3 style={{ marginBottom: '1rem' }}>Versionierung</h3>
           <p style={{ marginBottom: '1.5rem', color: '#666' }}>
-            Migrieren Sie Ihre Daten von JSON-Dateien zu PostgreSQL. Stellen Sie sicher, dass 
-            Sie eine PostgreSQL-Datenbank eingerichtet haben.
+            Legt fest, wie viele Tage alte Seitenversionen gespeichert bleiben. Nach Ablauf der Frist werden ältere Versionen beim nächsten Speichern automatisch gelöscht. Setze den Wert auf <strong>0</strong>, um alle alten Versionen sofort zu löschen.
           </p>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-              PostgreSQL Connection String
-            </label>
-            <input
-              type="text"
-              value={dbConnectionString}
-              onChange={(e) => setDbConnectionString(e.target.value)}
-              placeholder="postgresql://user:password@localhost:5432/database"
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontFamily: 'monospace',
-                fontSize: '0.9rem',
-              }}
-            />
-            <small style={{ display: 'block', marginTop: '0.5rem', color: '#666' }}>
-              Format: postgresql://username:password@host:port/database
-            </small>
-          </div>
-
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button
-              onClick={handleTestConnection}
-              disabled={isTesting}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#0070f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: isTesting ? 'not-allowed' : 'pointer',
-                opacity: isTesting ? 0.6 : 1,
-              }}
-            >
-              {isTesting ? 'Teste...' : 'Verbindung testen'}
-            </button>
+          <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+                Aufbewahrungsdauer (Tage)
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={revisionRetentionDays}
+                onChange={e => setRevisionRetentionDays(e.target.value)}
+                style={{
+                  width: '120px',
+                  padding: '0.6rem 0.75rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '1rem',
+                }}
+              />
+            </div>
 
             <button
-              onClick={handleMigrate}
-              disabled={isMigrating}
+              onClick={handleSaveRetention}
+              disabled={isSavingRetention}
               style={{
-                padding: '0.75rem 1.5rem',
+                marginTop: '1.4rem',
+                padding: '0.6rem 1.5rem',
                 background: '#10b981',
                 color: 'white',
                 border: 'none',
                 borderRadius: '4px',
-                cursor: isMigrating ? 'not-allowed' : 'pointer',
-                opacity: isMigrating ? 0.6 : 1,
+                cursor: isSavingRetention ? 'not-allowed' : 'pointer',
+                opacity: isSavingRetention ? 0.6 : 1,
               }}
             >
-              {isMigrating ? 'Migriere...' : 'Migration starten'}
+              {isSavingRetention ? 'Speichern…' : 'Speichern'}
             </button>
           </div>
 
-          {migrationStatus && (
-            <div style={{
-              padding: '1rem',
-              background: migrationStatus.status === 'success' ? '#d1fae5' : '#fee2e2',
-              border: `1px solid ${migrationStatus.status === 'success' ? '#10b981' : '#ef4444'}`,
-              borderRadius: '4px',
-            }}>
-              <h4 style={{ marginBottom: '0.5rem' }}>
-                {migrationStatus.status === 'success' ? '✓ Migration erfolgreich' : '✗ Migration fehlgeschlagen'}
-              </h4>
-              <div style={{ 
-                fontFamily: 'monospace', 
-                fontSize: '0.85rem',
-                maxHeight: '300px',
-                overflow: 'auto',
-              }}>
-                {migrationStatus.log.map((line, i) => (
-                  <div key={i}>{line}</div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section>
-          <h3 style={{ marginBottom: '1rem' }}>Weitere Einstellungen</h3>
-          <p style={{ color: '#666' }}>Weitere Konfigurationsoptionen folgen...</p>
+          <small style={{ color: '#6b7280' }}>
+            Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
+          </small>
         </section>
       </div>
     </div>
