@@ -13,8 +13,8 @@ node_modules/
 
 # Production
 /build
-/public/uploads/
-/public/extern_css/
+/public/uploads
+/public/extern_css
 
 # Static site imports (lokal, nicht versioniert)
 /static_imports/
