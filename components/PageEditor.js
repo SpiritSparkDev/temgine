@@ -4,9 +4,9 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers } from 'lucide-react';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
-import { renderPage } from '../lib/templateEngine';
+import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import RevisionHistoryPanel from './RevisionHistoryPanel';
@@ -51,11 +51,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [domLayout, setDomLayout] = useState([]);
   const [selectedElementId, setSelectedElementId] = useState(null);
   const [pageStatus, setPageStatus] = useState((page?.status || 'DRAFT').toUpperCase());
+  const [previewBlocks, setPreviewBlocks] = useState(() => new Set());
+  const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
+  const [splitPreview, setSplitPreview] = useState(false);
+  const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
   const initialSnapshotRef = useRef('');
   const autosaveTimerRef = useRef(null);
   const autosaveInFlightRef = useRef(false);
+  const splitPreviewIframeRef = useRef(null);
+  const splitPreviewTimerRef = useRef(null);
 
   const buildSnapshot = ({
     title,
@@ -296,6 +302,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     });
   }, [selectedFieldKey]);
 
+  /** Converts camelCase / kebab-case / snake_case field names into readable labels.
+   *  e.g. "linkesPanel" → "Linkes Panel", "externerLinkText" → "Externer Link Text" */
+  const formatLabel = (name) => {
+    if (!name) return '';
+    return name
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[-_]/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   const makeFieldKey = (path, varName) => `${path}::${varName}`;
 
   const setFieldRef = (path, varName, node) => {
@@ -375,6 +391,48 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       })
       .catch(() => {});
   }, []);
+
+  // postMessage listener: click in split preview → select block in editor
+  useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.data?.type === 'temgine-block-click') {
+        setSelectedBlockPath(String(e.data.blockPath));
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Escape key closes preview overlay
+  useEffect(() => {
+    if (!showPreview) return;
+    const handleKey = (e) => { if (e.key === 'Escape') setShowPreview(false); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [showPreview]);
+
+  // Auto-rebuild split preview (debounced 600ms) when content changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!splitPreview) return;
+    if (splitPreviewTimerRef.current) clearTimeout(splitPreviewTimerRef.current);
+    splitPreviewTimerRef.current = setTimeout(() => {
+      setSplitPreviewHtml(buildSplitPreviewHtml());
+    }, 600);
+    return () => clearTimeout(splitPreviewTimerRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [splitPreview, blocks, templateCodes, enabledCssFiles]);
+
+  // Highlight selected block in split preview when selectedBlockPath changes
+  useEffect(() => {
+    if (!splitPreview || !splitPreviewIframeRef.current) return;
+    try {
+      splitPreviewIframeRef.current.contentWindow?.postMessage(
+        { type: 'temgine-highlight-block', blockPath: selectedBlockPath },
+        '*'
+      );
+    } catch (_) {}
+  }, [selectedBlockPath, splitPreview]);
 
   // Prüfe ob Variable einen URL-Bezug hat
   const isUrlVariable = (varName) => {
@@ -765,7 +823,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return vars.map((varName) => ({
       varName,
       fieldKey: makeFieldKey(path, varName),
-      label: snippetLabels[block.template]?.[varName] || varName
+      label: snippetLabels[block.template]?.[varName] || formatLabel(varName)
     }));
   };
 
@@ -776,6 +834,108 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       getBlockFieldEntries(block, path).map((entry) => ({ ...entry, path, depth }))
     )
   ), [flattenedBlocks, templateVariablesByName, snippetLabels]);
+
+  function buildSingleBlockHtml(block) {
+    try {
+      const code = block && block.template ? templateCodes[block.template] : null;
+      if (!code) {
+        return '<!DOCTYPE html><html><body><p style="padding:16px;color:#888;font-family:sans-serif">Kein Template geladen</p></body></html>';
+      }
+      const rendered = renderTemplate(code, block.props || {});
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">` )
+        .join('\n');
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:8px;font-family:sans-serif;background:#fff;color:#333}img{max-width:100%;height:auto}</style>\n${cssLinkTags}</head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildSingleBlockHtml failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  function buildSplitPreviewHtml() {
+    try {
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+
+      const blockParts = (blocks || []).map((block, i) => {
+        const code = block.template ? templateCodes[block.template] : null;
+        if (!code) {
+          return `<div data-temgine-block="${i}" class="temgine-block-wrap temgine-block-empty">(Block ${i + 1}: kein Template)</div>`;
+        }
+        const rendered = renderTemplate(code, block.props || {});
+        return `<div data-temgine-block="${i}" class="temgine-block-wrap">${rendered}</div>`;
+      }).join('\n');
+
+      const interactScript = `<script>
+(function() {
+  var currentHighlight = null;
+  function clearHighlight() {
+    document.querySelectorAll('.temgine-block-wrap').forEach(function(el) {
+      el.style.outline = '2px solid transparent';
+    });
+  }
+  document.querySelectorAll('[data-temgine-block]').forEach(function(el) {
+    el.style.cursor = 'pointer';
+    el.style.outline = '2px solid transparent';
+    el.style.transition = 'outline 0.12s';
+    el.addEventListener('mouseenter', function() {
+      if (currentHighlight !== el) {
+        el.style.outline = '2px dashed rgba(234,88,12,0.45)';
+      }
+    });
+    el.addEventListener('mouseleave', function() {
+      if (currentHighlight !== el) {
+        el.style.outline = '2px solid transparent';
+      }
+    });
+    el.addEventListener('click', function(e) {
+      clearHighlight();
+      currentHighlight = el;
+      el.style.outline = '2px solid rgba(234,88,12,0.9)';
+      var path = el.getAttribute('data-temgine-block');
+      window.parent.postMessage({ type: 'temgine-block-click', blockPath: path }, '*');
+      e.stopPropagation();
+    });
+  });
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'temgine-highlight-block') {
+      clearHighlight();
+      currentHighlight = null;
+      var target = document.querySelector('[data-temgine-block="' + e.data.blockPath + '"]');
+      if (target) {
+        currentHighlight = target;
+        target.style.outline = '2px solid rgba(234,88,12,0.9)';
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  });
+})();
+<\/script>`;
+
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vorschau</title>\n${cssLinkTags}\n<style>.temgine-block-empty{padding:16px;border:1px dashed #666;color:#888;font-family:sans-serif;font-size:0.8rem;margin:4px 0}</style></head><body>${blockParts}${interactScript}</body></html>`;
+    } catch (e) {
+      console.error('buildSplitPreviewHtml failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  function toggleBlockPreview(path) {
+    setPreviewBlocks(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+        setBlockPreviewHtmls(h => { const n = { ...h }; delete n[path]; return n; });
+      } else {
+        next.add(path);
+        const b = getBlockAtPath(path);
+        if (b) {
+          setBlockPreviewHtmls(h => ({ ...h, [path]: buildSingleBlockHtml(b) }));
+        }
+      }
+      return next;
+    });
+  }
 
   function buildPreviewHtml() {
     try {
@@ -1096,6 +1256,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   <button type="button" className="block-move-btn" disabled={idx === 0}
                     onClick={() => indentBlock(path)} title="Als Kind einrücken (Indent)">
                     <ChevronRight size={12} /></button>
+                  <button type="button" className={`block-move-btn${previewBlocks.has(path) ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); toggleBlockPreview(path); }} title="Inline-Vorschau">
+                    <Eye size={12} /></button>
                 </div>
               );
             })()}
@@ -1117,7 +1280,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   .map(varName => {
                     const inputType = resolveInputType(varName);
                     const value = block.props[varName] || '';
-                    const label = snippetLabels[block.template]?.[varName] || varName;
+                    const label = snippetLabels[block.template]?.[varName] || formatLabel(varName);
 
                     if (varName.toLowerCase().includes('headinglevel')) {
                       const normalizedLevel = String(value || '2').replace(/^h/i, '');
@@ -1149,6 +1312,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="Bild-URL" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
                             <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
                           </div>
+                          {value && (
+                            <div className="field-image-thumb-row">
+                              <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} />
+                            </div>
+                          )}
                         </div>
                       )
                     }
@@ -1199,7 +1367,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     }
 
                     if (inputType === 'array') {
-                      const arrayLabel = snippetLabels[block.template]?.[varName] || varName;
+                      const arrayLabel = snippetLabels[block.template]?.[varName] || formatLabel(varName);
                       return (
                         <div key={varName} className="field-item">
                           <label className="field-label-xs">{arrayLabel}</label>
@@ -1209,7 +1377,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     }
 
                     // Default text/number input
-                    const defaultLabel = snippetLabels[block.template]?.[varName] || varName;
+                    const defaultLabel = snippetLabels[block.template]?.[varName] || formatLabel(varName);
                     return (
                       <div key={varName} className="field-item">
                         <label className="field-label-xs">{defaultLabel}</label>
@@ -1224,7 +1392,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 .filter(varName => resolveInputType(varName) === 'textarea')
                 .map(varName => {
                   const value = block.props[varName] || '';
-                  const label = snippetLabels[block.template]?.[varName] || varName;
+                  const label = snippetLabels[block.template]?.[varName] || formatLabel(varName);
                   return (
                     <div key={varName} className="field-item field-item-textarea">
                       <label className="field-label-xs">{label}</label>
@@ -1241,7 +1409,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 return (
                   <div key={sectionName} className="field-item field-item-repeater">
                     <div className="field-repeater-header">
-                      <label className="field-label-xs field-repeater-label">{sectionName}</label>
+                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)}</label>
                       <button
                         type="button"
                         onClick={() => {
@@ -1257,13 +1425,39 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <div className="repeater-rows">
                       {rows.map((row, rowIdx) => (
                         <div key={rowIdx} className="repeater-row">
+                          <div className="repeater-row-header">
+                            <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
+                            <div className="repeater-row-actions">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const copy = { ...row };
+                                  const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-duplicate"
+                                title={`Eintrag ${rowIdx + 1} duplizieren`}
+                                aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} duplizieren`}
+                              >⧉ Duplizieren</button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = rows.filter((_, i) => i !== rowIdx);
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-delete"
+                                title={`Eintrag ${rowIdx + 1} entfernen`}
+                                aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} entfernen`}
+                              >✕</button>
+                            </div>
+                          </div>
                           <div className="repeater-row-fields">
                             {subFields.map(sf => {
                               const sfVal = row[sf.name] !== undefined ? row[sf.name] : '';
                               if (sf.type === 'textarea') {
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
-                                    <label className="field-label-xs">{sf.name}</label>
+                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                     <textarea
                                       value={sfVal}
                                       placeholder={sf.name}
@@ -1280,7 +1474,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               if (sf.type === 'image' || sf.type === 'url') {
                                 return (
                                   <div key={sf.name} className="repeater-subfield">
-                                    <label className="field-label-xs">{sf.name}</label>
+                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                     <div className="field-url-row">
                                       <input
                                         type="text"
@@ -1303,12 +1497,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                         aria-label={`Datei für ${sf.name} auswählen`}
                                       >📁</button>
                                     </div>
+                                    {sf.type === 'image' && sfVal && (
+                                      <div className="field-image-thumb-row">
+                                        <img src={sfVal} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: url } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        })} />
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               }
                               return (
                                 <div key={sf.name} className="repeater-subfield">
-                                  <label className="field-label-xs">{sf.name}</label>
+                                  <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                   <input
                                     type={sf.type === 'number' ? 'number' : 'text'}
                                     placeholder={sf.name}
@@ -1322,33 +1524,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 </div>
                               );
                             })}
-                          </div>
-                          <div className="repeater-row-actions">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const copy = { ...row };
-                                const next = [
-                                  ...rows.slice(0, rowIdx + 1),
-                                  copy,
-                                  ...rows.slice(rowIdx + 1)
-                                ];
-                                updateNestedBlock(path, { [sectionName]: next });
-                              }}
-                              className="repeater-row-duplicate"
-                              title={`Eintrag ${rowIdx + 1} duplizieren`}
-                              aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} duplizieren`}
-                            >⧉</button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = rows.filter((_, i) => i !== rowIdx);
-                                updateNestedBlock(path, { [sectionName]: next });
-                              }}
-                              className="repeater-row-delete"
-                              title={`Eintrag ${rowIdx + 1} entfernen`}
-                              aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} entfernen`}
-                            >✕</button>
                           </div>
                         </div>
                       ))}
@@ -1386,6 +1561,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           {/* Render children editors recursively */}
           {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1))}
         </div>
+
+        {/* Inline block preview */}
+        {previewBlocks.has(path) && (
+          <div className="block-inline-preview-wrap">
+            <div className="block-inline-preview-head">
+              <span className="block-inline-preview-label">Vorschau</span>
+              <button
+                type="button"
+                className="block-move-btn"
+                title="Vorschau aktualisieren"
+                onClick={() => {
+                  const b = getBlockAtPath(path);
+                  if (b) setBlockPreviewHtmls(prev => ({ ...prev, [path]: buildSingleBlockHtml(b) }));
+                }}
+              >↻</button>
+            </div>
+            <iframe
+              srcDoc={blockPreviewHtmls[path] || ''}
+              sandbox="allow-scripts allow-same-origin"
+              className="block-inline-preview-frame"
+              title="Block-Vorschau"
+            />
+          </div>
+        )}
       </div>
     )
   }
@@ -1450,6 +1649,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </button>
             <button
               type="button"
+              className={`pe-tb-btn${splitPreview ? ' pe-tb-btn-active' : ''}`}
+              onClick={() => {
+                const next = !splitPreview;
+                setSplitPreview(next);
+                if (next) setSplitPreviewHtml(buildSplitPreviewHtml());
+              }}
+              title="Editor und Vorschau nebeneinander (interaktiv)"
+            >
+              <Columns size={14} /> Split
+            </button>
+            <button
+              type="button"
               className="pe-tb-btn"
               onClick={() => setShowRevisions(true)}
               title="Versionsverlauf anzeigen"
@@ -1469,7 +1680,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
 
-        <div className="page-editor-workspace">
+        <div className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}>
           {useDOMEditor ? (
             // DOM Editor View
             <div className="page-editor-canvas" title={devTitle('DOM-Layout-Editor')}>
@@ -1550,6 +1761,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {splitPreview && (
+            <div className="page-split-preview">
+              <div className="page-split-preview-head">
+                <span className="page-split-preview-label">Live-Vorschau — Klick zum Auswählen</span>
+                <button
+                  type="button"
+                  className="btn-modern-small hollow"
+                  onClick={() => setSplitPreviewHtml(buildSplitPreviewHtml())}
+                  title="Vorschau aktualisieren"
+                >↻</button>
+              </div>
+              <iframe
+                ref={splitPreviewIframeRef}
+                srcDoc={splitPreviewHtml}
+                sandbox="allow-scripts allow-same-origin"
+                className="page-split-preview-iframe"
+                title="Split-Vorschau"
+              />
             </div>
           )}
 
@@ -1647,7 +1879,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   {vars.map(varName => {
                                     const inputType = selTypeMap[varName] || guessInputType(varName);
                                     const isTextarea = inputType === 'textarea' || inputType === 'richtext';
-                                    const label = (snippetLabels[selectedBlock.template]?.[varName]) || varName;
+                                    const label = (snippetLabels[selectedBlock.template]?.[varName]) || formatLabel(varName);
                                     return (
                                       <li key={varName} className="inspector-field-item">
                                         <span className="inspector-field-icon">{isTextarea ? '≡' : inputType === 'number' ? '#' : 'T'}</span>
@@ -1751,38 +1983,48 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         </div>
       </div>
 
-      {/* Live-Vorschau Panel */}
+      {/* Live-Vorschau Overlay */}
       {showPreview && (
-        <div className="page-preview-panel">
-          <div className="page-preview-panel-head">
-            <strong className="page-preview-label">
-              Vorschau — aktueller Stand (ungespeichert)
-            </strong>
-            <div className="page-preview-actions">
-              <button
-                type="button"
-                className="btn-modern-small hollow"
-                onClick={() => setPreviewHtml(buildPreviewHtml())}
-                title="Vorschau aktualisieren"
-              >
-                Aktualisieren
-              </button>
-              <button
-                type="button"
-                className="btn-modern-small red hollow"
-                onClick={() => setShowPreview(false)}
-                title="Vorschau schließen"
-              >
-                ✕
-              </button>
+        <div
+          className="page-preview-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowPreview(false); }}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Seiten-Vorschau"
+        >
+          <div className="page-preview-panel">
+            <div className="page-preview-panel-head">
+              <strong className="page-preview-label">
+                Vorschau — aktueller Stand (ungespeichert)
+              </strong>
+              <div className="page-preview-actions">
+                <button
+                  type="button"
+                  className="btn-modern-small hollow"
+                  onClick={() => setPreviewHtml(buildPreviewHtml())}
+                  title="Vorschau aktualisieren"
+                >
+                  ↻ Aktualisieren
+                </button>
+                <button
+                  type="button"
+                  className="btn-modern-small red hollow"
+                  onClick={() => setShowPreview(false)}
+                  title="Vorschau schließen (Esc)"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
+            <iframe
+              srcDoc={previewHtml}
+              sandbox="allow-scripts allow-same-origin"
+              className="page-preview-iframe"
+              title="Seiten-Vorschau"
+            />
           </div>
-          <iframe
-            srcDoc={previewHtml}
-            sandbox="allow-scripts allow-same-origin"
-            className="page-preview-iframe"
-            title="Seiten-Vorschau"
-          />
         </div>
       )}
 
