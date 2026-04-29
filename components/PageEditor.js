@@ -62,6 +62,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const autosaveInFlightRef = useRef(false);
   const splitPreviewIframeRef = useRef(null);
   const splitPreviewTimerRef = useRef(null);
+  // Refs for keyboard shortcuts (always point to latest handlers)
+  const handleSaveRef = useRef(null);
+  const handleSaveAndCloseRef = useRef(null);
+  const handleCancelClickRef = useRef(null);
+  const handleUndoRef = useRef(null);
+  const handleRedoRef = useRef(null);
+  // Undo/Redo history
+  const historyStackRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const historySkipNextPushRef = useRef(false);
 
   const buildSnapshot = ({
     title,
@@ -1092,6 +1102,61 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     await handleSave({ view: true });
   }
 
+  // Keep refs up-to-date so keyboard handler always calls latest version
+  handleSaveRef.current = handleSave;
+  handleSaveAndCloseRef.current = handleSaveAndClose;
+
+  // Global keyboard shortcuts: Ctrl+S / Ctrl+Shift+S / Ctrl+Z / Ctrl+Y
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+
+      if (e.key === 's' || e.key === 'S') {
+        // Ignore shortcut when focus is inside a text input / textarea / contenteditable
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) {
+          // Allow Ctrl+S in richtext editors (they handle it themselves), but prevent default in normal inputs
+          if (tag === 'INPUT' || tag === 'TEXTAREA') {
+            e.preventDefault();
+          } else {
+            return;
+          }
+        } else {
+          e.preventDefault();
+        }
+        if (e.shiftKey) {
+          handleSaveAndCloseRef.current?.();
+        } else {
+          handleSaveRef.current?.();
+        }
+        return;
+      }
+
+      if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        // Let browser handle undo in text inputs
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) return;
+        e.preventDefault();
+        handleUndoRef.current?.();
+        return;
+      }
+
+      if ((e.key === 'y' || e.key === 'Y') || ((e.key === 'z' || e.key === 'Z') && e.shiftKey)) {
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) return;
+        e.preventDefault();
+        handleRedoRef.current?.();
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   useEffect(() => {
     if (!page?.id || !isDirty) {
       if (!isDirty) setAutosaveStatus('gespeichert');
@@ -1124,6 +1189,70 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }
     onCancel?.();
   }
+
+  // --- Undo / Redo ---
+  // History entries: { blocks, title, slug, pageData }
+  const undoTimerRef = useRef(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Push current state to history (debounced 400ms)
+  useEffect(() => {
+    if (historySkipNextPushRef.current) {
+      historySkipNextPushRef.current = false;
+      return;
+    }
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => {
+      const entry = { blocks: JSON.parse(JSON.stringify(blocks)), title, slug, pageData: JSON.parse(JSON.stringify(pageData || {})) };
+      const stack = historyStackRef.current;
+      const idx = historyIndexRef.current;
+      // Trim any future entries (after undo)
+      const newStack = stack.slice(0, idx + 1);
+      newStack.push(entry);
+      // Cap at 50 entries
+      if (newStack.length > 50) newStack.shift();
+      historyStackRef.current = newStack;
+      historyIndexRef.current = newStack.length - 1;
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
+    }, 400);
+    return () => clearTimeout(undoTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, title, slug, pageData]);
+
+  function applyHistoryEntry(entry) {
+    historySkipNextPushRef.current = true;
+    setBlocks(entry.blocks);
+    setTitle(entry.title);
+    setSlug(entry.slug);
+    setPageData(entry.pageData);
+  }
+
+  function handleUndo() {
+    const idx = historyIndexRef.current;
+    if (idx <= 0) return;
+    const newIdx = idx - 1;
+    historyIndexRef.current = newIdx;
+    applyHistoryEntry(historyStackRef.current[newIdx]);
+    setCanUndo(newIdx > 0);
+    setCanRedo(true);
+  }
+
+  function handleRedo() {
+    const idx = historyIndexRef.current;
+    const stack = historyStackRef.current;
+    if (idx >= stack.length - 1) return;
+    const newIdx = idx + 1;
+    historyIndexRef.current = newIdx;
+    applyHistoryEntry(stack[newIdx]);
+    setCanUndo(true);
+    setCanRedo(newIdx < stack.length - 1);
+  }
+
+  // Keep undo/redo refs current
+  handleUndoRef.current = handleUndo;
+  handleRedoRef.current = handleRedo;
 
   // Render helpers for nested block editor
   const renderBlockEditor = (block, path, depth = 0) => {
@@ -1668,9 +1797,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <History size={14} /> Verlauf
             </button>
             <div className="pe-toolbar-sep" />
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="Rückgängig (Strg+Z)"
+              aria-label="Rückgängig"
+            >
+              ↩
+            </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title="Wiederholen (Strg+Y)"
+              aria-label="Wiederholen"
+            >
+              ↪
+            </button>
+            <div className="pe-toolbar-sep" />
             <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
-            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
-            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title="Seite speichern und Editor schließen (Strg+Umschalt+S)">Speichern &amp; Schließen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title="Seite speichern (Strg+S)">Speichern</button>
             <span
               className={`pe-autosave-indicator${autosaveStatus === 'fehler' ? ' error' : autosaveStatus === 'speichert' ? ' saving' : ''}`}
               aria-live="polite"

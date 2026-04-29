@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type } from 'lucide-react';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -36,6 +36,8 @@ export default function AdminPageClient() {
   const [settingsTab, setSettingsTab] = useState('users');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [alphaTab, setAlphaTab] = useState('content-models');
+  const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
   useEffect(() => {
     if (view === 'users') {
@@ -163,9 +165,13 @@ export default function AdminPageClient() {
     const onKeyDown = (event) => {
       const isCmdK = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k';
       if (!isCmdK) return;
-      if (view !== 'builder') return;
       event.preventDefault();
-      setShowBuilderQuickSwitch((prev) => !prev);
+      if (view === 'builder') {
+        setShowBuilderQuickSwitch((prev) => !prev);
+      } else {
+        setGlobalSearchQuery('');
+        setShowGlobalSearch((prev) => !prev);
+      }
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -404,6 +410,76 @@ export default function AdminPageClient() {
     }
   }
 
+  // Global search: flatten all searchable items
+  const globalSearchResults = useMemo(() => {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const results = [];
+
+    // Pages (flat scan)
+    const scanPages = (nodes) => nodes.forEach(n => {
+      const haystack = [n.title, n.slug, n.status].filter(Boolean).join(' ').toLowerCase();
+      if (haystack.includes(q)) {
+        results.push({ type: 'page', label: n.title || n.slug, sub: `/${n.slug}`, id: n.id, node: n });
+      }
+      (n.children || []).forEach(c => scanPages([c]));
+    });
+    scanPages(pages);
+
+    // Templates
+    templateList.forEach(t => {
+      const name = typeof t === 'string' ? t : t.name;
+      if (name && name.toLowerCase().includes(q)) {
+        results.push({ type: 'template', label: name, sub: 'Template' });
+      }
+    });
+
+    // Admin views
+    const views = [
+      { id: 'dashboard', label: 'Dashboard' },
+      { id: 'pages', label: 'Seiten' },
+      { id: 'builder', label: 'Templates / Builder' },
+      { id: 'files', label: 'Dateien' },
+      { id: 'css', label: 'CSS' },
+      { id: 'fonts', label: 'Fonts' },
+      { id: 'navigation', label: 'Navigation' },
+      { id: 'users', label: 'Benutzer' },
+      { id: 'settings', label: 'Settings' },
+      { id: 'backup', label: 'Backup' },
+    ];
+    views.forEach(v => {
+      if (v.label.toLowerCase().includes(q) || v.id.toLowerCase().includes(q)) {
+        results.push({ type: 'view', label: v.label, sub: 'Admin-Bereich', viewId: v.id });
+      }
+    });
+
+    return results.slice(0, 20);
+  }, [globalSearchQuery, pages, templateList]);
+
+  function handleGlobalSearchSelect(result) {
+    setShowGlobalSearch(false);
+    setGlobalSearchQuery('');
+    if (result.type === 'page') {
+      handleSelectView('pages');
+      // Find the page in tree and open it in the editor
+      const findPage = (nodes) => {
+        for (const n of nodes) {
+          if (n.id === result.id) return n;
+          const found = findPage(n.children || []);
+          if (found) return found;
+        }
+      };
+      const pageNode = findPage(pages);
+      if (pageNode) {
+        setEditingPage(pageNode);
+      }
+    } else if (result.type === 'template') {
+      openBuilderTab('templates');
+    } else if (result.type === 'view') {
+      handleSelectView(result.viewId);
+    }
+  }
+
   return (
     <ErrorBoundary>
       <div className={`admin-scope${darkMode ? ' dark-mode' : ''}`}>
@@ -423,6 +499,100 @@ export default function AdminPageClient() {
           onConfirm={confirmDialog.onConfirm}
           onCancel={confirmDialog.onCancel}
         />
+      )}
+      {/* Global search overlay (Ctrl+K) */}
+      {showGlobalSearch && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9000,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+            paddingTop: '15vh',
+          }}
+          onClick={() => setShowGlobalSearch(false)}
+          aria-modal="true"
+          role="dialog"
+          aria-label="Globale Suche"
+        >
+          <div
+            style={{
+              background: 'var(--bg-primary)',
+              borderRadius: '12px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+              width: '520px',
+              maxWidth: '92vw',
+              overflow: 'hidden',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border-color)' }}>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Seiten, Templates, Bereiche suchen…"
+                value={globalSearchQuery}
+                onChange={e => setGlobalSearchQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') { setShowGlobalSearch(false); }
+                  if (e.key === 'Enter' && globalSearchResults.length > 0) {
+                    handleGlobalSearchSelect(globalSearchResults[0]);
+                  }
+                }}
+                style={{
+                  width: '100%', border: 'none', outline: 'none',
+                  fontSize: '1rem', background: 'transparent',
+                  color: 'var(--text-primary)',
+                }}
+                aria-label="Globale Suche Eingabe"
+              />
+            </div>
+            <div style={{ maxHeight: '380px', overflowY: 'auto' }}>
+              {globalSearchQuery.trim() === '' && (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+                  Suchbegriff eingeben…
+                </div>
+              )}
+              {globalSearchQuery.trim() !== '' && globalSearchResults.length === 0 && (
+                <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>
+                  Keine Ergebnisse für „{globalSearchQuery}"
+                </div>
+              )}
+              {globalSearchResults.map((result, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleGlobalSearchSelect(result)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    width: '100%', padding: '10px 16px',
+                    background: 'none', border: 'none',
+                    borderBottom: '1px solid var(--border-color)',
+                    cursor: 'pointer', textAlign: 'left',
+                    color: 'var(--text-primary)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                >
+                  <span style={{
+                    fontSize: '0.68rem', fontWeight: 600,
+                    padding: '2px 6px', borderRadius: '4px',
+                    background: result.type === 'page' ? '#dbeafe' : result.type === 'template' ? '#dcfce7' : '#f3f4f6',
+                    color: result.type === 'page' ? '#1d4ed8' : result.type === 'template' ? '#166534' : '#374151',
+                    flexShrink: 0,
+                  }}>
+                    {result.type === 'page' ? 'Seite' : result.type === 'template' ? 'Template' : 'Bereich'}
+                  </span>
+                  <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{result.label}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>{result.sub}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border-color)', fontSize: '0.72rem', color: 'var(--text-tertiary)', display: 'flex', gap: '12px' }}>
+              <span>↑↓ Navigieren</span>
+              <span>Enter Auswählen</span>
+              <span>Esc Schließen</span>
+            </div>
+          </div>
+        </div>
       )}
       {process.env.NEXT_PUBLIC_DEV_MODE === 'true' && (
         <div style={{
@@ -452,6 +622,14 @@ export default function AdminPageClient() {
           </a>
         </div>
         <div className="admin-navbar-right">
+          <button
+            className="admin-theme-toggle"
+            onClick={() => { setGlobalSearchQuery(''); setShowGlobalSearch(true); }}
+            aria-label="Globale Suche öffnen"
+            title="Globale Suche (Strg+K)"
+          >
+            <Search size={18} />
+          </button>
           <button 
             className="admin-theme-toggle" 
             onClick={toggleDarkMode}
@@ -489,15 +667,20 @@ export default function AdminPageClient() {
               Schließen
             </button>
             <ul>
+              <li className="menu-group-label">Inhalt</li>
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
+              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
+
+              <li className="menu-group-label">Design</li>
               <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
-              <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
               <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
-              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
+              <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
+
+              <li className="menu-group-label">System</li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
-              <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Settings</button></li>
+              <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Einstellungen</button></li>
               <li><button className={`menu-item ${view==='backup'?'active':''}`} onClick={() => handleSelectView('backup')}><HardDrive size={18} /> Backup</button></li>
               <li><button className={`menu-item ${view==='alpha'?'active':''}`} onClick={() => handleSelectView('alpha')}><FlaskConical size={18} /> Alpha</button></li>
             </ul>
