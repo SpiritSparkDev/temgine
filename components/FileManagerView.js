@@ -109,14 +109,27 @@ export default function FileManagerView({ showToast }) {
   // Metadaten: url → { altText, copyright, caption }
   const [metadataMap, setMetadataMap] = useState({});
   const [metaModalFile, setMetaModalFile] = useState(null);
+  const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
 
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
+  const folderInputRef = useRef(null);
 
   useEffect(() => {
     loadFiles();
   }, [currentFolder]);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        setFolderDragDropEnabled(data?.folderDragDropEnabled === 'true');
+      })
+      .catch(() => {
+        setFolderDragDropEnabled(false);
+      });
+  }, []);
 
   async function loadFiles() {
     try {
@@ -196,17 +209,65 @@ export default function FileManagerView({ showToast }) {
 
   // Upload-Verarbeitung via XHR mit Fortschritt
   async function processFileList(fileList, asImage = false, neverOptimize = false) {
-    const entries = Array.from(fileList).map(f => ({
+    const filesArray = Array.from(fileList);
+    const entries = filesArray.map(f => ({
       id:       Math.random().toString(36).slice(2),
-      name:     f.name,
+      name:     f.webkitRelativePath || f.relativePath || f.name,
       done:     false,
       error:    false,
       progress: 0,
     }));
     setUploadQueue(prev => [...prev, ...entries]);
 
+    const isFolderUpload = filesArray.some(file => Boolean(file.webkitRelativePath || file.relativePath));
+
+    if (isFolderUpload) {
+      try {
+        for (let index = 0; index < filesArray.length; index += 1) {
+          const file = filesArray[index];
+          const id = entries[index].id;
+          const relativePath = String(file.webkitRelativePath || file.relativePath || file.name).replace(/\\/g, '/');
+          const parts = relativePath.split('/').filter(Boolean);
+          const relativeDir = parts.slice(0, -1).join('/');
+          const uploadTarget = [currentFolder, relativeDir].filter(Boolean).join('/');
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const url = `/api/files${uploadTarget ? `?folder=${encodeURIComponent(uploadTarget)}` : ''}`;
+          await xhrUpload(url, formData, (progress) => {
+            const overall = Math.round(((index + (progress / 100)) / filesArray.length) * 100);
+            setUploadQueue(prev => prev.map(e => {
+              if (e.id === id) return { ...e, progress, done: progress >= 100 };
+              if (entries.slice(index + 1).some(en => en.id === e.id)) return e;
+              if (entries.slice(0, index).some(en => en.id === e.id)) return { ...e, progress: 100, done: true };
+              return e;
+            }));
+            setUploadQueue(prev => prev.map(e => (
+              entries.some(en => en.id === e.id) ? { ...e, batchProgress: overall } : e
+            )));
+          });
+
+          setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, done: true, progress: 100 } : e));
+        }
+
+        setTimeout(() => {
+          setUploadQueue(prev => prev.filter(e => !entries.some(en => en.id === e.id)));
+        }, 1500);
+
+        await loadFiles();
+        showToast(`${entries.length} Datei(en) aus Ordner hochgeladen`, 'success');
+        return;
+      } catch (err) {
+        setUploadQueue(prev => prev.map(e => (
+          entries.some(en => en.id === e.id) ? { ...e, done: true, error: true } : e
+        )));
+        showToast(`Ordner-Upload fehlgeschlagen: ${err.message}`, 'error');
+        return;
+      }
+    }
+
     await Promise.all(
-      Array.from(fileList).map(async (file, i) => {
+      filesArray.map(async (file, i) => {
         const id = entries[i].id;
         const updateProgress = (p) =>
           setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, progress: p } : e));
@@ -214,6 +275,9 @@ export default function FileManagerView({ showToast }) {
           const useImage = !neverOptimize && (asImage || (file.type && file.type.startsWith('image/')));
           const formData = new FormData();
           formData.append('file', file);
+          if (file.webkitRelativePath || file.relativePath) {
+            formData.append('relativePath', file.webkitRelativePath || file.relativePath);
+          }
           const url = useImage
             ? '/api/images/process'
             : `/api/files${currentFolder ? `?folder=${encodeURIComponent(currentFolder)}` : ''}`;
@@ -243,31 +307,90 @@ export default function FileManagerView({ showToast }) {
     e.target.value = '';
   }
 
+  function handleFolderInputChange(e) {
+    if (e.target.files?.length) processFileList(e.target.files, false, true);
+    e.target.value = '';
+  }
+
+  async function readDroppedEntry(entry, parentPath = '') {
+    if (!entry) return [];
+
+    if (entry.isFile) {
+      return await new Promise((resolve) => {
+        entry.file((file) => {
+          file.relativePath = `${parentPath}${file.name}`;
+          resolve([file]);
+        }, () => resolve([]));
+      });
+    }
+
+    if (!entry.isDirectory) return [];
+
+    const reader = entry.createReader();
+    const directoryEntries = [];
+
+    while (true) {
+      const batch = await new Promise((resolve, reject) => {
+        reader.readEntries(resolve, reject);
+      }).catch(() => []);
+
+      if (!batch || batch.length === 0) break;
+      directoryEntries.push(...batch);
+    }
+
+    const nestedFiles = await Promise.all(
+      directoryEntries.map((childEntry) => readDroppedEntry(childEntry, `${parentPath}${entry.name}/`))
+    );
+
+    return nestedFiles.flat();
+  }
+
+  async function collectDroppedFiles(dataTransfer) {
+    const items = Array.from(dataTransfer?.items || []);
+    const entryItems = items
+      .filter((item) => item.kind === 'file' && typeof item.webkitGetAsEntry === 'function')
+      .map((item) => item.webkitGetAsEntry())
+      .filter(Boolean);
+
+    if (entryItems.length === 0) {
+      return Array.from(dataTransfer?.files || []);
+    }
+
+    const nestedFiles = await Promise.all(entryItems.map((entry) => readDroppedEntry(entry)));
+    return nestedFiles.flat();
+  }
+
   // Drag & Drop
   const handleDragEnter = useCallback((e) => {
+    if (!folderDragDropEnabled) return;
     e.preventDefault();
     dragCounter.current++;
     if (dragCounter.current === 1) setDragging(true);
-  }, []);
+  }, [folderDragDropEnabled]);
 
   const handleDragLeave = useCallback((e) => {
+    if (!folderDragDropEnabled) return;
     e.preventDefault();
     dragCounter.current--;
     if (dragCounter.current === 0) setDragging(false);
-  }, []);
+  }, [folderDragDropEnabled]);
 
   const handleDragOver = useCallback((e) => {
+    if (!folderDragDropEnabled) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-  }, []);
+  }, [folderDragDropEnabled]);
 
-  const handleDrop = useCallback((e) => {
+  const handleDrop = useCallback(async (e) => {
+    if (!folderDragDropEnabled) return;
     e.preventDefault();
     dragCounter.current = 0;
     setDragging(false);
-    const dropped = e.dataTransfer.files;
-    if (dropped?.length) processFileList(dropped, false, true);
-  }, [currentFolder]);
+    const dropped = await collectDroppedFiles(e.dataTransfer);
+    if (dropped?.length) {
+      processFileList(dropped, false, true);
+    }
+  }, [currentFolder, folderDragDropEnabled]);
 
   async function handleDelete(fileUrl) {
     try {
@@ -378,7 +501,7 @@ export default function FileManagerView({ showToast }) {
       onDrop={handleDrop}
     >
       {/* Drag overlay */}
-      {dragging && (
+      {folderDragDropEnabled && dragging && (
         <div className="file-drop-overlay">
           <div className="file-drop-overlay-inner">
             <Upload size={48} />
@@ -429,6 +552,20 @@ export default function FileManagerView({ showToast }) {
               type="file"
               multiple
               onChange={handleFileInputChange}
+              style={{ display: 'none' }}
+            />
+          </label>
+
+          <label className="btn-primary upload-btn" title="Kompletten Ordner mit Unterordnern hochladen">
+            <Folder size={16} />
+            Ordner hochladen
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              webkitdirectory=""
+              directory=""
+              onChange={handleFolderInputChange}
               style={{ display: 'none' }}
             />
           </label>
