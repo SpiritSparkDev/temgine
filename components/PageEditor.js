@@ -2173,6 +2173,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
                           Als Startseite
                         </label>
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
+                        <input
+                          type="text"
+                          value={pageData.wrapperClass || ''}
+                          onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
+                          placeholder="z.B. page-home dark-theme"
+                          className="input-field-small"
+                          aria-label="CSS-Klasse für den Seiten-Wrapper"
+                        />
+                        <label className="field-label-xs">Wrapper-ID</label>
+                        <input
+                          type="text"
+                          value={pageData.wrapperId || ''}
+                          onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
+                          placeholder="z.B. main-page"
+                          className="input-field-small"
+                          aria-label="ID für den Seiten-Wrapper"
+                        />
                       </div>
                     )}
                   </div>
