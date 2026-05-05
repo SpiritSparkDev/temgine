@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import dynamic from 'next/dynamic';
-import 'react-quill/dist/quill.snow.css';
-
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
+import TextAlign from '@tiptap/extension-text-align';
 
 /**
  * MarkdownEditor - Edit element content with rich text support
- * Uses Quill editor for HTML content editing
+ * Uses TipTap editor for HTML content editing
  */
 export default function MarkdownEditor({
   elementId = null,
@@ -14,41 +15,30 @@ export default function MarkdownEditor({
   onChange = null,
   onSave = null,
 }) {
-  const [html, setHtml] = useState(content);
   const [isDirty, setIsDirty] = useState(false);
 
-  const modules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'script': 'sub'}, { 'script': 'super' }],
-      [{ 'indent': '-1'}, { 'indent': '+1' }],
-      ['blockquote', 'code-block'],
-      [{ 'color': [] }, { 'background': [] }],
-      [{ 'align': [] }],
-      ['link', 'image'],
-      ['clean']
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Link.configure({ openOnClick: false }),
+      Image,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ],
-  };
+    content,
+    onUpdate({ editor }) {
+      const html = editor.getHTML();
+      setIsDirty(true);
+      onChange?.(html);
+    },
+  });
 
-  const formats = [
-    'header',
-    'bold', 'italic', 'underline', 'strike',
-    'list', 'bullet',
-    'script', 'sub', 'super',
-    'indent',
-    'blockquote', 'code-block',
-    'color', 'background',
-    'align',
-    'link', 'image'
-  ];
+  const html = editor ? editor.getHTML() : content;
 
-  const handleChange = (value) => {
-    setHtml(value);
-    setIsDirty(true);
-    onChange?.(value);
-  };
+  const btn = (label, action, title) => (
+    <button type="button" title={title} onClick={action} style={toolbarBtnStyle}>
+      {label}
+    </button>
+  );
 
   return (
     <div style={{
@@ -69,16 +59,38 @@ export default function MarkdownEditor({
         </p>
       </div>
 
-      <div style={{ flex: 1, minHeight: '300px', marginBottom: '12px' }}>
-        <ReactQuill
-          value={html}
-          onChange={handleChange}
-          modules={modules}
-          formats={formats}
-          theme="snow"
-          placeholder="Enter HTML content..."
-          style={{ height: '100%', backgroundColor: 'white' }}
-        />
+      {/* Toolbar */}
+      {editor && (
+        <div style={toolbarStyle}>
+          {btn('H1', () => editor.chain().focus().toggleHeading({ level: 1 }).run())}
+          {btn('H2', () => editor.chain().focus().toggleHeading({ level: 2 }).run())}
+          {btn('H3', () => editor.chain().focus().toggleHeading({ level: 3 }).run())}
+          <span style={separatorStyle} />
+          {btn('B', () => editor.chain().focus().toggleBold().run(), 'Bold')}
+          {btn('I', () => editor.chain().focus().toggleItalic().run(), 'Italic')}
+          {btn('U̲', () => editor.chain().focus().toggleStrike().run(), 'Strikethrough')}
+          <span style={separatorStyle} />
+          {btn('OL', () => editor.chain().focus().toggleOrderedList().run())}
+          {btn('UL', () => editor.chain().focus().toggleBulletList().run())}
+          <span style={separatorStyle} />
+          {btn('"', () => editor.chain().focus().toggleBlockquote().run(), 'Blockquote')}
+          {btn('< >', () => editor.chain().focus().toggleCodeBlock().run(), 'Code block')}
+          <span style={separatorStyle} />
+          {btn('Link', () => {
+            const url = window.prompt('URL:');
+            if (url) editor.chain().focus().setLink({ href: url }).run();
+          })}
+          {btn('Img', () => {
+            const url = window.prompt('Image URL:');
+            if (url) editor.chain().focus().setImage({ src: url }).run();
+          })}
+          <span style={separatorStyle} />
+          {btn('✕', () => editor.chain().focus().clearNodes().unsetAllMarks().run(), 'Clear formatting')}
+        </div>
+      )}
+
+      <div style={{ flex: 1, minHeight: '300px', marginBottom: '12px', border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'auto' }}>
+        <EditorContent editor={editor} style={{ padding: '8px', minHeight: '280px' }} />
       </div>
 
       {isDirty && (
@@ -123,3 +135,32 @@ export default function MarkdownEditor({
     </div>
   );
 }
+
+const toolbarStyle = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '2px',
+  marginBottom: '8px',
+  padding: '6px',
+  background: '#f3f4f6',
+  borderRadius: '4px',
+  border: '1px solid #e5e7eb',
+};
+
+const toolbarBtnStyle = {
+  padding: '3px 8px',
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  background: 'white',
+  border: '1px solid #d1d5db',
+  borderRadius: '3px',
+  cursor: 'pointer',
+};
+
+const separatorStyle = {
+  display: 'inline-block',
+  width: '1px',
+  background: '#d1d5db',
+  margin: '0 2px',
+};
+
