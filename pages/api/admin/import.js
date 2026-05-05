@@ -1,7 +1,16 @@
 import { prisma } from '../../../lib/prisma'
 import { sanitizeRecursive } from '../../../lib/htmlSanitize'
+import { requireAuth } from '../../../lib/auth'
 import fs from 'fs'
 import path from 'path'
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+}
 
 async function importCSSFiles(cssFiles = [], strategy = 'merge') {
   const cssDir = path.join(process.cwd(), 'public', 'extern_css')
@@ -109,6 +118,9 @@ async function importNavigations(navigations = [], strategy = 'merge') {
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(405).end()
+
+    const auth = await requireAuth(req, res, ['ADMIN'])
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
 
     const strategy = (req.query.strategy || 'merge').toLowerCase()
     if (!['merge', 'replace'].includes(strategy)) {

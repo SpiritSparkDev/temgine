@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { requireAuth } from '../../../lib/auth'
 
 const BACKUPS_DIR = path.join(process.cwd(), 'data', 'backups')
 
@@ -40,7 +41,34 @@ function getBackupFiles() {
 
 export default async function handler(req, res) {
   try {
+    const auth = await requireAuth(req, res, ['ADMIN'])
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
     if (req.method === 'GET') {
+      // Download a specific backup if filename is given, otherwise list all
+      if (req.query.filename) {
+        const filename = req.query.filename
+        const filePath = path.join(BACKUPS_DIR, filename)
+
+        // Prevent directory traversal
+        if (!path.resolve(filePath).startsWith(path.resolve(BACKUPS_DIR))) {
+          return res.status(400).json({ error: 'Invalid filename' })
+        }
+
+        try {
+          if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Backup file not found' })
+          }
+          const content = fs.readFileSync(filePath, 'utf-8')
+          res.setHeader('Content-Type', 'application/json')
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+          return res.status(200).send(content)
+        } catch (e) {
+          console.error('Failed to read backup:', e.message)
+          return res.status(500).json({ error: 'Failed to read backup', details: e.message })
+        }
+      }
+
       // List all backups
       const backups = getBackupFiles()
       return res.status(200).json({
@@ -116,31 +144,6 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Failed to delete backup:', e.message)
         return res.status(500).json({ error: 'Failed to delete backup', details: e.message })
-      }
-    }
-
-    if (req.method === 'GET' && req.query.filename) {
-      // Download a specific backup
-      const filename = req.query.filename
-      const filePath = path.join(BACKUPS_DIR, filename)
-
-      // Prevent directory traversal
-      if (!path.resolve(filePath).startsWith(path.resolve(BACKUPS_DIR))) {
-        return res.status(400).json({ error: 'Invalid filename' })
-      }
-
-      try {
-        if (!fs.existsSync(filePath)) {
-          return res.status(404).json({ error: 'Backup file not found' })
-        }
-
-        const content = fs.readFileSync(filePath, 'utf-8')
-        res.setHeader('Content-Type', 'application/json')
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
-        return res.status(200).send(content)
-      } catch (e) {
-        console.error('Failed to read backup:', e.message)
-        return res.status(500).json({ error: 'Failed to read backup', details: e.message })
       }
     }
 

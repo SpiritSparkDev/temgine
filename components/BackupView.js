@@ -7,6 +7,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportingZip, setExportingZip] = useState(false)
+  const [exportingCss, setExportingCss] = useState(false)
   const [importing, setImporting] = useState(false)
   const [restoreStrategy, setRestoreStrategy] = useState('merge')
   const [backupSizeLimit, setBackupSizeLimit] = useState(5) // MB
@@ -114,6 +115,35 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       notify('error', `ZIP Export fehlgeschlagen: ${e.message}`)
     } finally {
       setExportingZip(false)
+    }
+  }
+
+  const handleExportCss = async () => {
+    setExportingCss(true)
+    try {
+      const res = await fetch('/api/admin/export?format=css')
+      if (!res.ok) throw new Error('CSS Export failed')
+
+      let filename = 'temgine-styles.css'
+      const disposition = res.headers.get('content-disposition')
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/)
+        if (match) filename = match[1]
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      link.click()
+      URL.revokeObjectURL(url)
+
+      notify('success', 'CSS exportiert (alle aktivierten Dateien zusammengeführt)')
+    } catch (e) {
+      notify('error', `CSS Export fehlgeschlagen: ${e.message}`)
+    } finally {
+      setExportingCss(false)
     }
   }
 
@@ -659,11 +689,18 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
               <><Download size={16} /> JSON Backup</>
             )}
           </button>
-          <button className="backup-btn" onClick={handleExportZip} disabled={exporting || exportingZip}>
+          <button className="backup-btn" onClick={handleExportZip} disabled={exporting || exportingZip || exportingCss}>
             {exportingZip ? (
               <><RefreshCw size={16} className="spinner" /> ZIP wird erstellt...</>
             ) : (
               <><Download size={16} /> ZIP (Templates + CSS)</>
+            )}
+          </button>
+          <button className="backup-btn" onClick={handleExportCss} disabled={exporting || exportingZip || exportingCss}>
+            {exportingCss ? (
+              <><RefreshCw size={16} className="spinner" /> CSS wird exportiert...</>
+            ) : (
+              <><Download size={16} /> CSS exportieren</>
             )}
           </button>
           <button className="backup-btn" onClick={() => setShowSizeSettings(!showSizeSettings)}>
