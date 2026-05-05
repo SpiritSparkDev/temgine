@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronUp,
+  CheckSquare,
   Edit,
   Eye,
   EyeOff,
@@ -11,6 +12,7 @@ import {
   Outdent,
   Plus,
   Search,
+  Square,
   Trash2,
 } from 'lucide-react';
 import Toast from './Toast';
@@ -23,6 +25,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
   const [iframeLoaded, setIframeLoaded] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     setTree(pages || []);
@@ -261,6 +265,76 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     ].join(' · ');
   }
 
+  // Collect all page IDs from a tree (flat list)
+  function collectAllIds(nodes) {
+    const ids = [];
+    const collect = (ns) => ns.forEach(n => { ids.push(n.id); collect(n.children || []); });
+    collect(nodes);
+    return ids;
+  }
+
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`${selectedIds.size} Seite(n) wirklich löschen?`)) return;
+    setBulkBusy(true);
+    try {
+      // Remove from tree
+      const removeNodes = (nodes) =>
+        nodes
+          .filter(n => !selectedIds.has(n.id))
+          .map(n => ({ ...n, children: removeNodes(n.children || []) }));
+      const updated = removeNodes(tree);
+      setTree(updated);
+      onUpdate && onUpdate(updated);
+      setSelectedIds(new Set());
+      setToast({ message: `${selectedIds.size} Seite(n) gelöscht.`, type: 'success' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkStatus(targetStatus) {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (const id of selectedIds) {
+        const res = await fetch('/api/pages/workflow', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageId: id, toStatus: targetStatus }),
+        });
+        if (res.ok) succeeded++; else failed++;
+      }
+      if (onRefreshPages) await onRefreshPages();
+      else {
+        const updateTree = (nodes) => nodes.map(n =>
+          selectedIds.has(n.id)
+            ? { ...n, status: targetStatus }
+            : { ...n, children: updateTree(n.children || []) }
+        );
+        setTree(updateTree(tree));
+      }
+      setSelectedIds(new Set());
+      const label = STATUS_LABELS[targetStatus] || targetStatus;
+      const msg = failed > 0
+        ? `${succeeded} gesetzt auf ${label}, ${failed} fehlgeschlagen.`
+        : `${succeeded} Seite(n) auf ${label} gesetzt.`;
+      setToast({ message: msg, type: failed > 0 ? 'error' : 'success' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   function renderCardGrid(nodes, depth = 0) {
     return (
       <div className={`page-card-row depth-${depth}`}>
@@ -272,9 +346,19 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
           return (
             <div key={node.id} className="page-card-group">
               <div
-                className={`page-card${node.status === 'PUBLISHED' ? ' published' : ''}`}
+                className={`page-card${node.status === 'PUBLISHED' ? ' published' : ''}${selectedIds.has(node.id) ? ' selected' : ''}`}
                 onMouseEnter={() => setIframeLoaded(prev => ({ ...prev, [node.id]: true }))}
               >
+                {/* Bulk selection checkbox */}
+                <button
+                  className="page-card-select-btn"
+                  onClick={() => toggleSelect(node.id)}
+                  title={selectedIds.has(node.id) ? 'Auswahl aufheben' : 'Auswählen'}
+                  aria-label={selectedIds.has(node.id) ? `${node.title} abwählen` : `${node.title} auswählen`}
+                  aria-pressed={selectedIds.has(node.id)}
+                >
+                  {selectedIds.has(node.id) ? <CheckSquare size={16} /> : <Square size={16} />}
+                </button>
                 {/* Thumbnail */}
                 <div className="page-card-thumb">
                   {node.status === 'PUBLISHED' && isLoaded ? (
@@ -471,6 +555,44 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
             </button>
           </div>
         </div>
+
+        {/* Bulk action bar */}
+        {selectedIds.size > 0 && (
+          <div className="bulk-action-bar" role="toolbar" aria-label="Sammelaktionen">
+            <span className="bulk-count">{selectedIds.size} ausgewählt</span>
+            <button
+              className="bulk-btn"
+              disabled={bulkBusy}
+              onClick={() => handleBulkStatus('PUBLISHED')}
+              title="Alle ausgewählten Seiten veröffentlichen"
+            >
+              <Eye size={14} /> Veröffentlichen
+            </button>
+            <button
+              className="bulk-btn"
+              disabled={bulkBusy}
+              onClick={() => handleBulkStatus('DRAFT')}
+              title="Alle ausgewählten Seiten auf Entwurf setzen"
+            >
+              <EyeOff size={14} /> Auf Entwurf
+            </button>
+            <button
+              className="bulk-btn bulk-btn-danger"
+              disabled={bulkBusy}
+              onClick={handleBulkDelete}
+              title="Alle ausgewählten Seiten löschen"
+            >
+              <Trash2 size={14} /> Löschen
+            </button>
+            <button
+              className="bulk-btn bulk-btn-ghost"
+              onClick={() => setSelectedIds(new Set())}
+              title="Auswahl aufheben"
+            >
+              Abbrechen
+            </button>
+          </div>
+        )}
 
         <div className="page-grid-root">
           {filteredTree.length > 0 ? (

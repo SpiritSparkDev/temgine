@@ -17,14 +17,29 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // Validates a folder param and returns an absolute path within UPLOAD_DIR
-// 20 Uploads pro Minute pro IP
-const uploadLimiter = rateLimit({ windowMs: 60_000, max: 20 });
+// Erlaubt auch größere Ordner-Uploads mit vielen Einzeldateien
+const uploadLimiter = rateLimit({ windowMs: 60_000, max: 500 });
 
 function resolveSafeDir(folderParam) {
   const safe = (folderParam || '').replace(/\.\./g, '').replace(/^\/+/, '').replace(/\/+$/, '');
   const resolved = path.resolve(UPLOAD_DIR, safe);
   if (!resolved.startsWith(UPLOAD_DIR)) throw new Error('UngÃ¼ltiger Pfad');
   return { resolved, safe };
+}
+
+function sanitizeRelativePath(relativePath) {
+  const normalized = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter(Boolean)
+    .filter((part) => part !== '.' && part !== '..')
+    .map((part) => part.replace(/[^a-zA-Z0-9._\-\u00C0-\u024F ]/g, '_'));
+
+  if (normalized.length === 0) return { relativeDir: '', filename: '' };
+
+  const filename = normalized[normalized.length - 1];
+  const relativeDir = normalized.slice(0, -1).join('/');
+  return { relativeDir, filename };
 }
 
 export default async function handler(req, res) {
@@ -124,6 +139,7 @@ export default async function handler(req, res) {
 
     const form = formidable({
       uploadDir: targetUploadDir,
+      multiples: true,
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       filename: (name, ext, part) => {
@@ -133,30 +149,71 @@ export default async function handler(req, res) {
       }
     });
 
-    form.parse(req, (err, fields, files) => {
-      if (err) {
-        return res.status(500).json({ error: 'Upload fehlgeschlagen' });
-      }
+    let fields
+    let files
+    try {
+      const parsed = await new Promise((resolve, reject) => {
+        form.parse(req, (err, nextFields, nextFiles) => {
+          if (err) {
+            reject(err)
+          } else {
+            resolve({ fields: nextFields, files: nextFiles })
+          }
+        })
+      })
+      fields = parsed.fields
+      files = parsed.files
+    } catch (_e) {
+      return res.status(500).json({ error: 'Upload fehlgeschlagen' })
+    }
 
-      const file = files.file;
-      if (!file) {
-        return res.status(400).json({ error: 'Keine Datei gefunden' });
-      }
+    const file = files.file;
+    if (!file) {
+      return res.status(400).json({ error: 'Keine Datei gefunden' });
+    }
 
-      const uploadedFile = Array.isArray(file) ? file[0] : file;
-      const relPath = path.relative(path.join(process.cwd(), 'public'), uploadedFile.filepath)
-        .replace(/\\/g, '/');
+    const uploadedFiles = Array.isArray(file) ? file : [file];
+    const relativePaths = Array.isArray(fields.relativePath)
+      ? fields.relativePath
+      : (fields.relativePath ? [fields.relativePath] : []);
 
-      res.status(200).json({
-        success: true,
-        file: {
+    try {
+      const responseFiles = uploadedFiles.map((uploadedFile, index) => {
+        const relativePathField = relativePaths[index];
+
+        if (relativePathField) {
+          const { relativeDir, filename } = sanitizeRelativePath(relativePathField);
+          const nestedTargetDir = relativeDir ? path.join(targetUploadDir, relativeDir) : targetUploadDir;
+          if (!nestedTargetDir.startsWith(UPLOAD_DIR)) {
+            throw new Error('UngÃ¼ltiger relativer Pfad');
+          }
+          fs.mkdirSync(nestedTargetDir, { recursive: true });
+
+          const finalName = filename || path.basename(uploadedFile.filepath);
+          const finalPath = path.join(nestedTargetDir, finalName);
+          fs.renameSync(uploadedFile.filepath, finalPath);
+          uploadedFile.filepath = finalPath;
+        }
+
+        const relPath = path.relative(path.join(process.cwd(), 'public'), uploadedFile.filepath)
+          .replace(/\\/g, '/');
+
+        return {
           name: path.basename(uploadedFile.filepath),
           size: uploadedFile.size,
           type: uploadedFile.mimetype,
           url: `/${relPath}`
-        }
+        };
       });
-    });
+
+      return res.status(200).json({
+        success: true,
+        files: responseFiles,
+        file: responseFiles[0] || null,
+      });
+    } catch (_e) {
+      return res.status(400).json({ error: 'Ordnerpfad konnte nicht verarbeitet werden' });
+    }
   } else if (req.method === 'PUT') {
     // Ordner erstellen
     try {

@@ -6,6 +6,7 @@ export default function Home() {
   const router = useRouter()
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
+  const [homePage, setHomePage] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -131,6 +132,7 @@ export default function Home() {
         // Rendere Seite
         const html = renderPage(homePage, templateCodes, { isChild: false }, navigations)
         setHtml(html)
+        setHomePage(homePage)
         setLoading(false)
       })
       .catch(err => {
@@ -140,6 +142,10 @@ export default function Home() {
   }, [])
 
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
-  
-  return <div dangerouslySetInnerHTML={{ __html: html }} />
+
+  const wrapperProps = {};
+  if (homePage?.data?.wrapperId) wrapperProps.id = homePage.data.wrapperId;
+  if (homePage?.data?.wrapperClass) wrapperProps.className = homePage.data.wrapperClass;
+
+  return <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: html }} />
 }

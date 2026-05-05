@@ -178,7 +178,8 @@ export default function PageCatchAll() {
   // Nur Scripts ohne src-Attribut werden ausgeführt (keine externen URLs).
   useEffect(() => {
     if (!html) return
-    const container = document.getElementById('page-html-output')
+    const containerId = page?.data?.wrapperId || 'page-html-output'
+    const container = document.getElementById(containerId)
     if (!container) return
     container.querySelectorAll('script:not([src])').forEach(old => {
       const s = document.createElement('script')
@@ -194,9 +195,13 @@ export default function PageCatchAll() {
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
   if (!page) return <div style={{ padding: 20 }}>Seite nicht gefunden</div>
 
+  const wrapperProps = { id: 'page-html-output' };
+  if (page?.data?.wrapperId) wrapperProps.id = page.data.wrapperId;
+  if (page?.data?.wrapperClass) wrapperProps.className = page.data.wrapperClass;
+
   return (
     <div>
-      <div id="page-html-output" dangerouslySetInnerHTML={{ __html: html }} />
+      <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: html }} />
       {showDebug && (
         <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
           <strong>Debug: rendered HTML (first 2000 chars)</strong>

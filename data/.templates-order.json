@@ -1,13 +1,10 @@
 [
-  "Hero Section",
+  "HeaderBanner",
+  "Einzelnes_Bild",
   "Text",
-  "Feature Cards",
-  "Image Gallery Grid",
-  "Testimonials",
-  "Pricing Table",
-  "Contact Form",
-  "Team Members",
-  "Blog Post List",
-  "Full Page Template",
-  "Footer"
+  "CallToAction",
+  "Icon-Liste",
+  "LinkWrapper",
+  "Galerie",
+  "Text 2-spaltig"
 ]

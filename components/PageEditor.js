@@ -4,8 +4,8 @@ import dynamic from 'next/dynamic';
 import 'react-quill/dist/quill.snow.css';
 
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns } from 'lucide-react';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks } from '../lib/templateParser';
+import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Maximize2, X } from 'lucide-react';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import TemplateStructurePreview from './TemplateStructurePreview';
@@ -55,6 +55,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
+  const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
+  const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
   const initialSnapshotRef = useRef('');
@@ -62,6 +64,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const autosaveInFlightRef = useRef(false);
   const splitPreviewIframeRef = useRef(null);
   const splitPreviewTimerRef = useRef(null);
+  // Refs for keyboard shortcuts (always point to latest handlers)
+  const handleSaveRef = useRef(null);
+  const handleSaveAndCloseRef = useRef(null);
+  const handleCancelClickRef = useRef(null);
+  const handleUndoRef = useRef(null);
+  const handleRedoRef = useRef(null);
+  // Undo/Redo history
+  const historyStackRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+  const historySkipNextPushRef = useRef(false);
 
   const buildSnapshot = ({
     title,
@@ -411,6 +423,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return () => window.removeEventListener('keydown', handleKey);
   }, [showPreview]);
 
+  // Escape key closes field expand lightbox
+  useEffect(() => {
+    if (!expandedField) return;
+    const handleKey = (e) => { if (e.key === 'Escape') setExpandedField(null); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [expandedField]);
+
   // Auto-rebuild split preview (debounced 600ms) when content changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -468,9 +488,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
-  // Maps template name → repeater blocks [{ sectionName, subFields: [{ name, type }] }]
-  const templateRepeatersByName = useMemo(() => {
+  // Maps template name → field groups [{ label, vars, isGroup }]
+  const templateGroupsByName = useMemo(() => {
     const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = extractFieldGroups(code) || [];
+      } catch (e) {
+        out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
+  // Maps template name → repeater blocks [{ sectionName, subFields: [{ name, type }] }]
+  const templateRepeatersByName = useMemo(() => {    const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
       try {
         out[name] = extractRepeaterBlocks(code) || [];
@@ -1092,6 +1124,61 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     await handleSave({ view: true });
   }
 
+  // Keep refs up-to-date so keyboard handler always calls latest version
+  handleSaveRef.current = handleSave;
+  handleSaveAndCloseRef.current = handleSaveAndClose;
+
+  // Global keyboard shortcuts: Ctrl+S / Ctrl+Shift+S / Ctrl+Z / Ctrl+Y
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+
+      if (e.key === 's' || e.key === 'S') {
+        // Ignore shortcut when focus is inside a text input / textarea / contenteditable
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) {
+          // Allow Ctrl+S in richtext editors (they handle it themselves), but prevent default in normal inputs
+          if (tag === 'INPUT' || tag === 'TEXTAREA') {
+            e.preventDefault();
+          } else {
+            return;
+          }
+        } else {
+          e.preventDefault();
+        }
+        if (e.shiftKey) {
+          handleSaveAndCloseRef.current?.();
+        } else {
+          handleSaveRef.current?.();
+        }
+        return;
+      }
+
+      if ((e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        // Let browser handle undo in text inputs
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) return;
+        e.preventDefault();
+        handleUndoRef.current?.();
+        return;
+      }
+
+      if ((e.key === 'y' || e.key === 'Y') || ((e.key === 'z' || e.key === 'Z') && e.shiftKey)) {
+        const tag = document.activeElement?.tagName?.toUpperCase();
+        const isEditable = document.activeElement?.isContentEditable;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || isEditable) return;
+        e.preventDefault();
+        handleRedoRef.current?.();
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   useEffect(() => {
     if (!page?.id || !isDirty) {
       if (!isDirty) setAutosaveStatus('gespeichert');
@@ -1125,10 +1212,76 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     onCancel?.();
   }
 
+  // --- Undo / Redo ---
+  // History entries: { blocks, title, slug, pageData }
+  const undoTimerRef = useRef(null);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // Push current state to history (debounced 400ms)
+  useEffect(() => {
+    if (historySkipNextPushRef.current) {
+      historySkipNextPushRef.current = false;
+      return;
+    }
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => {
+      const entry = { blocks: JSON.parse(JSON.stringify(blocks)), title, slug, pageData: JSON.parse(JSON.stringify(pageData || {})) };
+      const stack = historyStackRef.current;
+      const idx = historyIndexRef.current;
+      // Trim any future entries (after undo)
+      const newStack = stack.slice(0, idx + 1);
+      newStack.push(entry);
+      // Cap at 50 entries
+      if (newStack.length > 50) newStack.shift();
+      historyStackRef.current = newStack;
+      historyIndexRef.current = newStack.length - 1;
+      setCanUndo(historyIndexRef.current > 0);
+      setCanRedo(false);
+    }, 400);
+    return () => clearTimeout(undoTimerRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks, title, slug, pageData]);
+
+  function applyHistoryEntry(entry) {
+    historySkipNextPushRef.current = true;
+    setBlocks(entry.blocks);
+    setTitle(entry.title);
+    setSlug(entry.slug);
+    setPageData(entry.pageData);
+  }
+
+  function handleUndo() {
+    const idx = historyIndexRef.current;
+    if (idx <= 0) return;
+    const newIdx = idx - 1;
+    historyIndexRef.current = newIdx;
+    applyHistoryEntry(historyStackRef.current[newIdx]);
+    setCanUndo(newIdx > 0);
+    setCanRedo(true);
+  }
+
+  function handleRedo() {
+    const idx = historyIndexRef.current;
+    const stack = historyStackRef.current;
+    if (idx >= stack.length - 1) return;
+    const newIdx = idx + 1;
+    historyIndexRef.current = newIdx;
+    applyHistoryEntry(stack[newIdx]);
+    setCanUndo(true);
+    setCanRedo(newIdx < stack.length - 1);
+  }
+
+  // Keep undo/redo refs current
+  handleUndoRef.current = handleUndo;
+  handleRedoRef.current = handleRedo;
+
   // Render helpers for nested block editor
   const renderBlockEditor = (block, path, depth = 0) => {
     const isTop = depth === 0;
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
+    const templateGroups = block.template ? (templateGroupsByName[block.template] || []) : [];
+    const hasGroupedContainers = templateGroups.some(g => g.isGroup && g.vars.length >= 2);
     const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
     // Resolve effective input type: explicit annotation wins over guessed type
     const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
@@ -1274,121 +1427,191 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           {block.template && templateCodes[block.template] && (
             <div>
               {/* Grid layout for non-textarea fields */}
-              <div className="block-fields-grid">
-                {templateVariables
-                  .filter(varName => resolveInputType(varName) !== 'textarea')
-                  .map(varName => {
-                    const inputType = resolveInputType(varName);
-                    const value = block.props[varName] || '';
-                    const label = snippetLabels[block.template]?.[varName] || formatLabel(varName);
+              {(() => {
+                // Helper: render a single field-item for a varName
+                const renderFieldItem = (varName) => {
+                  const inputType = resolveInputType(varName);
+                  const value = block.props[varName] || '';
+                  const label = snippetLabels[block.template]?.[varName] || formatLabel(varName);
+                  const expandBtn = (
+                    <button
+                      type="button"
+                      className="field-expand-btn"
+                      onClick={e => { e.stopPropagation(); setExpandedField({ varName, label, value, inputType, blockPath: path }); }}
+                      aria-label={`${label} vergrößern`}
+                      title="Vergrößert anzeigen"
+                    >
+                      <Maximize2 size={10} />
+                    </button>
+                  );
 
-                    if (varName.toLowerCase().includes('headinglevel')) {
-                      const normalizedLevel = String(value || '2').replace(/^h/i, '');
-                      return (
-                        <div key={varName} className="field-item">
-                          <label className="field-label-xs">{label}</label>
-                          <select
-                            ref={(el) => setFieldRef(path, varName, el)}
-                            value={normalizedLevel}
-                            onChange={e => updateNestedBlock(path, { [varName]: e.target.value })}
-                            className="input-field-small field-input-full"
-                          >
-                            <option value="1">H1</option>
-                            <option value="2">H2</option>
-                            <option value="3">H3</option>
-                            <option value="4">H4</option>
-                            <option value="5">H5</option>
-                            <option value="6">H6</option>
-                          </select>
-                        </div>
-                      )
-                    }
-
-                    if (inputType === 'image') {
-                      return (
-                        <div key={varName} className="field-item">
-                          <label className="field-label-xs">{label}</label>
-                          <div className="field-url-row">
-                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="Bild-URL" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
-                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
-                          </div>
-                          {value && (
-                            <div className="field-image-thumb-row">
-                              <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} />
-                            </div>
-                          )}
-                        </div>
-                      )
-                    }
-
-                    if (isUrlVariable(varName)) {
-                      return (
-                        <div key={varName} className="field-item">
-                          <label className="field-label-xs">{label}</label>
-                          <div className="field-url-row">
-                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
-                            <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    // Special handling for heading variables
-                    if (varName.toLowerCase() === 'heading' || varName.toLowerCase().endsWith('heading')) {
-                      const textValue = block.props[`${varName}Text`] || (block.props[varName] ? stripTags(block.props[varName]) : '');
-                      const levelValue = block.props[`${varName}Level`] || 'h2';
-
-                      const applyHeading = (newText, newLevel) => {
-                        const lv = newLevel || levelValue;
-                        const rawText = newText !== undefined ? newText : textValue;
-                        const tx = stripTags(rawText);
-                        const updatedProps = { ...(block.props || {}) };
-                        updatedProps[`${varName}Text`] = tx;
-                        updatedProps[`${varName}Level`] = lv;
-                        updatedProps[varName] = `<${lv}>${tx}</${lv}>`;
-                        updateNestedBlock(path, updatedProps);
-                      };
-
-                      return (
-                        <div key={varName} className="field-item">
-                          <label className="field-label-xs">{label}</label>
-                          <div className="field-heading-row">
-                            <select ref={(el) => setFieldRef(path, `${varName}Level`, el)} value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small field-input-full">
-                              <option value="h1">H1</option>
-                              <option value="h2">H2</option>
-                              <option value="h3">H3</option>
-                              <option value="h4">H4</option>
-                              <option value="h5">H5</option>
-                            </select>
-                            <input ref={(el) => setFieldRef(path, `${varName}Text`, el)} type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small field-input-full" />
-                          </div>
-                        </div>
-                      )
-                    }
-
-                    if (inputType === 'array') {
-                      const arrayLabel = snippetLabels[block.template]?.[varName] || formatLabel(varName);
-                      return (
-                        <div key={varName} className="field-item">
-                          <label className="field-label-xs">{arrayLabel}</label>
-                          <textarea ref={(el) => setFieldRef(path, varName, el)} placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} className="input-field-small field-input-full field-array-textarea" />
-                        </div>
-                      )
-                    }
-
-                    // Default text/number input
-                    const defaultLabel = snippetLabels[block.template]?.[varName] || formatLabel(varName);
+                  if (varName.toLowerCase().includes('headinglevel')) {
+                    const normalizedLevel = String(value || '2').replace(/^h/i, '');
                     return (
                       <div key={varName} className="field-item">
-                        <label className="field-label-xs">{defaultLabel}</label>
-                        <input ref={(el) => setFieldRef(path, varName, el)} type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                        <label className="field-label-xs">{label}</label>
+                        {expandBtn}
+                        <select
+                          ref={(el) => setFieldRef(path, varName, el)}
+                          value={normalizedLevel}
+                          onChange={e => updateNestedBlock(path, { [varName]: e.target.value })}
+                          className="input-field-small field-input-full"
+                        >
+                          <option value="1">H1</option>
+                          <option value="2">H2</option>
+                          <option value="3">H3</option>
+                          <option value="4">H4</option>
+                          <option value="5">H5</option>
+                          <option value="6">H6</option>
+                        </select>
                       </div>
-                    )
-                  })}
-              </div>
+                    );
+                  }
+
+                  if (inputType === 'image') {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        {expandBtn}
+                        <div className="field-url-row">
+                          <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="Bild-URL" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                          <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
+                        </div>
+                        {value && (
+                          <div className="field-image-thumb-row">
+                            <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (isUrlVariable(varName)) {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        {expandBtn}
+                        <div className="field-url-row">
+                          <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                          <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (varName.toLowerCase() === 'heading' || varName.toLowerCase().endsWith('heading')) {
+                    const textValue = block.props[`${varName}Text`] || (block.props[varName] ? stripTags(block.props[varName]) : '');
+                    const levelValue = block.props[`${varName}Level`] || 'h2';
+                    const applyHeading = (newText, newLevel) => {
+                      const lv = newLevel || levelValue;
+                      const rawText = newText !== undefined ? newText : textValue;
+                      const tx = stripTags(rawText);
+                      const updatedProps = { ...(block.props || {}) };
+                      updatedProps[`${varName}Text`] = tx;
+                      updatedProps[`${varName}Level`] = lv;
+                      updatedProps[varName] = `<${lv}>${tx}</${lv}>`;
+                      updateNestedBlock(path, updatedProps);
+                    };
+                    const headingExpandBtn = (
+                      <button
+                        type="button"
+                        className="field-expand-btn"
+                        onClick={e => { e.stopPropagation(); setExpandedField({ varName, label, value: textValue, inputType: 'heading', blockPath: path, headingLevelValue: levelValue }); }}
+                        aria-label={`${label} vergrößern`}
+                        title="Vergrößert anzeigen"
+                      >
+                        <Maximize2 size={10} />
+                      </button>
+                    );
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        {headingExpandBtn}
+                        <div className="field-heading-row">
+                          <select ref={(el) => setFieldRef(path, `${varName}Level`, el)} value={levelValue} onChange={e => applyHeading(undefined, e.target.value)} className="input-field-small field-input-full">
+                            <option value="h1">H1</option>
+                            <option value="h2">H2</option>
+                            <option value="h3">H3</option>
+                            <option value="h4">H4</option>
+                            <option value="h5">H5</option>
+                          </select>
+                          <input ref={(el) => setFieldRef(path, `${varName}Text`, el)} type="text" placeholder="Heading text" value={textValue} onChange={e => applyHeading(e.target.value, undefined)} className="input-field-small field-input-full" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (inputType === 'array') {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        {expandBtn}
+                        <textarea ref={(el) => setFieldRef(path, varName, el)} placeholder="Ein Wert pro Zeile" value={Array.isArray(value) ? value.join('\n') : ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value.split('\n').filter(v => v.trim()) })} rows={2} className="input-field-small field-input-full field-array-textarea" />
+                      </div>
+                    );
+                  }
+
+                  if (inputType === 'textarea') {
+                    return (
+                      <div key={varName} className="field-item field-item-textarea">
+                        <label className="field-label-xs">{label}</label>
+                        <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
+                          <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={varName} className="field-item">
+                      <label className="field-label-xs">{label}</label>
+                      {expandBtn}
+                      <input ref={(el) => setFieldRef(path, varName, el)} type={inputType === 'number' ? 'number' : 'text'} placeholder={varName} value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                    </div>
+                  );
+                };
+
+                const groups = templateGroups;
+                const nonTextareaVars = templateVariables.filter(v => resolveInputType(v) !== 'textarea');
+
+                // If no meaningful groups, render flat as before
+                const hasGroups = hasGroupedContainers;
+                if (!hasGroups) {
+                  return (
+                    <div className="block-fields-grid">
+                      {nonTextareaVars.map(varName => renderFieldItem(varName))}
+                    </div>
+                  );
+                }
+
+                // Render groups
+                const coveredByGroups = new Set(groups.flatMap(g => g.vars));
+                const ungroupedVars = templateVariables.filter(v => !coveredByGroups.has(v));
+
+                return (
+                  <div className="block-fields-grid">
+                    {groups.map((group) => {
+                      const groupVars = group.vars;
+                      if (groupVars.length === 0) return null;
+                      if (group.isGroup && groupVars.length >= 2) {
+                        return (
+                          <div key={`grp-${group.vars[0]}`} className="field-group">
+                            {group.label && <div className="field-group-label">{formatLabel(group.label)}</div>}
+                            <div className="field-group-inner">
+                              {groupVars.map(varName => renderFieldItem(varName))}
+                            </div>
+                          </div>
+                        );
+                      }
+                      return groupVars.map(varName => renderFieldItem(varName));
+                    })}
+                    {ungroupedVars.map(varName => renderFieldItem(varName))}
+                  </div>
+                );
+              })()}
 
               {/* Separate textarea fields (full width) - NACH dem Grid */}
-              {templateVariables
+              {!hasGroupedContainers && templateVariables
                 .filter(varName => resolveInputType(varName) === 'textarea')
                 .map(varName => {
                   const value = block.props[varName] || '';
@@ -1668,9 +1891,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <History size={14} /> Verlauf
             </button>
             <div className="pe-toolbar-sep" />
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title="Rückgängig (Strg+Z)"
+              aria-label="Rückgängig"
+            >
+              ↩
+            </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title="Wiederholen (Strg+Y)"
+              aria-label="Wiederholen"
+            >
+              ↪
+            </button>
+            <div className="pe-toolbar-sep" />
             <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndView} title={devTitle('Seite speichern und im Frontend anzeigen')}>Speichern &amp; Anzeigen</button>
-            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title={devTitle('Seite speichern und Editor schliessen')}>Speichern &amp; Schließen</button>
-            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title={devTitle('Seite speichern')}>Speichern</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={handleSaveAndClose} title="Seite speichern und Editor schließen (Strg+Umschalt+S)">Speichern &amp; Schließen</button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} title="Seite speichern (Strg+S)">Speichern</button>
             <span
               className={`pe-autosave-indicator${autosaveStatus === 'fehler' ? ' error' : autosaveStatus === 'speichert' ? ' saving' : ''}`}
               aria-live="polite"
@@ -1929,6 +2173,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
                           Als Startseite
                         </label>
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
+                        <input
+                          type="text"
+                          value={pageData.wrapperClass || ''}
+                          onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
+                          placeholder="z.B. page-home dark-theme"
+                          className="input-field-small"
+                          aria-label="CSS-Klasse für den Seiten-Wrapper"
+                        />
+                        <label className="field-label-xs">Wrapper-ID</label>
+                        <input
+                          type="text"
+                          value={pageData.wrapperId || ''}
+                          onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
+                          placeholder="z.B. main-page"
+                          className="input-field-small"
+                          aria-label="ID für den Seiten-Wrapper"
+                        />
                       </div>
                     )}
                   </div>
@@ -2026,6 +2288,161 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             />
           </div>
         </div>
+      )}
+
+      {/* Field Expand Lightbox */}
+      <span ref={adminScopeRef} style={{display:'none'}} />
+      {expandedField && typeof window !== 'undefined' && createPortal(
+        <div className={`admin-scope${adminScopeRef.current?.closest('.dark-mode') ? ' dark-mode' : ''} field-lightbox-portal`} onClick={() => setExpandedField(null)}>
+        <div className="field-lightbox-overlay" onClick={() => setExpandedField(null)}>
+          <div className="field-lightbox" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Feld: ${expandedField.label}`}>
+            <div className="field-lightbox-header">
+              <span className="field-lightbox-label">{expandedField.label}</span>
+              <button
+                type="button"
+                className="field-lightbox-close"
+                onClick={() => setExpandedField(null)}
+                aria-label="Schließen"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="field-lightbox-body">
+              {expandedField.inputType === 'heading' ? (
+                <>
+                  <div className="field-lightbox-heading-row">
+                    <label className="field-lightbox-sublabel">Ebene</label>
+                    <select
+                      className="field-lightbox-select"
+                      value={expandedField.headingLevelValue || 'h2'}
+                      onChange={e => {
+                        const lv = e.target.value;
+                        const tx = expandedField.value;
+                        setExpandedField(f => ({ ...f, headingLevelValue: lv }));
+                        const vn = expandedField.varName;
+                        updateNestedBlock(expandedField.blockPath, {
+                          [`${vn}Level`]: lv,
+                          [`${vn}Text`]: tx,
+                          [vn]: `<${lv}>${tx}</${lv}>`
+                        });
+                      }}
+                    >
+                      <option value="h1">H1</option>
+                      <option value="h2">H2</option>
+                      <option value="h3">H3</option>
+                      <option value="h4">H4</option>
+                      <option value="h5">H5</option>
+                    </select>
+                  </div>
+                  <textarea
+                    className="field-lightbox-textarea"
+                    placeholder="Heading-Text"
+                    value={expandedField.value}
+                    onChange={e => {
+                      const tx = e.target.value;
+                      const lv = expandedField.headingLevelValue || 'h2';
+                      const vn = expandedField.varName;
+                      setExpandedField(f => ({ ...f, value: tx }));
+                      updateNestedBlock(expandedField.blockPath, {
+                        [`${vn}Level`]: lv,
+                        [`${vn}Text`]: tx,
+                        [vn]: `<${lv}>${tx}</${lv}>`
+                      });
+                    }}
+                    autoFocus
+                  />
+                </>
+              ) : expandedField.inputType === 'image' ? (
+                <>
+                  <input
+                    type="text"
+                    className="field-lightbox-input"
+                    placeholder="Bild-URL"
+                    value={expandedField.value}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpandedField(f => ({ ...f, value: v }));
+                      updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: v });
+                    }}
+                    autoFocus
+                  />
+                  <button type="button" className="field-lightbox-file-btn" onClick={() => openFileModal((url) => {
+                    setExpandedField(f => ({ ...f, value: url }));
+                    updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: url });
+                  })}>📁 Bild auswählen</button>
+                  {expandedField.value && (
+                    <div className="field-lightbox-preview">
+                      <img src={expandedField.value} alt="" />
+                    </div>
+                  )}
+                </>
+              ) : expandedField.inputType === 'number' ? (
+                <input
+                  type="number"
+                  className="field-lightbox-input"
+                  placeholder={expandedField.varName}
+                  value={expandedField.value}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setExpandedField(f => ({ ...f, value: v }));
+                    updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: v });
+                  }}
+                  autoFocus
+                />
+              ) : expandedField.inputType === 'url' ? (
+                <>
+                  <input
+                    type="text"
+                    className="field-lightbox-input"
+                    placeholder="URL oder Dateipfad"
+                    value={expandedField.value}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setExpandedField(f => ({ ...f, value: v }));
+                      updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: v });
+                    }}
+                    autoFocus
+                  />
+                  <button type="button" className="field-lightbox-file-btn" onClick={() => openFileModal((url) => {
+                    setExpandedField(f => ({ ...f, value: url }));
+                    updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: url });
+                  })}>📁 Datei auswählen</button>
+                </>
+              ) : expandedField.inputType === 'array' ? (
+                <>
+                  <p className="field-lightbox-hint">Ein Wert pro Zeile</p>
+                  <textarea
+                    className="field-lightbox-textarea"
+                    placeholder="Ein Wert pro Zeile"
+                    value={Array.isArray(expandedField.value) ? expandedField.value.join('\n') : expandedField.value}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      const arr = raw.split('\n').filter(v => v.trim());
+                      setExpandedField(f => ({ ...f, value: arr }));
+                      updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: arr });
+                    }}
+                    autoFocus
+                  />
+                </>
+              ) : (
+                /* textarea, text, date – large editable area */
+                <textarea
+                  className="field-lightbox-textarea"
+                  placeholder={expandedField.varName}
+                  value={expandedField.value}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setExpandedField(f => ({ ...f, value: v }));
+                    updateNestedBlock(expandedField.blockPath, { [expandedField.varName]: v });
+                  }}
+                  autoFocus
+                />
+              )}
+            </div>
+          </div>
+        </div>
+        </div>,
+        document.body
       )}
 
       {/* Datei-Auswahl Modal */}
