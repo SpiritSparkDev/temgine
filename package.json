@@ -38,6 +38,7 @@
     "formidable": "^3.5.1",
     "jszip": "^3.10.1",
     "lucide-react": "^0.263.1",
+    "marked": "^18.0.3",
     "mustache": "^4.2.0",
     "next": "^16.2.4",
     "next-auth": "^4.24.0",
