@@ -65,7 +65,7 @@ export default function RichTextEditor({
     ) : null;
 
   return (
-    <div style={wrapStyle}>
+    <div style={wrapStyle} onClick={() => editor && !readOnly && editor.commands.focus()}>
       {editor && !readOnly && (
         <div style={toolbarStyle}>
           {btn('bold',       'B',    () => editor.chain().focus().toggleBold().run(),         'Bold')}
@@ -92,7 +92,7 @@ export default function RichTextEditor({
       )}
       <EditorContent
         editor={editor}
-        style={{ padding: '8px', minHeight: '80px', outline: 'none', color: 'var(--text-primary)', background: 'var(--bg-secondary)', lineHeight: 1.6 }}
+        style={{ padding: '8px', minHeight: '80px', outline: 'none', color: 'var(--text-primary)', background: 'var(--bg-secondary)', lineHeight: 1.6, cursor: 'text' }}
       />
       {!editor && placeholder && (
         <div style={{ padding: '8px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>{placeholder}</div>

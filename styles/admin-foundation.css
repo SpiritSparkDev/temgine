@@ -5,6 +5,9 @@
   color: var(--text-primary);
   caret-color: var(--accent-primary);
   outline: none;
+  min-height: inherit;
+  height: 100%;
+  cursor: text;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {

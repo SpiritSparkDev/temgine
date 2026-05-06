@@ -1702,16 +1702,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <textarea
-                                      value={sfVal}
-                                      placeholder={sf.name}
-                                      onChange={e => {
-                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                        updateNestedBlock(path, { [sectionName]: next });
-                                      }}
-                                      rows={2}
-                                      className="input-field-small field-input-full"
-                                    />
+                                    <div className="field-quill-wrapper">
+                                      <RichTextEditor
+                                        value={sfVal}
+                                        onChange={val => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        }}
+                                        toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear']}
+                                      />
+                                    </div>
                                   </div>
                                 );
                               }
