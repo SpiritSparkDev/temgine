@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
       const entries = await prisma.contentEntry.findMany({
         where: { contentTypeId: String(contentTypeId) },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
 
       return res.status(200).json(entries);

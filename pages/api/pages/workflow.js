@@ -44,7 +44,8 @@ export default async function handler(req, res) {
     if (body.toStatus) body.toStatus = String(body.toStatus).toUpperCase();
 
     const [ok, errors] = validate(body, {
-      pageId:   [rules.required(), rules.string(), rules.maxLen(128)],
+      pageId:   [rules.string(), rules.maxLen(128)],
+      slug:     [rules.string(), rules.maxLen(255)],
       toStatus: [rules.required(), rules.oneOf(VALID_STATUSES)],
       note:     [rules.string(), rules.maxLen(1000)],
     });
@@ -53,9 +54,18 @@ export default async function handler(req, res) {
       return res.status(s).json(r);
     }
 
-    const { pageId, toStatus, note } = body;
+    const { pageId, slug, toStatus, note } = body;
 
-    const page = await prisma.page.findUnique({ where: { id: pageId } });
+    if (!pageId && !slug) {
+      const [s, r] = errorResponse(400, 'pageId oder slug erforderlich', 'VALIDATION_ERROR', { pageId: 'pageId oder slug ist erforderlich' });
+      return res.status(s).json(r);
+    }
+
+    // Look up by ID first, then fall back to slug (child pages may have a
+    // frontend-generated ID that doesn't exist as a DB row)
+    let page = null;
+    if (pageId) page = await prisma.page.findUnique({ where: { id: String(pageId) } });
+    if (!page && slug) page = await prisma.page.findUnique({ where: { slug: String(slug) } });
     if (!page) {
       const [s, r] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
       return res.status(s).json(r);

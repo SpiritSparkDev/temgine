@@ -1577,7 +1577,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item field-item-textarea">
                         <label className="field-label-xs">{label}</label>
                         <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                          <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear']} />
+                          <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                         </div>
                       </div>
                     );
@@ -1641,7 +1641,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <div key={varName} className="field-item field-item-textarea">
                       <label className="field-label-xs">{label}</label>
                       <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                        <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear']} />
+                        <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                       </div>
                     </div>
                   )
@@ -1675,6 +1675,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (rowIdx === 0) return;
+                                  const next = [...rows];
+                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === 0}
+                                title="Nach oben verschieben"
+                              ><ChevronUp size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (rowIdx === rows.length - 1) return;
+                                  const next = [...rows];
+                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === rows.length - 1}
+                                title="Nach unten verschieben"
+                              ><ChevronDown size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   const copy = { ...row };
                                   const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
                                   updateNestedBlock(path, { [sectionName]: next });
@@ -1702,16 +1726,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <textarea
-                                      value={sfVal}
-                                      placeholder={sf.name}
-                                      onChange={e => {
-                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                        updateNestedBlock(path, { [sectionName]: next });
-                                      }}
-                                      rows={2}
-                                      className="input-field-small field-input-full"
-                                    />
+                                    <div className="field-quill-wrapper">
+                                      <RichTextEditor
+                                        value={sfVal}
+                                        onChange={val => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        }}
+                                        toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']}
+                                      />
+                                    </div>
                                   </div>
                                 );
                               }
@@ -1771,6 +1795,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           </div>
                         </div>
                       ))}
+                    </div>
+                    <div className="field-repeater-header">
+                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)} ende</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
+                        }}
+                        className="btn-modern-small repeater-add-btn"
+                        title={`Eintrag zu ${sectionName} hinzufügen`}
+                      >
+                        <Plus size={12} /> Eintrag hinzufügen
+                      </button>
                     </div>
                   </div>
                 );
@@ -1836,7 +1874,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
               <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
-                <RichTextEditor value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear']} />
+                <RichTextEditor value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
               </div>
             </>
           )}

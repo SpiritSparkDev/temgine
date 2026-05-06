@@ -178,10 +178,12 @@ model ContentEntry {
   contentType   ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
   data          Json     @default("{}")
   title         String?
+  sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([contentTypeId])
+  @@index([contentTypeId, sortOrder])
 }
 
 model PageWorkflowEvent {
