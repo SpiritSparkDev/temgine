@@ -156,7 +156,8 @@ export default async function handler(req, res) {
               publishAt: p.publishAt || null,
               template: p.template || null,
               data: p.data || {},
-              isHomepage: p.isHomepage || false
+              isHomepage: p.isHomepage || false,
+              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : []
             },
             update: {
               title: p.title || undefined,
@@ -166,7 +167,8 @@ export default async function handler(req, res) {
               publishAt: p.publishAt || undefined,
               template: p.template || undefined,
               data: p.data || undefined,
-              isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined
+              isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
+              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined
             }
           })
           results.push(up)
@@ -263,6 +265,7 @@ export default async function handler(req, res) {
           status: p.status || 'DRAFT',
           publishAt: p.publishAt || null,
           isHomepage: p.isHomepage || false,
+          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : []
         },
         update: {
           title: p.title || undefined,
@@ -273,6 +276,7 @@ export default async function handler(req, res) {
           status: p.status || undefined,
           publishAt: p.publishAt !== undefined ? (p.publishAt || null) : undefined,
           isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
+          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined
         }
       })
       // create a revision for this upsert

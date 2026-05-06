@@ -56,6 +56,7 @@ model Page {
   status         PageStatus           @default(DRAFT)
   publishAt      DateTime?
   isHomepage     Boolean              @default(false)
+  accessGroups   Json                 @default("[]")
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
@@ -88,6 +89,7 @@ model Template {
   name      String             @unique
   code      String
   type      TemplateType       @default(SITE)
+  blogType  String?
   revisions TemplateRevision[]
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
@@ -205,4 +207,104 @@ model FileMetadata {
   updatedAt DateTime @updatedAt
 
   @@index([url])
+}
+
+// ── Contact Form ─────────────────────────────────────────────────────────────
+
+model ContactMessage {
+  id        String    @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String    @db.Text
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+// ── Member System ─────────────────────────────────────────────────────────────
+
+model Member {
+  id             String                  @id @default(cuid())
+  email          String                  @unique
+  name           String?
+  password       String
+  verified       Boolean                 @default(false)
+  verifyToken    String?                 @unique
+  verifyTokenExp DateTime?
+  blocked        Boolean                 @default(false)
+  groups         MemberGroupMembership[]
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  @@index([email])
+}
+
+model MemberGroup {
+  id      String                  @id @default(cuid())
+  name    String
+  slug    String                  @unique
+  members MemberGroupMembership[]
+
+  @@index([slug])
+}
+
+model MemberGroupMembership {
+  memberId String
+  groupId  String
+  member   Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  group    MemberGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, groupId])
+}
+
+// ── Blog / News ───────────────────────────────────────────────────────────────
+
+enum PostStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  SCHEDULED
+}
+
+model BlogChannel {
+  id                    String     @id @default(cuid())
+  name                  String
+  slug                  String     @unique
+  description           String?
+  /// Template name for the detail-preview card (image, title, excerpt, date)
+  templateDetailPreview String?
+  /// Template name for the simple-preview card (title + short excerpt only)
+  templateSimplePreview String?
+  /// Template name for the archive entry (title + date only)
+  templateArchiveEntry  String?
+  /// Template name for the full reading/article page
+  templateReading       String?
+  posts                 BlogPost[]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+}
+
+model BlogPost {
+  id           String      @id @default(cuid())
+  channelId    String
+  channel      BlogChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  title        String
+  slug         String
+  excerpt      String?     @db.Text
+  body         String?     @db.Text
+  coverImage   String?
+  author       String?
+  status       PostStatus  @default(DRAFT)
+  publishAt    DateTime?
+  publishedAt  DateTime?
+  templateData Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([channelId, slug])
+  @@index([channelId, status])
+  @@index([channelId, publishedAt])
 }

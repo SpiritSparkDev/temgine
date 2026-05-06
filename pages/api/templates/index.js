@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma'
+import { prisma } from '../../../lib/prisma'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       // List template names (keeps compatibility) — return array of names
         // List templates with type information
         const templates = await prisma.template.findMany({ orderBy: { createdAt: 'asc' } })
-        const list = templates.map(t => ({ id: t.id, name: t.name, code: t.code, type: t.type }))
+        const list = templates.map(t => ({ id: t.id, name: t.name, code: t.code, type: t.type, blogType: t.blogType || null }))
         return res.status(200).json(list)
     }
 
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         create: { name: String(name), code: String(code), type: ttype },
         update: { code: String(code), type: ttype }
       })
-      return res.status(200).json({ ok: true, id: up.id, name: up.name, code: up.code, type: up.type })
+      return res.status(200).json({ ok: true, id: up.id, name: up.name, code: up.code, type: up.type, blogType: up.blogType || null })
     }
 
     if (req.method === 'DELETE') {

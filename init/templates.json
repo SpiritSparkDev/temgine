@@ -28,5 +28,30 @@
     "name": "nav-main",
     "type": "BLOCK",
     "code": "<nav class=\"nav-main\">\n  <ul>\n    {{#items}}\n      <li><a href=\"{{url}}\">{{label}}</a></li>\n    {{/items}}\n  </ul>\n</nav>"
+  },
+  {
+    "name": "Blog Detail-Vorschau",
+    "type": "BLOCK",
+    "code": "<article class=\"blog-card blog-card--detail\">\n  {{#coverImage}}<a href=\"/{{channelSlug}}/{{slug}}\"><img class=\"blog-card__image\" src=\"{{{coverImage}}}\" alt=\"{{title}}\" loading=\"lazy\" /></a>{{/coverImage}}\n  <div class=\"blog-card__body\">\n    <h3 class=\"blog-card__title\"><a href=\"/{{channelSlug}}/{{slug}}\">{{title}}</a></h3>\n    {{#publishedAt}}<time class=\"blog-card__date\">{{publishedAt}}</time>{{/publishedAt}}\n    {{#excerpt}}<p class=\"blog-card__excerpt\">{{excerpt}}</p>{{/excerpt}}\n    <a class=\"blog-card__link\" href=\"/{{channelSlug}}/{{slug}}\">Weiterlesen →</a>\n  </div>\n</article>"
+  },
+  {
+    "name": "Blog Einfache Vorschau",
+    "type": "BLOCK",
+    "code": "<div class=\"blog-item blog-item--simple\">\n  <a class=\"blog-item__title\" href=\"/{{channelSlug}}/{{slug}}\">{{title}}</a>\n  {{#excerpt}}<span class=\"blog-item__excerpt\"> — {{excerpt}}</span>{{/excerpt}}\n</div>"
+  },
+  {
+    "name": "Blog Archiv-Eintrag",
+    "type": "BLOCK",
+    "code": "<li class=\"blog-archive__entry\">\n  {{#publishedAt}}<time class=\"blog-archive__date\">{{publishedAt}}</time>{{/publishedAt}}\n  <a class=\"blog-archive__title\" href=\"/{{channelSlug}}/{{slug}}\">{{title}}</a>\n</li>"
+  },
+  {
+    "name": "Blog Leseseite",
+    "type": "BLOCK",
+    "code": "<article class=\"blog-reading\">\n  <header class=\"blog-reading__header\">\n    <h1 class=\"blog-reading__title\">{{title}}</h1>\n    <div class=\"blog-reading__meta\">\n      {{#author}}<span class=\"blog-reading__author\">{{author}}</span>{{/author}}\n      {{#publishedAt}}<time class=\"blog-reading__date\">{{publishedAt}}</time>{{/publishedAt}}\n    </div>\n  </header>\n  {{#coverImage}}<img class=\"blog-reading__cover\" src=\"{{{coverImage}}}\" alt=\"{{title}}\" />{{/coverImage}}\n  <div class=\"blog-reading__body\">{{{body}}}</div>\n  <footer class=\"blog-reading__footer\">\n    <a href=\"/{{channel.slug}}\">← Zurück zur Übersicht</a>\n  </footer>\n</article>"
+  },
+  {
+    "name": "contact-form",
+    "type": "BLOCK",
+    "code": "<section class=\"block block-contact\">\n  {{#form_title}}<h2 class=\"contact-form__heading\">{{form_title}}</h2>{{/form_title}}\n  <form id=\"contact-form-block\" class=\"contact-form\" novalidate>\n    <div class=\"contact-form__field\">\n      <label for=\"cf-name\">Name *</label>\n      <input id=\"cf-name\" name=\"name\" type=\"text\" placeholder=\"Ihr Name\" required />\n    </div>\n    <div class=\"contact-form__field\">\n      <label for=\"cf-email\">E-Mail *</label>\n      <input id=\"cf-email\" name=\"email\" type=\"email\" placeholder=\"ihre@email.de\" required />\n    </div>\n    <div class=\"contact-form__field\">\n      <label for=\"cf-subject\">Betreff</label>\n      <input id=\"cf-subject\" name=\"subject\" type=\"text\" placeholder=\"Betreff\" />\n    </div>\n    <div class=\"contact-form__field\">\n      <label for=\"cf-message\">Nachricht *</label>\n      <textarea id=\"cf-message\" name=\"message\" rows=\"5\" placeholder=\"Ihre Nachricht\" required></textarea>\n    </div>\n    <button type=\"submit\" class=\"contact-form__btn\">{{#submit_label}}{{submit_label}}{{/submit_label}}{{^submit_label}}Senden{{/submit_label}}</button>\n    <div class=\"contact-form__status\" aria-live=\"polite\"></div>\n  </form>\n  <script>\n  (function() {\n    var form = document.getElementById('contact-form-block');\n    if (!form) return;\n    form.addEventListener('submit', function(e) {\n      e.preventDefault();\n      var statusEl = form.querySelector('.contact-form__status');\n      var btn = form.querySelector('button[type=submit]');\n      var data = {\n        name: (form.querySelector('[name=name]') || {}).value || '',\n        email: (form.querySelector('[name=email]') || {}).value || '',\n        subject: (form.querySelector('[name=subject]') || {}).value || '',\n        message: (form.querySelector('[name=message]') || {}).value || ''\n      };\n      btn.disabled = true;\n      statusEl.textContent = 'Wird gesendet…';\n      statusEl.style.color = '';\n      fetch('/api/contact', {\n        method: 'POST',\n        headers: { 'Content-Type': 'application/json' },\n        body: JSON.stringify(data)\n      })\n      .then(function(r) { return r.json(); })\n      .then(function(res) {\n        statusEl.textContent = res.message || '{{#success_message}}{{success_message}}{{/success_message}}{{^success_message}}Ihre Nachricht wurde gesendet. Danke!{{/success_message}}';\n        statusEl.style.color = 'green';\n        form.reset();\n        btn.disabled = false;\n      })\n      .catch(function() {\n        statusEl.textContent = 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';\n        statusEl.style.color = 'red';\n        btn.disabled = false;\n      });\n    });\n  })();\n  </script>\n</section>"
   }
 ]

@@ -27,6 +27,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [redirectType, setRedirectType] = useState('none');
   const [redirectUrl, setRedirectUrl] = useState('');
   const [isHomepage, setIsHomepage] = useState(false);
+  const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
+  const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
@@ -53,6 +55,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
+  const [blogChannels, setBlogChannels] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -157,6 +160,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialRedirectUrl = page.redirectUrl || '';
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
+      const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
 
       setTitle(page.title || '');
       setSlug(page.slug || '');
@@ -165,6 +169,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectType(initialRedirectType);
       setRedirectUrl(initialRedirectUrl);
       setIsHomepage(initialIsHomepage);
+      setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
 
       // Check if page needs DOM migration and migrate if necessary
@@ -388,6 +393,22 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     };
     loadFiles();
+  }, []);
+
+  useEffect(() => {
+    // Lade Blog-Kanäle für Blog-Channel-Blöcke
+    const loadBlogChannels = async () => {
+      try {
+        const res = await fetch('/api/blog/channels');
+        if (res.ok) {
+          const data = await res.json();
+          setBlogChannels(Array.isArray(data) ? data : (data.channels || []));
+        }
+      } catch (e) {
+        // Silently ignore — blog channels are optional
+      }
+    };
+    loadBlogChannels();
   }, []);
 
   useEffect(() => {
@@ -623,7 +644,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         ? { title: '', content: '' }
         : type === 'gallery'
           ? { images: [] }
-          : {}
+          : type === 'blog-channel'
+            ? { channelSlug: '', templateSlot: 'templateDetailPreview', postLimit: 6 }
+            : {}
     };
     setBlocks([...blocks, newBlock]);
   }
@@ -1069,6 +1092,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage,
+      accessGroups,
       status: pageStatus,
     };
 
@@ -1755,6 +1779,59 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Fallback simple text/gallery editors when no template */}
+          {/* Blog-Kanal block editor */}
+          {block.type === 'blog-channel' && (
+            <div className="blog-channel-editor">
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Kanal</label>
+                <select
+                  className="block-template-select"
+                  value={block.props.channelSlug || ''}
+                  onChange={e => updateNestedBlock(path, { channelSlug: e.target.value })}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <option value="">-- Kanal wählen --</option>
+                  {blogChannels.map(ch => (
+                    <option key={ch.id} value={ch.slug}>{ch.name} ({ch.slug})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Darstellung</label>
+                <select
+                  className="block-template-select"
+                  value={block.props.templateSlot || 'templateDetailPreview'}
+                  onChange={e => updateNestedBlock(path, { templateSlot: e.target.value })}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <option value="templateDetailPreview">Detail-Vorschau</option>
+                  <option value="templateSimplePreview">Einfache Vorschau</option>
+                  <option value="templateArchiveEntry">Archiv-Eintrag</option>
+                  <option value="templateReading">Leseseite</option>
+                </select>
+              </div>
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Max. Beiträge</label>
+                <input
+                  type="number"
+                  className="input-field-small"
+                  min={1}
+                  max={100}
+                  value={block.props.postLimit ?? 6}
+                  onChange={e => updateNestedBlock(path, { postLimit: parseInt(e.target.value, 10) || 6 })}
+                  onClick={e => e.stopPropagation()}
+                  style={{ width: 80 }}
+                />
+              </div>
+              {block.props.channelSlug && (
+                <div className="blog-channel-editor__preview">
+                  <span style={{ fontSize: 11, opacity: .6 }}>Kanal: </span>
+                  <code style={{ fontSize: 11 }}>/{block.props.channelSlug}</code>
+                </div>
+              )}
+            </div>
+          )}
+
           {!block.template && block.type === 'text' && (
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
@@ -2065,6 +2142,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <button
                       type="button"
                       className="pe-tb-btn"
+                      onClick={() => { const p = String((blocks || []).length); handleAddBlock('blog-channel'); setSelectedBlockPath(p); }}
+                      title={devTitle('Blog-Kanal-Block anlegen')}
+                    >
+                      <Plus size={13} /> Blog-Kanal
+                    </button>
+                    <button
+                      type="button"
+                      className="pe-tb-btn"
                       onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
                       title={devTitle('Unterblock anlegen')}
                     >
@@ -2170,6 +2255,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
                           Als Startseite
                         </label>
+                        {/* Access Control */}
+                        <AccessGroupsPanel
+                          accessGroups={accessGroups}
+                          onChange={setAccessGroups}
+                          availableGroups={availableMemberGroups}
+                          onLoadGroups={() => {
+                            if (availableMemberGroups.length === 0) {
+                              fetch('/api/admin/member-groups')
+                                .then(r => r.json())
+                                .then(d => setAvailableMemberGroups(Array.isArray(d) ? d : []))
+                                .catch(() => {});
+                            }
+                          }}
+                        />
                         <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
                         <input
                           type="text"
@@ -2619,6 +2718,68 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGroups }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const accessMode = accessGroups.length === 0
+    ? 'public'
+    : accessGroups[0] === '*'
+    ? 'all-members'
+    : 'specific';
+
+  function handleModeChange(mode) {
+    if (mode === 'public') onChange([]);
+    else if (mode === 'all-members') onChange(['*']);
+    else {
+      onLoadGroups();
+      onChange([]);
+    }
+    setExpanded(mode === 'specific');
+  }
+
+  function toggleGroup(slug) {
+    const current = accessGroups.filter(g => g !== '*');
+    if (current.includes(slug)) {
+      onChange(current.filter(g => g !== slug));
+    } else {
+      onChange([...current, slug]);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <label className="field-label-xs">Zugangskontrolle</label>
+      <select
+        className="input-field-small"
+        value={accessMode}
+        onChange={e => handleModeChange(e.target.value)}
+        aria-label="Zugangskontrolle"
+      >
+        <option value="public">Öffentlich (alle)</option>
+        <option value="all-members">Alle Mitglieder</option>
+        <option value="specific">Bestimmte Gruppen</option>
+      </select>
+      {accessMode === 'specific' && (
+        <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
+          {availableGroups.length === 0 && (
+            <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Keine Gruppen vorhanden.</span>
+          )}
+          {availableGroups.map(g => (
+            <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', marginBottom: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={accessGroups.includes(g.slug)}
+                onChange={() => toggleGroup(g.slug)}
+              />
+              {g.name}
+            </label>
+          ))}
         </div>
       )}
     </div>
