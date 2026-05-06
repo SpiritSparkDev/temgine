@@ -1,5 +1,54 @@
 /* Shared admin foundations: editors, tabs, forms, and generic preview surfaces. */
 
+/* ── TipTap / ProseMirror rich text editor ── */
+.ProseMirror {
+  color: var(--text-primary);
+  caret-color: var(--accent-primary);
+  outline: none;
+}
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--text-tertiary);
+  pointer-events: none;
+  float: left;
+  height: 0;
+  font-style: italic;
+}
+
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3,
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 {
+  color: var(--text-primary);
+}
+
+.ProseMirror a {
+  color: var(--accent-primary);
+}
+
+.ProseMirror code {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1px 4px;
+  font-size: 0.875em;
+  color: var(--text-primary);
+}
+
+.ProseMirror pre {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  color: var(--text-primary);
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent-primary);
+  padding-left: 12px;
+  color: var(--text-secondary);
+  margin-left: 0;
+}
+
 .ql-toolbar.ql-snow,
 .ql-container.ql-snow {
   border-color: var(--border-color) !important;

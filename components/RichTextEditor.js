@@ -26,6 +26,7 @@ export default function RichTextEditor({
   toolbar = ALL_TOOLBAR,
 }) {
   const editor = useEditor({
+    immediatelyRender: false,
     editable: !readOnly,
     extensions: [
       StarterKit,
@@ -91,19 +92,19 @@ export default function RichTextEditor({
       )}
       <EditorContent
         editor={editor}
-        style={{ padding: '8px', minHeight: '80px', outline: 'none' }}
+        style={{ padding: '8px', minHeight: '80px', outline: 'none', color: 'var(--text-primary)', background: 'var(--bg-secondary)', lineHeight: 1.6 }}
       />
       {!editor && placeholder && (
-        <div style={{ padding: '8px', color: '#9ca3af', fontStyle: 'italic' }}>{placeholder}</div>
+        <div style={{ padding: '8px', color: 'var(--text-tertiary)', fontStyle: 'italic' }}>{placeholder}</div>
       )}
     </div>
   );
 }
 
 const wrapStyle = {
-  border: '1px solid #d1d5db',
-  borderRadius: '4px',
-  background: 'white',
+  border: '1px solid var(--border-color)',
+  borderRadius: 'var(--radius-md)',
+  background: 'var(--bg-secondary)',
   overflow: 'hidden',
 };
 
@@ -112,17 +113,18 @@ const toolbarStyle = {
   flexWrap: 'wrap',
   gap: '2px',
   padding: '4px 6px',
-  background: '#f9fafb',
-  borderBottom: '1px solid #e5e7eb',
+  background: 'var(--bg-tertiary)',
+  borderBottom: '1px solid var(--border-color)',
 };
 
 const btnStyle = {
   padding: '2px 7px',
   fontSize: '0.8rem',
   fontWeight: 600,
-  background: 'white',
-  border: '1px solid #d1d5db',
-  borderRadius: '3px',
+  background: 'var(--bg-primary)',
+  color: 'var(--text-secondary)',
+  border: '1px solid var(--border-color)',
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   lineHeight: 1.4,
 };
@@ -130,7 +132,7 @@ const btnStyle = {
 const sepStyle = {
   display: 'inline-block',
   width: '1px',
-  background: '#d1d5db',
+  background: 'var(--border-color)',
   margin: '0 2px',
   alignSelf: 'stretch',
 };

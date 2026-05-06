@@ -1651,6 +1651,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (rowIdx === 0) return;
+                                  const next = [...rows];
+                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === 0}
+                                title="Nach oben verschieben"
+                              ><ChevronUp size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (rowIdx === rows.length - 1) return;
+                                  const next = [...rows];
+                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === rows.length - 1}
+                                title="Nach unten verschieben"
+                              ><ChevronDown size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   const copy = { ...row };
                                   const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
                                   updateNestedBlock(path, { [sectionName]: next });
@@ -1747,6 +1771,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           </div>
                         </div>
                       ))}
+                    </div>
+                    <div className="field-repeater-header">
+                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)} ende</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
+                        }}
+                        className="btn-modern-small repeater-add-btn"
+                        title={`Eintrag zu ${sectionName} hinzufügen`}
+                      >
+                        <Plus size={12} /> Eintrag hinzufügen
+                      </button>
                     </div>
                   </div>
                 );
