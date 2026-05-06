@@ -7,6 +7,8 @@ const {
   cleanHtml,
   generateTemplateName,
   generateTemplateFromHtml,
+  extractContentElements,
+  applyFieldExtractions,
 } = require('../lib/htmlImporter');
 
 describe('htmlImporter – guessBlockType', () => {
@@ -240,5 +242,142 @@ describe('htmlImporter – generateTemplateFromHtml', () => {
     expect(result.extractedProps.title).toBe('Our Services');
     expect(result.extractedProps.content).toContain('Service A');
     expect(result.extractedProps.content).toContain('Description A');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('htmlImporter – extractContentElements', () => {
+  test('returns empty array for empty input', () => {
+    expect(extractContentElements('')).toEqual([]);
+    expect(extractContentElements(null)).toEqual([]);
+  });
+
+  test('extracts a <p> element with suggestedName "text"', () => {
+    const elems = extractContentElements('<p>Hello world</p>');
+    expect(elems).toHaveLength(1);
+    expect(elems[0].tag).toBe('p');
+    expect(elems[0].textValue).toBe('Hello world');
+    expect(elems[0].suggestedName).toBe('text');
+    expect(elems[0].type).toBe('text');
+  });
+
+  test('auto-numbers duplicate base names', () => {
+    const elems = extractContentElements('<p>First</p><p>Second</p><p>Third</p>');
+    expect(elems[0].suggestedName).toBe('text');
+    expect(elems[1].suggestedName).toBe('text2');
+    expect(elems[2].suggestedName).toBe('text3');
+  });
+
+  test('extracts <h2> with suggestedName "subtitle"', () => {
+    const elems = extractContentElements('<h2 class="sub">Subtitle text</h2>');
+    expect(elems[0].tag).toBe('h2');
+    expect(elems[0].suggestedName).toBe('subtitle');
+    expect(elems[0].textValue).toBe('Subtitle text');
+  });
+
+  test('extracts <img> element with type "image" and imgSrc', () => {
+    const elems = extractContentElements('<img src="photo.jpg" alt="test">');
+    expect(elems).toHaveLength(1);
+    expect(elems[0].tag).toBe('img');
+    expect(elems[0].type).toBe('image');
+    expect(elems[0].imgSrc).toBe('photo.jpg');
+    expect(elems[0].suggestedName).toBe('image');
+  });
+
+  test('extracts <a> element with href', () => {
+    const elems = extractContentElements('<a href="/about">Learn more</a>');
+    expect(elems).toHaveLength(1);
+    expect(elems[0].tag).toBe('a');
+    expect(elems[0].type).toBe('link');
+    expect(elems[0].href).toBe('/about');
+    expect(elems[0].textValue).toBe('Learn more');
+  });
+
+  test('skips nested elements (only top-level)', () => {
+    // <p> contains <a> – should only return the <p>, not also the <a>
+    const elems = extractContentElements('<p>Text with <a href="/x">link</a> inside</p>');
+    expect(elems).toHaveLength(1);
+    expect(elems[0].tag).toBe('p');
+  });
+
+  test('returns outerHtml matching original', () => {
+    const html = '<p class="lead">Lead text</p>';
+    const elems = extractContentElements(html);
+    expect(elems[0].outerHtml).toBe(html);
+  });
+
+  test('handles mixed content with multiple element types', () => {
+    const html = '<h2>Title</h2><p>Text</p><img src="img.png"><a href="/link">Link</a>';
+    const elems = extractContentElements(html);
+    expect(elems).toHaveLength(4);
+    expect(elems.map(e => e.tag)).toEqual(['h2', 'p', 'img', 'a']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('htmlImporter – applyFieldExtractions', () => {
+  const baseTemplate = '<section><h2>{{title}}</h2>{{{content}}}</section>';
+  const baseContent = '<p class="lead">Lead paragraph</p><p>Second paragraph</p>';
+
+  test('returns unchanged values when no extractions selected', () => {
+    const result = applyFieldExtractions(baseTemplate, baseContent, []);
+    expect(result.newCode).toBe(baseTemplate);
+    expect(result.newContentHtml).toBe(baseContent);
+    expect(result.newProps).toEqual({});
+  });
+
+  test('extracts a <p> into a named field', () => {
+    const elems = extractContentElements(baseContent);
+    const withSelection = [
+      { ...elems[0], fieldName: 'lead', selected: true },
+      ...elems.slice(1),
+    ];
+    const result = applyFieldExtractions(baseTemplate, baseContent, withSelection);
+    // prop set
+    expect(result.newProps.lead).toBe('Lead paragraph');
+    // element removed from content
+    expect(result.newContentHtml).not.toContain('Lead paragraph');
+    expect(result.newContentHtml).toContain('Second paragraph');
+    // snippet inserted before {{{content}}}
+    expect(result.newCode).toContain('{{#lead}}');
+    expect(result.newCode).toContain('{{/lead}}');
+    expect(result.newCode).toContain('{{{content}}}');
+  });
+
+  test('extracts an <img> into a named field', () => {
+    const content = '<img src="hero.jpg" alt="hero">';
+    const template = '<div>{{{content}}}</div>';
+    const elems = extractContentElements(content);
+    const withSelection = [{ ...elems[0], fieldName: 'heroImg', selected: true }];
+    const result = applyFieldExtractions(template, content, withSelection);
+    expect(result.newProps.heroImg).toBe('hero.jpg');
+    expect(result.newCode).toContain('{{#heroImg}}');
+    expect(result.newCode).toContain('{{heroImg}}');
+    // content became empty → placeholder removed
+    expect(result.newCode).not.toContain('{{{content}}}');
+  });
+
+  test('respects fieldName rename', () => {
+    const elems = extractContentElements('<h2>Subtitle</h2>');
+    const withSelection = [{ ...elems[0], fieldName: 'mySubtitle', selected: true }];
+    const result = applyFieldExtractions(baseTemplate, '<h2>Subtitle</h2>', withSelection);
+    expect(result.newProps.mySubtitle).toBe('Subtitle');
+    expect(result.newCode).toContain('{{#mySubtitle}}');
+    expect(result.newCode).toContain('{{/mySubtitle}}');
+  });
+
+  test('skips extractions where selected is false', () => {
+    const elems = extractContentElements(baseContent);
+    const notSelected = elems.map(e => ({ ...e, selected: false }));
+    const result = applyFieldExtractions(baseTemplate, baseContent, notSelected);
+    expect(result.newProps).toEqual({});
+    expect(result.newContentHtml).toBe(baseContent);
+  });
+
+  test('skips extractions where fieldName is empty', () => {
+    const elems = extractContentElements(baseContent);
+    const emptyName = [{ ...elems[0], fieldName: '', selected: true }];
+    const result = applyFieldExtractions(baseTemplate, baseContent, emptyName);
+    expect(result.newProps).toEqual({});
   });
 });
