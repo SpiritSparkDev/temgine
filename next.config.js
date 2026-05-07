@@ -58,6 +58,7 @@ const cmPackages = [
 
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   async headers() {
     return [
       {
