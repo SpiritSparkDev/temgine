@@ -9,8 +9,9 @@ const isDev = process.env.NODE_ENV === 'development';
 const securityHeaders = [
   // Verhindert Clickjacking
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-  // Verhindert MIME-Type-Sniffing
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // Verhindert MIME-Type-Sniffing (nur in Produktion; in Next.js-Dev
+  // wird _clientMiddlewareManifest.js als application/json ausgeliefert).
+  ...(isDev ? [] : [{ key: 'X-Content-Type-Options', value: 'nosniff' }]),
   // Verhindert Referrer-Leakage bei cross-origin Navigation
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Aktiviert HTTPS-Enforcing (nur in Produktion sinnvoll, aber schadet nicht)
