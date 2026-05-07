@@ -189,6 +189,15 @@ export default function Login({ providers }) {
 }
 
 export async function getServerSideProps(context) {
+  // Redirect to /setup if no users exist yet
+  try {
+    const { prisma } = await import('../lib/prisma');
+    const count = await prisma.user.count();
+    if (count === 0) {
+      return { redirect: { destination: '/setup', permanent: false } };
+    }
+  } catch (_) {}
+
   const providers = await getProviders();
   return {
     props: { providers: providers || {} },
