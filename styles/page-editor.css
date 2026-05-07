@@ -664,6 +664,49 @@
   cursor: not-allowed;
 }
 
+.block-item.is-hidden {
+  opacity: 0.68;
+}
+
+.block-item.is-collapsed .block-header {
+  border-bottom: none;
+}
+
+.block-item.is-collapsed .block-title-row::before {
+  content: 'Minimiert';
+  margin-right: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.block-item-lightbox {
+  margin-bottom: 0;
+  box-shadow: none;
+}
+
+.block-item.is-hidden .block-header {
+  border-bottom-color: color-mix(in srgb, var(--danger-color, #e11d48) 35%, var(--border-color));
+}
+
+.block-item.is-hidden .block-title-row::after {
+  content: 'Ausgeblendet';
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--danger-color, #e11d48);
+}
+
+.block-hidden-toggle.active {
+  background: color-mix(in srgb, var(--danger-color, #e11d48) 70%, transparent);
+  border-color: var(--danger-color, #e11d48);
+  color: #fff;
+}
+
 .block-card-body {
   padding: 8px 10px;
 }
@@ -1692,6 +1735,74 @@
   border: none;
   background: #fff;
   display: block;
+}
+
+/* ── Block Lightbox ─────────────────────────────────────────────── */
+.block-lightbox-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  pointer-events: none;
+}
+
+.block-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.68);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  pointer-events: auto;
+}
+
+.block-lightbox {
+  width: min(1100px, 96vw);
+  max-height: 88vh;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.block-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.block-lightbox-label {
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.block-lightbox-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.block-lightbox-close:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.block-lightbox-body {
+  overflow: auto;
+  padding: 12px;
+  min-height: 0;
 }
 
 /* ─── File Modal ─── */

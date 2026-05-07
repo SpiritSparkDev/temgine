@@ -37,6 +37,9 @@ export default async function handler(req, res) {
       if (!block || typeof block !== 'object') return block
 
       const next = { ...block }
+      if (next.hidden !== undefined) {
+        next.hidden = Boolean(next.hidden)
+      }
       if (next.props && typeof next.props === 'object') {
         next.props = sanitizeRecursive(next.props)
       }

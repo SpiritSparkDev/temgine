@@ -69,7 +69,7 @@ export function parseTemplateStructure(code, options = {}) {
   return nodes;
 }
 
-function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick, activeSlot }) {
+function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick, activeSlot, hiddenBlockPaths }) {
   if (node.type === 'slot-group') {
     const slotName = node.slotName;
     const isActiveSlot = Boolean(slotName) && slotName === String(activeSlot || '').trim();
@@ -101,6 +101,7 @@ function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick
                 onBlockClick={onBlockClick}
                 onSlotClick={onSlotClick}
                 activeSlot={activeSlot}
+                hiddenBlockPaths={hiddenBlockPaths}
               />
             ))
           )}
@@ -110,6 +111,9 @@ function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick
   }
 
   // type === 'block'
+  if (hiddenBlockPaths && hiddenBlockPaths.has(String(node.path))) {
+    return null;
+  }
   const isActive = String(node.path) === String(activeBlockPath || '');
   const isClickable = Boolean(node.path !== undefined) && typeof onBlockClick === 'function';
   return (
@@ -135,6 +139,7 @@ function BlockNode({ node, depth = 0, activeBlockPath, onBlockClick, onSlotClick
               onBlockClick={onBlockClick}
               onSlotClick={onSlotClick}
               activeSlot={activeSlot}
+              hiddenBlockPaths={hiddenBlockPaths}
             />
           ))}
         </div>
@@ -150,6 +155,7 @@ export default function TemplateStructurePreview({
   slotUsage = {},
   onSlotClick = null,
   blocks = [],
+  hiddenBlockPaths = null,
   activeBlockPath = '',
   onBlockClick = null,
   previewClassName = ''
@@ -170,6 +176,7 @@ export default function TemplateStructurePreview({
             onBlockClick={onBlockClick}
             onSlotClick={onSlotClick}
             activeSlot={activeSlot}
+            hiddenBlockPaths={hiddenBlockPaths}
           />
         ))
       )}

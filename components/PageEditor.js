@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Maximize2, X } from 'lucide-react';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Monitor, Minimize2, Maximize2, X } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
@@ -40,6 +40,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
+  const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
@@ -52,6 +53,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [pageStatus, setPageStatus] = useState((page?.status || 'DRAFT').toUpperCase());
   const [previewBlocks, setPreviewBlocks] = useState(() => new Set());
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
+  const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
+  const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
@@ -171,6 +174,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
+      setCollapsedBlocks(new Set());
+      setLightboxBlockPath('');
 
       // Check if page needs DOM migration and migrate if necessary
       if (pageNeedsMigration(page)) {
@@ -448,6 +453,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [expandedField]);
+
+  // Escape key closes block lightbox
+  useEffect(() => {
+    if (!lightboxBlockPath) return;
+    const handleKey = (e) => { if (e.key === 'Escape') setLightboxBlockPath(''); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [lightboxBlockPath]);
 
   // Auto-rebuild split preview (debounced 600ms) when content changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -843,6 +856,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setBlocks(copy);
   }
 
+  const toggleNestedBlockHidden = (path) => {
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        cur[idx].hidden = !Boolean(cur[idx].hidden);
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
+  }
+
+  const toggleCollapsedBlock = (path) => {
+    setCollapsedBlocks(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
   const getBlockAtPath = (path) => {
     if (!path && path !== '0') return null;
     const parts = String(path).split('.').map(p => parseInt(p, 10));
@@ -880,6 +917,25 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   };
 
   const flattenedBlocks = useMemo(() => flattenBlocks(blocks), [blocks]);
+
+  const hiddenOutlinePaths = useMemo(() => {
+    if (!outlineVisibleOnly) return new Set();
+    const hidden = new Set();
+    const collect = (items = [], prefix = '') => {
+      (items || []).forEach((item, idx) => {
+        const path = prefix ? `${prefix}.${idx}` : String(idx);
+        if (item?.hidden) {
+          hidden.add(path);
+          return;
+        }
+        if (Array.isArray(item?.children) && item.children.length > 0) {
+          collect(item.children, path);
+        }
+      });
+    };
+    collect(blocks || []);
+    return hidden;
+  }, [outlineVisibleOnly, blocks]);
 
   const outlineFieldEntries = useMemo(() => (
     flattenedBlocks.flatMap(({ path, block, depth }) =>
@@ -1298,8 +1354,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   handleRedoRef.current = handleRedo;
 
   // Render helpers for nested block editor
-  const renderBlockEditor = (block, path, depth = 0) => {
-    const isTop = depth === 0;
+  const renderBlockEditor = (block, path, depth = 0, options = {}) => {
+    const inLightbox = !!options.inLightbox;
+    const isTop = depth === 0 && !inLightbox;
+    const isCollapsed = collapsedBlocks.has(path);
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
     const templateGroups = block.template ? (templateGroupsByName[block.template] || []) : [];
     const hasGroupedContainers = templateGroups.some(g => g.isGroup && g.vars.length >= 2);
@@ -1351,16 +1409,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return (
       <div
         key={path}
-        ref={(el) => {
+        ref={inLightbox ? undefined : ((el) => {
           if (el) {
             blockNodeRefs.current[path] = el;
           } else {
             delete blockNodeRefs.current[path];
           }
-        }}
+        })}
         data-block-path={path}
-        className={`block-item${selectedBlockPath === path ? ' selected' : ''}`}
-        style={{ marginLeft: depth * 16 }}
+        className={`block-item${selectedBlockPath === path ? ' selected' : ''}${block?.hidden ? ' is-hidden' : ''}${isCollapsed ? ' is-collapsed' : ''}${inLightbox ? ' block-item-lightbox' : ''}`}
+        style={{ marginLeft: inLightbox ? 0 : depth * 16 }}
         onClick={() => setSelectedBlockPath(path)}
         title={devTitle(`Komponente: Block ${formatBlockNumber(path)}. Funktion: Block auswaehlen und Inhalte bearbeiten.`)}
         {...containerProps}
@@ -1432,7 +1490,34 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <ChevronRight size={12} /></button>
                   <button type="button" className={`block-move-btn${previewBlocks.has(path) ? ' active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); toggleBlockPreview(path); }} title="Inline-Vorschau">
-                    <Eye size={12} /></button>
+                    <Monitor size={12} /></button>
+                  <button
+                    type="button"
+                    className={`block-move-btn${block?.hidden ? ' active block-hidden-toggle' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); toggleNestedBlockHidden(path); }}
+                    title={block?.hidden ? 'Block einblenden' : 'Block ausblenden'}
+                    aria-label={block?.hidden ? 'Block einblenden' : 'Block ausblenden'}
+                  >
+                    {block?.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    className={`block-move-btn${isCollapsed ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); toggleCollapsedBlock(path); }}
+                    title={isCollapsed ? 'Block maximieren' : 'Block minimieren'}
+                    aria-label={isCollapsed ? 'Block maximieren' : 'Block minimieren'}
+                  >
+                    {isCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); setLightboxBlockPath(path); setSelectedBlockPath(path); }}
+                    title="Block in Lightbox bearbeiten"
+                    aria-label="Block in Lightbox bearbeiten"
+                  >
+                    <LayoutGrid size={12} />
+                  </button>
                 </div>
               );
             })()}
@@ -1443,7 +1528,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         </div>
 
         {/* Block Content */}
-        <div className="block-card-body">
+        {!isCollapsed && <div className="block-card-body">
           {/* Template specific fields (reuse existing logic) */}
           {block.template && templateCodes[block.template] && (
             <div>
@@ -1894,11 +1979,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Render children editors recursively */}
-          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1))}
+          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1, options))}
         </div>
+        }
 
         {/* Inline block preview */}
-        {previewBlocks.has(path) && (
+        {!isCollapsed && previewBlocks.has(path) && (
           <div className="block-inline-preview-wrap">
             <div className="block-inline-preview-head">
               <span className="block-inline-preview-label">Vorschau</span>
@@ -2366,7 +2452,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     {!outlineCollapsed.has('outline-structure') && (
                       <div className="page-editor-outline-structure">
-                        <TemplateStructurePreview blocks={blocks} activeBlockPath={selectedBlockPath} onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null} />
+                        <label className="page-editor-outline-toggle" style={{ marginBottom: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={outlineVisibleOnly}
+                            onChange={e => setOutlineVisibleOnly(e.target.checked)}
+                          />
+                          Nur sichtbare Blöcke anzeigen
+                        </label>
+                        <TemplateStructurePreview
+                          blocks={blocks}
+                          hiddenBlockPaths={hiddenOutlinePaths}
+                          activeBlockPath={selectedBlockPath}
+                          onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
+                        />
                       </div>
                     )}
                   </div>
@@ -2423,6 +2522,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
       )}
+
+      {lightboxBlockPath && typeof window !== 'undefined' && (() => {
+        const lightboxBlock = getBlockAtPath(lightboxBlockPath);
+        if (!lightboxBlock) return null;
+        return createPortal(
+          <div className={`admin-scope${adminScopeRef.current?.closest('.dark-mode') ? ' dark-mode' : ''} block-lightbox-portal`} onClick={() => setLightboxBlockPath('')}>
+            <div className="block-lightbox-overlay" onClick={() => setLightboxBlockPath('')}>
+              <div className="block-lightbox" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Block bearbeiten">
+                <div className="block-lightbox-header">
+                  <strong className="block-lightbox-label">Block #{formatBlockNumber(lightboxBlockPath)} bearbeiten</strong>
+                  <button type="button" className="block-lightbox-close" onClick={() => setLightboxBlockPath('')} aria-label="Schließen">✕</button>
+                </div>
+                <div className="block-lightbox-body">
+                  {renderBlockEditor(lightboxBlock, lightboxBlockPath, 0, { inLightbox: true })}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Field Expand Lightbox */}
       <span ref={adminScopeRef} style={{display:'none'}} />
