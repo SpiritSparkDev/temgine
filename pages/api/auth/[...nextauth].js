@@ -21,20 +21,31 @@ export const authOptions = {
         if (!username || !password) return null;
         
         try {
+          // Case-insensitive lookup: setup stores email as lowercase,
+          // but user might type it with capitals on the login form.
           const user = await prisma.user.findFirst({
             where: {
               password: { not: null },
-              OR: [{ email: username }, { name: username }],
+              OR: [
+                { email: { equals: username, mode: 'insensitive' } },
+                { name: { equals: username, mode: 'insensitive' } },
+              ],
             },
             select: { id: true, name: true, email: true, password: true, role: true },
           });
 
-          if (!user?.password) return null;
+          if (!user?.password) {
+            console.error('[auth] User not found for username:', username);
+            return null;
+          }
 
           const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
           if (user.password === hashedPassword) {
             return { id: user.id, name: user.name, email: user.email, role: user.role, accountType: 'admin' };
           }
+          console.error('[auth] Password mismatch for user:', user.email,
+            '| stored:', user.password.slice(0, 8) + '…',
+            '| computed:', hashedPassword.slice(0, 8) + '…');
         } catch (error) {
           console.error('Admin auth error:', error);
         }
