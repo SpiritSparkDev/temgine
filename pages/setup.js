@@ -83,6 +83,7 @@ export default function SetupPage({ hasUsers }) {
               value={token}
               onChange={e => setToken(e.target.value)}
               placeholder="Aus .env.local: SETUP_TOKEN"
+              autoComplete="off"
               required
             />
           </Field>
@@ -93,6 +94,7 @@ export default function SetupPage({ hasUsers }) {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Admin"
+              autoComplete="name"
               required
             />
           </Field>
@@ -103,6 +105,7 @@ export default function SetupPage({ hasUsers }) {
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="admin@example.com"
+              autoComplete="email"
               required
             />
           </Field>
@@ -113,6 +116,7 @@ export default function SetupPage({ hasUsers }) {
               value={password}
               onChange={e => setPassword(e.target.value)}
               minLength={8}
+              autoComplete="new-password"
               required
             />
           </Field>
@@ -123,6 +127,7 @@ export default function SetupPage({ hasUsers }) {
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               minLength={8}
+              autoComplete="new-password"
               required
             />
           </Field>
