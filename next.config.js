@@ -20,7 +20,7 @@ const securityHeaders = [
   // Verhindert Adobe-Flash und PDF-Cross-Site-Zugriffe
   { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
   // Permissions Policy: deaktiviert nicht benötigte Browser-APIs
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   // Content-Security-Policy – moderat: erlaubt inline scripts für Next.js und CodeMirror
   {
     key: 'Content-Security-Policy',
