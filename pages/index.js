@@ -8,6 +8,42 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [homePage, setHomePage] = useState(null)
 
+  const defaultNoHomepageHtml = '<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>'
+  const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
+
+  const checkMaintenanceMode = async () => {
+    try {
+      const res = await fetch('/api/settings')
+      if (!res.ok) return false
+      const settings = await res.json()
+      return settings?.maintenance_mode_enabled === 'true'
+    } catch (_) {
+      return false
+    }
+  }
+
+  const loadNoHomepageHtml = async () => {
+    try {
+      const res = await fetch('/api/settings')
+      if (!res.ok) return defaultNoHomepageHtml
+      const settings = await res.json()
+      return settings?.maintenance_no_homepage_html || defaultNoHomepageHtml
+    } catch (_) {
+      return defaultNoHomepageHtml
+    }
+  }
+
+  const load503Html = async () => {
+    try {
+      const res = await fetch('/api/settings')
+      if (!res.ok) return default503Html
+      const settings = await res.json()
+      return settings?.maintenance_503_html || default503Html
+    } catch (_) {
+      return default503Html
+    }
+  }
+
   useEffect(() => {
     setLoading(true)
     
@@ -18,6 +54,15 @@ export default function Home() {
     fetch(pagesUrl)
       .then(r => r.json())
       .then(async pages => {
+        // Prüfe zuerst Wartungsmodus
+        const isMaintenanceMode = await checkMaintenanceMode()
+        if (isMaintenanceMode) {
+          const maintenance503Html = await load503Html()
+          setHtml(maintenance503Html)
+          setLoading(false)
+          return
+        }
+
         if (!Array.isArray(pages)) {
           console.error('Pages ist kein Array!')
           setLoading(false)
@@ -39,7 +84,8 @@ export default function Home() {
         }
 
         if (!homePage) {
-          setHtml('<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>')
+          const noHomepageHtml = await loadNoHomepageHtml()
+          setHtml(noHomepageHtml)
           setLoading(false)
           return
         }

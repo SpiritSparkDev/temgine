@@ -11,11 +11,14 @@ import {
     RefreshCw,
     Upload,
     XCircle,
+    AlertTriangle,
 } from 'lucide-react';
 
 export default function DashboardView({ templateList, pages, setView, showToast }) {
     const [dbHealth, setDbHealth] = useState(null);
     const [dbLoading, setDbLoading] = useState(true);
+    const [maintenanceModeEnabled, setMaintenanceModeEnabled] = useState(false);
+    const [maintenanceModeLoading, setMaintenanceModeLoading] = useState(true);
 
     const blockTemplateCount = templateList.filter(template => template.type === 'BLOCK').length;
     const recentPages = pages.slice(0, 6);
@@ -76,6 +79,7 @@ export default function DashboardView({ templateList, pages, setView, showToast 
 
     useEffect(() => {
         checkDatabaseHealth();
+        loadMaintenanceMode();
         // Alle 30 Sekunden aktualisieren
         const interval = setInterval(checkDatabaseHealth, 30000);
         return () => clearInterval(interval);
@@ -90,6 +94,46 @@ export default function DashboardView({ templateList, pages, setView, showToast 
             setDbHealth({ status: 'error', connected: false, error: error.message });
         } finally {
             setDbLoading(false);
+        }
+    };
+
+    const loadMaintenanceMode = async () => {
+        try {
+            const res = await fetch('/api/settings');
+            if (res.ok) {
+                const settings = await res.json();
+                setMaintenanceModeEnabled(settings?.maintenance_mode_enabled === 'true');
+            }
+        } catch (e) {
+            console.error('Error loading maintenance mode:', e);
+        } finally {
+            setMaintenanceModeLoading(false);
+        }
+    };
+
+    const toggleMaintenanceMode = async () => {
+        const newState = !maintenanceModeEnabled;
+        setMaintenanceModeEnabled(newState);
+        
+        try {
+            const res = await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    key: 'maintenance_mode_enabled',
+                    value: String(newState),
+                }),
+            });
+            if (!res.ok) throw new Error('Fehler beim Speichern');
+            if (typeof showToast === 'function') {
+                showToast(
+                    newState ? 'Wartungsmodus aktiviert' : 'Wartungsmodus deaktiviert',
+                    'success'
+                );
+            }
+        } catch (e) {
+            setMaintenanceModeEnabled(!newState);
+            if (typeof showToast === 'function') showToast('Fehler beim Speichern: ' + e.message, 'error');
         }
     };
 
@@ -234,6 +278,45 @@ export default function DashboardView({ templateList, pages, setView, showToast 
                                 Import DB
                                 <input id="db-import-input" type="file" accept="application/json" className="dashboard-hidden-input" onChange={(e) => handleImportFile(e)} />
                             </label>
+                        </div>
+                    </article>
+
+                    <article className="dashboard-panel">
+                        <div className="dashboard-panel-head">
+                            <div>
+                                <span className="dashboard-panel-kicker">System</span>
+                                <h3>Wartungsmodus</h3>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem', background: maintenanceModeEnabled ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', borderRadius: '8px', border: `1px solid ${maintenanceModeEnabled ? '#fca5a5' : '#86efac'}` }}>
+                            <div style={{ flex: 1 }}>
+                                <strong style={{ display: 'block', marginBottom: '0.25rem', color: maintenanceModeEnabled ? '#dc2626' : '#16a34a' }}>
+                                    {maintenanceModeEnabled ? 'Wartungsmodus aktiv' : 'Wartungsmodus aus'}
+                                </strong>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {maintenanceModeEnabled
+                                        ? 'Die Website zeigt 503-Seite für alle Besucher'
+                                        : 'Website läuft normal'}
+                                </p>
+                            </div>
+                            <button
+                                onClick={toggleMaintenanceMode}
+                                disabled={maintenanceModeLoading}
+                                style={{
+                                    padding: '0.6rem 1.25rem',
+                                    background: maintenanceModeEnabled ? '#ef4444' : '#22c55e',
+                                    color: '#fff',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    fontWeight: 600,
+                                    cursor: maintenanceModeLoading ? 'not-allowed' : 'pointer',
+                                    opacity: maintenanceModeLoading ? 0.6 : 1,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {maintenanceModeEnabled ? 'Deaktivieren' : 'Aktivieren'}
+                            </button>
                         </div>
                     </article>
 

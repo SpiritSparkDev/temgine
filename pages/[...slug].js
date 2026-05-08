@@ -12,6 +12,42 @@ export default function PageCatchAll() {
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
 
+  const default404Html = '<div style="padding: 40px; text-align: center;"><h1>Seite nicht gefunden</h1></div>'
+  const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
+
+  const checkMaintenanceMode = async () => {
+    try {
+      const settingsRes = await fetch('/api/settings')
+      if (!settingsRes.ok) return false
+      const settings = await settingsRes.json()
+      return settings?.maintenance_mode_enabled === 'true'
+    } catch (_) {
+      return false
+    }
+  }
+
+  const loadMaintenance404Html = async () => {
+    try {
+      const settingsRes = await fetch('/api/settings')
+      if (!settingsRes.ok) return default404Html
+      const settings = await settingsRes.json()
+      return settings?.maintenance_404_html || default404Html
+    } catch (_) {
+      return default404Html
+    }
+  }
+
+  const load503Html = async () => {
+    try {
+      const settingsRes = await fetch('/api/settings')
+      if (!settingsRes.ok) return default503Html
+      const settings = await settingsRes.json()
+      return settings?.maintenance_503_html || default503Html
+    } catch (_) {
+      return default503Html
+    }
+  }
+
   useEffect(() => {
     const raw = query.slug
     if (raw === undefined) return
@@ -23,6 +59,16 @@ export default function PageCatchAll() {
     (async () => {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
+
+    // Prüfe zuerst Wartungsmodus
+    const isMaintenanceMode = await checkMaintenanceMode()
+    if (isMaintenanceMode) {
+      const maintenance503Html = await load503Html()
+      setPage({ title: '503', data: {} })
+      setHtml(maintenance503Html)
+      setLoading(false)
+      return
+    }
 
     // ── Blog routing: check if the first segment matches a BlogChannel slug ──
     // Pattern: /[channelSlug]/[postSlug] → reading page
@@ -95,7 +141,13 @@ export default function PageCatchAll() {
           return null
         }
         foundPage = find404Page(pages)
-        if (!foundPage) { setPage(null); setLoading(false); return }
+        if (!foundPage) {
+          const maintenance404Html = await loadMaintenance404Html()
+          setPage({ title: '404', data: {} })
+          setHtml(maintenance404Html)
+          setLoading(false)
+          return
+        }
       }
 
       setPage(foundPage)

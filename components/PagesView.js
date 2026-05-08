@@ -15,9 +15,54 @@ export default function PagesView({
   onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
+  const [pagesTab, setPagesTab] = useState('pages'); // 'pages' or 'maintenance'
+  const [maintenance404Html, setMaintenance404Html] = useState('');
+  const [maintenance503Html, setMaintenance503Html] = useState('');
+  const [maintenanceNoHomepageHtml, setMaintenanceNoHomepageHtml] = useState('');
+  const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
+  const [maintenanceLoaded, setMaintenanceLoaded] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
+  };
+
+  const loadMaintenancePages = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (!res.ok) return;
+      const settings = await res.json();
+      setMaintenance404Html(settings?.maintenance_404_html || '');
+      setMaintenance503Html(settings?.maintenance_503_html || '');
+      setMaintenanceNoHomepageHtml(settings?.maintenance_no_homepage_html || '');
+      setMaintenanceLoaded(true);
+    } catch (e) {
+      console.error('Error loading maintenance pages:', e);
+    }
+  };
+
+  const handleSaveMaintenance = async () => {
+    setIsSavingMaintenance(true);
+    const pairs = [
+      ['maintenance_404_html', maintenance404Html],
+      ['maintenance_503_html', maintenance503Html],
+      ['maintenance_no_homepage_html', maintenanceNoHomepageHtml],
+    ];
+
+    try {
+      for (const [key, value] of pairs) {
+        const r = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Fehler');
+      }
+      showToast('Maintenance-Seiten gespeichert', 'success');
+    } catch (e) {
+      showToast('Fehler beim Speichern: ' + e.message, 'error');
+    } finally {
+      setIsSavingMaintenance(false);
+    }
   };
 
   return (
@@ -29,8 +74,49 @@ export default function PagesView({
           onClose={() => setToast(null)} 
         />
       )}
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', paddingLeft: '1rem', marginBottom: '1rem' }}>
+        <button 
+          style={{
+            padding: '0.5rem 1.25rem',
+            border: 'none',
+            borderBottom: pagesTab === 'pages' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+            background: 'transparent',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            color: pagesTab === 'pages' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            marginBottom: '-2px',
+            transition: 'color 0.15s, border-color 0.15s',
+          }}
+          onClick={() => setPagesTab('pages')}
+        >
+          Seiten
+        </button>
+        <button 
+          style={{
+            padding: '0.5rem 1.25rem',
+            border: 'none',
+            borderBottom: pagesTab === 'maintenance' ? '2px solid var(--accent-primary)' : '2px solid transparent',
+            background: 'transparent',
+            cursor: 'pointer',
+            fontWeight: 600,
+            fontSize: '0.9rem',
+            color: pagesTab === 'maintenance' ? 'var(--accent-primary)' : 'var(--text-secondary)',
+            marginBottom: '-2px',
+            transition: 'color 0.15s, border-color 0.15s',
+          }}
+          onClick={() => {
+            setPagesTab('maintenance');
+            if (!maintenanceLoaded) loadMaintenancePages();
+          }}
+        >
+          Maintenance Seiten
+        </button>
+      </div>
       
-      {editingPage ? (
+      {pagesTab === 'pages' && editingPage ? (
         <PageEditor 
           page={editingPage} 
           templates={templateList}
@@ -112,7 +198,7 @@ export default function PagesView({
             setEditingPage(null);
           }}
         />
-      ) : (
+      ) : pagesTab === 'pages' ? (
         <PageTreeEditor 
           pages={pages} 
           onSelect={(id) => {
@@ -131,6 +217,110 @@ export default function PagesView({
           userRole={userRole}
           onRefreshPages={onRefreshPages}
         />
+      ) : (
+        <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
+          <h2 style={{ marginBottom: '1.5rem' }}>Maintenance Seiten</h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              HTML-Inhalte für Fallback-Seiten. Diese Inhalte werden direkt gerendert.
+            </p>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                404 Seite (Nicht gefunden)
+              </label>
+              <textarea
+                value={maintenance404Html}
+                onChange={e => setMaintenance404Html(e.target.value)}
+                placeholder="<h1>Seite nicht gefunden</h1>"
+                rows={8}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  boxSizing: 'border-box',
+                  minHeight: '180px',
+                  resize: 'vertical',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                503 Seite (Service nicht verfügbar)
+              </label>
+              <textarea
+                value={maintenance503Html}
+                onChange={e => setMaintenance503Html(e.target.value)}
+                placeholder="<h1>Wartungsarbeiten</h1>"
+                rows={8}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  boxSizing: 'border-box',
+                  minHeight: '180px',
+                  resize: 'vertical',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Keine Startseite gefunden
+              </label>
+              <textarea
+                value={maintenanceNoHomepageHtml}
+                onChange={e => setMaintenanceNoHomepageHtml(e.target.value)}
+                placeholder="<h1>Keine Startseite gefunden</h1>"
+                rows={8}
+                style={{
+                  width: '100%',
+                  padding: '0.55rem 0.75rem',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  fontSize: '0.9rem',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  boxSizing: 'border-box',
+                  minHeight: '180px',
+                  resize: 'vertical',
+                  fontFamily: 'monospace',
+                }}
+              />
+            </div>
+
+            <div>
+              <button
+                onClick={handleSaveMaintenance}
+                disabled={isSavingMaintenance}
+                style={{
+                  padding: '0.6rem 1.5rem',
+                  background: '#10b981',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: isSavingMaintenance ? 'not-allowed' : 'pointer',
+                  opacity: isSavingMaintenance ? 0.6 : 1,
+                }}
+              >
+                {isSavingMaintenance ? 'Speichern…' : 'Maintenance Seiten speichern'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
