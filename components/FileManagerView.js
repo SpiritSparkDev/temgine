@@ -208,7 +208,7 @@ export default function FileManagerView({ showToast }) {
   }
 
   // Upload-Verarbeitung via XHR mit Fortschritt
-  async function processFileList(fileList, asImage = false, neverOptimize = false) {
+  async function processFileList(fileList) {
     const filesArray = Array.from(fileList);
     const entries = filesArray.map(f => ({
       id:       Math.random().toString(36).slice(2),
@@ -272,15 +272,12 @@ export default function FileManagerView({ showToast }) {
         const updateProgress = (p) =>
           setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, progress: p } : e));
         try {
-          const useImage = !neverOptimize && (asImage || (file.type && file.type.startsWith('image/')));
           const formData = new FormData();
           formData.append('file', file);
           if (file.webkitRelativePath || file.relativePath) {
             formData.append('relativePath', file.webkitRelativePath || file.relativePath);
           }
-          const url = useImage
-            ? '/api/images/process'
-            : `/api/files${currentFolder ? `?folder=${encodeURIComponent(currentFolder)}` : ''}`;
+          const url = `/api/files${currentFolder ? `?folder=${encodeURIComponent(currentFolder)}` : ''}`;
           await xhrUpload(url, formData, updateProgress);
           setUploadQueue(prev => prev.map(e => e.id === id ? { ...e, done: true, progress: 100 } : e));
         } catch (err) {
@@ -298,17 +295,17 @@ export default function FileManagerView({ showToast }) {
   }
 
   function handleFileInputChange(e) {
-    if (e.target.files?.length) processFileList(e.target.files, false);
+    if (e.target.files?.length) processFileList(e.target.files);
     e.target.value = '';
   }
 
   function handleImageInputChange(e) {
-    if (e.target.files?.length) processFileList(e.target.files, true);
+    if (e.target.files?.length) processFileList(e.target.files);
     e.target.value = '';
   }
 
   function handleFolderInputChange(e) {
-    if (e.target.files?.length) processFileList(e.target.files, false, true);
+    if (e.target.files?.length) processFileList(e.target.files);
     e.target.value = '';
   }
 
@@ -388,7 +385,7 @@ export default function FileManagerView({ showToast }) {
     setDragging(false);
     const dropped = await collectDroppedFiles(e.dataTransfer);
     if (dropped?.length) {
-      processFileList(dropped, false, true);
+      processFileList(dropped);
     }
   }, [currentFolder, folderDragDropEnabled]);
 
