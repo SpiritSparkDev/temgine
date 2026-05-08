@@ -11,6 +11,33 @@ export default function Home() {
   const defaultNoHomepageHtml = '<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>'
   const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
 
+  const loadActiveCssLinks = async () => {
+    try {
+      const cssRes = await fetch('/api/css')
+      if (!cssRes.ok) return ''
+      const cssData = await cssRes.json()
+      const files = Array.isArray(cssData?.files) ? cssData.files : []
+      return files
+        .filter(f => f && f.enabled !== false && f.href)
+        .map(f => `<link rel="stylesheet" href="${String(f.href).replace(/"/g, '&quot;')}">`)
+        .join('\n')
+    } catch (_) {
+      return ''
+    }
+  }
+
+  const injectCssLinks = (sourceHtml, cssLinks) => {
+    if (!cssLinks) return sourceHtml
+    const value = String(sourceHtml || '')
+    if (/<\/head>/i.test(value)) {
+      return value.replace(/<\/head>/i, `${cssLinks}\n</head>`)
+    }
+    if (/<body[^>]*>/i.test(value)) {
+      return value.replace(/<body([^>]*)>/i, `<body$1>${cssLinks}`)
+    }
+    return `${cssLinks}${value}`
+  }
+
   const checkMaintenanceMode = async () => {
     try {
       const res = await fetch('/api/settings')
@@ -58,7 +85,8 @@ export default function Home() {
         const isMaintenanceMode = await checkMaintenanceMode()
         if (isMaintenanceMode) {
           const maintenance503Html = await load503Html()
-          setHtml(maintenance503Html)
+          const cssLinks = await loadActiveCssLinks()
+          setHtml(injectCssLinks(maintenance503Html, cssLinks))
           setLoading(false)
           return
         }
@@ -85,7 +113,8 @@ export default function Home() {
 
         if (!homePage) {
           const noHomepageHtml = await loadNoHomepageHtml()
-          setHtml(noHomepageHtml)
+          const cssLinks = await loadActiveCssLinks()
+          setHtml(injectCssLinks(noHomepageHtml, cssLinks))
           setLoading(false)
           return
         }

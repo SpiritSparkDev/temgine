@@ -15,6 +15,33 @@ export default function PageCatchAll() {
   const default404Html = '<div style="padding: 40px; text-align: center;"><h1>Seite nicht gefunden</h1></div>'
   const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
 
+  const loadActiveCssLinks = async () => {
+    try {
+      const cssRes = await fetch('/api/css')
+      if (!cssRes.ok) return ''
+      const cssData = await cssRes.json()
+      const files = Array.isArray(cssData?.files) ? cssData.files : []
+      return files
+        .filter(f => f && f.enabled !== false && f.href)
+        .map(f => `<link rel="stylesheet" href="${String(f.href).replace(/"/g, '&quot;')}">`)
+        .join('\n')
+    } catch (_) {
+      return ''
+    }
+  }
+
+  const injectCssLinks = (sourceHtml, cssLinks) => {
+    if (!cssLinks) return sourceHtml
+    const value = String(sourceHtml || '')
+    if (/<\/head>/i.test(value)) {
+      return value.replace(/<\/head>/i, `${cssLinks}\n</head>`)
+    }
+    if (/<body[^>]*>/i.test(value)) {
+      return value.replace(/<body([^>]*)>/i, `<body$1>${cssLinks}`)
+    }
+    return `${cssLinks}${value}`
+  }
+
   const checkMaintenanceMode = async () => {
     try {
       const settingsRes = await fetch('/api/settings')
@@ -64,8 +91,9 @@ export default function PageCatchAll() {
     const isMaintenanceMode = await checkMaintenanceMode()
     if (isMaintenanceMode) {
       const maintenance503Html = await load503Html()
+      const cssLinks = await loadActiveCssLinks()
       setPage({ title: '503', data: {} })
-      setHtml(maintenance503Html)
+      setHtml(injectCssLinks(maintenance503Html, cssLinks))
       setLoading(false)
       return
     }
@@ -143,8 +171,9 @@ export default function PageCatchAll() {
         foundPage = find404Page(pages)
         if (!foundPage) {
           const maintenance404Html = await loadMaintenance404Html()
+          const cssLinks = await loadActiveCssLinks()
           setPage({ title: '404', data: {} })
-          setHtml(maintenance404Html)
+          setHtml(injectCssLinks(maintenance404Html, cssLinks))
           setLoading(false)
           return
         }
