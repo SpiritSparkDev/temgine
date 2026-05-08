@@ -27,19 +27,58 @@ function resolveSafeDir(folderParam) {
   return { resolved, safe };
 }
 
+function normalizeUploadSegment(input) {
+  return String(input || '')
+    .normalize('NFC')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae')
+    .replace(/Ö/g, 'Oe')
+    .replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._\-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 function sanitizeRelativePath(relativePath) {
   const normalized = String(relativePath || '')
     .replace(/\\/g, '/')
     .split('/')
     .filter(Boolean)
     .filter((part) => part !== '.' && part !== '..')
-    .map((part) => part.replace(/[^a-zA-Z0-9._\-\u00C0-\u024F ]/g, '_'));
+    .map((part) => normalizeUploadSegment(part));
 
   if (normalized.length === 0) return { relativeDir: '', filename: '' };
 
   const filename = normalized[normalized.length - 1];
   const relativeDir = normalized.slice(0, -1).join('/');
   return { relativeDir, filename };
+}
+
+function getUniqueFilename(dir, preferredName, options = {}) {
+  const { reservedNames = null, ignorePath = '' } = options;
+  const parsed = path.parse(preferredName || 'upload');
+  const baseName = parsed.name || 'upload';
+  const extension = parsed.ext || '';
+  const ignoredAbs = ignorePath ? path.resolve(ignorePath) : '';
+
+  let counter = 1;
+  let candidate = `${baseName}${extension}`;
+
+  while (true) {
+    const abs = path.join(dir, candidate);
+    const existsOnDisk = fs.existsSync(abs) && path.resolve(abs) !== ignoredAbs;
+    const existsInBatch = reservedNames ? reservedNames.has(candidate) : false;
+    if (!existsOnDisk && !existsInBatch) {
+      if (reservedNames) reservedNames.add(candidate);
+      return candidate;
+    }
+    counter += 1;
+    candidate = `${baseName}_${counter}${extension}`;
+  }
 }
 
 export default async function handler(req, res) {
@@ -137,15 +176,18 @@ export default async function handler(req, res) {
       }
     }
 
+    const reservedRootNames = new Set();
     const form = formidable({
       uploadDir: targetUploadDir,
       multiples: true,
       keepExtensions: true,
       maxFileSize: 10 * 1024 * 1024, // 10MB
       filename: (name, ext, part) => {
-        // Bereinige Dateinamen, Originalname bleibt erhalten
-        return (part.originalFilename || 'upload')
-          .replace(/[^a-zA-Z0-9._\-\u00C0-\u024F]/g, '_');
+        const originalName = part.originalFilename || 'upload';
+        const parsed = path.parse(originalName);
+        const base = normalizeUploadSegment(parsed.name) || 'upload';
+        const extension = normalizeUploadSegment(parsed.ext).replace(/_/g, '') || ext || '';
+        return getUniqueFilename(targetUploadDir, `${base}${extension}`, { reservedNames: reservedRootNames });
       }
     });
 
@@ -189,7 +231,11 @@ export default async function handler(req, res) {
           }
           fs.mkdirSync(nestedTargetDir, { recursive: true });
 
-          const finalName = filename || path.basename(uploadedFile.filepath);
+          const finalName = getUniqueFilename(
+            nestedTargetDir,
+            filename || path.basename(uploadedFile.filepath),
+            { ignorePath: uploadedFile.filepath }
+          );
           const finalPath = path.join(nestedTargetDir, finalName);
           fs.renameSync(uploadedFile.filepath, finalPath);
           uploadedFile.filepath = finalPath;
