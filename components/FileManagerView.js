@@ -886,7 +886,7 @@ export default function FileManagerView({ showToast }) {
                 <button className="icon-btn-small" onClick={() => setMetaModalFile(file)} title="Metadaten bearbeiten">
                   <Tag size={14} />
                 </button>
-                <a href={file.url} download className="icon-btn-small" title="Herunterladen">
+                <a href={`/api/files/download?url=${encodeURIComponent(file.url)}`} download={file.name} className="icon-btn-small" title="Herunterladen">
                   <Download size={14} />
                 </a>
                 <button className="icon-btn-small delete" onClick={() => handleDelete(file.url)} title="Löschen">
