@@ -1,6 +1,7 @@
 ﻿import fs from 'fs';
 import path from 'path';
 import formidable from 'formidable';
+import { prisma } from '../../lib/prisma';
 import { rateLimit } from '../../lib/rateLimit';
 
 export const config = {
@@ -79,6 +80,129 @@ function getUniqueFilename(dir, preferredName, options = {}) {
     counter += 1;
     candidate = `${baseName}_${counter}${extension}`;
   }
+}
+
+function parseJsonBody(req) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      let body = '';
+      for await (const chunk of req) {
+        body += chunk.toString();
+      }
+      resolve(body ? JSON.parse(body) : {});
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function toUploadUrl(relativePath) {
+  const normalized = String(relativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  return `/uploads/${normalized}`;
+}
+
+function normalizeUploadFilename(input) {
+  const parsed = path.parse(String(input || ''));
+  const base = normalizeUploadSegment(parsed.name) || 'upload';
+  const extension = normalizeUploadSegment(parsed.ext).replace(/_/g, '') || parsed.ext || '';
+  return `${base}${extension}`;
+}
+
+function repairFilenamesRecursive(absDir, oldRelativeDir = '', newRelativeDir = '') {
+  const result = {
+    renamedFiles: 0,
+    renamedFolders: 0,
+    mappings: [],
+  };
+
+  const entries = fs.readdirSync(absDir, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name, 'de', { sensitivity: 'base' }));
+
+  for (const entry of entries) {
+    const oldName = entry.name;
+    const oldAbsPath = path.join(absDir, oldName);
+    const oldRelativePath = [oldRelativeDir, oldName].filter(Boolean).join('/');
+
+    if (entry.isDirectory()) {
+      const preferredDirName = normalizeUploadSegment(oldName) || 'ordner';
+      const nextDirName = getUniqueFilename(absDir, preferredDirName, { ignorePath: oldAbsPath });
+      const nextAbsPath = path.join(absDir, nextDirName);
+      const nextRelativePath = [newRelativeDir, nextDirName].filter(Boolean).join('/');
+
+      if (nextDirName !== oldName) {
+        fs.renameSync(oldAbsPath, nextAbsPath);
+        result.renamedFolders += 1;
+      }
+
+      const childResult = repairFilenamesRecursive(nextAbsPath, oldRelativePath, nextRelativePath);
+      result.renamedFiles += childResult.renamedFiles;
+      result.renamedFolders += childResult.renamedFolders;
+      result.mappings.push(...childResult.mappings);
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+
+    const preferredFileName = normalizeUploadFilename(oldName);
+    const nextFileName = getUniqueFilename(absDir, preferredFileName, { ignorePath: oldAbsPath });
+    const nextAbsPath = path.join(absDir, nextFileName);
+    const nextRelativePath = [newRelativeDir, nextFileName].filter(Boolean).join('/');
+
+    if (nextFileName !== oldName) {
+      fs.renameSync(oldAbsPath, nextAbsPath);
+      result.renamedFiles += 1;
+    }
+
+    if (oldRelativePath !== nextRelativePath) {
+      result.mappings.push({
+        oldUrl: toUploadUrl(oldRelativePath),
+        newUrl: toUploadUrl(nextRelativePath),
+      });
+    }
+  }
+
+  return result;
+}
+
+async function syncMetadataUrls(mappings = []) {
+  let updated = 0;
+  const uniqueMappings = [];
+  const seen = new Set();
+
+  for (const item of mappings) {
+    const key = `${item.oldUrl}=>${item.newUrl}`;
+    if (!item?.oldUrl || !item?.newUrl || item.oldUrl === item.newUrl || seen.has(key)) continue;
+    seen.add(key);
+    uniqueMappings.push(item);
+  }
+
+  for (const { oldUrl, newUrl } of uniqueMappings) {
+    const existing = await prisma.fileMetadata.findUnique({ where: { url: oldUrl } });
+    if (!existing) continue;
+
+    const target = await prisma.fileMetadata.findUnique({ where: { url: newUrl } });
+    if (target) {
+      await prisma.fileMetadata.update({
+        where: { url: newUrl },
+        data: {
+          altText: target.altText || existing.altText,
+          copyright: target.copyright || existing.copyright,
+          caption: target.caption || existing.caption,
+        },
+      });
+      await prisma.fileMetadata.delete({ where: { url: oldUrl } });
+      updated += 1;
+      continue;
+    }
+
+    await prisma.fileMetadata.update({
+      where: { url: oldUrl },
+      data: { url: newUrl },
+    });
+    updated += 1;
+  }
+
+  return updated;
 }
 
 export default async function handler(req, res) {
@@ -259,6 +383,30 @@ export default async function handler(req, res) {
       });
     } catch (_e) {
       return res.status(400).json({ error: 'Ordnerpfad konnte nicht verarbeitet werden' });
+    }
+  } else if (req.method === 'PATCH') {
+    try {
+      const body = await parseJsonBody(req);
+      if (body?.action !== 'repair-filenames') {
+        return res.status(400).json({ error: 'Ungültige Aktion' });
+      }
+
+      const { resolved: targetDir, safe: folderPath } = resolveSafeDir(body.folder || '');
+      if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: 'Ordner nicht gefunden' });
+      }
+
+      const result = repairFilenamesRecursive(targetDir, folderPath, folderPath);
+      const metadataUpdated = await syncMetadataUrls(result.mappings);
+
+      return res.status(200).json({
+        success: true,
+        renamedFiles: result.renamedFiles,
+        renamedFolders: result.renamedFolders,
+        metadataUpdated,
+      });
+    } catch (error) {
+      return res.status(500).json({ error: 'Dateinamen konnten nicht repariert werden: ' + error.message });
     }
   } else if (req.method === 'PUT') {
     // Ordner erstellen

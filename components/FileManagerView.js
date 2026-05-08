@@ -110,6 +110,7 @@ export default function FileManagerView({ showToast }) {
   const [metadataMap, setMetadataMap] = useState({});
   const [metaModalFile, setMetaModalFile] = useState(null);
   const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
+  const [isRepairingNames, setIsRepairingNames] = useState(false);
 
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
@@ -462,6 +463,41 @@ export default function FileManagerView({ showToast }) {
     showToast('URL kopiert', 'success');
   }
 
+  async function handleRepairBrokenNames() {
+    const folderLabel = currentFolder || 'uploads';
+    if (!confirm(`Defekte Datei- und Ordnernamen in "${folderLabel}" und allen Unterordnern reparieren?`)) return;
+
+    setIsRepairingNames(true);
+    try {
+      const res = await fetch('/api/files', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'repair-filenames', folder: currentFolder })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Dateinamen konnten nicht repariert werden', 'error');
+        return;
+      }
+
+      await loadFiles();
+      const renamedTotal = Number(data.renamedFiles || 0) + Number(data.renamedFolders || 0);
+      if (renamedTotal === 0) {
+        showToast('Keine defekten Dateinamen gefunden', 'success');
+        return;
+      }
+
+      showToast(
+        `${data.renamedFiles || 0} Datei(en), ${data.renamedFolders || 0} Ordner und ${data.metadataUpdated || 0} Metadaten aktualisiert`,
+        'success'
+      );
+    } catch (error) {
+      showToast('Fehler: ' + error.message, 'error');
+    } finally {
+      setIsRepairingNames(false);
+    }
+  }
+
   function formatFileSize(bytes) {
     if (!bytes || bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -539,6 +575,17 @@ export default function FileManagerView({ showToast }) {
           >
             <CheckSquare size={16} />
             Auswahl
+          </button>
+
+          <button
+            className="btn-secondary"
+            onClick={handleRepairBrokenNames}
+            disabled={isRepairingNames}
+            title="Aktuellen Ordner und Unterordner nach defekten Namen durchsuchen und reparieren"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: isRepairingNames ? 0.7 : 1, cursor: isRepairingNames ? 'wait' : 'pointer' }}
+          >
+            <FileText size={16} />
+            {isRepairingNames ? 'Repariere Namen…' : 'Dateinamen reparieren'}
           </button>
 
           <label className="btn-primary upload-btn" title="Mehrere Dateien möglich">
