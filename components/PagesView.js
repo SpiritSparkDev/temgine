@@ -154,11 +154,22 @@ export default function PagesView({
                 setEditingPage(null);
               } else if (!isSilent && opts.view === true) {
                 // Versuche, die Seite in einem bestehenden Tab zu fokussieren oder öffne einen neuen
-                const pageUrl = `/${updatedPage.slug}`;
+                const findPagePathById = (nodes, targetId, parentPath = '') => {
+                  for (const node of nodes || []) {
+                    const currentPath = parentPath ? `${parentPath}/${node.slug}` : node.slug;
+                    if (node.id === targetId) return currentPath;
+                    const nested = findPagePathById(node.children || [], targetId, currentPath);
+                    if (nested) return nested;
+                  }
+                  return '';
+                };
+
+                const fullPath = findPagePathById(updated, updatedPage.id);
+                const pageUrl = `/${fullPath || updatedPage.slug}`;
                 let opened = false;
                 try {
                   // window.open mit dem gleichen Namen kann existierende Fenster reuse
-                  const safeName = `page_${updatedPage.slug.replace(/[^a-z0-9]/gi, '_')}`;
+                  const safeName = `page_${(fullPath || updatedPage.slug).replace(/[^a-z0-9]/gi, '_')}`;
                   const newWindow = window.open(pageUrl, safeName);
                   if (newWindow) {
                     // Erzwinge ein Reload, um sicherzustellen, dass die neue Version angezeigt wird
