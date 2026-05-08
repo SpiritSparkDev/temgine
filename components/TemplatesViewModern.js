@@ -590,6 +590,7 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'BLOCK' }));
       }
+      list = list.filter(t => !t.blogType);
       const order = Array.isArray(orderData.order) ? orderData.order : [];
       if (order.length > 0) {
         const ordered = [];

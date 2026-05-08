@@ -46,6 +46,7 @@ export default function TemplatesView({
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'SITE' }));
       }
+      list = list.filter(t => !t.blogType);
       console.log('Geladene Templates:', list);
       setAllTemplates(list || []);
     } catch (error) {

@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronUp,
   CheckSquare,
+  Copy,
   Edit,
   Eye,
   EyeOff,
@@ -14,6 +15,7 @@ import {
   Search,
   Square,
   Trash2,
+  Users,
 } from 'lucide-react';
 import Toast from './Toast';
 import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
@@ -56,7 +58,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     return filterNodes(tree);
   }, [searchTerm, tree]);
 
-  function handleAdd(parentId = null) {
+  async function handleAdd(parentId = null) {
     const id = Math.random().toString(36).substr(2, 9);
     const makeSlug = (text) => {
       return String(text || 'neue-seite')
@@ -71,15 +73,98 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
-      onUpdate && onUpdate(updated);
+      if (onUpdate) await onUpdate(updated);
     } else {
       const addChild = (nodes) => nodes.map(n => n.id === parentId ? { ...n, children: [...(n.children || []), newPage] } : { ...n, children: addChild(n.children || []) });
       const updated = addChild(tree);
       setTree(updated);
-      onUpdate && onUpdate(updated);
+      if (onUpdate) await onUpdate(updated);
     }
     setNewTitle('');
     setNewNavigation('');
+    // Reload tree from DB so node.id matches the real CUID assigned by Prisma.
+    // Without this, publish/workflow calls fail with 404 because they send the
+    // temporary random frontend-ID instead of the actual DB record ID.
+    if (onRefreshPages) await onRefreshPages();
+  }
+
+  async function handleDuplicate(nodeId) {
+    const findNode = (nodes) => {
+      for (const n of nodes) {
+        if (n.id === nodeId) return n;
+        const found = findNode(n.children || []);
+        if (found) return found;
+      }
+    };
+    const source = findNode(tree);
+    if (!source) return;
+
+    const makeSlug = (text) =>
+      String(text || 'seite')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-');
+
+    const deepClone = (node) => ({
+      ...JSON.parse(JSON.stringify(node)),
+      id: Math.random().toString(36).substr(2, 9),
+      slug: makeSlug(node.slug + '-kopie'),
+      title: node.title + ' (Kopie)',
+      status: 'DRAFT',
+      children: (node.children || []).map(deepClone),
+    });
+
+    const duplicate = deepClone(source);
+
+    // Insert duplicate directly after source at the same level
+    const insertAfter = (nodes) => {
+      const idx = nodes.findIndex(n => n.id === nodeId);
+      if (idx !== -1) {
+        const updated = [...nodes];
+        updated.splice(idx + 1, 0, duplicate);
+        return updated;
+      }
+      return nodes.map(n => ({ ...n, children: insertAfter(n.children || []) }));
+    };
+
+    const updated = insertAfter(tree);
+    setTree(updated);
+    if (onUpdate) await onUpdate(updated);
+    if (onRefreshPages) await onRefreshPages();
+    setToast({ message: `"${source.title}" dupliziert.`, type: 'success' });
+  }
+
+  async function handleAddSibling(nodeId) {
+    const id = Math.random().toString(36).substr(2, 9);
+    const makeSlug = (text) =>
+      String(text || 'neue-seite')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')
+        .replace(/-+/g, '-');
+    const title = newTitle || 'Neue Seite';
+    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
+
+    // Insert sibling directly after nodeId at the same level
+    const insertAfter = (nodes) => {
+      const idx = nodes.findIndex(n => n.id === nodeId);
+      if (idx !== -1) {
+        const updated = [...nodes];
+        updated.splice(idx + 1, 0, newPage);
+        return updated;
+      }
+      return nodes.map(n => ({ ...n, children: insertAfter(n.children || []) }));
+    };
+
+    const updated = insertAfter(tree);
+    setTree(updated);
+    if (onUpdate) await onUpdate(updated);
+    setNewTitle('');
+    setNewNavigation('');
+    if (onRefreshPages) await onRefreshPages();
   }
 
   function handleDelete(id) {
@@ -168,15 +253,39 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     // Zielstatus: PUBLISHED → DRAFT, alles andere → PUBLISHED
     const targetStatus = node.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
 
+    // Helper: update status in tree and persist via onUpdate (used for child pages
+    // that have no own DB row and therefore can't go through the workflow endpoint)
+    const applyStatusLocally = async () => {
+      const updateTree = (nodes) => nodes.map(n =>
+        n.id === nodeId
+          ? { ...n, status: targetStatus }
+          : { ...n, children: updateTree(n.children || []) }
+      );
+      const updatedTree = updateTree(tree);
+      setTree(updatedTree);
+      if (onUpdate) await onUpdate(updatedTree);
+      if (onRefreshPages) await onRefreshPages();
+      setToast({
+        message: `Status geändert: ${STATUS_LABELS[targetStatus] || targetStatus}`,
+        type: 'success',
+      });
+    };
+
     try {
       const res = await fetch('/api/pages/workflow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pageId: node.id, toStatus: targetStatus }),
+        body: JSON.stringify({ pageId: node.id, slug: node.slug, toStatus: targetStatus }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setToast({ message: data.error || 'Statuswechsel fehlgeschlagen.', type: 'error' });
+        if (res.status === 404) {
+          // Page has no own DB row (child page stored in parent's children JSON).
+          // Fall back to updating the status in the tree and saving via onUpdate.
+          await applyStatusLocally();
+        } else {
+          setToast({ message: data.error || 'Statuswechsel fehlgeschlagen.', type: 'error' });
+        }
       } else {
         setToast({
           message: `Status geändert: ${STATUS_LABELS[targetStatus] || targetStatus}`,
@@ -186,7 +295,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
         if (onRefreshPages) {
           await onRefreshPages();
         } else {
-          // Fallback: lokalen Baum aktualisieren
           const updateTree = (nodes) => nodes.map(n =>
             n.id === nodeId
               ? { ...n, status: targetStatus }
@@ -478,6 +586,22 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                       aria-label={`Unterseite unter ${node.title} hinzufügen`}
                     >
                       <Plus size={15} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleAddSibling(node.id)}
+                      title="Geschwisterseite hinzufügen"
+                      aria-label={`Geschwisterseite neben ${node.title} hinzufügen`}
+                    >
+                      <Users size={15} />
+                    </button>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleDuplicate(node.id)}
+                      title="Duplizieren"
+                      aria-label={`${node.title} duplizieren`}
+                    >
+                      <Copy size={15} />
                     </button>
                   </div>
                   <div className="card-btn-group">

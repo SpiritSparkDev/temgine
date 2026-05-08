@@ -91,21 +91,21 @@ export default function Home() {
           if (navRes.ok) {
             const activeNavs = await navRes.json()
             if (Array.isArray(activeNavs)) {
-              const flatPages = []
-              const flattenPages = (nodes, parentPath = '', depth = 0) => {
-                for (const n of nodes) {
-                  const fullPath = parentPath ? `${parentPath}/${n.slug}` : n.slug
-                  flatPages.push({ slug: fullPath, title: n.title, depth })
-                  if (n.children && n.children.length > 0) flattenPages(n.children, fullPath, depth + 1)
-                }
-              }
-              flattenPages(pages)
+              const buildNestedPages = (nodes, parentPath = '') =>
+                (nodes || [])
+                  .filter(n => n.status === 'PUBLISHED' || n.isHomepage)
+                  .map(n => {
+                    const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
+                    const children = buildNestedPages(n.children || [], slug)
+                    return { slug, title: n.title, hasChildren: children.length > 0, children }
+                  })
+              const nestedPages = buildNestedPages(pages)
 
               const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
 
               for (const nav of activeNavs) {
                 const key = String(nav.type).toLowerCase()
-                const data = key === 'page' ? { anchors } : { pages: flatPages }
+                const data = key === 'page' ? { anchors } : { pages: nestedPages }
                 navigations[key] = { code: nav.code, data }
               }
 
@@ -116,7 +116,7 @@ export default function Home() {
                   if (pageNavRes.ok) {
                     const pageNavData = await pageNavRes.json()
                     if (pageNavData && pageNavData.code) {
-                      navigations['main'] = { code: pageNavData.code, data: { pages: flatPages } }
+                      navigations['main'] = { code: pageNavData.code, data: { pages: nestedPages } }
                     }
                   }
                 } catch (e) {

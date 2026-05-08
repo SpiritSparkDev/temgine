@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma'
+import { prisma } from '../../../lib/prisma'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -20,11 +20,14 @@ export default async function handler(req, res) {
         return res.status(200).json({ name: t.name, code: t.code, type: t.type })
       }
 
-      // List template names (keeps compatibility) — return array of names
-        // List templates with type information
-        const templates = await prisma.template.findMany({ orderBy: { createdAt: 'asc' } })
-        const list = templates.map(t => ({ name: t.name, type: t.type }))
-        return res.status(200).json(list)
+      // List templates with explicit field selection.
+      // This avoids runtime 500 when local DB schema lags behind optional columns.
+      const templates = await prisma.template.findMany({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true, code: true, type: true },
+      })
+      const list = templates.map(t => ({ id: t.id, name: t.name, code: t.code, type: t.type }))
+      return res.status(200).json(list)
     }
 
     if (req.method === 'POST') {
@@ -41,9 +44,10 @@ export default async function handler(req, res) {
       const up = await prisma.template.upsert({
         where: { name: String(name) },
         create: { name: String(name), code: String(code), type: ttype },
-        update: { code: String(code), type: ttype }
+        update: { code: String(code), type: ttype },
+        select: { id: true, name: true, code: true, type: true },
       })
-      return res.status(200).json({ ok: true, id: up.id })
+      return res.status(200).json({ ok: true, id: up.id, name: up.name, code: up.code, type: up.type })
     }
 
     if (req.method === 'DELETE') {

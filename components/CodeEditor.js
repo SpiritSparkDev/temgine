@@ -1,11 +1,31 @@
 import React, { useEffect, useRef, useState } from 'react'
-import MonacoEditor from '@monaco-editor/react'
+import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from '@codemirror/view'
+import { EditorState, Compartment } from '@codemirror/state'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { autocompletion, completionKeymap, closeBrackets } from '@codemirror/autocomplete'
+import { html } from '@codemirror/lang-html'
+import { css } from '@codemirror/lang-css'
+import { javascript } from '@codemirror/lang-javascript'
+import { oneDark } from '@codemirror/theme-one-dark'
 import { registerEditorApi } from '../lib/insertHelper'
 
+const languageExtension = (lang) => {
+  if (lang === 'css') return css()
+  if (lang === 'javascript') return javascript()
+  return html() // default: html
+}
+
 export default function CodeEditor({ value = '', onChange = () => {}, language = 'html', height = '400px', options = {}, registerInserter = null }) {
-  const editorRef = useRef(null)
-  const apiRef = useRef(null)
+  const containerRef = useRef(null)
+  const viewRef = useRef(null)
+  const onChangeRef = useRef(onChange)
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const isDarkRef = useRef(isDarkMode)
+  const themeCompartment = useRef(new Compartment())
+  const apiRef = useRef(null)
+
+  // Keep onChange ref fresh
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   // Detect dark mode by observing the nearest .admin-scope element's class list
   useEffect(() => {
@@ -14,7 +34,14 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
     const getScope = () => document.querySelector('.admin-scope')
     const syncDarkMode = () => {
       const scope = getScope()
-      setIsDarkMode(scope ? scope.classList.contains('dark-mode') : false)
+      const dark = scope ? scope.classList.contains('dark-mode') : false
+      setIsDarkMode(dark)
+      isDarkRef.current = dark
+      if (viewRef.current) {
+        viewRef.current.dispatch({
+          effects: themeCompartment.current.reconfigure(dark ? oneDark : []),
+        })
+      }
     }
 
     syncDarkMode()
@@ -26,76 +53,100 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
     return () => observer.disconnect()
   }, [])
 
-  function handleMount(editor, monaco) {
-    editorRef.current = editor
+  // Build the editor once the container is mounted
+  useEffect(() => {
+    if (!containerRef.current) return
 
-    // Keep Monaco's hidden keyboard textarea non-visible and non-resizable,
-    // without touching the rendered cursor layer.
-    try {
-      const input = editor.getDomNode()?.querySelector('textarea.inputarea')
-      if (input) {
-        input.style.resize = 'none'
-        input.style.boxShadow = 'none'
+    const updateListener = EditorView.updateListener.of((update) => {
+      if (update.docChanged) {
+        onChangeRef.current(update.state.doc.toString())
       }
-    } catch (e) {}
+    })
+
+    const focusExt = EditorView.domEventHandlers({
+      focus() {
+        try { if (apiRef.current) window.__temgine_active_editor = apiRef.current } catch (e) {}
+      },
+      blur() {
+        try {
+          if (window.__temgine_active_editor === apiRef.current) window.__temgine_active_editor = null
+        } catch (e) {}
+      },
+    })
+
+    const state = EditorState.create({
+      doc: value,
+      extensions: [
+        lineNumbers(),
+        highlightActiveLine(),
+        highlightActiveLineGutter(),
+        drawSelection(),
+        history(),
+        closeBrackets(),
+        autocompletion(),
+        keymap.of([...defaultKeymap, ...historyKeymap, ...completionKeymap, indentWithTab]),
+        EditorView.lineWrapping,
+        languageExtension(language),
+        themeCompartment.current.of(isDarkRef.current ? oneDark : []),
+        EditorView.theme({
+          '&': { height: '100%', fontSize: '14px', fontFamily: 'monospace' },
+          '.cm-scroller': { overflow: 'auto' },
+        }),
+        updateListener,
+        focusExt,
+      ],
+    })
+
+    const view = new EditorView({ state, parent: containerRef.current })
+    viewRef.current = view
+
     const api = {
       insert(text) {
         try {
-          const model = editor.getModel()
-          const selection = editor.getSelection()
-          if (!model || !selection) return false
-          editor.executeEdits('insert', [{ range: selection, text, forceMoveMarkers: true }])
-          editor.focus()
+          const { state: s, dispatch } = view
+          const range = s.selection.main
+          dispatch(s.update({
+            changes: { from: range.from, to: range.to, insert: text },
+            selection: { anchor: range.from + text.length },
+          }))
+          view.focus()
           return true
         } catch (e) { return false }
       },
       async insertAsync(text) { return api.insert(text) },
-      focus() { try { editor.focus() } catch (e) {} }
+      focus() { try { view.focus() } catch (e) {} },
     }
 
     try { if (typeof registerInserter === 'function') registerInserter(api) } catch (e) {}
     try { registerEditorApi(api) } catch (e) {}
     apiRef.current = api
 
-    editor.onDidFocusEditorWidget(() => {
-      try { window.__temgine_active_editor = api } catch (e) {}
-    })
-    editor.onDidBlurEditorWidget(() => {
-      try {
-        if (window.__temgine_active_editor === api) window.__temgine_active_editor = null
-      } catch (e) {}
-    })
-  }
+    return () => {
+      view.destroy()
+      viewRef.current = null
+    }
+    // Only run on mount — value & language changes handled separately below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language])
 
-  const monacoOptions = {
-    fontSize: 14,
-    lineHeight: 22,
-    fontFamily: 'monospace',
-    minimap: { enabled: false },
-    quickSuggestions: true,
-    suggestOnTriggerCharacters: true,
-    tabCompletion: 'on',
-    wordWrap: 'on',
-    tabSize: 2,
-    scrollBeyondLastLine: false,
-    padding: { top: 10, bottom: 10 },
-    automaticLayout: true,
-    ...options,
-  }
+  // Sync value from outside (only when it differs from current doc)
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const current = view.state.doc.toString()
+    if (current !== value) {
+      view.dispatch({
+        changes: { from: 0, to: current.length, insert: value },
+      })
+    }
+  }, [value])
 
   return (
-    <div className="codeeditor-wrapper" style={{ height }}>
-      <MonacoEditor
-        height="100%"
-        language={language}
-        value={value}
-        theme={isDarkMode ? 'vs-dark' : 'vs'}
-        options={monacoOptions}
-        onMount={handleMount}
-        onChange={v => onChange(v ?? '')}
-        loading={<div style={{ padding: 16, color: 'var(--text-secondary, #666)', fontFamily: 'monospace' }}>Editor wird geladen…</div>}
-      />
-    </div>
+    <div
+      ref={containerRef}
+      className="codeeditor-wrapper"
+      style={{ height, overflow: 'hidden' }}
+    />
   )
 }
 

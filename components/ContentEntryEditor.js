@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import dynamic from 'next/dynamic';
 import { AlertCircle, Save, X, Trash2 } from 'lucide-react';
 import Toast from './Toast';
-
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import 'react-quill/dist/quill.snow.css';
+import RichTextEditor from './RichTextEditor';
 
 /**
  * ContentEntryEditor - Form-based editor for content entries based on a content model
@@ -292,20 +289,11 @@ export default function ContentEntryEditor({
           <div key={field.key} className={containerCls}>
             <FieldLabel />
             <div className="cee-richtext-wrap">
-              <ReactQuill
+              <RichTextEditor
                 value={value}
                 onChange={v => handleFieldChange(field.key, v)}
-                theme="snow"
                 readOnly={isSaving}
-                modules={{
-                  toolbar: [
-                    ['bold', 'italic', 'underline', 'strike'],
-                    [{ list: 'ordered' }, { list: 'bullet' }],
-                    ['blockquote', 'code-block'],
-                    ['link'],
-                    ['clean'],
-                  ],
-                }}
+                toolbar={['bold', 'italic', 'strike', 'ol', 'ul', 'blockquote', 'code', 'link', 'clear']}
               />
             </div>
             <FieldErrors />

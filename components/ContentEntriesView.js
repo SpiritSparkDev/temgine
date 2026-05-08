@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, ChevronLeft, FileText, Clock, Hash } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Edit2, Trash2, Search, ChevronLeft, FileText, Clock, Hash, GripVertical } from 'lucide-react';
 import ContentEntryEditor from './ContentEntryEditor';
 import Toast from './Toast';
 
@@ -13,6 +13,8 @@ export default function ContentEntriesView({
   const [selectedEntry, setSelectedEntry] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [toast, setToast] = useState(null);
+  const dragIdRef = useRef(null);
+  const dragOverIdRef = useRef(null);
 
   useEffect(() => {
     if (model?.id) loadEntries();
@@ -103,6 +105,46 @@ export default function ContentEntriesView({
     );
   });
 
+  // ── Drag-and-drop reorder (only when not filtering) ──────────────────────
+  const isDraggable = !searchQuery;
+
+  const handleDragStart = (id) => {
+    dragIdRef.current = id;
+  };
+
+  const handleDragOver = (e, id) => {
+    e.preventDefault();
+    dragOverIdRef.current = id;
+  };
+
+  const handleDrop = async () => {
+    const fromId = dragIdRef.current;
+    const toId = dragOverIdRef.current;
+    dragIdRef.current = null;
+    dragOverIdRef.current = null;
+    if (!fromId || !toId || fromId === toId) return;
+
+    const fromIdx = entries.findIndex(e => e.id === fromId);
+    const toIdx = entries.findIndex(e => e.id === toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const next = [...entries];
+    const [moved] = next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, moved);
+    setEntries(next);
+
+    try {
+      await fetch('/api/content-entries/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: next.map(e => e.id) }),
+      });
+    } catch {
+      showToast('Fehler beim Speichern der Reihenfolge', 'error');
+      loadEntries(); // revert on failure
+    }
+  };
+
   // ── Editor view ──────────────────────────────────────────────────────────
   if (selectedEntry || isCreating) {
     return (
@@ -184,7 +226,20 @@ export default function ContentEntriesView({
               const meta = getEntryMeta(entry);
               const updatedAt = entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString('de-DE') : null;
               return (
-                <div key={entry.id} className="cev-card" onClick={() => setSelectedEntry(entry)}>
+                <div
+                  key={entry.id}
+                  className="cev-card"
+                  onClick={() => setSelectedEntry(entry)}
+                  draggable={isDraggable}
+                  onDragStart={isDraggable ? () => handleDragStart(entry.id) : undefined}
+                  onDragOver={isDraggable ? (e) => handleDragOver(e, entry.id) : undefined}
+                  onDrop={isDraggable ? handleDrop : undefined}
+                >
+                  {isDraggable && (
+                    <div className="cev-card-drag" onClick={e => e.stopPropagation()} title="Ziehen zum Sortieren">
+                      <GripVertical size={16} />
+                    </div>
+                  )}
                   <div className="cev-card-icon">
                     <FileText size={18} />
                   </div>
@@ -385,6 +440,25 @@ export default function ContentEntriesView({
           cursor: pointer;
           transition: all 0.15s;
         }
+
+        .cev-card[draggable="true"]:active {
+          opacity: 0.55;
+          box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .cev-card-drag {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2px 0;
+          color: var(--text-tertiary, #9ca3af);
+          cursor: grab;
+          flex-shrink: 0;
+          opacity: 0.4;
+          transition: opacity 0.15s;
+        }
+
+        .cev-card:hover .cev-card-drag { opacity: 1; }
 
         .cev-card:hover {
           border-color: rgba(99,102,241,0.4);

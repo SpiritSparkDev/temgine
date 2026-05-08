@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type } from 'lucide-react';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type, Rss, Mail, Shield } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -19,6 +19,10 @@ import ImporterView from './ImporterView';
 import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
 import FontManagerView from './FontManagerView';
+import BlogView from './BlogView';
+import ContactMessagesView from './ContactMessagesView';
+import MembersAdminView from './MembersAdminView';
+import MemberGroupsAdminView from './MemberGroupsAdminView';
 
 export default function AdminPageClient() {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -36,6 +40,7 @@ export default function AdminPageClient() {
   const [settingsTab, setSettingsTab] = useState('users');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [alphaTab, setAlphaTab] = useState('content-models');
+  const [membersTab, setMembersTab] = useState('members');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
 
@@ -252,7 +257,7 @@ export default function AdminPageClient() {
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'BLOCK' }));
       }
-      setTemplateList(list);
+      setTemplateList(list.filter(tpl => !tpl.blogType));
     } catch (e) {
       console.error('[admin] Error loading templates:', e);
     }
@@ -670,6 +675,7 @@ export default function AdminPageClient() {
               <li className="menu-group-label">Inhalt</li>
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
+              <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
               <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
 
               <li className="menu-group-label">Design</li>
@@ -677,6 +683,10 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
               <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
+
+              <li className="menu-group-label">Mitglieder</li>
+              <li><button className={`menu-item ${view==='members'?'active':''}`} onClick={() => handleSelectView('members')}><Users size={18} /> Mitglieder</button></li>
+              <li><button className={`menu-item ${view==='contact-messages'?'active':''}`} onClick={() => handleSelectView('contact-messages')}><Mail size={18} /> Nachrichten</button></li>
 
               <li className="menu-group-label">System</li>
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
@@ -784,6 +794,22 @@ export default function AdminPageClient() {
           {view === 'files' && <FileManagerView showToast={showToast} />}
           {view === 'css' && <CSSManagerViewModern showToast={showToast} />}
           {view === 'fonts' && <FontManagerView showToast={showToast} />}
+          {view === 'blog' && <BlogView showToast={showToast} />}
+          {view === 'contact-messages' && <ContactMessagesView showToast={showToast} />}
+          {view === 'members' && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div className="settings-tabs-wrapper">
+                <div className="settings-tabs">
+                  <button onClick={() => setMembersTab('members')} className={`settings-tab-btn ${membersTab === 'members' ? 'active' : ''}`}>Mitglieder</button>
+                  <button onClick={() => setMembersTab('groups')} className={`settings-tab-btn ${membersTab === 'groups' ? 'active' : ''}`}>Gruppen</button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                {membersTab === 'members' && <MembersAdminView showToast={showToast} />}
+                {membersTab === 'groups' && <MemberGroupsAdminView showToast={showToast} />}
+              </div>
+            </div>
+          )}
           {view === 'navigation' && <NavigationView showToast={showToast} />}
           {view === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

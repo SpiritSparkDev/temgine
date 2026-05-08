@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import dynamic from 'next/dynamic';
-import 'react-quill/dist/quill.snow.css';
-
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import { GripVertical, Grid, Eye, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Maximize2, X } from 'lucide-react';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Monitor, Minimize2, Maximize2, X } from 'lucide-react';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
+import RichTextEditor from './RichTextEditor';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import RevisionHistoryPanel from './RevisionHistoryPanel';
 import SeoPanel from './SeoPanel';
@@ -30,6 +27,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [redirectType, setRedirectType] = useState('none');
   const [redirectUrl, setRedirectUrl] = useState('');
   const [isHomepage, setIsHomepage] = useState(false);
+  const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
+  const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
@@ -41,6 +40,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
+  const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
@@ -53,9 +53,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [pageStatus, setPageStatus] = useState((page?.status || 'DRAFT').toUpperCase());
   const [previewBlocks, setPreviewBlocks] = useState(() => new Set());
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
+  const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
+  const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
+  const [blogChannels, setBlogChannels] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -160,6 +163,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialRedirectUrl = page.redirectUrl || '';
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
+      const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
 
       setTitle(page.title || '');
       setSlug(page.slug || '');
@@ -168,7 +172,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectType(initialRedirectType);
       setRedirectUrl(initialRedirectUrl);
       setIsHomepage(initialIsHomepage);
+      setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
+      setCollapsedBlocks(new Set());
+      setLightboxBlockPath('');
 
       // Check if page needs DOM migration and migrate if necessary
       if (pageNeedsMigration(page)) {
@@ -394,6 +401,22 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }, []);
 
   useEffect(() => {
+    // Lade Blog-Kanäle für Blog-Channel-Blöcke
+    const loadBlogChannels = async () => {
+      try {
+        const res = await fetch('/api/blog/channels');
+        if (res.ok) {
+          const data = await res.json();
+          setBlogChannels(Array.isArray(data) ? data : (data.channels || []));
+        }
+      } catch (e) {
+        // Silently ignore — blog channels are optional
+      }
+    };
+    loadBlogChannels();
+  }, []);
+
+  useEffect(() => {
     // Lade aktivierte CSS-Dateien für Vorschau
     fetch('/api/css')
       .then(r => r.json())
@@ -430,6 +453,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [expandedField]);
+
+  // Escape key closes block lightbox
+  useEffect(() => {
+    if (!lightboxBlockPath) return;
+    const handleKey = (e) => { if (e.key === 'Escape') setLightboxBlockPath(''); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [lightboxBlockPath]);
 
   // Auto-rebuild split preview (debounced 600ms) when content changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -626,7 +657,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         ? { title: '', content: '' }
         : type === 'gallery'
           ? { images: [] }
-          : {}
+          : type === 'blog-channel'
+            ? { channelSlug: '', templateSlot: 'templateDetailPreview', postLimit: 6 }
+            : {}
     };
     setBlocks([...blocks, newBlock]);
   }
@@ -823,6 +856,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setBlocks(copy);
   }
 
+  const toggleNestedBlockHidden = (path) => {
+    const copy = JSON.parse(JSON.stringify(blocks || []));
+    const parts = String(path).split('.').map(p => parseInt(p, 10));
+    let cur = copy;
+    for (let i = 0; i < parts.length; i++) {
+      const idx = parts[i];
+      if (i === parts.length - 1) {
+        cur[idx].hidden = !Boolean(cur[idx].hidden);
+      } else {
+        cur = cur[idx].children = cur[idx].children || [];
+      }
+    }
+    setBlocks(copy);
+  }
+
+  const toggleCollapsedBlock = (path) => {
+    setCollapsedBlocks(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
   const getBlockAtPath = (path) => {
     if (!path && path !== '0') return null;
     const parts = String(path).split('.').map(p => parseInt(p, 10));
@@ -860,6 +917,25 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   };
 
   const flattenedBlocks = useMemo(() => flattenBlocks(blocks), [blocks]);
+
+  const hiddenOutlinePaths = useMemo(() => {
+    if (!outlineVisibleOnly) return new Set();
+    const hidden = new Set();
+    const collect = (items = [], prefix = '') => {
+      (items || []).forEach((item, idx) => {
+        const path = prefix ? `${prefix}.${idx}` : String(idx);
+        if (item?.hidden) {
+          hidden.add(path);
+          return;
+        }
+        if (Array.isArray(item?.children) && item.children.length > 0) {
+          collect(item.children, path);
+        }
+      });
+    };
+    collect(blocks || []);
+    return hidden;
+  }, [outlineVisibleOnly, blocks]);
 
   const outlineFieldEntries = useMemo(() => (
     flattenedBlocks.flatMap(({ path, block, depth }) =>
@@ -1072,6 +1148,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       redirectType,
       redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage,
+      accessGroups,
       status: pageStatus,
     };
 
@@ -1277,8 +1354,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   handleRedoRef.current = handleRedo;
 
   // Render helpers for nested block editor
-  const renderBlockEditor = (block, path, depth = 0) => {
-    const isTop = depth === 0;
+  const renderBlockEditor = (block, path, depth = 0, options = {}) => {
+    const inLightbox = !!options.inLightbox;
+    const isTop = depth === 0 && !inLightbox;
+    const isCollapsed = collapsedBlocks.has(path);
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
     const templateGroups = block.template ? (templateGroupsByName[block.template] || []) : [];
     const hasGroupedContainers = templateGroups.some(g => g.isGroup && g.vars.length >= 2);
@@ -1330,16 +1409,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return (
       <div
         key={path}
-        ref={(el) => {
+        ref={inLightbox ? undefined : ((el) => {
           if (el) {
             blockNodeRefs.current[path] = el;
           } else {
             delete blockNodeRefs.current[path];
           }
-        }}
+        })}
         data-block-path={path}
-        className={`block-item${selectedBlockPath === path ? ' selected' : ''}`}
-        style={{ marginLeft: depth * 16 }}
+        className={`block-item${selectedBlockPath === path ? ' selected' : ''}${block?.hidden ? ' is-hidden' : ''}${isCollapsed ? ' is-collapsed' : ''}${inLightbox ? ' block-item-lightbox' : ''}`}
+        style={{ marginLeft: inLightbox ? 0 : depth * 16 }}
         onClick={() => setSelectedBlockPath(path)}
         title={devTitle(`Komponente: Block ${formatBlockNumber(path)}. Funktion: Block auswaehlen und Inhalte bearbeiten.`)}
         {...containerProps}
@@ -1411,7 +1490,34 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <ChevronRight size={12} /></button>
                   <button type="button" className={`block-move-btn${previewBlocks.has(path) ? ' active' : ''}`}
                     onClick={(e) => { e.stopPropagation(); toggleBlockPreview(path); }} title="Inline-Vorschau">
-                    <Eye size={12} /></button>
+                    <Monitor size={12} /></button>
+                  <button
+                    type="button"
+                    className={`block-move-btn${block?.hidden ? ' active block-hidden-toggle' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); toggleNestedBlockHidden(path); }}
+                    title={block?.hidden ? 'Block einblenden' : 'Block ausblenden'}
+                    aria-label={block?.hidden ? 'Block einblenden' : 'Block ausblenden'}
+                  >
+                    {block?.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    className={`block-move-btn${isCollapsed ? ' active' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); toggleCollapsedBlock(path); }}
+                    title={isCollapsed ? 'Block maximieren' : 'Block minimieren'}
+                    aria-label={isCollapsed ? 'Block maximieren' : 'Block minimieren'}
+                  >
+                    {isCollapsed ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); setLightboxBlockPath(path); setSelectedBlockPath(path); }}
+                    title="Block in Lightbox bearbeiten"
+                    aria-label="Block in Lightbox bearbeiten"
+                  >
+                    <LayoutGrid size={12} />
+                  </button>
                 </div>
               );
             })()}
@@ -1422,7 +1528,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         </div>
 
         {/* Block Content */}
-        <div className="block-card-body">
+        {!isCollapsed && <div className="block-card-body">
           {/* Template specific fields (reuse existing logic) */}
           {block.template && templateCodes[block.template] && (
             <div>
@@ -1556,7 +1662,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item field-item-textarea">
                         <label className="field-label-xs">{label}</label>
                         <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                          <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
+                          <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                         </div>
                       </div>
                     );
@@ -1620,7 +1726,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <div key={varName} className="field-item field-item-textarea">
                       <label className="field-label-xs">{label}</label>
                       <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                        <ReactQuill value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} theme="snow" />
+                        <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                       </div>
                     </div>
                   )
@@ -1654,6 +1760,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (rowIdx === 0) return;
+                                  const next = [...rows];
+                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === 0}
+                                title="Nach oben verschieben"
+                              ><ChevronUp size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (rowIdx === rows.length - 1) return;
+                                  const next = [...rows];
+                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
+                                  updateNestedBlock(path, { [sectionName]: next });
+                                }}
+                                className="repeater-row-move"
+                                disabled={rowIdx === rows.length - 1}
+                                title="Nach unten verschieben"
+                              ><ChevronDown size={13} /></button>
+                              <button
+                                type="button"
+                                onClick={() => {
                                   const copy = { ...row };
                                   const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
                                   updateNestedBlock(path, { [sectionName]: next });
@@ -1681,16 +1811,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <textarea
-                                      value={sfVal}
-                                      placeholder={sf.name}
-                                      onChange={e => {
-                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                        updateNestedBlock(path, { [sectionName]: next });
-                                      }}
-                                      rows={2}
-                                      className="input-field-small field-input-full"
-                                    />
+                                    <div className="field-quill-wrapper">
+                                      <RichTextEditor
+                                        value={sfVal}
+                                        onChange={val => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        }}
+                                        toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']}
+                                      />
+                                    </div>
                                   </div>
                                 );
                               }
@@ -1751,6 +1881,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         </div>
                       ))}
                     </div>
+                    <div className="field-repeater-header">
+                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)} ende</label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
+                        }}
+                        className="btn-modern-small repeater-add-btn"
+                        title={`Eintrag zu ${sectionName} hinzufügen`}
+                      >
+                        <Plus size={12} /> Eintrag hinzufügen
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1758,11 +1902,64 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Fallback simple text/gallery editors when no template */}
+          {/* Blog-Kanal block editor */}
+          {block.type === 'blog-channel' && (
+            <div className="blog-channel-editor">
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Kanal</label>
+                <select
+                  className="block-template-select"
+                  value={block.props.channelSlug || ''}
+                  onChange={e => updateNestedBlock(path, { channelSlug: e.target.value })}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <option value="">-- Kanal wählen --</option>
+                  {blogChannels.map(ch => (
+                    <option key={ch.id} value={ch.slug}>{ch.name} ({ch.slug})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Darstellung</label>
+                <select
+                  className="block-template-select"
+                  value={block.props.templateSlot || 'templateDetailPreview'}
+                  onChange={e => updateNestedBlock(path, { templateSlot: e.target.value })}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <option value="templateDetailPreview">Detail-Vorschau</option>
+                  <option value="templateSimplePreview">Einfache Vorschau</option>
+                  <option value="templateArchiveEntry">Archiv-Eintrag</option>
+                  <option value="templateReading">Leseseite</option>
+                </select>
+              </div>
+              <div className="blog-channel-editor__field">
+                <label className="block-field-label">Max. Beiträge</label>
+                <input
+                  type="number"
+                  className="input-field-small"
+                  min={1}
+                  max={100}
+                  value={block.props.postLimit ?? 6}
+                  onChange={e => updateNestedBlock(path, { postLimit: parseInt(e.target.value, 10) || 6 })}
+                  onClick={e => e.stopPropagation()}
+                  style={{ width: 80 }}
+                />
+              </div>
+              {block.props.channelSlug && (
+                <div className="blog-channel-editor__preview">
+                  <span style={{ fontSize: 11, opacity: .6 }}>Kanal: </span>
+                  <code style={{ fontSize: 11 }}>/{block.props.channelSlug}</code>
+                </div>
+              )}
+            </div>
+          )}
+
           {!block.template && block.type === 'text' && (
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
               <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
-                <ReactQuill value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} theme="snow" />
+                <RichTextEditor value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
               </div>
             </>
           )}
@@ -1782,11 +1979,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Render children editors recursively */}
-          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1))}
+          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1, options))}
         </div>
+        }
 
         {/* Inline block preview */}
-        {previewBlocks.has(path) && (
+        {!isCollapsed && previewBlocks.has(path) && (
           <div className="block-inline-preview-wrap">
             <div className="block-inline-preview-head">
               <span className="block-inline-preview-label">Vorschau</span>
@@ -2068,6 +2266,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <button
                       type="button"
                       className="pe-tb-btn"
+                      onClick={() => { const p = String((blocks || []).length); handleAddBlock('blog-channel'); setSelectedBlockPath(p); }}
+                      title={devTitle('Blog-Kanal-Block anlegen')}
+                    >
+                      <Plus size={13} /> Blog-Kanal
+                    </button>
+                    <button
+                      type="button"
+                      className="pe-tb-btn"
                       onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
                       title={devTitle('Unterblock anlegen')}
                     >
@@ -2173,6 +2379,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
                           Als Startseite
                         </label>
+                        {/* Access Control */}
+                        <AccessGroupsPanel
+                          accessGroups={accessGroups}
+                          onChange={setAccessGroups}
+                          availableGroups={availableMemberGroups}
+                          onLoadGroups={() => {
+                            if (availableMemberGroups.length === 0) {
+                              fetch('/api/admin/member-groups')
+                                .then(r => r.json())
+                                .then(d => setAvailableMemberGroups(Array.isArray(d) ? d : []))
+                                .catch(() => {});
+                            }
+                          }}
+                        />
                         <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
                         <input
                           type="text"
@@ -2232,7 +2452,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     {!outlineCollapsed.has('outline-structure') && (
                       <div className="page-editor-outline-structure">
-                        <TemplateStructurePreview blocks={blocks} activeBlockPath={selectedBlockPath} onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null} />
+                        <label className="page-editor-outline-toggle" style={{ marginBottom: '8px' }}>
+                          <input
+                            type="checkbox"
+                            checked={outlineVisibleOnly}
+                            onChange={e => setOutlineVisibleOnly(e.target.checked)}
+                          />
+                          Nur sichtbare Blöcke anzeigen
+                        </label>
+                        <TemplateStructurePreview
+                          blocks={blocks}
+                          hiddenBlockPaths={hiddenOutlinePaths}
+                          activeBlockPath={selectedBlockPath}
+                          onBlockClick={blocks.length > 0 ? handleStructureBlockClick : null}
+                        />
                       </div>
                     )}
                   </div>
@@ -2289,6 +2522,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
       )}
+
+      {lightboxBlockPath && typeof window !== 'undefined' && (() => {
+        const lightboxBlock = getBlockAtPath(lightboxBlockPath);
+        if (!lightboxBlock) return null;
+        return createPortal(
+          <div className={`admin-scope${adminScopeRef.current?.closest('.dark-mode') ? ' dark-mode' : ''} block-lightbox-portal`} onClick={() => setLightboxBlockPath('')}>
+            <div className="block-lightbox-overlay" onClick={() => setLightboxBlockPath('')}>
+              <div className="block-lightbox" onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Block bearbeiten">
+                <div className="block-lightbox-header">
+                  <strong className="block-lightbox-label">Block #{formatBlockNumber(lightboxBlockPath)} bearbeiten</strong>
+                  <button type="button" className="block-lightbox-close" onClick={() => setLightboxBlockPath('')} aria-label="Schließen">✕</button>
+                </div>
+                <div className="block-lightbox-body">
+                  {renderBlockEditor(lightboxBlock, lightboxBlockPath, 0, { inLightbox: true })}
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Field Expand Lightbox */}
       <span ref={adminScopeRef} style={{display:'none'}} />
@@ -2622,6 +2876,68 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGroups }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const accessMode = accessGroups.length === 0
+    ? 'public'
+    : accessGroups[0] === '*'
+    ? 'all-members'
+    : 'specific';
+
+  function handleModeChange(mode) {
+    if (mode === 'public') onChange([]);
+    else if (mode === 'all-members') onChange(['*']);
+    else {
+      onLoadGroups();
+      onChange([]);
+    }
+    setExpanded(mode === 'specific');
+  }
+
+  function toggleGroup(slug) {
+    const current = accessGroups.filter(g => g !== '*');
+    if (current.includes(slug)) {
+      onChange(current.filter(g => g !== slug));
+    } else {
+      onChange([...current, slug]);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <label className="field-label-xs">Zugangskontrolle</label>
+      <select
+        className="input-field-small"
+        value={accessMode}
+        onChange={e => handleModeChange(e.target.value)}
+        aria-label="Zugangskontrolle"
+      >
+        <option value="public">Öffentlich (alle)</option>
+        <option value="all-members">Alle Mitglieder</option>
+        <option value="specific">Bestimmte Gruppen</option>
+      </select>
+      {accessMode === 'specific' && (
+        <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
+          {availableGroups.length === 0 && (
+            <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Keine Gruppen vorhanden.</span>
+          )}
+          {availableGroups.map(g => (
+            <label key={g.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', marginBottom: '4px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={accessGroups.includes(g.slug)}
+                onChange={() => toggleGroup(g.slug)}
+              />
+              {g.name}
+            </label>
+          ))}
         </div>
       )}
     </div>

@@ -9,8 +9,9 @@ const isDev = process.env.NODE_ENV === 'development';
 const securityHeaders = [
   // Verhindert Clickjacking
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-  // Verhindert MIME-Type-Sniffing
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  // Verhindert MIME-Type-Sniffing (nur in Produktion; in Next.js-Dev
+  // wird _clientMiddlewareManifest.js als application/json ausgeliefert).
+  ...(isDev ? [] : [{ key: 'X-Content-Type-Options', value: 'nosniff' }]),
   // Verhindert Referrer-Leakage bei cross-origin Navigation
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Aktiviert HTTPS-Enforcing (nur in Produktion sinnvoll, aber schadet nicht)
@@ -20,20 +21,20 @@ const securityHeaders = [
   // Verhindert Adobe-Flash und PDF-Cross-Site-Zugriffe
   { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
   // Permissions Policy: deaktiviert nicht benötigte Browser-APIs
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
   // Content-Security-Policy – moderat: erlaubt inline scripts für Next.js und CodeMirror
   {
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net", // Next.js + Monaco loader brauchen eval + CDN
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js braucht eval
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob:",
-      "connect-src 'self' https://cdn.jsdelivr.net",
+      "connect-src 'self'",
       "frame-src 'self'",
-      "worker-src blob: 'self' https://cdn.jsdelivr.net",
+      "worker-src blob: 'self'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
@@ -47,8 +48,18 @@ const securityHeaders = [
  * This avoids "Unrecognized extension value" errors caused by multiple
  * copies of `@codemirror/state` being loaded.
  */
+const cmPackages = [
+  '@codemirror/state',
+  '@codemirror/view',
+  '@codemirror/language',
+  '@codemirror/commands',
+  '@codemirror/autocomplete',
+  '@codemirror/theme-one-dark'
+];
+
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   async headers() {
     return [
       {
@@ -58,21 +69,16 @@ module.exports = {
       },
     ];
   },
+  // Turbopack config (Next.js 16 default for `next dev`)
+  // Empty config silences the "webpack config but no turbopack config" warning.
+  // Turbopack handles package deduplication natively — no aliases needed.
+  turbopack: {},
   webpack: (config) => {
     config.resolve.alias = config.resolve.alias || {};
     const pkgRoot = path.resolve(__dirname, 'node_modules');
 
     // Aliases for common CodeMirror packages to force a single resolved copy
-    const aliases = [
-      '@codemirror/state',
-      '@codemirror/view',
-      '@codemirror/language',
-      '@codemirror/commands',
-      '@codemirror/autocomplete',
-      '@codemirror/search',
-      '@codemirror/lint',
-      '@codemirror/theme-one-dark'
-    ];
+    const aliases = cmPackages;
 
     aliases.forEach((name) => {
       config.resolve.alias[name] = path.join(pkgRoot, name);

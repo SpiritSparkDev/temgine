@@ -1,6 +1,10 @@
 #!/bin/bash
 # Deployment script for Temgine CMS to Plesk
-# Run this on your local machine before uploading to server
+# Run this on your LOCAL machine before uploading to server.
+#
+# Strategy: build locally, prune devDependencies, then upload everything.
+# This avoids running "npm install" on the server and ensures the Prisma
+# client (generated during build) is included correctly.
 
 echo "🚀 Temgine CMS Deployment Script"
 echo "=============================="
@@ -11,32 +15,45 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-echo "📦 Building Next.js application..."
+echo "📦 Building Next.js application (includes prisma generate)..."
 npm run build
 
 if [ $? -ne 0 ]; then
     echo "❌ Build failed"
     exit 1
 fi
-
 echo "✅ Build successful"
+
 echo ""
-echo "📤 Next steps to deploy to Plesk:"
-echo "1. Copy the .next folder to your server at ~/httpdocs/.next"
-echo "2. Copy node_modules to ~/httpdocs/node_modules"
-echo "3. Ensure .env file exists at ~/httpdocs/.env with:"
-echo "   - DATABASE_URL=postgresql://pf_admin:PASSWORD@localhost:5432/pf_database?schema=public"
-echo "   - NEXTAUTH_URL=https://reverent-grothendieck.212-227-188-40.plesk.page"
-echo "   - NEXTAUTH_SECRET=<your-secret>"
-echo "   - GITHUB_ID=<your-github-app-id>"
-echo "   - GITHUB_SECRET=<your-github-app-secret>"
-echo "   - DEV_MODE=false"
+echo "✂️  Pruning devDependencies from node_modules..."
+npm prune --omit=dev
+
+if [ $? -ne 0 ]; then
+    echo "❌ Prune failed"
+    exit 1
+fi
+echo "✅ Pruning done (devDependencies removed)"
+
 echo ""
-echo "4. In Plesk UI: Go to Node.js > Node App Manager > Restart the app"
+echo "📤 Upload everything to ~/httpdocs/ on the server via rsync:"
 echo ""
-echo "💡 Alternative: Use FTP/SFTP to upload:"
-echo "   scp -r .next <user>@<server>:~/httpdocs/"
-echo "   scp package.json <user>@<server>:~/httpdocs/"
-echo "   scp .env <user>@<server>:~/httpdocs/"
+echo "   rsync -av --exclude=.git --exclude=.next-dev --exclude='node_modules/.cache' \\"
+echo "     ./ <user>@<server>:~/httpdocs/"
+echo ""
+echo "   This uploads: .next/, node_modules/ (pruned), pages/, components/,"
+echo "   lib/, public/, prisma/, scripts/, package.json, next.config.js, ..."
+echo ""
+echo "2. Ensure .env file exists at ~/httpdocs/.env with:"
+echo "   DATABASE_URL=postgresql://pf_admin:PASSWORD@localhost:5432/pf_database?schema=public"
+echo "   NEXTAUTH_URL=https://your-domain.example.com"
+echo "   NEXTAUTH_SECRET=<your-secret>"
+echo "   GITHUB_ID=<your-github-app-id>"
+echo "   GITHUB_SECRET=<your-github-app-secret>"
+echo "   DEV_MODE=false"
+echo ""
+echo "3. In Plesk UI: Go to Node.js > Node App Manager > Restart the app"
+echo ""
+echo "⚠️  After deployment, restore devDependencies locally with:"
+echo "   npm install"
 echo ""
 echo "✨ Deployment ready!"

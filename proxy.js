@@ -1,7 +1,7 @@
 import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
 
-export async function middleware(req) {
+export async function proxy(req) {
   // Development Mode: Nur lokal und niemals in Production bypassen
   const devMode = process.env.DEV_MODE === 'true';
   const isProduction = process.env.NODE_ENV === 'production';

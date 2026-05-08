@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, FileCode, Eye, Type, Image, List, Quote, AlignLeft, Layers, X, RefreshCw } from 'lucide-react';
-import { guessBlockType, extractHeading, extractTextContent, extractImageSrcs, cleanHtml, generateTemplateName, generateTemplateFromHtml } from '../lib/htmlImporter.js';
+import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, FileCode, Eye, Type, Image, List, Quote, AlignLeft, Layers, X, RefreshCw, Tag } from 'lucide-react';
+import { guessBlockType, extractHeading, extractTextContent, extractImageSrcs, cleanHtml, generateTemplateName, generateTemplateFromHtml, extractContentElements, applyFieldExtractions } from '../lib/htmlImporter.js';
 import { findBestMatch, extractPropsFromHtml } from '../lib/templateMatcher.js';
 import { extractTemplateVariables } from '../lib/templateParser.js';
 
@@ -33,44 +33,101 @@ function parseHtmlToBlockCandidates(htmlString) {
   const doc = parser.parseFromString(`<body>${clean}</body>`, 'text/html');
   const body = doc.body;
 
-  const BLOCK_TAGS = new Set([
-    'header', 'footer', 'nav', 'main', 'section', 'article', 'aside',
-    'figure', 'blockquote', 'form', 'table', 'ul', 'ol', 'div',
-    'h1', 'h2', 'h3',
+  // These tags are always standalone blocks — recursion stops here
+  const STOP_TAGS = new Set([
+    'header', 'footer', 'nav', 'aside',
+    'section', 'article',
+    'figure', 'blockquote', 'form', 'table', 'ul', 'ol',
   ]);
+
+  // Always transparent — recurse into, never emit as a block
+  const TRANSPARENT_TAGS = new Set(['main', 'body']);
+
+  // Class words that strongly indicate a layout wrapper div
+  const WRAPPER_CLS = /\b(container|wrapper|wrap|inner|outer|page|layout|site|app|content|row|columns?|col(?:-\d+)?|flex|grid|section-inner|hero-inner|page-content|main-content)\b/i;
 
   const candidates = [];
   let idx = 0;
 
-  const walk = (node, depth) => {
-    if (node.nodeType !== 1) return; // element nodes only
+  function addCandidate(node) {
     const tag = node.tagName.toLowerCase();
+    const classArr = Array.from(node.classList);
+    const innerHTML = node.innerHTML || '';
+    const blockType = guessBlockType(tag, classArr, innerHTML);
+    const preview = extractHeading(innerHTML) || extractTextContent(innerHTML).slice(0, 80);
+    candidates.push({
+      id: `block-${idx++}`,
+      tagName: tag,
+      blockType,
+      html: node.outerHTML,
+      preview: preview || `<${tag}>`,
+      classList: classArr,
+    });
+  }
 
-    if (BLOCK_TAGS.has(tag)) {
-      const classArr = Array.from(node.classList);
-      const innerHTML = node.innerHTML || '';
-      const blockType = guessBlockType(tag, classArr, innerHTML);
-      const preview = extractHeading(innerHTML) || extractTextContent(innerHTML).slice(0, 80);
-
-      candidates.push({
-        id: `block-${idx++}`,
-        tagName: tag,
-        blockType,
-        html: node.outerHTML,
-        preview: preview || `<${tag}>`,
-        classList: classArr,
-      });
-      return; // don't recurse into recognised blocks
+  function shouldRecurseDiv(node, depth) {
+    const classStr = Array.from(node.classList).join(' ');
+    if (WRAPPER_CLS.test(classStr)) return true;
+    const children = Array.from(node.children);
+    // Contains semantic block children → layout wrapper
+    if (children.some(c => STOP_TAGS.has(c.tagName.toLowerCase()))) return true;
+    if (children.some(c => TRANSPARENT_TAGS.has(c.tagName.toLowerCase()))) return true;
+    // Multiple div children at shallow depth → likely multi-section layout
+    if (depth <= 1) {
+      const divCount = children.filter(c => c.tagName.toLowerCase() === 'div').length;
+      if (divCount >= 3) return true;
     }
+    return false;
+  }
 
-    if (depth < 3) {
+  function walk(node, depth) {
+    if (node.nodeType !== 1) return;
+    const tag = node.tagName.toLowerCase();
+    if (['script', 'style', 'noscript', 'template', 'head'].includes(tag)) return;
+
+    // Always-transparent wrappers
+    if (TRANSPARENT_TAGS.has(tag)) {
       for (const child of Array.from(node.children)) walk(child, depth + 1);
+      return;
     }
-  };
 
-  for (const child of Array.from(body.children)) walk(child, 0);
+    // Semantic stop-blocks → always a standalone block
+    if (STOP_TAGS.has(tag)) {
+      addCandidate(node);
+      return;
+    }
 
-  // If nothing detected, treat entire body as a single text block
+    // Div: decide between wrapper (recurse) and content block (emit)
+    if (tag === 'div') {
+      if (shouldRecurseDiv(node, depth)) {
+        for (const child of Array.from(node.children)) walk(child, depth + 1);
+      } else {
+        addCandidate(node);
+      }
+      return;
+    }
+
+    // Headings/paragraphs at top level become their own block
+    if (/^(h[1-6]|p)$/.test(tag) && depth <= 1) {
+      addCandidate(node);
+      return;
+    }
+
+    // Anything else at depth 0
+    if (depth === 0) addCandidate(node);
+  }
+
+  // If body has a single div child, treat it as the page wrapper and look inside
+  const topElems = Array.from(body.children).filter(
+    c => !['script', 'style', 'noscript'].includes(c.tagName.toLowerCase())
+  );
+  if (topElems.length === 1 && topElems[0].tagName.toLowerCase() === 'div') {
+    for (const child of Array.from(topElems[0].children)) walk(child, 0);
+  } else {
+    for (const elem of topElems) walk(elem, 0);
+  }
+
+  // Fallback: treat whole input as a single text block
   if (candidates.length === 0 && body.innerHTML.trim()) {
     const innerHTML = body.innerHTML;
     candidates.push({
@@ -213,12 +270,18 @@ function slugify(text) {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 export default function ImporterView({ showToast, onPageCreated }) {
-  const [step, setStep] = useState(1); // 1: input, 2: review blocks, 3: page settings
+const [step, setStep] = useState(1); // 1: input, 2: review blocks, 3: mark fields, 4: page settings
   const [htmlInput, setHtmlInput] = useState('');
   const [parseError, setParseError] = useState('');
   const [templates, setTemplates] = useState([]);
   const [matches, setMatches] = useState([]);      // array of enriched block objects
   const [selectedBlockId, setSelectedBlockId] = useState(null);
+  // extractions: { [blockId]: [{ idx, tag, attrs, outerHtml, textValue, imgSrc, href, suggestedName, type, fieldName, selected }] }
+  const [extractions, setExtractions] = useState({});
+  // folder (parent page)
+  const [parentSlug, setParentSlug] = useState('');
+  const [parentTitle, setParentTitle] = useState('');
+  const [existingPages, setExistingPages] = useState([]);
   const [pageTitle, setPageTitle] = useState('');
   const [pageSlug, setPageSlug] = useState('');
   const [siteTemplate, setSiteTemplate] = useState('');
@@ -255,6 +318,20 @@ export default function ImporterView({ showToast, onPageCreated }) {
       const built = buildMatches(candidates, templates);
       setMatches(built);
       setSelectedBlockId(built[0]?.id || null);
+
+      // Seed extractions: only for auto-generated (not existing) block templates
+      const initExtractions = {};
+      for (const m of built) {
+        if (!m.usesExistingTemplate && m.props?.content) {
+          const elems = extractContentElements(m.props.content);
+          initExtractions[m.id] = elems.map(el => ({
+            ...el,
+            fieldName: el.suggestedName,
+            selected: false,
+          }));
+        }
+      }
+      setExtractions(initExtractions);
 
       // Pre-compute the site template code for the "Neu aus HTML" mode
       try {
@@ -326,11 +403,34 @@ export default function ImporterView({ showToast, onPageCreated }) {
     ));
   }
 
-  // ── Step 3: Import ──────────────────────────────────────────────────────
+  // ── Step 3: Apply field extractions ───────────────────────────────────
+
+  function applyAllExtractions() {
+    setMatches(prev => prev.map(m => {
+      const exts = extractions[m.id];
+      if (!exts || m.usesExistingTemplate || !m.newTemplateCode) return m;
+      const selected = exts.filter(e => e.selected && e.fieldName?.trim());
+      if (selected.length === 0) return m;
+      const { newCode, newProps, newContentHtml } = applyFieldExtractions(
+        m.newTemplateCode,
+        m.props?.content || '',
+        selected,
+      );
+      return {
+        ...m,
+        newTemplateCode: newCode,
+        props: { ...m.props, ...newProps, content: newContentHtml },
+      };
+    }));
+  }
+
+  // ── Step 4: Import ──────────────────────────────────────────────────────
 
   async function handleImport() {
+    if (!parentTitle.trim()) { showToast('Bitte Ordner-Titel eingeben', 'error'); return; }
+    if (!parentSlug.trim()) { showToast('Bitte Ordner-Slug eingeben', 'error'); return; }
     if (!pageTitle.trim()) { showToast('Bitte Seitentitel eingeben', 'error'); return; }
-    if (!pageSlug.trim()) { showToast('Bitte Slug eingeben', 'error'); return; }
+    if (!pageSlug.trim()) { showToast('Bitte Seiten-Slug eingeben', 'error'); return; }
 
     setImporting(true);
     try {
@@ -367,6 +467,8 @@ export default function ImporterView({ showToast, onPageCreated }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          parentSlug: parentSlug.trim(),
+          parentTitle: parentTitle.trim(),
           pageTitle: pageTitle.trim(),
           pageSlug: pageSlug.trim(),
           siteTemplate: effectiveSiteTemplate,
@@ -392,6 +494,9 @@ export default function ImporterView({ showToast, onPageCreated }) {
       setStep(1);
       setHtmlInput('');
       setMatches([]);
+      setExtractions({});
+      setParentSlug('');
+      setParentTitle('');
       setPageTitle('');
       setPageSlug('');
       setSiteTemplate('');
@@ -411,11 +516,11 @@ export default function ImporterView({ showToast, onPageCreated }) {
     <div className="importer-view">
       {/* Progress bar */}
       <div className="importer-steps">
-        {['HTML eingeben', 'Blöcke prüfen', 'Seite importieren'].map((label, i) => (
+        {['HTML eingeben', 'Blöcke prüfen', 'Felder markieren', 'Seite importieren'].map((label, i) => (
           <div key={i} className={`importer-step ${step === i + 1 ? 'active' : ''} ${step > i + 1 ? 'done' : ''}`}>
             <span className="importer-step-num">{step > i + 1 ? <Check size={12} /> : i + 1}</span>
             <span className="importer-step-label">{label}</span>
-            {i < 2 && <ChevronRight size={14} className="importer-step-arrow" />}
+            {i < 3 && <ChevronRight size={14} className="importer-step-arrow" />}
           </div>
         ))}
       </div>
@@ -563,8 +668,27 @@ export default function ImporterView({ showToast, onPageCreated }) {
         </div>
       )}
 
-      {/* ─── STEP 3: Page settings + import ─────────────────────────────── */}
+      {/* ─── STEP 3: Mark content fields ────────────────────────────────── */}
       {step === 3 && (
+        <FieldMarkingStep
+          matches={matches}
+          extractions={extractions}
+          setExtractions={setExtractions}
+          onBack={() => setStep(2)}
+          onNext={() => {
+            applyAllExtractions();
+            // Load existing top-level pages for folder picker
+            fetch('/api/pages')
+              .then(r => r.json())
+              .then(d => setExistingPages(Array.isArray(d) ? d.map(p => ({ slug: p.slug, title: p.title })) : []))
+              .catch(() => setExistingPages([]));
+            setStep(4);
+          }}
+        />
+      )}
+
+      {/* ─── STEP 4: Page settings + import ─────────────────────────────── */}
+      {step === 4 && (
         <div className="importer-panel">
           <div className="importer-panel-header">
             <Upload size={18} />
@@ -592,8 +716,71 @@ export default function ImporterView({ showToast, onPageCreated }) {
             ))}
           </ul>
 
-          {/* Page metadata */}
+          {/* Folder + page metadata */}
           <div className="importer-meta-form">
+
+            {/* ── Ordner (parent) ── */}
+            <p className="importer-section-label">📁 Ordner (Elternseite)</p>
+
+            {existingPages.length > 0 && (
+              <div className="importer-field">
+                <label className="importer-field-label">Vorhandenen Ordner wählen</label>
+                <select
+                  className="importer-select"
+                  value={parentSlug}
+                  onChange={e => {
+                    const sel = existingPages.find(p => p.slug === e.target.value);
+                    setParentSlug(e.target.value);
+                    if (sel) setParentTitle(sel.title);
+                  }}
+                >
+                  <option value="">— Neuen Ordner anlegen —</option>
+                  {existingPages.map(p => (
+                    <option key={p.slug} value={p.slug}>{p.title} ({p.slug})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="importer-field">
+              <label className="importer-field-label">Ordner-Titel *</label>
+              <input
+                className="importer-field-input"
+                type="text"
+                value={parentTitle}
+                onChange={e => {
+                  setParentTitle(e.target.value);
+                  if (!parentSlug) setParentSlug(slugify(e.target.value));
+                }}
+                placeholder="z.B. Projekte"
+              />
+            </div>
+
+            <div className="importer-field">
+              <label className="importer-field-label">Ordner-Slug *</label>
+              <div className="importer-slug-row">
+                <span className="importer-slug-prefix">/</span>
+                <input
+                  className="importer-field-input"
+                  type="text"
+                  value={parentSlug}
+                  onChange={e => setParentSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  placeholder="projekte"
+                />
+                <button
+                  className="importer-regen-btn"
+                  onClick={() => setParentSlug(slugify(parentTitle))}
+                  title="Slug aus Titel generieren"
+                  type="button"
+                >
+                  <RefreshCw size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* ── Seite (child) ── */}
+            <p className="importer-section-label" style={{ marginTop: '0.5rem' }}>📄 Importierte Seite</p>
+
             <div className="importer-field">
               <label className="importer-field-label">Seitentitel *</label>
               <input
@@ -609,14 +796,14 @@ export default function ImporterView({ showToast, onPageCreated }) {
             </div>
 
             <div className="importer-field">
-              <label className="importer-field-label">Slug *</label>
+              <label className="importer-field-label">Seiten-Slug *</label>
               <div className="importer-slug-row">
-                <span className="importer-slug-prefix">/</span>
+                <span className="importer-slug-prefix">{parentSlug ? `/${parentSlug}/` : '/…/'}</span>
                 <input
                   className="importer-field-input"
                   type="text"
                   value={pageSlug}
-                  onChange={e => setPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9\-/]/g, ''))}
+                  onChange={e => setPageSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                   placeholder="startseite"
                 />
                 <button
@@ -628,6 +815,9 @@ export default function ImporterView({ showToast, onPageCreated }) {
                   <RefreshCw size={13} />
                 </button>
               </div>
+              {parentSlug && pageSlug && (
+                <span className="importer-url-preview">URL: /{parentSlug}/{pageSlug}</span>
+              )}
             </div>
 
             <div className="importer-field">
@@ -699,13 +889,13 @@ export default function ImporterView({ showToast, onPageCreated }) {
           </div>
 
           <div className="importer-actions">
-            <button className="btn btn-secondary" onClick={() => setStep(2)} disabled={importing}>
+            <button className="btn btn-secondary" onClick={() => setStep(3)} disabled={importing}>
               <ChevronLeft size={14} /> Zurück
             </button>
             <button
               className="btn btn-primary"
               onClick={handleImport}
-              disabled={importing || !pageTitle.trim() || !pageSlug.trim()}
+              disabled={importing || !parentTitle.trim() || !parentSlug.trim() || !pageTitle.trim() || !pageSlug.trim()}
             >
               {importing ? <RefreshCw size={14} className="spin" /> : <Upload size={14} />}
               {importing ? 'Importiere...' : 'Jetzt importieren'}
@@ -806,9 +996,181 @@ export default function ImporterView({ showToast, onPageCreated }) {
         .importer-mode-btn.active { background: var(--accent, #0070f3); color: #fff; font-weight: 600; }
         .importer-site-tpl-new { display: flex; flex-direction: column; gap: 0.4rem; }
 
+        /* Folder / section label */
+        .importer-section-label { font-size: 0.82rem; font-weight: 700; margin: 0 0 0.4rem; color: var(--text, #333); }
+        .importer-url-preview { font-size: 0.78rem; color: var(--accent, #0070f3); margin-top: 0.25rem; font-family: monospace; }
+
+        /* Field marking step */
+        .importer-marking-split { display: flex; gap: 0; flex: 1; min-height: 0; border: 1px solid var(--border, #ddd); border-radius: 8px; overflow: hidden; }
+        .importer-marking-panel { flex: 1; overflow-y: auto; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+        .importer-marking-empty { padding: 1.5rem; color: var(--text-muted, #888); font-size: 0.85rem; }
+        .importer-elem-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .importer-elem-row { display: flex; align-items: flex-start; gap: 0.6rem; padding: 0.5rem 0.6rem; border: 1px solid var(--border, #ddd); border-radius: 6px; background: var(--bg, #fff); }
+        .importer-elem-row.selected { border-color: var(--accent, #0070f3); background: #eff6ff; }
+        .importer-elem-check { margin-top: 3px; cursor: pointer; accent-color: var(--accent, #0070f3); }
+        .importer-elem-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+        .importer-elem-tag { font-size: 0.7rem; font-family: monospace; background: var(--bg-2, #f3f4f6); padding: 0.1rem 0.3rem; border-radius: 3px; display: inline-block; color: var(--text-muted, #666); }
+        .importer-elem-text { font-size: 0.8rem; color: var(--text, #333); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .importer-elem-name { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.2rem; }
+        .importer-elem-name-label { font-size: 0.72rem; color: var(--text-muted, #888); }
+        .importer-elem-name-input { padding: 0.2rem 0.4rem; border: 1px solid var(--border, #ddd); border-radius: 4px; font-size: 0.78rem; font-family: monospace; width: 130px; background: var(--bg, #fff); }
+        .importer-tpl-preview { font-size: 0.72rem; font-family: monospace; background: var(--bg-2, #f8f9fa); padding: 0.5rem; border-radius: 5px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 180px; overflow-y: auto; color: var(--text, #333); }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         .spin { animation: spin 0.8s linear infinite; }
       `}</style>
+    </div>
+  );
+}
+
+// ─── Step 3: Field marking subcomponent ──────────────────────────────────────
+
+function FieldMarkingStep({ matches, extractions, setExtractions, onBack, onNext }) {
+  const autoBlocks = matches.filter(m => !m.usesExistingTemplate && m.newTemplateCode);
+  const [selectedBlockId, setSelectedBlockId] = useState(autoBlocks[0]?.id || null);
+
+  const selectedMatch = matches.find(m => m.id === selectedBlockId);
+  const blockExtractions = (selectedBlockId && extractions[selectedBlockId]) || [];
+
+  function toggleElem(blockId, idx) {
+    setExtractions(prev => ({
+      ...prev,
+      [blockId]: (prev[blockId] || []).map(e => e.idx === idx ? { ...e, selected: !e.selected } : e),
+    }));
+  }
+
+  function setFieldName(blockId, idx, name) {
+    setExtractions(prev => ({
+      ...prev,
+      [blockId]: (prev[blockId] || []).map(e => e.idx === idx ? { ...e, fieldName: name } : e),
+    }));
+  }
+
+  // Build live preview of resulting template code for the selected block
+  function buildPreview(match) {
+    if (!match || !match.newTemplateCode) return '';
+    const exts = (extractions[match.id] || []);
+    const selected = exts.filter(e => e.selected && e.fieldName?.trim());
+    if (selected.length === 0) return match.newTemplateCode;
+    try {
+      const { newCode } = applyFieldExtractions(
+        match.newTemplateCode,
+        match.props?.content || '',
+        selected,
+      );
+      return newCode;
+    } catch { return match.newTemplateCode; }
+  }
+
+  const totalSelected = Object.values(extractions).flat().filter(e => e.selected).length;
+
+  return (
+    <div className="importer-marking-split">
+      {/* Block sidebar */}
+      <div className="importer-sidebar">
+        <div className="importer-sidebar-head">
+          <span>Neue Templates ({autoBlocks.length})</span>
+          <button className="importer-back-btn" onClick={onBack}><ChevronLeft size={14} /> Zurück</button>
+        </div>
+        <ul className="importer-block-list">
+          {autoBlocks.length === 0 && (
+            <li style={{ padding: '1rem', fontSize: '0.8rem', color: 'var(--text-muted, #888)' }}>
+              Keine auto-generierten Templates.
+            </li>
+          )}
+          {autoBlocks.map(m => {
+            const exts = extractions[m.id] || [];
+            const selCount = exts.filter(e => e.selected).length;
+            return (
+              <li
+                key={m.id}
+                className={`importer-block-item ${selectedBlockId === m.id ? 'active' : ''}`}
+                onClick={() => setSelectedBlockId(m.id)}
+              >
+                <span className="importer-block-icon"><BlockTypeIcon type={m.blockType} /></span>
+                <span className="importer-block-info">
+                  <span className="importer-block-type">{BLOCK_TYPE_LABELS[m.blockType] || m.blockType}</span>
+                  <span className="importer-block-preview">{m.preview}</span>
+                </span>
+                {selCount > 0 && <span className="importer-badge match">{selCount}</span>}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="importer-sidebar-footer">
+          <button className="btn btn-primary btn-full" onClick={onNext}>
+            Weiter {totalSelected > 0 ? `(${totalSelected} Felder)` : ''} <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Marking panel */}
+      <div className="importer-marking-panel">
+        {!selectedMatch && (
+          <div className="importer-marking-empty">
+            Wähle links einen Block aus, um seine Inhaltselemente zu markieren.
+          </div>
+        )}
+        {selectedMatch && (
+          <>
+            <div className="importer-editor-header">
+              <Tag size={15} />
+              <strong>{selectedMatch.preview || BLOCK_TYPE_LABELS[selectedMatch.blockType]}</strong>
+              <code className="importer-tag-badge">&lt;{selectedMatch.tagName}&gt;</code>
+            </div>
+            <p className="importer-hint" style={{ margin: 0 }}>
+              Wähle Elemente aus, die als eigene editierbare Felder aus <code>{'{{{content}}}'}</code> herausgelöst werden sollen.
+            </p>
+
+            {blockExtractions.length === 0 && (
+              <p className="importer-hint">Keine extrahierbaren Elemente gefunden.</p>
+            )}
+
+            <div className="importer-elem-list">
+              {blockExtractions.map(elem => (
+                <div
+                  key={elem.idx}
+                  className={`importer-elem-row ${elem.selected ? 'selected' : ''}`}
+                >
+                  <input
+                    type="checkbox"
+                    className="importer-elem-check"
+                    checked={elem.selected}
+                    onChange={() => toggleElem(selectedMatch.id, elem.idx)}
+                    id={`elem-${selectedMatch.id}-${elem.idx}`}
+                  />
+                  <div className="importer-elem-info">
+                    <label htmlFor={`elem-${selectedMatch.id}-${elem.idx}`} style={{ cursor: 'pointer' }}>
+                      <span className="importer-elem-tag">&lt;{elem.tag}&gt;</span>
+                      <span className="importer-elem-text" style={{ marginLeft: '0.4rem' }}>
+                        {elem.type === 'image' ? `[Bild: ${elem.imgSrc || '—'}]` : elem.textValue || '—'}
+                      </span>
+                    </label>
+                    {elem.selected && (
+                      <div className="importer-elem-name">
+                        <span className="importer-elem-name-label">Feldname:</span>
+                        <input
+                          type="text"
+                          className="importer-elem-name-input"
+                          value={elem.fieldName || ''}
+                          onChange={e => setFieldName(selectedMatch.id, elem.idx, e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'))}
+                          placeholder="feldname"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Live template preview */}
+            <div>
+              <p className="importer-field-label" style={{ margin: '0.5rem 0 0.25rem' }}>Template-Vorschau</p>
+              <pre className="importer-tpl-preview">{buildPreview(selectedMatch)}</pre>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

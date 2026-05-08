@@ -1,4 +1,5 @@
 import { prisma } from '../../../lib/prisma'
+import { requireAuth } from '../../../lib/auth'
 import fs from 'fs'
 import path from 'path'
 import JSZip from 'jszip'
@@ -83,7 +84,30 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') return res.status(405).end()
 
+    const auth = await requireAuth(req, res, ['ADMIN'])
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
     const wantZip = req.query.format === 'zip'
+    const wantCss = req.query.format === 'css'
+
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
+    const baseName = `temgine-backup-${dateStr}-${timeStr}`
+
+    // CSS-only export: merged file of all enabled CSS
+    if (wantCss) {
+      const css = await loadCSSFiles()
+      if (css.length === 0) {
+        return res.status(404).json({ error: 'Keine CSS-Dateien vorhanden' })
+      }
+      const merged = css
+        .map(f => `/* ==============================\n   ${f.filename}\n   ============================== */\n\n${f.content || ''}`)
+        .join('\n\n')
+      res.setHeader('Content-Type', 'text/css; charset=utf-8')
+      res.setHeader('Content-Disposition', `attachment; filename="temgine-styles-${dateStr}.css"`)
+      return res.status(200).send(merged)
+    }
 
     // Fetch all data in parallel
     const [pages, templates, snippets, css, navigations] = await Promise.all([
@@ -108,7 +132,6 @@ export default async function handler(req, res) {
       }
     })
 
-    const now = new Date()
     const backupMetadata = {
       version: '1.1',
       exportedAt: now.toISOString(),
@@ -139,11 +162,6 @@ export default async function handler(req, res) {
 
     const json = JSON.stringify(backup, null, 2)
     const fileSize = Buffer.byteLength(json, 'utf-8')
-
-    // Generate filename with timestamp
-    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-    const baseName = `temgine-backup-${dateStr}-${timeStr}`
 
     if (wantZip) {
       const zip = new JSZip()

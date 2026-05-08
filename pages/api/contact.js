@@ -1,180 +1,124 @@
-import { prisma } from '../../lib/prisma';
+/**
+ * pages/api/contact.js
+ *
+ * Public POST endpoint for contact form submissions.
+ * - Rate-limited (5 requests per minute per IP)
+ * - Validates input
+ * - Sends email via SMTP (if configured)
+ * - Optionally saves message to DB (controlled by Setting contactSaveToDb)
+ */
+
 import { rateLimit } from '../../lib/rateLimit';
-import { verifySolution } from 'altcha-lib';
-import nodemailer from 'nodemailer';
+import { sendMail } from '../../lib/email';
+import { prisma } from '../../lib/prisma';
 
-const ALTCHA_HMAC_KEY = process.env.ALTCHA_HMAC_KEY || 'temphelix-change-me-in-env';
-
-// 5 submissions per IP per minute
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 
-const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
-  const response = { error: message, code };
-  if (details) response.details = details;
-  return [status, response];
-};
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+// Validate that a string is a plausible email address
+function isValidEmail(str) {
+  return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
 }
 
-async function getOrCreateContactContentType() {
-  const SLUG = 'kontakt-einsendungen';
-  let ct = await prisma.contentType.findUnique({ where: { slug: SLUG } });
-  if (!ct) {
-    ct = await prisma.contentType.create({
-      data: {
-        name: 'Kontakt-Einsendungen',
-        slug: SLUG,
-        description: 'Automatisch erstellt für Kontaktformular-Einsendungen',
-        fields: {
-          create: [
-            { name: 'Name',        key: 'name',       type: 'text',     required: true,  sortOrder: 0 },
-            { name: 'E-Mail',      key: 'email',      type: 'text',     required: true,  sortOrder: 1 },
-            { name: 'Nachricht',   key: 'message',    type: 'textarea', required: false, sortOrder: 2 },
-            { name: 'Prioritäten', key: 'priorities', type: 'text',     required: false, sortOrder: 3 },
-            { name: 'IP-Adresse',  key: 'ip',         type: 'text',     required: false, sortOrder: 4 },
-          ],
-        },
-      },
-    });
-  }
-  return ct;
+// Sanitize a plain-text string — strip HTML tags, trim, truncate
+function sanitizeText(str, maxLen = 2000) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/<[^>]*>/g, '').trim().slice(0, maxLen);
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    const [s, r] = errorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
-    return res.status(s).json(r);
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   // Rate limiting
   const { ok, retryAfter } = limiter.check(req);
   if (!ok) {
-    const [s, r] = errorResponse(429, 'Zu viele Anfragen', 'RATE_LIMIT_EXCEEDED', { retryAfter });
-    return res.status(s).json(r);
+    res.setHeader('Retry-After', retryAfter);
+    return res.status(429).json({ error: 'Zu viele Anfragen. Bitte warte einen Moment.', retryAfter });
   }
 
-  const { name, email, message, priorities, altcha } = req.body || {};
-
-  // Input validation
-  if (!name || !String(name).trim()) {
-    const [s, r] = errorResponse(400, 'Name ist erforderlich', 'VALIDATION_ERROR');
-    return res.status(s).json(r);
-  }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
-    const [s, r] = errorResponse(400, 'Gültige E-Mail-Adresse erforderlich', 'VALIDATION_ERROR');
-    return res.status(s).json(r);
-  }
-
-  // ALTCHA verification
-  if (!altcha) {
-    const [s, r] = errorResponse(400, 'Spam-Schutz-Token fehlt', 'ALTCHA_MISSING');
-    return res.status(s).json(r);
-  }
-  const altchaValid = await verifySolution(altcha, ALTCHA_HMAC_KEY, true);
-  if (!altchaValid) {
-    const [s, r] = errorResponse(400, 'Spam-Schutz nicht bestanden', 'ALTCHA_INVALID');
-    return res.status(s).json(r);
-  }
-
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim()
-    || req.socket?.remoteAddress
-    || 'unknown';
-
-  const nameClean     = String(name).trim();
-  const emailClean    = String(email).trim().toLowerCase();
-  const messageClean  = String(message || '').trim();
-  const prioritiesStr = Array.isArray(priorities)
-    ? priorities.map(p => String(p)).join(', ')
-    : String(priorities || '');
-
-  // Store in DB
-  let dbEntry;
-  try {
-    const ct = await getOrCreateContactContentType();
-    dbEntry = await prisma.contentEntry.create({
-      data: {
-        contentTypeId: ct.id,
-        title: nameClean,
-        data: {
-          name:        nameClean,
-          email:       emailClean,
-          message:     messageClean,
-          priorities:  prioritiesStr,
-          ip,
-          submittedAt: new Date().toISOString(),
-        },
-      },
-    });
-  } catch (err) {
-    console.error('[contact] DB error:', err.message);
-    // Continue – still attempt email delivery
-  }
-
-  // Send email via configured SMTP
-  try {
-    const smtpSettings = await prisma.setting.findMany({
-      where: { key: { in: [
-        'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_secure',
-        'contact_recipient_email', 'contact_sender_name',
-        'contact_sender_email', 'contact_subject_prefix',
-      ]}},
-    });
-    const cfg = Object.fromEntries(smtpSettings.map(s => [s.key, s.value]));
-
-    if (cfg.smtp_host && cfg.contact_recipient_email) {
-      const transporter = nodemailer.createTransport({
-        host:   cfg.smtp_host,
-        port:   parseInt(cfg.smtp_port || '587', 10),
-        secure: cfg.smtp_secure === 'true',
-        auth:   cfg.smtp_user
-          ? { user: cfg.smtp_user, pass: cfg.smtp_pass || '' }
-          : undefined,
-      });
-
-      const prefix      = cfg.contact_subject_prefix || '[Kontakt]';
-      const senderName  = cfg.contact_sender_name  || 'Website';
-      const senderEmail = cfg.contact_sender_email || cfg.smtp_user || 'noreply@example.com';
-
-      await transporter.sendMail({
-        from:    `"${senderName}" <${senderEmail}>`,
-        to:      cfg.contact_recipient_email,
-        replyTo: `"${nameClean}" <${emailClean}>`,
-        subject: `${prefix} Neue Anfrage von ${nameClean}`,
-        text: [
-          `Name: ${nameClean}`,
-          `E-Mail: ${emailClean}`,
-          prioritiesStr ? `Prioritäten: ${prioritiesStr}` : '',
-          '',
-          messageClean || '(keine Nachricht)',
-          '',
-          `Eingegangen: ${new Date().toLocaleString('de-DE')}`,
-          `IP: ${ip}`,
-        ].filter(Boolean).join('\n'),
-        html: `
-          <table style="font-family:sans-serif;font-size:14px;max-width:600px">
-            <tr><td><strong>Name:</strong></td><td>${escapeHtml(nameClean)}</td></tr>
-            <tr><td><strong>E-Mail:</strong></td><td><a href="mailto:${escapeHtml(emailClean)}">${escapeHtml(emailClean)}</a></td></tr>
-            ${prioritiesStr ? `<tr><td><strong>Prioritäten:</strong></td><td>${escapeHtml(prioritiesStr)}</td></tr>` : ''}
-          </table>
-          <hr>
-          <p style="font-family:sans-serif;font-size:14px;white-space:pre-line">${escapeHtml(messageClean || '(keine Nachricht)').replace(/\n/g, '<br>')}</p>
-          <hr>
-          <p style="font-family:sans-serif;font-size:12px;color:#999">
-            Eingegangen: ${new Date().toLocaleString('de-DE')} &middot; IP: ${escapeHtml(ip)}
-          </p>
-        `,
-      });
+  // Origin check — only allow same-origin requests
+  const origin = req.headers['origin'];
+  const host = req.headers['host'];
+  if (origin && host) {
+    try {
+      const originHost = new URL(origin).host;
+      if (originHost !== host) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Forbidden' });
     }
-  } catch (err) {
-    console.error('[contact] Email error:', err.message);
-    // Don't fail the user request for email errors
   }
 
-  return res.status(200).json({ ok: true, id: dbEntry?.id || null });
+  const body = req.body || {};
+  const name = sanitizeText(body.name, 200);
+  const email = sanitizeText(body.email, 200);
+  const subject = sanitizeText(body.subject, 300);
+  const message = sanitizeText(body.message, 4000);
+
+  // Validation
+  const errors = {};
+  if (!name) errors.name = 'Name ist erforderlich.';
+  if (!isValidEmail(email)) errors.email = 'Gültige E-Mail-Adresse erforderlich.';
+  if (!message || message.length < 5) errors.message = 'Nachricht ist zu kurz.';
+
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).json({ error: 'Validierungsfehler', fields: errors });
+  }
+
+  // Read settings from DB
+  let contactMailTo = null;
+  let saveToDb = false;
+  try {
+    const [mailSetting, saveSetting] = await Promise.all([
+      prisma.setting.findUnique({ where: { key: 'contactMailTo' } }),
+      prisma.setting.findUnique({ where: { key: 'contactSaveToDb' } }),
+    ]);
+    contactMailTo = mailSetting?.value || process.env.CONTACT_MAIL_TO || null;
+    saveToDb = saveSetting?.value === 'true';
+  } catch (e) {
+    // DB not available — fall back to env var
+    contactMailTo = process.env.CONTACT_MAIL_TO || null;
+  }
+
+  const results = { emailSent: false, savedToDb: false };
+
+  // Send email
+  if (contactMailTo) {
+    try {
+      const subjectLine = subject
+        ? `Kontaktformular: ${subject}`
+        : `Neue Kontaktanfrage von ${name}`;
+      await sendMail({
+        to: contactMailTo,
+        subject: subjectLine,
+        text: `Name: ${name}\nE-Mail: ${email}\n\n${message}`,
+        html: `<p><strong>Name:</strong> ${name}<br><strong>E-Mail:</strong> ${email}</p><p>${message.replace(/\n/g, '<br>')}</p>`,
+      });
+      results.emailSent = true;
+    } catch (e) {
+      console.error('[contact] E-Mail-Versand fehlgeschlagen:', e.message);
+      // Don't fail the request — we still save to DB if enabled
+    }
+  }
+
+  // Save to DB (opt-in)
+  if (saveToDb) {
+    try {
+      await prisma.contactMessage.create({
+        data: { name, email, subject: subject || null, message },
+      });
+      results.savedToDb = true;
+    } catch (e) {
+      console.error('[contact] DB-Speicherung fehlgeschlagen:', e.message);
+    }
+  }
+
+  if (!results.emailSent && !results.savedToDb && !contactMailTo) {
+    // No destination configured — still return success to the user
+    console.warn('[contact] Kein Empfänger konfiguriert (contactMailTo). Nachricht verworfen.');
+  }
+
+  return res.status(200).json({ ok: true });
 }
