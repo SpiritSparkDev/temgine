@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, Search, ChevronLeft, FileText, Clock, Hash, GripVertical } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, ChevronLeft, FileText, Clock, Hash, GripVertical } from '../lib/muiIcons';
 import ContentEntryEditor from './ContentEntryEditor';
 import Toast from './Toast';
 

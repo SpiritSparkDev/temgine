@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Shield, Plus, Pencil, Trash2, RefreshCw, Check, X } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, RefreshCw, Check, X } from '../lib/muiIcons';
 
 export default function MemberGroupsAdminView({ showToast }) {
   const [groups, setGroups] = useState([]);

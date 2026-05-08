@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code2, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Layout, Grid, Code, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from '../lib/muiIcons';
 import { createButtonHandlers } from '../lib/insertHelper';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });

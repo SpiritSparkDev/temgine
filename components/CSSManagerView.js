@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { GripVertical, X } from 'lucide-react';
+import { GripVertical, X } from '../lib/muiIcons';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 

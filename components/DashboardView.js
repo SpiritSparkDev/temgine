@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Activity,
-    AlertCircle,
-    ArrowRight,
-    CheckCircle,
-    Database,
+    TrendingUp,
+    AlertTriangle,
+    CheckCircle2,
+    HardDrive,
     Download,
     FileText,
-    LayoutTemplate,
+    DashboardCustomize,
     RefreshCw,
     Upload,
     XCircle,
-    AlertTriangle,
-} from 'lucide-react';
+} from '../lib/muiIcons';
 
 export default function DashboardView({ templateList, pages, setView, showToast }) {
     const [dbHealth, setDbHealth] = useState(null);

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Plus, Save, Trash2, Rss, Layout, ChevronLeft, AlertCircle,
-  CheckCircle2, Circle, MousePointerClick, FileCode, HelpCircle
-} from 'lucide-react';
+  Plus, Save, Trash2, Rss, Layout, ChevronLeft, AlertTriangle,
+  CheckCircle2, Circle, MousePointerClick, Code, HelpCircle
+} from '../lib/muiIcons';
 import CodeEditor from './CodeEditor';
 import ConfirmDialog from './ConfirmDialog';
 

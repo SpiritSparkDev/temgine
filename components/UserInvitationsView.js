@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Mail, Copy, Trash2, CheckCircle, XCircle, Clock, Shield } from 'lucide-react';
+import { UserPlus, Mail, Copy, Trash2, CheckCircle2, XCircle, Clock, Shield } from '../lib/muiIcons';
 
 const ROLE_LABELS = {
   ADMIN: 'Administrator',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Navigation, Anchor, Globe, Layout, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layout, ChevronRight } from '../lib/muiIcons';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 

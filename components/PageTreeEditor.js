@@ -4,7 +4,7 @@ import {
   ChevronUp,
   CheckSquare,
   Copy,
-  Edit,
+  Edit2,
   Eye,
   EyeOff,
   FileText,
@@ -16,7 +16,7 @@ import {
   Square,
   Trash2,
   Users,
-} from 'lucide-react';
+} from '../lib/muiIcons';
 import Toast from './Toast';
 import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 

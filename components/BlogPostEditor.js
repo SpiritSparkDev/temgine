@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, Save, FileText, Image, User, Clock, Tag, Rss, Sliders } from 'lucide-react';
+import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal } from '../lib/muiIcons';
 import RichTextEditor from './RichTextEditor';
 
 const STATUS_OPTIONS = [

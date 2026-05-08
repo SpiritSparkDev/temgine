@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react'
-import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal } from 'lucide-react'
+import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal } from '../lib/muiIcons'
 
 export default function BackupView({ onToast = () => {}, onConfirm = () => {} }) {
   const importInputRef = useRef(null)

@@ -1,9 +1,10 @@
 import React from 'react';
 import { createButtonHandlers } from '../lib/insertHelper'
 import dynamic from 'next/dynamic';
-import { GripVertical, Plus, Trash2, Download, ChevronDown, ChevronUp } from 'lucide-react';
+import { GripVertical, Plus, Trash2, Download, ChevronDown, ChevronUp } from '../lib/muiIcons';
 import ErrorBoundary from './ErrorBoundary';
 import TemplatePreviewIframe from './TemplatePreviewIframe';
+import IconPickerModal from './IconPickerModal';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -21,6 +22,7 @@ export default function TemplatesView({
   const [navigations, setNavigations] = React.useState([]);
   const [allTemplates, setAllTemplates] = React.useState([]);
   const [refOpen, setRefOpen] = React.useState(false);
+  const [isIconPickerOpen, setIsIconPickerOpen] = React.useState(false);
 
   // Lade Navigationen und Templates beim Start
   React.useEffect(() => {
@@ -219,6 +221,13 @@ export default function TemplatesView({
                     {s.label}{s.type === 'bound' ? ' (bound)' : s.type === 'defined' ? ' (defined)' : ''}
                   </button>
                 ))}
+                <button 
+                  className="template-snippet-btn"
+                  onClick={() => setIsIconPickerOpen(true)}
+                  style={{ backgroundColor: 'rgba(100, 150, 255, 0.15)', borderColor: 'rgba(100, 150, 255, 0.3)' }}
+                >
+                  Icons
+                </button>
               </div>
               {/* Bound snippets list */}
               <div style={{ marginTop: 8 }}>
@@ -454,6 +463,12 @@ export default function TemplatesView({
         </div>
 
       </div>
+
+      <IconPickerModal 
+        isOpen={isIconPickerOpen}
+        onClose={() => setIsIconPickerOpen(false)}
+        onInsert={(iconHtml) => setTemplateCode(c => c + iconHtml)}
+      />
     </div>
   );
 }

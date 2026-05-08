@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AlertCircle, Save, X, Trash2 } from 'lucide-react';
+import { AlertCircle, Save, X, Trash2 } from '../lib/muiIcons';
 import Toast from './Toast';
 import RichTextEditor from './RichTextEditor';
 

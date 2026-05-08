@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save } from 'lucide-react';
+import { Save } from '../lib/muiIcons';
 
 /**
  * ElementPropertyEditor - Edit properties of a selected DOM element

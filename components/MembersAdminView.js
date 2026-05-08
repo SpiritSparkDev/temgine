@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Users, Trash2, Shield, ShieldOff, RefreshCw, UserX, UserCheck } from 'lucide-react';
+import { Users, Trash2, Shield, ShieldOff, RefreshCw, UserX, UserPlus } from '../lib/muiIcons';
 
 function formatDate(iso) {
   if (!iso) return '';

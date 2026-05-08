@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Search, ChevronLeft, FileText, Rss } from 'lucide-react';
+import { Plus, Trash2, Search, ChevronLeft, FileText, Rss } from '../lib/muiIcons';
 import BlogPostEditor from './BlogPostEditor';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';

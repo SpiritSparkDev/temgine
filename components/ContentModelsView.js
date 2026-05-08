@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Plus, Edit2, Trash2, Database, ChevronUp, ChevronDown, X, Save, Layers } from 'lucide-react'
+import { Plus, Edit2, Trash2, Database, ChevronUp, ChevronDown, X, Save, Layers } from '../lib/muiIcons'
 
 const FIELD_TYPE_LABELS = {
   text: 'Text',

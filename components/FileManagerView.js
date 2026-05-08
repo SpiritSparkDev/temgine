@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Trash2, Image as ImageIcon, FileText, Download, Copy, FolderPlus, Folder, ChevronRight, Clock, CheckSquare, Square, AlertTriangle, Tag, X, Info } from 'lucide-react';
+import { Upload, Trash2, Image as ImageIcon, FileText, Download, Copy, FolderPlus, Folder, ChevronRight, Clock, CheckSquare, Square, AlertTriangle, Tag, X, Info } from '../lib/muiIcons';
 
 // ── XHR-Upload mit Fortschritts-Callback ────────────────────────────────────
 function xhrUpload(url, formData, onProgress) {

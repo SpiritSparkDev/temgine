@@ -98,6 +98,8 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
   return (
     <SessionProvider session={session}>
       <Head>
+        {/* Font Awesome Icons CDN */}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
         {/* Favicon files served from /public/favicon/ */}
         <link rel="icon" href="/favicon/favicon.ico" />
         <link rel="shortcut icon" href="/favicon/favicon.ico" />

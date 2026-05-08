@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
-import { History, X, ChevronRight } from 'lucide-react';
+import { History, X, ChevronRight } from '../lib/muiIcons';
 
 const BADGE_STYLES = {
   'badge-gray':   { background: '#f5f5f5', color: '#616161', border: '1px solid #e0e0e0' },

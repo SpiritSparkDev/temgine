@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Mail, Trash2, Eye, EyeOff, RefreshCw, Inbox } from 'lucide-react';
+import { Mail, Trash2, Eye, EyeOff, RefreshCw, Inbox } from '../lib/muiIcons';
 
 function formatDate(iso) {
   if (!iso) return '';

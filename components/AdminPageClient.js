@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield } from 'lucide-react';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield } from '../lib/muiIcons';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';

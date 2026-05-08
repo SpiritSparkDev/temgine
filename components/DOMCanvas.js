@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Plus, Trash2, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Copy, ChevronDown, ChevronUp } from '../lib/muiIcons';
 
 /**
  * DOMCanvas - Visual editor for DOM elements

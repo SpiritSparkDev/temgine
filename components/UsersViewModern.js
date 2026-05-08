@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, User, Edit, Trash2 } from 'lucide-react';
+import { Shield, User, Edit2, Trash2 } from '../lib/muiIcons';
 
 const ROLE_LABELS = {
   ADMIN: 'Administrator',

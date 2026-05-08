@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Columns, Monitor, Minimize2, Maximize2, X } from 'lucide-react';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X } from '../lib/muiIcons';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';

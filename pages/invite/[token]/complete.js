@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle } from '../../lib/muiIcons';
 
 export default function CompleteInvite() {
   const router = useRouter();

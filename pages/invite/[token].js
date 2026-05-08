@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
-import { User, Mail, Key, Shield, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Key, Shield, CheckCircle2, AlertTriangle } from '../../lib/muiIcons';
 import Head from 'next/head';
 
 export default function InvitePage() {

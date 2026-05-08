@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { X, RotateCcw, Trash2, Clock, Loader, GitCompare } from 'lucide-react';
+import { X, RotateCcw, Trash2, Clock, Loader, GitCompare } from '../lib/muiIcons';
 
 function formatDate(dateStr) {
   if (!dateStr) return '–';

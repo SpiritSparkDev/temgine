@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Rss, Layout, AlertCircle } from 'lucide-react';
+import { X, Save, Rss, Layout, AlertTriangle } from '../lib/muiIcons';
 
 const TEMPLATE_SLOTS = [
   {

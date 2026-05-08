@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { availableTransitions, STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 import WorkflowHistoryPanel from './WorkflowHistoryPanel';
-import { History } from 'lucide-react';
+import { History } from '../lib/muiIcons';
 
 const TRANSITION_LABELS = {
   DRAFT:     'Zurück zu Entwurf',

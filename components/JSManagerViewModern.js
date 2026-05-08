@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Edit2, Trash2, FileCode, GripVertical, FolderOpen } from 'lucide-react';
+import { Plus, Edit2, Trash2, Code, GripVertical, FolderOpen } from '../lib/muiIcons';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 

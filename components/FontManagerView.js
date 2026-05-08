@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Type, FolderOpen, RefreshCw } from 'lucide-react';
+import { Type, FolderOpen, RefreshCw } from '../lib/muiIcons';
 
 export default function FontManagerView({ showToast }) {
   const [fonts, setFonts] = useState([]);

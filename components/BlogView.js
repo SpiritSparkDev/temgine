@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Rss, FileText, ChevronRight, CheckCircle2, Circle, Layout } from 'lucide-react';
+import { Plus, Edit2, Trash2, Rss, FileText, ChevronRight, CheckCircle2, Circle, Layout } from '../lib/muiIcons';
 import BlogPostsView from './BlogPostsView';
 import BlogChannelEditor from './BlogChannelEditor';
 import BlogTemplateEditor from './BlogTemplateEditor';
