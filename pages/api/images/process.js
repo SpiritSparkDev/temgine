@@ -25,10 +25,50 @@ const SIZES = {
   }
 });
 
+function normalizeUploadSegment(input) {
+  return String(input || '')
+    .normalize('NFC')
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae')
+    .replace(/Ö/g, 'Oe')
+    .replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._\-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function normalizeUploadFilename(input) {
+  const parsed = path.parse(String(input || ''));
+  const base = normalizeUploadSegment(parsed.name) || 'image';
+  const ext = normalizeUploadSegment(parsed.ext).replace(/_/g, '') || parsed.ext || '';
+  return `${base}${ext}`;
+}
+
+function getUniqueWebpBaseName(dir, preferredBaseName) {
+  const parsed = path.parse(String(preferredBaseName || 'image.webp'));
+  const base = parsed.name || 'image';
+  const ext = parsed.ext || '.webp';
+  let candidate = `${base}${ext}`;
+  let counter = 1;
+
+  while (fs.existsSync(path.join(dir, candidate))) {
+    counter += 1;
+    candidate = `${base}_${counter}${ext}`;
+  }
+
+  return path.parse(candidate).name;
+}
+
 async function processImage(inputPath, filename) {
   const results = {};
-  const ext = path.extname(filename);
-  const basename = path.basename(filename, ext);
+  const normalizedName = normalizeUploadFilename(filename || 'image');
+  const ext = path.extname(normalizedName);
+  const preferredBase = path.basename(normalizedName, ext);
+  const basename = getUniqueWebpBaseName(UPLOAD_DIR, `${preferredBase}.webp`);
 
   try {
     const image = sharp(inputPath);
