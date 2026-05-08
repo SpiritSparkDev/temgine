@@ -3,9 +3,9 @@
   "version": "0.8.0",
   "private": true,
   "scripts": {
-    "dev": "npm run test && next dev",
+    "dev": "npm run test && next dev --turbopack",
     "test": "jest --color",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --turbopack",
     "start": "next start",
     "check-env": "node scripts/check-env.js",
     "migrate": "node scripts/migrate.js",
@@ -17,7 +17,6 @@
     "clean": "if (Test-Path .next) { Remove-Item .next -Recurse -Force }; if (Test-Path .next-dev) { Remove-Item .next-dev -Recurse -Force }; if (Test-Path node_modules/.cache) { Remove-Item node_modules/.cache -Recurse -Force }; Write-Host 'Cleaned build artifacts and caches'"
   },
   "dependencies": {
-    "@babel/runtime": "^7.29.2",
     "@codemirror/autocomplete": "^6.18.4",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/lang-css": "^6.3.1",
@@ -51,13 +50,6 @@
     "sharp": "^0.32.6"
   },
   "devDependencies": {
-    "@babel/code-frame": "^7.29.0",
-    "@babel/core": "^7.29.0",
-    "@babel/generator": "^7.29.1",
-    "@babel/parser": "^7.29.2",
-    "@babel/template": "^7.28.6",
-    "@babel/traverse": "^7.29.0",
-    "@babel/types": "^7.29.0",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
     "identity-obj-proxy": "^3.0.0",

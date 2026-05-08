@@ -1,4 +1,3 @@
-const path = require('path');
 // Use development mode only when NODE_ENV is explicitly 'development'.
 // On Plesk/production hosts NODE_ENV is often unset — defaulting to dev mode
 // would make the server look for built assets in '.next-dev' while the build
@@ -43,23 +42,10 @@ const securityHeaders = [
   },
 ];
 
-/**
- * Ensure a single instance of CodeMirror packages is resolved by webpack.
- * This avoids "Unrecognized extension value" errors caused by multiple
- * copies of `@codemirror/state` being loaded.
- */
-const cmPackages = [
-  '@codemirror/state',
-  '@codemirror/view',
-  '@codemirror/language',
-  '@codemirror/commands',
-  '@codemirror/autocomplete',
-  '@codemirror/theme-one-dark'
-];
-
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  turbopack: {},
   async headers() {
     return [
       {
@@ -68,22 +54,5 @@ module.exports = {
         headers: securityHeaders,
       },
     ];
-  },
-  // Turbopack config (Next.js 16 default for `next dev`)
-  // Empty config silences the "webpack config but no turbopack config" warning.
-  // Turbopack handles package deduplication natively — no aliases needed.
-  turbopack: {},
-  webpack: (config) => {
-    config.resolve.alias = config.resolve.alias || {};
-    const pkgRoot = path.resolve(__dirname, 'node_modules');
-
-    // Aliases for common CodeMirror packages to force a single resolved copy
-    const aliases = cmPackages;
-
-    aliases.forEach((name) => {
-      config.resolve.alias[name] = path.join(pkgRoot, name);
-    });
-
-    return config;
   }
 };
