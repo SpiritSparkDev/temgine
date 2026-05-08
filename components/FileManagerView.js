@@ -93,6 +93,7 @@ function MetadataModal({ file, metadata, onSave, onClose }) {
 // ── Haupt-Komponente ─────────────────────────────────────────────────────────
 
 export default function FileManagerView({ showToast }) {
+  const MAX_IMAGE_RETRIES = 2;
   const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -102,7 +103,7 @@ export default function FileManagerView({ showToast }) {
   const [dragging, setDragging] = useState(false);
   // uploadQueue: [{ id, name, done, error, progress }]
   const [uploadQueue, setUploadQueue] = useState([]);
-  const [failedImages, setFailedImages] = useState(new Set());
+  const [failedImages, setFailedImages] = useState({});
   // Batch-Selektion
   const [selectedUrls, setSelectedUrls] = useState(new Set());
   const [batchMode, setBatchMode] = useState(false);
@@ -139,8 +140,9 @@ export default function FileManagerView({ showToast }) {
       const fileList = data.files || [];
       setFiles(fileList);
       setFolders(data.folders || []);
+      setFailedImages({});
       if (fileList.length > 0) loadMetadata(fileList.map(f => f.url));
-    } catch (_e) { setFiles([]); setFolders([]); }
+    } catch (_e) { setFiles([]); setFolders([]); setFailedImages({}); }
   }
 
   async function loadMetadata(urls) {
@@ -488,7 +490,7 @@ export default function FileManagerView({ showToast }) {
       }
 
       showToast(
-        `${data.renamedFiles || 0} Datei(en), ${data.renamedFolders || 0} Ordner und ${data.metadataUpdated || 0} Metadaten aktualisiert`,
+        `${data.renamedFiles || 0} Datei(en), ${data.renamedFolders || 0} Ordner, ${data.metadataUpdated || 0} Metadaten und ${data.referencesUpdated?.replacedUrls || 0} Inhalts-Referenzen aktualisiert`,
         'success'
       );
     } catch (error) {
@@ -511,7 +513,10 @@ export default function FileManagerView({ showToast }) {
   }
 
   function handleImageError(url) {
-    setFailedImages(prev => new Set([...prev, url]));
+    setFailedImages(prev => ({
+      ...prev,
+      [url]: (prev[url] || 0) + 1,
+    }));
   }
 
   const filteredFiles = files.filter(file => {
@@ -821,7 +826,11 @@ export default function FileManagerView({ showToast }) {
 
         {/* Datei-Karten */}
         {filteredFiles.map((file, index) => {
-          const imgFailed  = failedImages.has(file.url);
+          const imageFailureCount = failedImages[file.url] || 0;
+          const imageRetryExhausted = imageFailureCount > MAX_IMAGE_RETRIES;
+          const imageSrc = imageFailureCount > 0
+            ? `${file.url}${file.url.includes('?') ? '&' : '?'}retry=${imageFailureCount}`
+            : file.url;
           const isSelected = selectedUrls.has(file.url);
           const meta       = metadataMap[file.url];
           const missingAlt = isImage(file.name) && !meta?.altText;
@@ -850,10 +859,10 @@ export default function FileManagerView({ showToast }) {
               <div className="file-preview"
                 onClick={batchMode ? () => toggleSelect(file.url) : undefined}
                 style={batchMode ? { cursor: 'pointer' } : undefined}>
-                {isImage(file.name) && !imgFailed ? (
-                  <img src={file.url} alt={meta?.altText || file.name} onError={() => handleImageError(file.url)} />
-                ) : isImage(file.name) && imgFailed ? (
-                  <div className="file-not-ready"><Clock size={28} /><span>Wird verarbeitet</span></div>
+                {isImage(file.name) && !imageRetryExhausted ? (
+                  <img src={imageSrc} alt={meta?.altText || file.name} onError={() => handleImageError(file.url)} />
+                ) : isImage(file.name) && imageRetryExhausted ? (
+                  <div className="file-not-ready"><Clock size={28} /><span>Bild konnte nicht geladen werden</span></div>
                 ) : (
                   <div className="file-icon"><FileText size={48} /></div>
                 )}

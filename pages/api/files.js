@@ -166,15 +166,7 @@ function repairFilenamesRecursive(absDir, oldRelativeDir = '', newRelativeDir = 
 
 async function syncMetadataUrls(mappings = []) {
   let updated = 0;
-  const uniqueMappings = [];
-  const seen = new Set();
-
-  for (const item of mappings) {
-    const key = `${item.oldUrl}=>${item.newUrl}`;
-    if (!item?.oldUrl || !item?.newUrl || item.oldUrl === item.newUrl || seen.has(key)) continue;
-    seen.add(key);
-    uniqueMappings.push(item);
-  }
+  const uniqueMappings = buildUniqueMappings(mappings);
 
   for (const { oldUrl, newUrl } of uniqueMappings) {
     const existing = await prisma.fileMetadata.findUnique({ where: { url: oldUrl } });
@@ -203,6 +195,259 @@ async function syncMetadataUrls(mappings = []) {
   }
 
   return updated;
+}
+
+function buildUniqueMappings(mappings = []) {
+  const uniqueMappings = [];
+  const seen = new Set();
+
+  const add = (oldUrl, newUrl) => {
+    if (!oldUrl || !newUrl || oldUrl === newUrl) return;
+    const key = `${oldUrl}=>${newUrl}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    uniqueMappings.push({ oldUrl, newUrl });
+  };
+
+  for (const item of mappings) {
+    const oldUrl = String(item?.oldUrl || '');
+    const newUrl = String(item?.newUrl || '');
+    add(oldUrl, newUrl);
+
+    try {
+      add(encodeURI(oldUrl), encodeURI(newUrl));
+    } catch (_e) {}
+  }
+
+  uniqueMappings.sort((left, right) => right.oldUrl.length - left.oldUrl.length);
+  return uniqueMappings;
+}
+
+function replaceMappedUrlsInString(input, mappings = []) {
+  let output = String(input || '');
+  let replaced = 0;
+
+  for (const { oldUrl, newUrl } of mappings) {
+    if (!oldUrl || oldUrl === newUrl) continue;
+    if (!output.includes(oldUrl)) continue;
+
+    const parts = output.split(oldUrl);
+    replaced += Math.max(parts.length - 1, 0);
+    output = parts.join(newUrl);
+  }
+
+  return { output, replaced };
+}
+
+function resolveUploadUrlToAbsolute(uploadUrlPath) {
+  const relative = String(uploadUrlPath || '').replace(/^\/uploads\//, '').replace(/^\/+/, '');
+  const abs = path.resolve(UPLOAD_DIR, relative);
+  if (!abs.startsWith(UPLOAD_DIR)) return null;
+  return abs;
+}
+
+function findBestMatchForNormalizedFile(dirAbs, normalizedFilename) {
+  if (!fs.existsSync(dirAbs)) return null;
+  const parsed = path.parse(normalizedFilename);
+  const targetBase = parsed.name || '';
+  const targetExt = (parsed.ext || '').toLowerCase();
+
+  const candidates = fs.readdirSync(dirAbs)
+    .filter((entry) => {
+      const entryParsed = path.parse(entry);
+      if ((entryParsed.ext || '').toLowerCase() !== targetExt) return false;
+      return entryParsed.name === targetBase || entryParsed.name.startsWith(`${targetBase}_`);
+    })
+    .sort((left, right) => {
+      if (left.length !== right.length) return left.length - right.length;
+      return left.localeCompare(right, 'de', { sensitivity: 'base' });
+    });
+
+  return candidates[0] || null;
+}
+
+function tryRepairSingleUploadUrl(rawUrl) {
+  if (!rawUrl || !rawUrl.startsWith('/uploads/')) return rawUrl;
+
+  const hashIndex = rawUrl.indexOf('#');
+  const queryIndex = rawUrl.indexOf('?');
+  const splitIndex = [queryIndex, hashIndex].filter((idx) => idx >= 0).sort((a, b) => a - b)[0] ?? -1;
+  const pathPart = splitIndex >= 0 ? rawUrl.slice(0, splitIndex) : rawUrl;
+  const suffix = splitIndex >= 0 ? rawUrl.slice(splitIndex) : '';
+
+  const exactAbs = resolveUploadUrlToAbsolute(pathPart);
+  if (exactAbs && fs.existsSync(exactAbs)) return rawUrl;
+
+  let decodedPath = pathPart;
+  try { decodedPath = decodeURI(pathPart); } catch (_e) {}
+
+  const relative = decodedPath.replace(/^\/uploads\//, '').replace(/^\/+/, '');
+  const parts = relative.split('/').filter(Boolean);
+  if (parts.length === 0) return rawUrl;
+
+  const normalizedParts = parts.map((part, index) => {
+    if (index === parts.length - 1) return normalizeUploadFilename(part);
+    return normalizeUploadSegment(part);
+  });
+  const normalizedRelative = normalizedParts.join('/');
+  const normalizedUrl = `/uploads/${normalizedRelative}${suffix}`;
+  const normalizedAbs = resolveUploadUrlToAbsolute(`/uploads/${normalizedRelative}`);
+  if (normalizedAbs && fs.existsSync(normalizedAbs)) return normalizedUrl;
+
+  const normalizedFile = normalizedParts[normalizedParts.length - 1];
+  const normalizedDirRel = normalizedParts.slice(0, -1).join('/');
+  const normalizedDirAbs = path.resolve(UPLOAD_DIR, normalizedDirRel || '.');
+  const bestMatch = findBestMatchForNormalizedFile(normalizedDirAbs, normalizedFile);
+  if (!bestMatch) return rawUrl;
+
+  const repairedRel = [normalizedDirRel, bestMatch].filter(Boolean).join('/');
+  return `/uploads/${repairedRel}${suffix}`;
+}
+
+function repairUploadUrlsInString(input, urlCache) {
+  const source = String(input || '');
+  let changed = 0;
+
+  const output = source.replace(/\/uploads\/[^"'\s)<>]+/g, (urlCandidate) => {
+    if (urlCache.has(urlCandidate)) {
+      const cached = urlCache.get(urlCandidate);
+      if (cached !== urlCandidate) changed += 1;
+      return cached;
+    }
+
+    const repaired = tryRepairSingleUploadUrl(urlCandidate);
+    urlCache.set(urlCandidate, repaired);
+    if (repaired !== urlCandidate) changed += 1;
+    return repaired;
+  });
+
+  return { output, replaced: changed };
+}
+
+function replaceUrlsInJsonValue(value, mappings, urlCache) {
+  if (typeof value === 'string') {
+    const mapped = replaceMappedUrlsInString(value, mappings);
+    const repaired = repairUploadUrlsInString(mapped.output, urlCache);
+    return {
+      value: repaired.output,
+      replaced: mapped.replaced + repaired.replaced,
+      changed: repaired.output !== value,
+    };
+  }
+
+  if (Array.isArray(value)) {
+    let replaced = 0;
+    let changed = false;
+    const next = value.map((item) => {
+      const result = replaceUrlsInJsonValue(item, mappings, urlCache);
+      replaced += result.replaced;
+      if (result.changed) changed = true;
+      return result.value;
+    });
+    return { value: next, replaced, changed };
+  }
+
+  if (value && typeof value === 'object') {
+    let replaced = 0;
+    let changed = false;
+    const next = {};
+    for (const [key, item] of Object.entries(value)) {
+      const result = replaceUrlsInJsonValue(item, mappings, urlCache);
+      next[key] = result.value;
+      replaced += result.replaced;
+      if (result.changed) changed = true;
+    }
+    return { value: next, replaced, changed };
+  }
+
+  return { value, replaced: 0, changed: false };
+}
+
+async function syncContentUrlReferences(mappings = []) {
+  const uniqueMappings = buildUniqueMappings(mappings);
+  const urlCache = new Map();
+  const stats = {
+    pages: 0,
+    templates: 0,
+    snippets: 0,
+    navigations: 0,
+    contentEntries: 0,
+    settings: 0,
+    replacedUrls: 0,
+  };
+
+  const pages = await prisma.page.findMany({
+    select: { id: true, blocks: true, data: true, children: true },
+  });
+  for (const pageRecord of pages) {
+    const blocksResult = replaceUrlsInJsonValue(pageRecord.blocks, uniqueMappings, urlCache);
+    const dataResult = replaceUrlsInJsonValue(pageRecord.data, uniqueMappings, urlCache);
+    const childrenResult = replaceUrlsInJsonValue(pageRecord.children, uniqueMappings, urlCache);
+    const totalReplaced = blocksResult.replaced + dataResult.replaced + childrenResult.replaced;
+
+    if (!blocksResult.changed && !dataResult.changed && !childrenResult.changed) continue;
+    await prisma.page.update({
+      where: { id: pageRecord.id },
+      data: {
+        blocks: blocksResult.value,
+        data: dataResult.value,
+        children: childrenResult.value,
+      },
+    });
+    stats.pages += 1;
+    stats.replacedUrls += totalReplaced;
+  }
+
+  const templates = await prisma.template.findMany({ select: { id: true, code: true } });
+  for (const templateRecord of templates) {
+    const mapped = replaceMappedUrlsInString(templateRecord.code, uniqueMappings);
+    const repaired = repairUploadUrlsInString(mapped.output, urlCache);
+    if (repaired.output === templateRecord.code) continue;
+    await prisma.template.update({ where: { id: templateRecord.id }, data: { code: repaired.output } });
+    stats.templates += 1;
+    stats.replacedUrls += mapped.replaced + repaired.replaced;
+  }
+
+  const snippets = await prisma.snippet.findMany({ select: { id: true, value: true } });
+  for (const snippetRecord of snippets) {
+    const mapped = replaceMappedUrlsInString(snippetRecord.value, uniqueMappings);
+    const repaired = repairUploadUrlsInString(mapped.output, urlCache);
+    if (repaired.output === snippetRecord.value) continue;
+    await prisma.snippet.update({ where: { id: snippetRecord.id }, data: { value: repaired.output } });
+    stats.snippets += 1;
+    stats.replacedUrls += mapped.replaced + repaired.replaced;
+  }
+
+  const navigations = await prisma.navigation.findMany({ select: { id: true, code: true } });
+  for (const navRecord of navigations) {
+    const mapped = replaceMappedUrlsInString(navRecord.code, uniqueMappings);
+    const repaired = repairUploadUrlsInString(mapped.output, urlCache);
+    if (repaired.output === navRecord.code) continue;
+    await prisma.navigation.update({ where: { id: navRecord.id }, data: { code: repaired.output } });
+    stats.navigations += 1;
+    stats.replacedUrls += mapped.replaced + repaired.replaced;
+  }
+
+  const entries = await prisma.contentEntry.findMany({ select: { id: true, data: true } });
+  for (const entryRecord of entries) {
+    const result = replaceUrlsInJsonValue(entryRecord.data, uniqueMappings, urlCache);
+    if (!result.changed) continue;
+    await prisma.contentEntry.update({ where: { id: entryRecord.id }, data: { data: result.value } });
+    stats.contentEntries += 1;
+    stats.replacedUrls += result.replaced;
+  }
+
+  const settings = await prisma.setting.findMany({ select: { id: true, value: true } });
+  for (const settingRecord of settings) {
+    const mapped = replaceMappedUrlsInString(settingRecord.value, uniqueMappings);
+    const repaired = repairUploadUrlsInString(mapped.output, urlCache);
+    if (repaired.output === settingRecord.value) continue;
+    await prisma.setting.update({ where: { id: settingRecord.id }, data: { value: repaired.output } });
+    stats.settings += 1;
+    stats.replacedUrls += mapped.replaced + repaired.replaced;
+  }
+
+  return stats;
 }
 
 export default async function handler(req, res) {
@@ -398,12 +643,14 @@ export default async function handler(req, res) {
 
       const result = repairFilenamesRecursive(targetDir, folderPath, folderPath);
       const metadataUpdated = await syncMetadataUrls(result.mappings);
+      const referencesUpdated = await syncContentUrlReferences(result.mappings);
 
       return res.status(200).json({
         success: true,
         renamedFiles: result.renamedFiles,
         renamedFolders: result.renamedFolders,
         metadataUpdated,
+        referencesUpdated,
       });
     } catch (error) {
       return res.status(500).json({ error: 'Dateinamen konnten nicht repariert werden: ' + error.message });
