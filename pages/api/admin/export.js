@@ -4,6 +4,9 @@ import fs from 'fs'
 import path from 'path'
 import JSZip from 'jszip'
 
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
+const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
+
 async function loadCSSFiles() {
   const cssDir = path.join(process.cwd(), 'public', 'extern_css')
   const files = []
@@ -56,28 +59,55 @@ function loadJsonConfig(filename) {
 }
 
 async function loadNavigations() {
-  const navDir = path.join(process.cwd(), 'data', 'navigations')
-  const navigations = []
-  
-  if (!fs.existsSync(navDir)) return navigations
-  
   try {
-    const files = fs.readdirSync(navDir).filter(f => f.endsWith('.html'))
-    for (const filename of files) {
-      const filePath = path.join(navDir, filename)
-      try {
-        const code = fs.readFileSync(filePath, 'utf-8')
-        const name = filename.replace('.html', '')
-        navigations.push({ name, filename, code })
-      } catch (e) {
-        console.warn(`Failed to read navigation file ${filename}:`, e.message)
+    return await prisma.navigation.findMany({
+      orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, name: true, type: true, code: true, isActive: true }
+    })
+  } catch (e) {
+    console.warn('Failed to load navigations from database:', e.message)
+    return []
+  }
+}
+
+function scanUploadFonts(dir, relBase = '', out = []) {
+  if (!fs.existsSync(dir)) return out
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const rel = relBase ? `${relBase}/${entry.name}` : entry.name
+      const abs = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        scanUploadFonts(abs, rel, out)
+        continue
       }
+      const ext = path.extname(entry.name).toLowerCase()
+      if (!FONT_EXTS.has(ext)) continue
+      out.push({ relPath: rel, absPath: abs })
     }
   } catch (e) {
-    console.warn('Failed to load navigations:', e.message)
+    console.warn('Failed to scan upload fonts:', e.message)
   }
-  
-  return navigations
+  return out
+}
+
+function loadUploadFonts() {
+  const files = []
+  if (!fs.existsSync(UPLOADS_DIR)) return files
+  const found = scanUploadFonts(UPLOADS_DIR, '', [])
+  for (const file of found) {
+    try {
+      const content = fs.readFileSync(file.absPath)
+      files.push({
+        path: file.relPath,
+        encoding: 'base64',
+        content: content.toString('base64')
+      })
+    } catch (e) {
+      console.warn(`Failed to read upload font ${file.relPath}:`, e.message)
+    }
+  }
+  return files
 }
 
 export default async function handler(req, res) {
@@ -118,6 +148,8 @@ export default async function handler(req, res) {
       loadNavigations()
     ])
 
+    const uploadFonts = loadUploadFonts()
+
     const cssConfig = loadJsonConfig('css-config.json')
     const fontsConfig = loadJsonConfig('fonts-config.json')
 
@@ -133,17 +165,18 @@ export default async function handler(req, res) {
     })
 
     const backupMetadata = {
-      version: '1.1',
+      version: '1.2',
       exportedAt: now.toISOString(),
       exportedDate: now.toLocaleDateString('de-DE'),
       exportedTime: now.toLocaleTimeString('de-DE'),
-      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'cssConfig', 'fontsConfig'],
+      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'uploadFonts', 'cssConfig', 'fontsConfig'],
       itemCounts: {
         templates: templates.length,
         snippets: mappedSnippets.length,
         pages: pages.length,
         cssFiles: css.length,
         navigations: navigations.length,
+        uploadFonts: uploadFonts.length,
         cssConfig: cssConfig ? 1 : 0,
         fontsConfig: fontsConfig ? 1 : 0
       }
@@ -156,6 +189,7 @@ export default async function handler(req, res) {
       pages,
       css,
       navigations,
+      uploadFonts,
       cssConfig: cssConfig || null,
       fontsConfig: fontsConfig || null
     }
@@ -179,8 +213,21 @@ export default async function handler(req, res) {
       // Navigations as individual HTML files
       const navFolder = zip.folder('navigations')
       for (const nav of navigations) {
-        const safeName = (nav.name || nav.filename || 'navigation').replace(/[^\w.-]/g, '_')
-        navFolder.file(`${safeName}.html`, nav.code || '')
+        const safeName = (nav.name || nav.id || 'navigation').replace(/[^\w.-]/g, '_')
+        navFolder.file(`${safeName}.json`, JSON.stringify(nav, null, 2))
+      }
+
+      // Uploaded fonts (binary) to keep @font-face sources valid after restore
+      const uploadFontsFolder = zip.folder('uploads-fonts')
+      for (const f of uploadFonts) {
+        const safePath = String(f.path || '').replace(/\\/g, '/').replace(/^\/+/, '')
+        if (!safePath) continue
+        try {
+          const buf = Buffer.from(String(f.content || ''), 'base64')
+          uploadFontsFolder.file(safePath, buf)
+        } catch (e) {
+          console.warn(`Failed to add font ${safePath} to zip:`, e.message)
+        }
       }
 
       // CSS files individually + merged

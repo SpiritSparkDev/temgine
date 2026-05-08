@@ -4,6 +4,9 @@ import { requireAuth } from '../../../lib/auth'
 import fs from 'fs'
 import path from 'path'
 
+const VALID_NAV_TYPES = new Set(['MAIN', 'PAGE'])
+const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
+
 export const config = {
   api: {
     bodyParser: {
@@ -121,32 +124,166 @@ function importJsonConfig(filename, data, strategy = 'merge') {
 }
 
 async function importNavigations(navigations = [], strategy = 'merge') {
-  const navDir = path.join(process.cwd(), 'data', 'navigations')
-  if (!fs.existsSync(navDir)) fs.mkdirSync(navDir, { recursive: true })
+  const result = { imported: 0, errors: [], activeMainId: null }
 
-  // If replace strategy: delete all existing navigation files
   if (strategy === 'replace') {
     try {
-      const allFiles = fs.readdirSync(navDir).filter(f => f.endsWith('.html'))
-      for (const file of allFiles) {
-        fs.unlinkSync(path.join(navDir, file))
-      }
+      await prisma.navigation.deleteMany({})
     } catch (e) {
-      console.warn('Failed to delete old navigation files:', e.message)
+      result.errors.push(`Vorhandene Navigationen konnten nicht gelöscht werden: ${e.message}`)
     }
   }
 
-  // Write navigation files
   for (const nav of navigations) {
-    const filename = nav.filename || `${nav.name || 'nav'}.html`
-    const code = nav.code || ''
-    const filePath = path.join(navDir, filename)
+    const name = String(nav?.name || '').trim() || 'Navigation'
+    const rawType = String(nav?.type || 'MAIN').toUpperCase()
+    const type = VALID_NAV_TYPES.has(rawType) ? rawType : 'MAIN'
+    const code = String(nav?.code || '')
+    const isActive = Boolean(nav?.isActive)
+
     try {
-      fs.writeFileSync(filePath, code, 'utf-8')
+      let saved = null
+      if (nav?.id) {
+        // Preserve IDs from backup when available so page.data.pageNav remains valid.
+        saved = await prisma.navigation.upsert({
+          where: { id: String(nav.id) },
+          create: { id: String(nav.id), name, type, code, isActive },
+          update: { name, type, code, isActive }
+        })
+      } else {
+        // Legacy backups without nav ID: best-effort match by type+name.
+        const existing = await prisma.navigation.findFirst({ where: { type, name } })
+        if (existing) {
+          saved = await prisma.navigation.update({
+            where: { id: existing.id },
+            data: { code, isActive }
+          })
+        } else {
+          saved = await prisma.navigation.create({ data: { name, type, code, isActive } })
+        }
+      }
+
+      if (saved?.type === 'MAIN' && saved?.isActive) {
+        result.activeMainId = saved.id
+      }
+      result.imported++
     } catch (e) {
-      console.warn(`Failed to write navigation file ${filename}:`, e.message)
+      result.errors.push(`Navigation "${name}" konnte nicht importiert werden: ${e.message}`)
     }
   }
+
+  // Ensure only one active navigation per type.
+  for (const type of VALID_NAV_TYPES) {
+    try {
+      const actives = await prisma.navigation.findMany({
+        where: { type, isActive: true },
+        orderBy: { updatedAt: 'desc' },
+        select: { id: true }
+      })
+      if (actives.length > 1) {
+        const keepId = actives[0].id
+        await prisma.navigation.updateMany({
+          where: { type, isActive: true, id: { not: keepId } },
+          data: { isActive: false }
+        })
+      }
+      if (type === 'MAIN' && !result.activeMainId && actives[0]?.id) {
+        result.activeMainId = actives[0].id
+      }
+    } catch (e) {
+      result.errors.push(`Aktive Navigationen für Typ ${type} konnten nicht bereinigt werden: ${e.message}`)
+    }
+  }
+
+  return result
+}
+
+async function reconcilePageNavReferences(fallbackMainId = null) {
+  const result = { fixed: 0, errors: [] }
+  try {
+    const navs = await prisma.navigation.findMany({
+      where: { type: { in: ['MAIN', 'PAGE'] } },
+      select: { id: true, type: true, isActive: true }
+    })
+    const validIds = new Set(navs.map(n => n.id))
+    const activeMainId = fallbackMainId || (navs.find(n => n.type === 'MAIN' && n.isActive)?.id || null)
+
+    const pages = await prisma.page.findMany({ select: { id: true, data: true } })
+    for (const p of pages) {
+      const data = (p.data && typeof p.data === 'object' && !Array.isArray(p.data)) ? { ...p.data } : {}
+      if (!data.pageNav) continue
+      const pageNav = String(data.pageNav)
+      if (validIds.has(pageNav)) continue
+
+      if (activeMainId) data.pageNav = activeMainId
+      else delete data.pageNav
+
+      await prisma.page.update({ where: { id: p.id }, data: { data } })
+      result.fixed++
+    }
+  } catch (e) {
+    result.errors.push(`Seiten-Navigationsreferenzen konnten nicht bereinigt werden: ${e.message}`)
+  }
+  return result
+}
+
+function sanitizeUploadRelativePath(input) {
+  const norm = String(input || '').replace(/\\/g, '/').replace(/^\/+/, '')
+  if (!norm || norm.includes('..')) return null
+  return norm.split('/').map(seg => seg.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
+}
+
+function importUploadFonts(uploadFonts = [], strategy = 'merge') {
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
+  const result = { imported: 0, errors: [] }
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+
+  // Replace strategy: remove existing font files under uploads recursively.
+  if (strategy === 'replace') {
+    const walkDeleteFonts = (dir) => {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const e of entries) {
+          const abs = path.join(dir, e.name)
+          if (e.isDirectory()) walkDeleteFonts(abs)
+          else if (FONT_EXTS.has(path.extname(e.name).toLowerCase())) fs.unlinkSync(abs)
+        }
+      } catch (e) {
+        result.errors.push(`Vorhandene Upload-Fonts konnten nicht vollständig gelöscht werden: ${e.message}`)
+      }
+    }
+    walkDeleteFonts(uploadsDir)
+  }
+
+  for (const item of uploadFonts) {
+    const rel = sanitizeUploadRelativePath(item?.path)
+    if (!rel) {
+      result.errors.push('Ungültiger Upload-Font-Pfad übersprungen')
+      continue
+    }
+    const ext = path.extname(rel).toLowerCase()
+    if (!FONT_EXTS.has(ext)) continue
+
+    const abs = path.join(uploadsDir, rel)
+    if (!path.resolve(abs).startsWith(path.resolve(uploadsDir))) {
+      result.errors.push(`Unsicherer Upload-Font-Pfad übersprungen: ${rel}`)
+      continue
+    }
+
+    try {
+      const dir = path.dirname(abs)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const raw = item?.encoding === 'base64'
+        ? Buffer.from(String(item.content || ''), 'base64')
+        : Buffer.from(String(item.content || ''), 'utf-8')
+      fs.writeFileSync(abs, raw)
+      result.imported++
+    } catch (e) {
+      result.errors.push(`Upload-Font "${rel}" konnte nicht geschrieben werden: ${e.message}`)
+    }
+  }
+
+  return result
 }
 
 export default async function handler(req, res) {
@@ -162,17 +299,18 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [] }
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], uploadFonts: body.uploadFonts || [] }
     
     const templates = Array.isArray(backup.templates) ? backup.templates : []
     const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
     const pages = Array.isArray(backup.pages) ? backup.pages : []
     const css = Array.isArray(backup.css) ? backup.css : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
+    const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
     const cssConfig = backup.cssConfig || null
     const fontsConfig = backup.fontsConfig || null
 
-    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, errors: [] }
+    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, uploadFonts: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
@@ -287,10 +425,24 @@ export default async function handler(req, res) {
 
     // Import navigations
     try {
-      await importNavigations(navigations, strategy)
-      importStats.navigations = navigations.length
+      const navResult = await importNavigations(navigations, strategy)
+      importStats.navigations = navResult.imported
+      if (navResult.errors.length > 0) importStats.errors.push(...navResult.errors)
+
+      const reconcileResult = await reconcilePageNavReferences(navResult.activeMainId)
+      importStats.fixedPageNavRefs = reconcileResult.fixed
+      if (reconcileResult.errors.length > 0) importStats.errors.push(...reconcileResult.errors)
     } catch (e) {
       importStats.errors.push(`Navigations import failed: ${e.message}`)
+    }
+
+    // Restore uploaded font files so @font-face URLs keep working after restore
+    try {
+      const uploadFontResult = importUploadFonts(uploadFonts, strategy)
+      importStats.uploadFonts = uploadFontResult.imported
+      if (uploadFontResult.errors.length > 0) importStats.errors.push(...uploadFontResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Upload-Fonts import failed: ${e.message}`)
     }
 
     // Restore CSS enabled/disabled config
@@ -315,7 +467,7 @@ export default async function handler(req, res) {
       ok: true,
       strategy,
       importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.uploadFonts} upload fonts${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
     })
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)
