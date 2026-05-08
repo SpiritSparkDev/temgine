@@ -271,6 +271,8 @@ body { /* Einzige Ausnahme für den Scope*/
   box-sizing: border-box;
   position: fixed;
       height: 100%; 
+      overflow-y: scroll;
+  padding-bottom: 20ch;
 }
 
 .admin-nav {

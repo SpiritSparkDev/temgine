@@ -1,8 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 
 // SMTP setting keys persisted in the DB
+// Memoized field component to prevent re-renders
+const Field = React.memo(({ label, children, style }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', ...style }}>
+    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      {label}
+    </label>
+    {children}
+  </div>
+));
+
 const SMTP_KEYS = [
   'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_secure',
   'contact_recipient_email', 'contact_sender_name',
@@ -201,24 +211,16 @@ export default function SettingsView({ showToast }) {
     </button>
   );
 
-  // Reusable labeled form field
-  const Field = ({ label, children, style }) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', ...style }}>
-      <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-        {label}
-      </label>
-      {children}
-    </div>
-  );
 
-  const inputStyle = {
+  // Memoize styles to prevent re-renders on input changes
+  const inputStyle = useMemo(() => ({
     width: '100%', padding: '0.55rem 0.75rem',
     border: '1px solid var(--border-color)',
     borderRadius: '6px', fontSize: '0.9rem',
     background: 'var(--bg-secondary)',
     color: 'var(--text-primary)',
     boxSizing: 'border-box',
-  };
+  }), []);
 
   const tabBase = {
     padding: '0.5rem 1.25rem',

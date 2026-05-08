@@ -24,6 +24,58 @@ NextAuth.js stellt automatisch folgende Endpunkte bereit:
 
 ---
 
+## Kontaktformular
+
+### POST /api/contact
+
+Empfängt Formular-Absendungen und verarbeitet Felder generisch.
+
+**Verhalten:**
+- Pflichtfelder: `name` und `email` (inkl. Alias-Unterstützung, z. B. `fullname`, `mail`).
+- Alle gesendeten Formularfelder werden automatisch erfasst.
+- Die Nachricht wird automatisch als Feldliste aufgebaut (`Label: Wert` pro Zeile), falls kein explizites Nachrichtenfeld vorhanden ist.
+- Mehrfachwerte (z. B. Checkboxen) werden als kommaseparierte Liste zusammengeführt.
+- Meta-Felder wie `altcha`/Captcha werden nicht in die generierte Nachricht übernommen.
+
+**Unterstützte Alias-Felder:**
+- Name: `name`, `fullName`, `fullname`, `full_name`, `firstName`+`lastName`, `vorname`+`nachname`
+- E-Mail: `email`, `mail`, `e-mail`, `emailAddress`, `email_address`
+- Betreff: `subject`, `betreff`
+- Nachricht: `message`, `nachricht`, `text`, `content`
+
+**Body (Beispiel):**
+```json
+{
+  "fullname": "Max Mustermann",
+  "mail": "max@example.com",
+  "prioritaet": ["Stil", "Budget"],
+  "budget_range": "5k-10k",
+  "text": "Bitte ruft mich morgen an.",
+  "altcha": "<token>"
+}
+```
+
+**Response (Erfolg):**
+```json
+{
+  "ok": true
+}
+```
+
+**Response (Validierungsfehler):**
+```json
+{
+  "error": "Validierungsfehler",
+  "fields": {
+    "name": "Name ist erforderlich.",
+    "email": "Gültige E-Mail-Adresse erforderlich.",
+    "message": "Nachricht ist zu kurz."
+  }
+}
+```
+
+---
+
 ## Seiten (Pages)
 
 ### API-Vertrag (verbindlich)
@@ -333,41 +385,86 @@ Snippet löschen.
 Alle Navigationen oder eine einzelne Navigation abrufen.
 
 **Query-Parameter:**
-- `name` (optional) - Name der spezifischen Navigation
+- `id` (optional) - ID einer spezifischen Navigation (liefert inkl. `code`)
+- `active` (optional) - `true`, um nur aktive Navigationen zu laden (für Frontend-Rendering)
+
+**Navigations-Typen (aktuell):**
+- `MAIN` - Hauptnavigation (enthält Desktop + Mobile über CSS-Klassen wie `.desktop_nav` / `.mobile_nav`)
+- `PAGE` - Seitennavigation (z. B. Anchors/TOC)
 
 **Response (alle Navigationen):**
 ```json
-{
-  "navigations": ["main", "footer"]
-}
+[ 
+  {
+    "id": "clx123...",
+    "name": "Hauptnavigation Standard",
+    "type": "MAIN",
+    "isActive": true,
+    "updatedAt": "2026-05-08T10:22:33.000Z",
+    "isResponsiveCombined": true
+  }
+]
 ```
 
-**Response (einzelne Navigation):**
+**Response (`id` gesetzt, einzelne Navigation):**
 ```json
 {
-  "name": "main",
-  "code": "<nav>...</nav>"
+  "id": "clx123...",
+  "name": "Hauptnavigation Standard",
+  "type": "MAIN",
+  "code": "<nav class=\"desktop_nav\">...</nav>",
+  "isActive": true,
+  "createdAt": "2026-05-08T10:10:00.000Z",
+  "updatedAt": "2026-05-08T10:22:33.000Z"
 }
 ```
 
 ### POST /api/navigations
 
-Navigation erstellen oder aktualisieren.
+Navigation erstellen.
 
 **Body:**
 ```json
 {
-  "name": "main",
-  "code": "<nav class=\"navbar\">...</nav>"
+  "name": "Hauptnavigation Standard",
+  "type": "MAIN",
+  "code": "<nav class=\"desktop_nav\">...</nav>"
 }
 ```
 
 **Response:**
 ```json
 {
-  "message": "Navigation gespeichert"
+  "id": "clx123...",
+  "name": "Hauptnavigation Standard",
+  "type": "MAIN",
+  "code": "<nav class=\"desktop_nav\">...</nav>",
+  "isActive": false
 }
 ```
+
+### PUT /api/navigations
+
+Navigation aktualisieren oder aktivieren/deaktivieren.
+
+**Body (Code/Name aktualisieren):**
+```json
+{
+  "id": "clx123...",
+  "name": "Hauptnavigation Modern",
+  "code": "<nav class=\"desktop_nav\">...</nav>"
+}
+```
+
+**Body (aktivieren/deaktivieren):**
+```json
+{
+  "id": "clx123...",
+  "isActive": true
+}
+```
+
+Hinweis: Beim Aktivieren wird pro Typ (`MAIN` bzw. `PAGE`) jeweils nur eine Navigation aktiv gehalten.
 
 ### DELETE /api/navigations
 
@@ -376,7 +473,7 @@ Navigation löschen.
 **Body:**
 ```json
 {
-  "name": "main"
+  "id": "clx123..."
 }
 ```
 

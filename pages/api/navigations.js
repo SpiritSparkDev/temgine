@@ -2,7 +2,13 @@ import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/auth';
 import { logAudit } from '../../lib/audit';
 
-const VALID_TYPES = ['MAIN', 'PAGE', 'MOBILE'];
+const VALID_TYPES = ['MAIN', 'PAGE'];
+
+function isResponsiveCombinedNavCode(code) {
+  const src = String(code || '');
+  return /class\s*=\s*["'][^"']*\bdesktop_nav\b/i.test(src)
+    && /class\s*=\s*["'][^"']*\bmobile_nav\b/i.test(src);
+}
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -29,18 +35,29 @@ export default async function handler(req, res) {
       // Active navs — used by public rendering ([...slug].js)
       if (active === 'true') {
         const navs = await prisma.navigation.findMany({
-          where: { isActive: true },
+          where: { isActive: true, type: { in: VALID_TYPES } },
           select: { id: true, name: true, type: true, code: true },
         });
         return res.status(200).json(navs);
       }
 
-      // Full list (no code) — used by NavigationView
+      // Full list (with responsive marker, but without code body) — used by NavigationView
       const navs = await prisma.navigation.findMany({
+        where: { type: { in: VALID_TYPES } },
         orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true, name: true, type: true, isActive: true, updatedAt: true },
+        select: { id: true, name: true, type: true, isActive: true, updatedAt: true, code: true },
       });
-      return res.status(200).json(navs);
+
+      const list = navs.map((nav) => ({
+        id: nav.id,
+        name: nav.name,
+        type: nav.type,
+        isActive: nav.isActive,
+        updatedAt: nav.updatedAt,
+        isResponsiveCombined: nav.type === 'MAIN' && isResponsiveCombinedNavCode(nav.code),
+      }));
+
+      return res.status(200).json(list);
     }
 
     // ── Mutations — require MODERATOR or higher ───────────────────────────────

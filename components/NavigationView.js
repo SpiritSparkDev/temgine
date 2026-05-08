@@ -1,54 +1,75 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Navigation, Anchor, Smartphone, Globe, Layout, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Navigation, Anchor, Globe, Layout, ChevronRight } from 'lucide-react';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
-// ── Sample data for live preview ────────────────────────────────────────────
-const SAMPLE_DATA = {
-  main: {
-    pages: [
-      { slug: 'startseite', title: 'Startseite', hasChildren: false, children: [] },
-      { slug: 'ueber-uns', title: 'Über uns', hasChildren: true, children: [
-        { slug: 'ueber-uns/team', title: 'Team', hasChildren: false, children: [] },
-        { slug: 'ueber-uns/geschichte', title: 'Geschichte', hasChildren: false, children: [] },
-      ]},
-      { slug: 'leistungen', title: 'Leistungen', hasChildren: true, children: [
-        { slug: 'leistungen/webdesign', title: 'Webdesign', hasChildren: false, children: [] },
-        { slug: 'leistungen/seo', title: 'SEO', hasChildren: false, children: [] },
-        { slug: 'leistungen/beratung', title: 'Beratung', hasChildren: false, children: [] },
-      ]},
-      { slug: 'blog', title: 'Blog', hasChildren: false, children: [] },
-      { slug: 'kontakt', title: 'Kontakt', hasChildren: false, children: [] },
-    ],
-  },
-  page: {
-    anchors: [
-      { anchorId: 'einleitung', title: 'Einleitung' },
-      { anchorId: 'hauptteil', title: 'Hauptteil' },
-      { anchorId: 'ergebnisse', title: 'Ergebnisse' },
-      { anchorId: 'fazit', title: 'Fazit' },
-    ],
-  },
-  mobile: {
-    pages: [
-      { slug: 'startseite', title: 'Startseite', hasChildren: false, children: [] },
-      { slug: 'ueber-uns', title: 'Über uns', hasChildren: true, children: [
-        { slug: 'ueber-uns/team', title: 'Team', hasChildren: false, children: [] },
-        { slug: 'ueber-uns/geschichte', title: 'Geschichte', hasChildren: false, children: [] },
-      ]},
-      { slug: 'leistungen', title: 'Leistungen', hasChildren: true, children: [
-        { slug: 'leistungen/webdesign', title: 'Webdesign', hasChildren: false, children: [] },
-        { slug: 'leistungen/seo', title: 'SEO', hasChildren: false, children: [] },
-      ]},
-      { slug: 'kontakt', title: 'Kontakt', hasChildren: false, children: [] },
-    ],
-  },
-};
+const NAVIGATION_CSS_FILENAME = 'navigation.css';
+const DEFAULT_NAVIGATION_CSS = `/* Automatisch erstellt durch Navigation-Editor */
+.desktop_nav { display: block; }
+.mobile_nav { display: none; }
+
+.mobile_nav__list { display: none; list-style: none; padding: 0; margin: .75rem 0 0; }
+.mobile_nav.open .mobile_nav__list { display: block; }
+
+@media (max-width: 960px) {
+  .desktop_nav { display: none; }
+  .mobile_nav { display: block; }
+}`;
 
 // ── Presets ──────────────────────────────────────────────────────────────────
 const PRESETS = {
   MAIN: [
+    {
+      label: 'Responsive Combo (Desktop + Mobile)',
+      description: 'Ein Template mit .desktop_nav und .mobile_nav; Umschaltung per CSS-Media-Query',
+      code: `<style>
+.desktop_nav { display: block; }
+.mobile_nav { display: none; }
+.mobile_nav__list { display: none; list-style: none; padding: 0; margin: .75rem 0 0; }
+.mobile_nav.open .mobile_nav__list { display: block; }
+
+@media (max-width: 960px) {
+  .desktop_nav { display: none; }
+  .mobile_nav { display: block; }
+}
+</style>
+
+<div class="site-nav-combo">
+  <nav class="desktop_nav" aria-label="Hauptnavigation Desktop">
+    <ul class="desktop_nav__list">
+      {{#pages}}
+      <li class="desktop_nav__item{{#hasChildren}} has-children{{/hasChildren}}">
+        <a class="desktop_nav__link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="desktop_nav__sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
+      {{/pages}}
+    </ul>
+  </nav>
+
+  <nav class="mobile_nav" aria-label="Hauptnavigation Mobile">
+    <button class="mobile_nav__toggle" type="button" onclick="this.closest('.mobile_nav').classList.toggle('open')">
+      Menü
+    </button>
+    <ul class="mobile_nav__list">
+      {{#pages}}
+      <li class="mobile_nav__item{{#hasChildren}} has-children{{/hasChildren}}">
+        <a class="mobile_nav__link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="mobile_nav__sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
+      {{/pages}}
+    </ul>
+  </nav>
+</div>`
+    },
     {
       label: 'Horizontal Bar',
       description: 'Klassische horizontale Navigation mit Untermenü',
@@ -299,101 +320,11 @@ const PRESETS = {
 </nav>`,
     },
   ],
-  MOBILE: [
-    {
-      label: 'Hamburger Full-Screen',
-      description: 'Vollbild-Overlay mit Hamburger-Button',
-      code: `<div class="mobile-nav fullscreen-nav">
-  <button class="hamburger-btn" aria-label="Menü öffnen" onclick="this.closest('.mobile-nav').classList.toggle('open')">
-    <span></span><span></span><span></span>
-  </button>
-  <div class="fullscreen-overlay">
-    <button class="overlay-close" aria-label="Menü schließen" onclick="this.closest('.mobile-nav').classList.remove('open')">✕</button>
-    <ul class="fullscreen-list">
-      {{#pages}}
-      <li class="{{#hasChildren}}has-children{{/hasChildren}}">
-        <a class="fullscreen-link" href="/{{slug}}">{{title}}</a>
-        {{#hasChildren}}
-        <ul class="fullscreen-sub">
-          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
-        </ul>
-        {{/hasChildren}}
-      </li>
-      {{/pages}}
-    </ul>
-  </div>
-</div>`,
-    },
-    {
-      label: 'Slide-in Drawer',
-      description: 'Slide-in Schublade von links',
-      code: `<div class="mobile-nav drawer-nav">
-  <button class="drawer-toggle" aria-label="Menü öffnen" onclick="this.closest('.mobile-nav').classList.toggle('open')">☰</button>
-  <div class="drawer-backdrop" onclick="this.closest('.mobile-nav').classList.remove('open')"></div>
-  <aside class="drawer-panel">
-    <div class="drawer-header">
-      <span class="drawer-brand">Menü</span>
-      <button class="drawer-close" aria-label="Menü schließen" onclick="this.closest('.mobile-nav').classList.remove('open')">✕</button>
-    </div>
-    <ul class="drawer-list">
-      {{#pages}}
-      <li class="drawer-item{{#hasChildren}} has-children{{/hasChildren}}">
-        <a class="drawer-link" href="/{{slug}}">{{title}}</a>
-        {{#hasChildren}}
-        <ul class="drawer-sub">
-          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
-        </ul>
-        {{/hasChildren}}
-      </li>
-      {{/pages}}
-    </ul>
-  </aside>
-</div>`,
-    },
-    {
-      label: 'Bottom Bar',
-      description: 'Navigation am unteren Bildschirmrand',
-      code: `<nav class="mobile-nav bottom-bar" aria-label="Hauptnavigation">
-  <ul class="bottom-bar-list">
-    {{#pages}}
-    <li class="bottom-bar-item">
-      <a class="bottom-bar-link" href="/{{slug}}">
-        <span class="bottom-bar-icon" aria-hidden="true">○</span>
-        <span class="bottom-bar-label">{{title}}</span>
-      </a>
-    </li>
-    {{/pages}}
-  </ul>
-</nav>`,
-    },
-    {
-      label: 'Accordion',
-      description: 'Ausklappbare Sektion-Navigation mit Unterseiten',
-      code: `<nav class="mobile-nav accordion-nav" aria-label="Hauptnavigation">
-  <ul class="accordion-list">
-    {{#pages}}
-    <li class="accordion-item{{#hasChildren}} has-children{{/hasChildren}}">
-      {{#hasChildren}}
-      <button class="accordion-toggle" onclick="this.closest('.accordion-item').classList.toggle('open')">
-        {{title}} <span class="accordion-arrow" aria-hidden="true">›</span>
-      </button>
-      <ul class="accordion-sub">
-        {{#children}}<li><a class="accordion-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
-      </ul>
-      {{/hasChildren}}
-      {{^hasChildren}}<a class="accordion-link" href="/{{slug}}">{{title}}</a>{{/hasChildren}}
-    </li>
-    {{/pages}}
-  </ul>
-</nav>`,
-    },
-  ],
 };
 
 const TYPE_TABS = [
   { id: 'MAIN', label: 'Hauptnavigation', Icon: Globe },
   { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
-  { id: 'MOBILE', label: 'Mobile Navigation', Icon: Smartphone },
 ];
 
 export default function NavigationView({ showToast }) {
@@ -402,7 +333,8 @@ export default function NavigationView({ showToast }) {
   const [editing, setEditing] = useState(null); // { id?, name, type, code, isNew }
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
-  const [previewHtml, setPreviewHtml] = useState('');
+  const [navigationCssCode, setNavigationCssCode] = useState('');
+  const [isSavingNavigationCss, setIsSavingNavigationCss] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -418,22 +350,61 @@ export default function NavigationView({ showToast }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  useEffect(() => { loadNavList(); }, [loadNavList]);
-
-  // Live preview: re-render whenever code changes
-  useEffect(() => {
-    if (!editing) { setPreviewHtml(''); return; }
+  const loadOrCreateNavigationCss = useCallback(async () => {
     try {
-      // Dynamic import of Mustache to avoid SSR issues
-      import('mustache').then(({ default: Mustache }) => {
-        const sampleData = SAMPLE_DATA[editing.type?.toLowerCase() || navType.toLowerCase()] || {};
-        const rendered = Mustache.render(String(editCode || ''), sampleData);
-        setPreviewHtml(rendered);
-      }).catch(() => setPreviewHtml(editCode));
+      const listRes = await fetch('/api/css');
+      const listData = await listRes.json();
+      const files = Array.isArray(listData?.files) ? listData.files : [];
+      const hasNavigationCss = files.some((f) => f?.source === 'extern_css' && f?.name === NAVIGATION_CSS_FILENAME);
+
+      if (!hasNavigationCss) {
+        const createRes = await fetch('/api/css', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: NAVIGATION_CSS_FILENAME, content: DEFAULT_NAVIGATION_CSS }),
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok || !createData.success) {
+          throw new Error(createData.error || 'navigation.css konnte nicht erstellt werden');
+        }
+        showToast('navigation.css wurde erstellt und ist im CSS-Menü verfügbar', 'success');
+      }
+
+      const fileRes = await fetch(`/api/css?file=${encodeURIComponent(NAVIGATION_CSS_FILENAME)}`);
+      const fileData = await fileRes.json().catch(() => ({}));
+      if (!fileRes.ok) {
+        throw new Error(fileData.error || 'navigation.css konnte nicht geladen werden');
+      }
+      setNavigationCssCode(String(fileData.content || ''));
     } catch (e) {
-      setPreviewHtml(editCode);
+      showToast(`Fehler bei navigation.css: ${e.message}`, 'error');
     }
-  }, [editCode, editing, navType]);
+  }, [showToast]);
+
+  useEffect(() => {
+    loadNavList();
+    loadOrCreateNavigationCss();
+  }, [loadNavList, loadOrCreateNavigationCss]);
+
+  async function handleSaveNavigationCss() {
+    setIsSavingNavigationCss(true);
+    try {
+      const res = await fetch('/api/css', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: NAVIGATION_CSS_FILENAME, content: navigationCssCode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'navigation.css konnte nicht gespeichert werden');
+      }
+      showToast('navigation.css gespeichert', 'success');
+    } catch (e) {
+      showToast(`Fehler: ${e.message}`, 'error');
+    } finally {
+      setIsSavingNavigationCss(false);
+    }
+  }
 
   const filteredNav = navList.filter(n => n.type === navType);
 
@@ -587,6 +558,11 @@ export default function NavigationView({ showToast }) {
                 >
                   <div className="nav-card-info">
                     <span className="nav-card-name">{nav.name}</span>
+                    {nav.isResponsiveCombined && (
+                      <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
+                        Responsive Combo
+                      </span>
+                    )}
                     {nav.isActive && (
                       <span className="nav-active-badge">
                         <Check size={11} /> Aktiv
@@ -685,7 +661,7 @@ export default function NavigationView({ showToast }) {
               </div>
             )}
 
-            {/* Editor + Preview split */}
+            {/* Editor + navigation.css split */}
             <div className="nav-editor-split">
               <div className="nav-editor-code">
                 <div className="nav-panel-label">Mustache-Template</div>
@@ -699,13 +675,30 @@ export default function NavigationView({ showToast }) {
                 </div>
               </div>
               <div className="nav-editor-preview">
-                <div className="nav-panel-label">Live-Vorschau</div>
-                <div
-                  className="nav-preview-container"
-                  dangerouslySetInnerHTML={{ __html: previewHtml || '<p style="color:#999;padding:1rem">Vorschau erscheint beim Bearbeiten…</p>' }}
-                />
+                <div className="nav-panel-label">navigation.css</div>
+                <div className="nav-monaco-wrap">
+                  <CodeEditor
+                    value={navigationCssCode}
+                    onChange={value => setNavigationCssCode(value || '')}
+                    language="css"
+                    height="100%"
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                  <button
+                    className="nav-card-btn save"
+                    onClick={handleSaveNavigationCss}
+                    disabled={isSavingNavigationCss}
+                    title="navigation.css speichern"
+                  >
+                    <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
+                  </button>
+                </div>
                 <div className="nav-preview-hint">
-                  Vorschau mit Beispieldaten — echte Daten kommen zur Laufzeit
+                  Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
+                </div>
+                <div className="nav-preview-hint">
+                  Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
                 </div>
               </div>
             </div>
@@ -714,8 +707,7 @@ export default function NavigationView({ showToast }) {
             <div className="nav-placeholder-ref">
               <strong>Platzhalter:</strong>
               <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
-              <code>{`{{{nav:page}}}`}</code> Seitennavigation ·
-              <code>{`{{{nav:mobile}}}`}</code> Mobile Navigation
+              <code>{`{{{nav:page}}}`}</code> Seitennavigation
             </div>
           </div>
         ) : (
@@ -724,7 +716,7 @@ export default function NavigationView({ showToast }) {
             <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
             <p className="nav-editor-empty-hint">
               Aktive Navigationen werden via <code>{`{{{nav:main}}}`}</code>,
-              <code>{`{{{nav:page}}}`}</code> oder <code>{`{{{nav:mobile}}}`}</code> in
+              <code>{`{{{nav:page}}}`}</code> in
               Site-Templates eingebunden.
             </p>
           </div>

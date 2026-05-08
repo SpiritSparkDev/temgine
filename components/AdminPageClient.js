@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, Box, HardDrive, Upload, FlaskConical, Compass, Type, Rss, Mail, Shield } from 'lucide-react';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield } from 'lucide-react';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -10,12 +10,11 @@ import SettingsView from './SettingsView';
 import UsersViewModern from './UsersViewModern';
 import UserInvitationsView from './UserInvitationsView';
 import CSSManagerViewModern from './CSSManagerViewModern';
+import JSManagerViewModern from './JSManagerViewModern';
 import FileManagerView from './FileManagerView';
 import BackupView from './BackupView';
 import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
-import ContentModelsView from './ContentModelsView';
-import ImporterView from './ImporterView';
 import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
 import FontManagerView from './FontManagerView';
@@ -39,7 +38,6 @@ export default function AdminPageClient() {
   const [builderSearch, setBuilderSearch] = useState('');
   const [settingsTab, setSettingsTab] = useState('users');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
-  const [alphaTab, setAlphaTab] = useState('content-models');
   const [membersTab, setMembersTab] = useState('members');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
@@ -62,10 +60,9 @@ export default function AdminPageClient() {
     try {
       const saved = localStorage.getItem('adminView');
       const legacyBuilderMap = {
-        templates: 'templates',
-        'content-models': 'content-models'
+        templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','navigation','users','settings','backup','alpha'];
+      const allowed = ['dashboard','pages','builder','files','css','js','navigation','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -118,8 +115,7 @@ export default function AdminPageClient() {
 
   useEffect(() => {
     const legacyBuilderMap = {
-      templates: 'templates',
-      'content-models': 'content-models'
+      templates: 'templates'
     };
 
     if (legacyBuilderMap[view]) {
@@ -143,20 +139,6 @@ export default function AdminPageClient() {
       description: 'Block-Templates pflegen',
       icon: Layout,
       count: templateList.length
-    },
-    {
-      id: 'content-models',
-      label: 'Content Models',
-      description: 'Datenstrukturen fuer Inhalte definieren (Alpha)',
-      icon: Box,
-      count: 'Alpha'
-    },
-    {
-      id: 'importer',
-      label: 'Inhalts-Importer',
-      description: 'HTML zu Seite & Templates importieren (Alpha)',
-      icon: Upload,
-      count: 'Alpha'
     },
   ];
 
@@ -348,18 +330,6 @@ export default function AdminPageClient() {
     }
   }
 
-  // Called by ImporterView when a new page has been successfully created.
-  // Refreshes the pages list and navigates to the PageEditor for the new page.
-  async function handlePageCreated(slug) {
-    const freshPages = await loadPagesFromApi();
-    // Find the newly created page in the fresh list (top-level)
-    const newPage = (freshPages || []).find(p => String(p.slug) === String(slug));
-    handleSelectView('pages');
-    if (newPage) {
-      setEditingPage(newPage);
-    }
-  }
-
   async function loadTemplate(name) {
     if (!name) return;
     const res = await fetch(`/api/templates?name=${encodeURIComponent(name)}`);
@@ -446,6 +416,7 @@ export default function AdminPageClient() {
       { id: 'builder', label: 'Templates / Builder' },
       { id: 'files', label: 'Dateien' },
       { id: 'css', label: 'CSS' },
+      { id: 'js', label: 'JS' },
       { id: 'fonts', label: 'Fonts' },
       { id: 'navigation', label: 'Navigation' },
       { id: 'users', label: 'Benutzer' },
@@ -681,6 +652,7 @@ export default function AdminPageClient() {
               <li className="menu-group-label">Design</li>
               <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
               <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
+              <li><button className={`menu-item ${view==='js'?'active':''}`} onClick={() => handleSelectView('js')}><Code size={18} /> JS</button></li>
               <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
 
@@ -692,7 +664,6 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
               <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Einstellungen</button></li>
               <li><button className={`menu-item ${view==='backup'?'active':''}`} onClick={() => handleSelectView('backup')}><HardDrive size={18} /> Backup</button></li>
-              <li><button className={`menu-item ${view==='alpha'?'active':''}`} onClick={() => handleSelectView('alpha')}><FlaskConical size={18} /> Alpha</button></li>
             </ul>
             <div className="menu-sep" />
           </nav>
@@ -716,8 +687,6 @@ export default function AdminPageClient() {
 
               <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                 {builderTab === 'templates' && <TemplatesViewModern showToast={showToast} onSaved={refreshTemplateList} />}
-                {builderTab === 'content-models' && <ContentModelsView />}
-                {builderTab === 'importer' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
               </div>
 
               {showBuilderQuickSwitch && (
@@ -793,6 +762,7 @@ export default function AdminPageClient() {
           )}
           {view === 'files' && <FileManagerView showToast={showToast} />}
           {view === 'css' && <CSSManagerViewModern showToast={showToast} />}
+          {view === 'js' && <JSManagerViewModern showToast={showToast} />}
           {view === 'fonts' && <FontManagerView showToast={showToast} />}
           {view === 'blog' && <BlogView showToast={showToast} />}
           {view === 'contact-messages' && <ContactMessagesView showToast={showToast} />}
@@ -840,30 +810,6 @@ export default function AdminPageClient() {
             <ErrorBoundary>
               <BackupView onToast={showToastForBackup} onConfirm={showConfirmForBackup} />
             </ErrorBoundary>
-          )}
-          {view === 'alpha' && (
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <div className="settings-tabs-wrapper">
-                <div className="settings-tabs">
-                  <button
-                    onClick={() => setAlphaTab('content-models')}
-                    className={`settings-tab-btn ${alphaTab === 'content-models' ? 'active' : ''}`}
-                  >
-                    Content Models
-                  </button>
-                  <button
-                    onClick={() => setAlphaTab('importer')}
-                    className={`settings-tab-btn ${alphaTab === 'importer' ? 'active' : ''}`}
-                  >
-                    Importer
-                  </button>
-                </div>
-              </div>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-                {alphaTab === 'content-models' && <ContentModelsView />}
-                {alphaTab === 'importer' && <ImporterView showToast={showToast} onPageCreated={handlePageCreated} />}
-              </div>
-            </div>
           )}
         </main>
       </div>

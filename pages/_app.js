@@ -46,6 +46,28 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       }
     };
 
+    const loadExternalJS = async () => {
+      try {
+        const res = await fetch('/api/js');
+        const data = await res.json();
+        const files = data.files || [];
+
+        // Entferne alte externe JS Tags
+        document.querySelectorAll('script[data-extern-js]').forEach(script => script.remove());
+
+        // Füge Skripte in Reihenfolge hinzu (nur aktivierte Dateien)
+        files.filter(f => f.enabled !== false).forEach((f) => {
+          const script = document.createElement('script');
+          script.src = typeof f === 'string' ? `/extern_js/${f}` : f.href;
+          script.defer = true;
+          script.dataset.externJs = 'true';
+          document.body.appendChild(script);
+        });
+      } catch (error) {
+        console.error('Fehler beim Laden der externen JS-Dateien:', error);
+      }
+    };
+
     // Don't load editor-managed external CSS on admin or backend routes
     const path = router && router.pathname ? router.pathname : '';
     const isBackend = path.startsWith('/admin') || path.startsWith('/api') || path.startsWith('/invite') || path.startsWith('/_next') || path.startsWith('/auth');
@@ -68,6 +90,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
 
     if (!isBackend && !componentOptOut && !propsOptOut) {
       loadExternalCSS();
+      loadExternalJS();
       loadFonts();
     }
   }, [router && router.pathname, Component]);

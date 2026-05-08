@@ -328,15 +328,31 @@ const TEMPLATE_PRESETS = {
     var altcha = widget ? widget.value : null;
     if (!altcha) { fb.textContent = 'Bitte den Spam-Schutz abschließen.'; return; }
     btn.disabled = true; fb.textContent = '';
+    var formData = new FormData(form);
+    var payload = {};
+    formData.forEach(function (value, key) {
+      var normalized = typeof value === 'string' ? value : String(value || '');
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        if (Array.isArray(payload[key])) payload[key].push(normalized);
+        else payload[key] = [payload[key], normalized];
+      } else {
+        payload[key] = normalized;
+      }
+    });
+    payload.altcha = altcha;
     fetch('/api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name.value, email: form.email.value, message: form.nachricht.value, altcha: altcha }),
+      body: JSON.stringify(payload),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok) { fb.style.color = '#22c55e'; fb.textContent = 'Vielen Dank! Wir melden uns bald.'; form.reset(); }
-        else         { fb.style.color = '#ef4444'; fb.textContent = res.d.error || 'Fehler beim Senden.'; }
+        else         {
+          fb.style.color = '#ef4444';
+          var fieldError = res.d && res.d.fields && res.d.fields.message;
+          fb.textContent = fieldError || res.d.error || 'Fehler beim Senden.';
+        }
         btn.disabled = false;
       })
       .catch(function () { fb.style.color = '#ef4444'; fb.textContent = 'Netzwerkfehler.'; btn.disabled = false; });
@@ -411,16 +427,31 @@ const TEMPLATE_PRESETS = {
     var altcha = widget ? widget.value : null;
     if (!altcha) { fb.textContent = 'Bitte den Spam-Schutz abschließen.'; return; }
     btn.disabled = true; fb.textContent = '';
-    var checked = Array.from(form.querySelectorAll('[name="prioritaet"]:checked')).map(function(el){ return el.value; });
+    var formData = new FormData(form);
+    var payload = {};
+    formData.forEach(function (value, key) {
+      var normalized = typeof value === 'string' ? value : String(value || '');
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        if (Array.isArray(payload[key])) payload[key].push(normalized);
+        else payload[key] = [payload[key], normalized];
+      } else {
+        payload[key] = normalized;
+      }
+    });
+    payload.altcha = altcha;
     fetch('/api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name.value, email: form.email.value, message: form.nachricht.value, priorities: checked, altcha: altcha }),
+      body: JSON.stringify(payload),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok) { fb.style.color = '#22c55e'; fb.textContent = 'Vielen Dank! Wir melden uns bald.'; form.reset(); }
-        else         { fb.style.color = '#ef4444'; fb.textContent = res.d.error || 'Fehler beim Senden.'; }
+        else         {
+          fb.style.color = '#ef4444';
+          var fieldError = res.d && res.d.fields && res.d.fields.message;
+          fb.textContent = fieldError || res.d.error || 'Fehler beim Senden.';
+        }
         btn.disabled = false;
       })
       .catch(function () { fb.style.color = '#ef4444'; fb.textContent = 'Netzwerkfehler.'; btn.disabled = false; });
@@ -494,16 +525,31 @@ const TEMPLATE_PRESETS = {
     var altcha = widget ? widget.value : null;
     if (!altcha) { fb.textContent = 'Bitte den Spam-Schutz abschließen.'; return; }
     btn.disabled = true; fb.textContent = '';
-    var checked = Array.from(form.querySelectorAll('[name="prioritaet"]:checked')).map(function(el){ return el.value; });
+    var formData = new FormData(form);
+    var payload = {};
+    formData.forEach(function (value, key) {
+      var normalized = typeof value === 'string' ? value : String(value || '');
+      if (Object.prototype.hasOwnProperty.call(payload, key)) {
+        if (Array.isArray(payload[key])) payload[key].push(normalized);
+        else payload[key] = [payload[key], normalized];
+      } else {
+        payload[key] = normalized;
+      }
+    });
+    payload.altcha = altcha;
     fetch('/api/contact', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name.value, email: form.email.value, message: form.nachricht.value, priorities: checked, altcha: altcha }),
+      body: JSON.stringify(payload),
     })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (res.ok) { fb.style.color = '#22c55e'; fb.textContent = 'Vielen Dank! Wir melden uns bald.'; form.reset(); }
-        else         { fb.style.color = '#ef4444'; fb.textContent = res.d.error || 'Fehler beim Senden.'; }
+        else         {
+          fb.style.color = '#ef4444';
+          var fieldError = res.d && res.d.fields && res.d.fields.message;
+          fb.textContent = fieldError || res.d.error || 'Fehler beim Senden.';
+        }
         btn.disabled = false;
       })
       .catch(function () { fb.style.color = '#ef4444'; fb.textContent = 'Netzwerkfehler.'; btn.disabled = false; });

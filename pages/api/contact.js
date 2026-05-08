@@ -14,6 +14,16 @@ import { prisma } from '../../lib/prisma';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 
+const META_FIELD_KEYS = new Set([
+  'altcha', 'captcha', 'hcaptcha', 'g-recaptcha-response',
+  'recaptcha', 'csrf', 'csrfToken', '_csrf', '_method',
+]);
+
+const NAME_ALIASES = ['name', 'fullName', 'fullname', 'full_name'];
+const EMAIL_ALIASES = ['email', 'mail', 'e-mail', 'emailAddress', 'email_address'];
+const SUBJECT_ALIASES = ['subject', 'betreff'];
+const MESSAGE_ALIASES = ['message', 'nachricht', 'text', 'content'];
+
 // Validate that a string is a plausible email address
 function isValidEmail(str) {
   return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
@@ -23,6 +33,68 @@ function isValidEmail(str) {
 function sanitizeText(str, maxLen = 2000) {
   if (typeof str !== 'string') return '';
   return str.replace(/<[^>]*>/g, '').trim().slice(0, maxLen);
+}
+
+function normalizeValue(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => sanitizeText(String(entry ?? ''), 500))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof value === 'boolean') return value ? 'ja' : 'nein';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'object' && value !== null) {
+    return sanitizeText(JSON.stringify(value), 1200);
+  }
+  return sanitizeText(String(value ?? ''), 500);
+}
+
+function readAlias(body, aliases) {
+  for (const alias of aliases) {
+    if (body[alias] !== undefined && body[alias] !== null) {
+      const value = normalizeValue(body[alias]);
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function readName(body) {
+  const direct = readAlias(body, NAME_ALIASES);
+  if (direct) return direct;
+
+  const firstName = readAlias(body, ['firstName', 'firstname', 'first_name', 'vorname']);
+  const lastName = readAlias(body, ['lastName', 'lastname', 'last_name', 'nachname']);
+  return sanitizeText(`${firstName} ${lastName}`.trim(), 200);
+}
+
+function toLabel(key) {
+  if (!key) return 'Feld';
+  const cleaned = key
+    .replace(/[\[\]]+/g, ' ')
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return 'Feld';
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function buildFormFields(body) {
+  const fields = [];
+  for (const [rawKey, rawValue] of Object.entries(body || {})) {
+    const key = String(rawKey || '').trim();
+    if (!key || META_FIELD_KEYS.has(key)) continue;
+    const value = normalizeValue(rawValue);
+    if (!value) continue;
+    fields.push({ key, label: toLabel(key), value });
+  }
+  return fields;
+}
+
+function buildAutoMessage(fields) {
+  return fields.map((field) => `${field.label}: ${field.value}`).join('\n');
 }
 
 export default async function handler(req, res) {
@@ -51,11 +123,15 @@ export default async function handler(req, res) {
     }
   }
 
-  const body = req.body || {};
-  const name = sanitizeText(body.name, 200);
-  const email = sanitizeText(body.email, 200);
-  const subject = sanitizeText(body.subject, 300);
-  const message = sanitizeText(body.message, 4000);
+  const body = (req.body && typeof req.body === 'object') ? req.body : {};
+  const name = sanitizeText(readName(body), 200);
+  const email = sanitizeText(readAlias(body, EMAIL_ALIASES), 200);
+  const subject = sanitizeText(readAlias(body, SUBJECT_ALIASES), 300);
+
+  const formFields = buildFormFields(body);
+  const explicitMessage = sanitizeText(readAlias(body, MESSAGE_ALIASES), 4000);
+  const autoMessage = sanitizeText(buildAutoMessage(formFields), 4000);
+  const message = explicitMessage || autoMessage;
 
   // Validation
   const errors = {};

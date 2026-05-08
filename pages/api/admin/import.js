@@ -12,9 +12,23 @@ export const config = {
   },
 }
 
+function normalizeCssFilename(input, fallback = 'style.css') {
+  const raw = String(input || '').trim();
+  const base = path.basename(raw || fallback).replace(/[^A-Za-z0-9._-]/g, '_');
+  const withExt = base.toLowerCase().endsWith('.css') ? base : `${base}.css`;
+  const finalName = withExt === '.css' ? fallback : withExt;
+  return finalName;
+}
+
 async function importCSSFiles(cssFiles = [], strategy = 'merge') {
   const cssDir = path.join(process.cwd(), 'public', 'extern_css')
   if (!fs.existsSync(cssDir)) fs.mkdirSync(cssDir, { recursive: true })
+
+  const result = {
+    imported: 0,
+    errors: [],
+    writtenFiles: []
+  }
 
   // If replace strategy: delete all existing CSS files
   if (strategy === 'replace') {
@@ -28,20 +42,37 @@ async function importCSSFiles(cssFiles = [], strategy = 'merge') {
       if (fs.existsSync(orderPath)) fs.unlinkSync(orderPath)
     } catch (e) {
       console.warn('Failed to delete old CSS files:', e.message)
+      result.errors.push(`Vorhandene CSS-Dateien konnten nicht vollständig gelöscht werden: ${e.message}`)
     }
   }
 
   // Write new CSS files
   const newFilenames = []
+  const usedNames = new Set()
   for (const file of cssFiles) {
-    const filename = file.filename || 'style.css'
+    const rawName = file?.filename || file?.name || file?.file || ''
+    let filename = normalizeCssFilename(rawName, 'style.css')
+    if (usedNames.has(filename)) {
+      const stem = filename.replace(/\.css$/i, '')
+      let i = 2
+      while (usedNames.has(`${stem}-${i}.css`)) i++
+      filename = `${stem}-${i}.css`
+    }
+    usedNames.add(filename)
     const content = file.content || ''
     const filePath = path.join(cssDir, filename)
+    if (!path.resolve(filePath).startsWith(path.resolve(cssDir))) {
+      result.errors.push(`Ungültiger CSS-Dateiname übersprungen: ${rawName || '(leer)'}`)
+      continue
+    }
     try {
       fs.writeFileSync(filePath, content, 'utf-8')
       newFilenames.push(filename)
+      result.imported++
+      result.writtenFiles.push(filename)
     } catch (e) {
       console.warn(`Failed to write CSS file ${filename}:`, e.message)
+      result.errors.push(`CSS-Datei "${filename}" konnte nicht geschrieben werden: ${e.message}`)
     }
   }
 
@@ -58,8 +89,11 @@ async function importCSSFiles(cssFiles = [], strategy = 'merge') {
       fs.writeFileSync(orderPath, JSON.stringify({ order: merged }, null, 2), 'utf-8')
     } catch (e) {
       console.warn('Failed to write .order.json:', e.message)
+      result.errors.push(`CSS-Reihenfolge (.order.json) konnte nicht aktualisiert werden: ${e.message}`)
     }
   }
+
+  return result
 }
 
 function importJsonConfig(filename, data, strategy = 'merge') {
@@ -242,8 +276,11 @@ export default async function handler(req, res) {
 
     // Import CSS files
     try {
-      await importCSSFiles(css, strategy)
-      importStats.css = css.length
+      const cssResult = await importCSSFiles(css, strategy)
+      importStats.css = cssResult.imported
+      if (cssResult.errors.length > 0) {
+        importStats.errors.push(...cssResult.errors)
+      }
     } catch (e) {
       importStats.errors.push(`CSS import failed: ${e.message}`)
     }
