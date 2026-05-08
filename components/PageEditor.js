@@ -2379,6 +2379,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
                           Als Startseite
                         </label>
+                        <label className="page-editor-outline-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(pageData?.ignoreInNavigation)}
+                            onChange={e => setPageData(d => ({ ...d, ignoreInNavigation: e.target.checked }))}
+                          />
+                          In Navigation ausblenden
+                        </label>
                         {/* Access Control */}
                         <AccessGroupsPanel
                           accessGroups={accessGroups}

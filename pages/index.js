@@ -139,7 +139,7 @@ export default function Home() {
             if (Array.isArray(activeNavs)) {
               const buildNestedPages = (nodes, parentPath = '') =>
                 (nodes || [])
-                  .filter(n => n.status === 'PUBLISHED' || n.isHomepage)
+                  .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
                   .map(n => {
                     const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
                     const children = buildNestedPages(n.children || [], slug)
