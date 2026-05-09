@@ -69,6 +69,26 @@ export default function AdminPageClient() {
   }, [view, initialLoading, session, templateList.length, pages.length, loadWarnings.length]);
 
   useEffect(() => {
+    if (initialLoading) {
+      console.log('[admin] loading placeholder active', {
+        view,
+        hasSession: Boolean(session),
+        templateCount: templateList.length,
+        pageCount: pages.length,
+      });
+      return;
+    }
+
+    console.log('[admin] main content active', {
+      view,
+      builderTab,
+      settingsTab,
+      membersTab,
+      loadWarnings,
+    });
+  }, [initialLoading, view, builderTab, settingsTab, membersTab, session, templateList.length, pages.length, loadWarnings]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('adminView');
       const legacyBuilderMap = {
@@ -355,10 +375,20 @@ export default function AdminPageClient() {
   // Reload pages from API and update local state. Returns the fresh list.
   async function loadPagesFromApi() {
     try {
+      console.log('[admin] loadPagesFromApi start', {
+        currentCount: pages.length,
+      });
       const res = await fetch('/api/pages?includeDrafts=true');
+      console.log('[admin] loadPagesFromApi response', {
+        ok: res.ok,
+        status: res.status,
+      });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       const list = Array.isArray(data) ? data : (data.pages || []);
+      console.log('[admin] loadPagesFromApi parsed', {
+        count: list.length,
+      });
       setPages(list);
       return list;
     } catch (e) {
