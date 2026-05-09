@@ -115,13 +115,19 @@ export default function PageCatchAll() {
         })
         if (staticRes.ok) {
           const staticHtml = await staticRes.text()
+          const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || (staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000)
           console.log('[page-route] static snapshot loaded', {
             routePath,
             htmlLength: staticHtml.length,
             containsLoadingText: staticHtml.includes('Lädt'),
             containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
             preview: staticHtml.slice(0, 220),
+            looksLikeLoadingShell,
           })
+          if (looksLikeLoadingShell) {
+            console.log('[page-route] static snapshot rejected, falling back to dynamic render', { routePath })
+            throw new Error('invalid static snapshot')
+          }
           setPage({ title: '', data: {} })
           setHtml(staticHtml)
           setLoading(false)

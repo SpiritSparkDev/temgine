@@ -229,26 +229,39 @@ export default function Home() {
         })
         .then((staticHtml) => {
           if (staticHtml) {
+            const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000
             console.log('[home-route] using static snapshot', {
               htmlLength: staticHtml.length,
               containsLoadingText: staticHtml.includes('Lädt'),
               containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
               preview: staticHtml.slice(0, 220),
+              looksLikeLoadingShell,
             })
+            if (looksLikeLoadingShell) {
+              console.log('[home-route] static snapshot rejected, falling back to dynamic render')
+              startDynamicRender()
+              return
+            }
             fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
               .then(async (metaRes) => {
                 const metaText = await metaRes.text().catch(() => '')
+                const metaContentType = metaRes.headers.get('content-type') || ''
                 console.log('[home-route] static snapshot meta response', {
                   ok: metaRes.ok,
                   status: metaRes.status,
-                  contentType: metaRes.headers.get('content-type'),
+                  contentType: metaContentType,
                   preview: metaText.slice(0, 240),
                 })
+                if (!metaContentType.includes('application/json') || metaText.includes('<!DOCTYPE html>')) {
+                  console.log('[home-route] static snapshot meta rejected, falling back to dynamic render')
+                  startDynamicRender()
+                }
               })
               .catch((err) => {
                 console.log('[home-route] static snapshot meta fetch failed', {
                   error: err?.message || String(err),
                 })
+                startDynamicRender()
               })
             setHtml(staticHtml)
             setHomePage({ data: {} })
