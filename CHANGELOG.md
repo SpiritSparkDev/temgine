@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.9.0] - 2026-05-09
+
+### Added
+- Option to hide individual pages from navigation via page metadata
+- Loading of active external CSS files for maintenance and error pages (404/503)
+- Robust page preview URL resolution for nested page trees
+- Icon picker modal in the template editor for quick Font Awesome insertion
+- Extended file handling utilities (name normalization, unique name generation, metadata repair helpers)
+
+### Changed
+- Icon system migrated to MUI-based wrapper API for unified icon usage across admin views
+- Build and runtime compatibility improved for modern Turbopack workflows
+
+### Fixed
+- Fixed nested page preview links opening invalid frontend paths
+- Fixed missing style injection on maintenance-related pages
+- Fixed icon import/build issues in production after icon migration
+
+---
+
 ## [0.8.0] – 2026-04-07
 
 ### Added
