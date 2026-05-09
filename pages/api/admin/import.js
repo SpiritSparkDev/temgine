@@ -233,6 +233,56 @@ function sanitizeUploadRelativePath(input) {
   return norm.split('/').map(seg => seg.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
 }
 
+function importUploadedFiles(uploadedFiles = [], strategy = 'merge') {
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
+  const result = { imported: 0, errors: [] }
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+
+  if (strategy === 'replace') {
+    const walkDelete = (dir) => {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true })
+        for (const e of entries) {
+          const abs = path.join(dir, e.name)
+          if (e.isDirectory()) walkDelete(abs)
+          else fs.unlinkSync(abs)
+        }
+      } catch (e) {
+        result.errors.push(`Vorhandene Uploads konnten nicht vollständig gelöscht werden: ${e.message}`)
+      }
+    }
+    walkDelete(uploadsDir)
+  }
+
+  for (const item of uploadedFiles) {
+    const rel = sanitizeUploadRelativePath(item?.path)
+    if (!rel) {
+      result.errors.push('Ungültiger Upload-Dateipfad übersprungen')
+      continue
+    }
+
+    const abs = path.join(uploadsDir, rel)
+    if (!path.resolve(abs).startsWith(path.resolve(uploadsDir))) {
+      result.errors.push(`Unsicherer Upload-Dateipfad übersprungen: ${rel}`)
+      continue
+    }
+
+    try {
+      const dir = path.dirname(abs)
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const raw = item?.encoding === 'base64'
+        ? Buffer.from(String(item.content || ''), 'base64')
+        : Buffer.from(String(item.content || ''), 'utf-8')
+      fs.writeFileSync(abs, raw)
+      result.imported++
+    } catch (e) {
+      result.errors.push(`Upload-Datei "${rel}" konnte nicht geschrieben werden: ${e.message}`)
+    }
+  }
+
+  return result
+}
+
 function importUploadFonts(uploadFonts = [], strategy = 'merge') {
   const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
   const result = { imported: 0, errors: [] }
@@ -299,7 +349,7 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], uploadFonts: body.uploadFonts || [] }
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
     
     const templates = Array.isArray(backup.templates) ? backup.templates : []
     const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
@@ -307,10 +357,11 @@ export default async function handler(req, res) {
     const css = Array.isArray(backup.css) ? backup.css : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
     const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
+    const uploadedFiles = Array.isArray(backup.uploadedFiles) ? backup.uploadedFiles : []
     const cssConfig = backup.cssConfig || null
     const fontsConfig = backup.fontsConfig || null
 
-    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, uploadFonts: 0, fixedPageNavRefs: 0, errors: [] }
+    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
@@ -445,6 +496,14 @@ export default async function handler(req, res) {
       importStats.errors.push(`Upload-Fonts import failed: ${e.message}`)
     }
 
+    try {
+      const uploadFilesResult = importUploadedFiles(uploadedFiles, strategy)
+      importStats.uploadedFiles = uploadFilesResult.imported
+      if (uploadFilesResult.errors.length > 0) importStats.errors.push(...uploadFilesResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Upload-Dateien import failed: ${e.message}`)
+    }
+
     // Restore CSS enabled/disabled config
     if (cssConfig) {
       try {
@@ -467,7 +526,7 @@ export default async function handler(req, res) {
       ok: true,
       strategy,
       importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.uploadFonts} upload fonts${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
     })
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)

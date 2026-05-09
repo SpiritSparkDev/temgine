@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react'
+import JSZip from 'jszip'
 import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal } from '../lib/muiIcons'
 
 export default function BackupView({ onToast = () => {}, onConfirm = () => {} }) {
@@ -44,15 +45,24 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
     }
   }
 
-  // Export backup (JSON)
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Export project transfer ZIP
   const handleExport = async () => {
     setExporting(true)
     try {
-      const res = await fetch('/api/admin/export')
+      const res = await fetch('/api/admin/export?format=transfer-zip')
       if (!res.ok) throw new Error('Export failed')
 
-      const json = await res.text()
-      const fileSize = new Blob([json]).size
+      const blob = await res.blob()
+      const fileSize = blob.size
       const sizeMB = fileSize / (1024 * 1024)
 
       // Check size limit and warn if exceeded
@@ -61,23 +71,16 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       }
 
       // Get filename from Content-Disposition header if available
-      let filename = 'temgine-backup.json'
+      let filename = 'temgine-project-transfer.zip'
       const disposition = res.headers.get('content-disposition')
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/)
         if (match) filename = match[1]
       }
 
-      // Download file
-      const blob = new Blob([json], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, filename)
 
-      notify('success', `Backup exportiert (${sizeMB.toFixed(2)}MB)`)
+      notify('success', `Projekttransfer exportiert (${sizeMB.toFixed(2)}MB)`)
       
       // Refresh backup list
       loadBackups()
@@ -88,14 +91,22 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
     }
   }
 
-  // Export backup as ZIP (separate files per template/navigation/CSS)
+  // Export static website as ZIP
   const handleExportZip = async () => {
     setExportingZip(true)
     try {
-      const res = await fetch('/api/admin/export?format=zip')
-      if (!res.ok) throw new Error('ZIP Export failed')
+      const res = await fetch('/api/admin/export?format=static-site')
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '')
+        console.error('[backup-view] static export failed', {
+          status: res.status,
+          contentType: res.headers.get('content-type'),
+          body: errorText,
+        })
+        throw new Error(errorText || `ZIP Export failed (${res.status})`)
+      }
 
-      let filename = 'temgine-backup.zip'
+      let filename = 'temgine-static-site.zip'
       const disposition = res.headers.get('content-disposition')
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/)
@@ -103,15 +114,11 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       }
 
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      link.click()
-      URL.revokeObjectURL(url)
+      downloadBlob(blob, filename)
 
-      notify('success', 'ZIP exportiert (enthält Templates, Navigations, CSS als separate Dateien)')
+      notify('success', 'Statische Website exportiert (HTML, Bilder, Fonts und CSS)')
     } catch (e) {
+      console.error('[backup-view] static export error', e)
       notify('error', `ZIP Export fehlgeschlagen: ${e.message}`)
     } finally {
       setExportingZip(false)
@@ -148,73 +155,110 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   }
 
   // Import backup from file
-  const handleImport = (e) => {
+  const readZipBackup = async (file) => {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer())
+    const jsonEntries = Object.keys(zip.files).filter(name => name.toLowerCase().endsWith('.json'))
+    const preferred = jsonEntries.find(name => /manifest\//i.test(name)) || jsonEntries[0]
+    if (!preferred) throw new Error('ZIP enthält keine JSON-Metadaten')
+    const content = await zip.file(preferred).async('string')
+    const data = JSON.parse(content)
+    if (data?.metadata?.exportType === 'static-site') {
+      throw new Error('Static Site ZIPs können nicht importiert werden')
+    }
+
+    const entries = Object.values(zip.files)
+    const uploadFiles = []
+    const uploadFonts = []
+
+    for (const entry of entries) {
+      if (!entry || entry.dir) continue
+      const name = String(entry.name || '')
+      if (name.startsWith('uploads-fonts/')) {
+        const relPath = name.replace(/^uploads-fonts\//, '')
+        const fileContent = await entry.async('base64')
+        uploadFonts.push({ path: relPath, encoding: 'base64', content: fileContent })
+      }
+      if (name.startsWith('uploads/')) {
+        const relPath = name.replace(/^uploads\//, '')
+        const fileContent = await entry.async('base64')
+        uploadFiles.push({ path: relPath, encoding: 'base64', content: fileContent })
+      }
+    }
+
+    if (uploadFonts.length > 0) {
+      data.uploadFonts = uploadFonts
+    }
+    if (uploadFiles.length > 0) {
+      data.uploadedFiles = uploadFiles
+    }
+
+    return data
+  }
+
+  const handleImport = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     setImporting(true)
-    const reader = new FileReader()
-    reader.onload = async (event) => {
-      try {
-        const content = event.target?.result
-        if (!content) throw new Error('File is empty')
+    try {
+      const data = file.name.toLowerCase().endsWith('.zip')
+        ? await readZipBackup(file)
+        : JSON.parse(await file.text())
 
-        const data = JSON.parse(content)
+      // Show confirmation dialog
+      const itemCounts = data.metadata?.itemCounts || {
+        templates: data.templates?.length || 0,
+        snippets: data.snippets?.length || 0,
+        pages: data.pages?.length || 0,
+        cssFiles: data.css?.length || 0,
+        navigations: data.navigations?.length || 0,
+        uploadedFiles: data.uploadedFiles?.length || 0,
+        cssConfig: data.cssConfig ? 1 : 0,
+        fontsConfig: data.fontsConfig ? 1 : 0
+      }
 
-        // Show confirmation dialog
-        const itemCounts = data.metadata?.itemCounts || {
-          templates: data.templates?.length || 0,
-          snippets: data.snippets?.length || 0,
-          pages: data.pages?.length || 0,
-          cssFiles: data.css?.length || 0,
-          navigations: data.navigations?.length || 0,
-          cssConfig: data.cssConfig ? 1 : 0,
-          fontsConfig: data.fontsConfig ? 1 : 0
-        }
-
-        const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'} - Werden importiert:\n
+      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'} - Werden importiert:\n
 • ${itemCounts.templates} Templates
 • ${itemCounts.snippets} Snippets
 • ${itemCounts.pages} Seiten
 • ${itemCounts.cssFiles} CSS-Dateien
 • ${itemCounts.navigations} Navigationen
+• ${itemCounts.uploadedFiles} Upload-Dateien
 • CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
 • Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}
 
 ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!' : ''}`
 
-        onConfirm({
-          title: 'Backup importieren?',
-          message,
-          onConfirm: async () => {
-            try {
-              const res = await fetch(`/api/admin/import?strategy=${restoreStrategy}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-              })
+      onConfirm({
+        title: 'Projekttransfer importieren?',
+        message,
+        onConfirm: async () => {
+          try {
+            const res = await fetch(`/api/admin/import?strategy=${restoreStrategy}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(data)
+            })
 
-              if (!res.ok) {
-                const error = await res.json()
-                throw new Error(error.error || 'Import failed')
-              }
-
-              const result = await res.json()
-              notify('success', `Import erfolgreich: ${result.importStats.templates} Templates, ${result.importStats.snippets} Snippets, ${result.importStats.pages} Seiten`)
-              await loadBackups()
-            } catch (err) {
-              notify('error', `Import fehlgeschlagen: ${err.message}`)
+            if (!res.ok) {
+              const error = await res.json()
+              throw new Error(error.error || 'Import failed')
             }
+
+            const result = await res.json()
+            notify('success', `Import erfolgreich: ${result.importStats.templates} Templates, ${result.importStats.snippets} Snippets, ${result.importStats.pages} Seiten`)
+            await loadBackups()
+          } catch (err) {
+            notify('error', `Import fehlgeschlagen: ${err.message}`)
           }
-        })
-      } catch (err) {
-        notify('error', `Datei-Fehler: ${err.message}`)
-      } finally {
-        setImporting(false)
-        e.target.value = '' // Reset input
-      }
+        }
+      })
+    } catch (err) {
+      notify('error', `Datei-Fehler: ${err.message}`)
+    } finally {
+      setImporting(false)
+      e.target.value = '' // Reset input
     }
-    reader.readAsText(file)
   }
 
   // Delete a backup
@@ -668,32 +712,32 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
 
       <div className="backup-hero">
         <div>
-          <h2 className="backup-title">Backup & Wiederherstellung</h2>
-          <p className="backup-subtitle">Sichere Templates, Snippets, Seiten, CSS, Fonts und Navigationen in einem Schritt.</p>
+          <h2 className="backup-title">Projekttransfer & Static Export</h2>
+            <p className="backup-subtitle">Transferiere Projekte zwischen Temgine-Instanzen oder exportiere die öffentliche Website als statische Ausgabe.</p>
         </div>
-        <span className="backup-chip">Sicherungszentrale</span>
+          <span className="backup-chip">Exportzentrale</span>
       </div>
 
       {/* Export Section */}
       <div className="backup-section">
-        <h3><Download className="backup-section-icon" /> Export</h3>
+        <h3><Download className="backup-section-icon" /> Projekttransfer</h3>
         <div className="backup-info">
           <Info size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-          Erstelle ein vollständiges Backup aller Templates, Snippets, Seiten, CSS-Dateien, Navigationen sowie der CSS- und Font-Aktivierungskonfiguration.
+          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Enthält Inhalte, Konfigurationen und Medien-Assets.
         </div>
         <div className="backup-buttons">
           <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip}>
             {exporting ? (
               <><RefreshCw size={16} className="spinner" /> Wird exportiert...</>
             ) : (
-              <><Download size={16} /> JSON Backup</>
+              <><Download size={16} /> Projekttransfer-ZIP</>
             )}
           </button>
           <button className="backup-btn" onClick={handleExportZip} disabled={exporting || exportingZip || exportingCss}>
             {exportingZip ? (
-              <><RefreshCw size={16} className="spinner" /> ZIP wird erstellt...</>
+              <><RefreshCw size={16} className="spinner" /> Export läuft...</>
             ) : (
-              <><Download size={16} /> ZIP (Templates + CSS)</>
+              <><Download size={16} /> Static Site ZIP</>
             )}
           </button>
           <button className="backup-btn" onClick={handleExportCss} disabled={exporting || exportingZip || exportingCss}>
@@ -728,9 +772,9 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
 
       {/* Import Section */}
       <div className="backup-section">
-        <h3><Upload className="backup-section-icon" /> Import</h3>
+        <h3><Upload className="backup-section-icon" /> Import / Restore</h3>
         <div className="backup-info">
-          Lade ein zuvor exportiertes Backup. Wähle die Restore-Strategie:
+          Lade einen Projekttransfer oder ein altes Backup. Wähle die Restore-Strategie:
         </div>
 
         <div className="strategy-selector">
@@ -777,14 +821,14 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
               </>
             ) : (
               <>
-                <Upload size={16} /> Backup-Datei auswählen
+                <Upload size={16} /> ZIP oder JSON auswählen
               </>
             )}
           </button>
           <input
             ref={importInputRef}
             type="file"
-            accept=".json"
+            accept=".json,.zip"
             onChange={handleImport}
             disabled={importing}
           />
@@ -810,7 +854,7 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
 
         {backups.length === 0 ? (
           <div className="backup-empty">
-            Keine Backups vorhanden. Erstelle das erste Backup mit dem Export-Button oben.
+            Keine Backups vorhanden. Erstelle den ersten Projekttransfer mit dem Export-Button oben.
           </div>
         ) : (
           <div className="backup-list">
