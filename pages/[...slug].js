@@ -11,6 +11,10 @@ export default function PageCatchAll() {
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
+  const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
+  const debugLog = (...args) => {
+    if (debugRender) console.log(...args)
+  }
 
   const default404Html = '<div style="padding: 40px; text-align: center;"><h1>Seite nicht gefunden</h1></div>'
   const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
@@ -75,11 +79,22 @@ export default function PageCatchAll() {
     }
   }
 
+  const loadLiveRenderMode = async () => {
+    try {
+      const settingsRes = await fetch(`/api/settings?_t=${Date.now()}`, { cache: 'no-store' })
+      if (!settingsRes.ok) return 'dynamic'
+      const settings = await settingsRes.json()
+      return settings?.liveRenderMode === 'static' ? 'static' : 'dynamic'
+    } catch (_) {
+      return 'dynamic'
+    }
+  }
+
   useEffect(() => {
     const raw = query.slug
     if (raw === undefined) return
 
-    console.log('[page-route] route effect start', {
+    debugLog('[page-route] route effect start', {
       raw,
       pathname: router.pathname,
       asPath: router.asPath,
@@ -93,21 +108,25 @@ export default function PageCatchAll() {
     (async () => {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
+    const liveRenderMode = await loadLiveRenderMode()
+    const shouldTryStatic = !previewMode && liveRenderMode === 'static'
 
-    console.log('[page-route] render mode decision', {
+    debugLog('[page-route] render mode decision', {
       isLocal,
       previewMode,
+      liveRenderMode,
+      shouldTryStatic,
       segments,
       currentUrl: typeof window !== 'undefined' ? window.location.href : null,
     })
 
-    if (!isLocal && !previewMode) {
+    if (shouldTryStatic) {
       try {
         const routePath = segments.length ? `/${segments.join('/')}` : '/'
         const staticRoute = routePath === '/' ? '/__live/index.html' : `/__live${routePath}/index.html`
-        console.log('[page-route] trying static snapshot', { routePath, staticRoute })
+        debugLog('[page-route] trying static snapshot', { routePath, staticRoute })
         const staticRes = await fetch(`${staticRoute}?_t=${Date.now()}`, { cache: 'no-store' })
-        console.log('[page-route] static snapshot response', {
+        debugLog('[page-route] static snapshot response', {
           ok: staticRes.ok,
           status: staticRes.status,
           contentType: staticRes.headers.get('content-type'),
@@ -116,7 +135,7 @@ export default function PageCatchAll() {
         if (staticRes.ok) {
           const staticHtml = await staticRes.text()
           const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || (staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000)
-          console.log('[page-route] static snapshot loaded', {
+          debugLog('[page-route] static snapshot loaded', {
             routePath,
             htmlLength: staticHtml.length,
             containsLoadingText: staticHtml.includes('Lädt'),
@@ -124,52 +143,67 @@ export default function PageCatchAll() {
             preview: staticHtml.slice(0, 220),
             looksLikeLoadingShell,
           })
-          if (looksLikeLoadingShell) {
-            console.log('[page-route] static snapshot rejected, falling back to dynamic render', { routePath })
-            throw new Error('invalid static snapshot')
-          }
-          setPage({ title: '', data: {} })
-          setHtml(staticHtml)
-          setLoading(false)
-          return
-        }
 
-        const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
-        console.log('[page-route] static meta response', {
-          ok: metaRes.ok,
-          status: metaRes.status,
-          contentType: metaRes.headers.get('content-type'),
-        })
-        if (metaRes.ok) {
-          const notFoundRes = await fetch(`/__live/404.html?_t=${Date.now()}`, { cache: 'no-store' })
-          console.log('[page-route] static 404 response', {
-            ok: notFoundRes.ok,
-            status: notFoundRes.status,
-            contentType: notFoundRes.headers.get('content-type'),
-          })
-          if (notFoundRes.ok) {
-            const notFoundHtml = await notFoundRes.text()
-            console.log('[page-route] using static 404 fallback', { htmlLength: notFoundHtml.length })
-            setPage({ title: '404', data: {} })
-            setHtml(notFoundHtml)
-            setLoading(false)
-            return
+          if (!looksLikeLoadingShell) {
+            const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
+            const metaText = await metaRes.text().catch(() => '')
+            const metaContentType = metaRes.headers.get('content-type') || ''
+            const metaLooksValid = metaRes.ok && metaContentType.includes('application/json') && !metaText.includes('<!DOCTYPE html>')
+
+            debugLog('[page-route] static meta response', {
+              ok: metaRes.ok,
+              status: metaRes.status,
+              contentType: metaContentType,
+              preview: metaText.slice(0, 240),
+              metaLooksValid,
+            })
+
+            if (metaLooksValid) {
+              setPage({ title: '', data: {} })
+              setHtml(staticHtml)
+              setLoading(false)
+              return
+            }
+          }
+
+          if (routePath !== '/') {
+            const notFoundRes = await fetch(`/__live/404.html?_t=${Date.now()}`, { cache: 'no-store' })
+            debugLog('[page-route] static 404 response', {
+              ok: notFoundRes.ok,
+              status: notFoundRes.status,
+              contentType: notFoundRes.headers.get('content-type'),
+            })
+            if (notFoundRes.ok) {
+              const notFoundHtml = await notFoundRes.text()
+              const looksInvalid404 = notFoundHtml.includes('Lädt') || (notFoundHtml.includes('<!DOCTYPE html>') && notFoundHtml.length < 5000)
+              if (!looksInvalid404) {
+                debugLog('[page-route] using static 404 fallback', { htmlLength: notFoundHtml.length })
+                setPage({ title: '404', data: {} })
+                setHtml(notFoundHtml)
+                setLoading(false)
+                return
+              }
+            }
           }
         }
-      } catch (_e) {}
+      } catch (_e) {
+        debugLog('[page-route] static snapshot failed, falling back to dynamic render', {
+          error: _e?.message || String(_e),
+        })
+      }
     }
 
-    console.log('[page-route] falling back to dynamic render', { segments })
+    debugLog('[page-route] falling back to dynamic render', { segments })
 
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
 
     // Prüfe zuerst Wartungsmodus
     const isMaintenanceMode = await checkMaintenanceMode()
-    console.log('[page-route] maintenance mode check', { isMaintenanceMode })
+    debugLog('[page-route] maintenance mode check', { isMaintenanceMode })
     if (isMaintenanceMode) {
       const maintenance503Html = await load503Html()
       const cssLinks = await loadActiveCssLinks()
-      console.log('[page-route] using maintenance html', {
+      debugLog('[page-route] using maintenance html', {
         htmlLength: maintenance503Html.length,
         cssLinksLength: cssLinks.length,
       })

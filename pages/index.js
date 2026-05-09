@@ -7,6 +7,10 @@ export default function Home() {
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
   const [homePage, setHomePage] = useState(null)
+  const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
+  const debugLog = (...args) => {
+    if (debugRender) console.log(...args)
+  }
 
   const defaultNoHomepageHtml = '<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>'
   const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
@@ -77,6 +81,17 @@ export default function Home() {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`
+
+    const loadLiveRenderMode = async () => {
+      try {
+        const settingsRes = await fetch(`/api/settings?_t=${Date.now()}`, { cache: 'no-store' })
+        if (!settingsRes.ok) return 'dynamic'
+        const settings = await settingsRes.json()
+        return settings?.liveRenderMode === 'static' ? 'static' : 'dynamic'
+      } catch (_e) {
+        return 'dynamic'
+      }
+    }
 
     const startDynamicRender = () => fetch(pagesUrl)
       .then(r => r.json())
@@ -215,71 +230,64 @@ export default function Home() {
         setLoading(false)
       })
 
-    if (!isLocal && !previewMode) {
-      console.log('[home-route] trying static snapshot', { route: '/__live/index.html' })
-      fetch(`/__live/index.html?_t=${Date.now()}`, { cache: 'no-store' })
-        .then(async (res) => {
-          console.log('[home-route] static snapshot response', {
-            ok: res.ok,
-            status: res.status,
-            contentType: res.headers.get('content-type'),
+    ;(async () => {
+      const liveRenderMode = await loadLiveRenderMode()
+      const shouldTryStatic = !previewMode && liveRenderMode === 'static'
+
+      debugLog('[home-route] render mode', { liveRenderMode, previewMode, shouldTryStatic })
+
+      if (shouldTryStatic) {
+        try {
+          debugLog('[home-route] trying static snapshot', { route: '/__live/index.html' })
+          const staticRes = await fetch(`/__live/index.html?_t=${Date.now()}`, { cache: 'no-store' })
+          debugLog('[home-route] static snapshot response', {
+            ok: staticRes.ok,
+            status: staticRes.status,
+            contentType: staticRes.headers.get('content-type'),
           })
-          if (!res.ok) return null
-          return res.text()
-        })
-        .then((staticHtml) => {
-          if (staticHtml) {
-            const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000
-            console.log('[home-route] using static snapshot', {
+
+          if (staticRes.ok) {
+            const staticHtml = await staticRes.text()
+            const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || (staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000)
+            debugLog('[home-route] using static snapshot', {
               htmlLength: staticHtml.length,
               containsLoadingText: staticHtml.includes('Lädt'),
               containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
               preview: staticHtml.slice(0, 220),
               looksLikeLoadingShell,
             })
-            if (looksLikeLoadingShell) {
-              console.log('[home-route] static snapshot rejected, falling back to dynamic render')
-              startDynamicRender()
-              return
-            }
-            fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
-              .then(async (metaRes) => {
-                const metaText = await metaRes.text().catch(() => '')
-                const metaContentType = metaRes.headers.get('content-type') || ''
-                console.log('[home-route] static snapshot meta response', {
-                  ok: metaRes.ok,
-                  status: metaRes.status,
-                  contentType: metaContentType,
-                  preview: metaText.slice(0, 240),
-                })
-                if (!metaContentType.includes('application/json') || metaText.includes('<!DOCTYPE html>')) {
-                  console.log('[home-route] static snapshot meta rejected, falling back to dynamic render')
-                  startDynamicRender()
-                }
-              })
-              .catch((err) => {
-                console.log('[home-route] static snapshot meta fetch failed', {
-                  error: err?.message || String(err),
-                })
-                startDynamicRender()
-              })
-            setHtml(staticHtml)
-            setHomePage({ data: {} })
-            setLoading(false)
-            return
-          }
-          console.log('[home-route] static snapshot missing, falling back to dynamic render')
-          startDynamicRender()
-        })
-        .catch(() => {
-          console.log('[home-route] static snapshot fetch failed, falling back to dynamic render')
-          startDynamicRender()
-        })
-      return
-    }
 
-    console.log('[home-route] rendering dynamically without static snapshot')
-    startDynamicRender()
+            if (!looksLikeLoadingShell) {
+              const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
+              const metaText = await metaRes.text().catch(() => '')
+              const metaContentType = metaRes.headers.get('content-type') || ''
+              const metaLooksValid = metaRes.ok && metaContentType.includes('application/json') && !metaText.includes('<!DOCTYPE html>')
+
+              debugLog('[home-route] static snapshot meta response', {
+                ok: metaRes.ok,
+                status: metaRes.status,
+                contentType: metaContentType,
+                preview: metaText.slice(0, 240),
+                metaLooksValid,
+              })
+
+              if (metaLooksValid) {
+                setHtml(staticHtml)
+                setHomePage({ data: {} })
+                setLoading(false)
+                return
+              }
+            }
+          }
+          debugLog('[home-route] static snapshot rejected, falling back to dynamic render')
+        } catch (_e) {
+          debugLog('[home-route] static snapshot fetch failed, falling back to dynamic render')
+        }
+      }
+
+      debugLog('[home-route] rendering dynamically')
+      startDynamicRender()
+    })()
   }, [])
 
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>

@@ -5,6 +5,7 @@ const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
 const CONFIG_FILE = path.join(process.cwd(), 'data', 'fonts-config.json');
 
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot']);
+const SAFE_EMIT_EXTS = new Set(['.woff', '.woff2']);
 
 const FONT_FORMAT = {
   '.ttf':   'truetype',
@@ -57,7 +58,7 @@ export default function handler(req, res) {
 
   const disabled = loadDisabledSet();
   const fonts = scanUploadsForFonts(UPLOADS_DIR, '');
-  const enabled = fonts.filter(f => !disabled.has(f.id));
+  const enabled = fonts.filter(f => !disabled.has(f.id) && SAFE_EMIT_EXTS.has(f.ext));
 
   const css = enabled.map(f => {
     const family = f.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
