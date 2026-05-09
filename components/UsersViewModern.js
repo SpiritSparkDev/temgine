@@ -124,7 +124,7 @@ export default function UsersViewModern({ showToast }) {
                       onClick={() => setEditingUser(user.id)}
                       title="Rolle ändern"
                     >
-                      <Edit size={14} />
+                      <Edit2 size={14} />
                     </button>
                   </div>
                 )}

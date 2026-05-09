@@ -577,7 +577,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                       title="Bearbeiten"
                       aria-label={`${node.title} bearbeiten`}
                     >
-                      <Edit size={15} />
+                      <Edit2 size={15} />
                     </button>
                     <button
                       className="icon-btn"

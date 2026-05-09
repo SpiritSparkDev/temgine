@@ -969,7 +969,7 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
             <>
               <div className="tce-code-tabs">
                 <div className="tce-code-tab active">
-                  <Code2 size={11} aria-hidden="true" />
+                  <Code size={11} aria-hidden="true" />
                   <span>{templateName || 'unbenannt'}.html</span>
                 </div>
               </div>

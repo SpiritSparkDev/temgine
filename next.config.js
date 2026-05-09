@@ -3,14 +3,16 @@
 // would make the server look for built assets in '.next-dev' while the build
 // (which always runs with NODE_ENV=production) wrote them to '.next'.
 const isDev = process.env.NODE_ENV === 'development';
+const isProd = process.env.NODE_ENV === 'production';
 
 // ── Security Headers (F-03) ──────────────────────────────────────────────────
 const securityHeaders = [
   // Verhindert Clickjacking
   { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
-  // Verhindert MIME-Type-Sniffing (nur in Produktion; in Next.js-Dev
-  // wird _clientMiddlewareManifest.js als application/json ausgeliefert).
-  ...(isDev ? [] : [{ key: 'X-Content-Type-Options', value: 'nosniff' }]),
+  // Verhindert MIME-Type-Sniffing nur in Production.
+  // In Dev liefert Next.js _clientMiddlewareManifest.js als application/json,
+  // was mit nosniff sonst eine Browser-Warnung erzeugt.
+  ...(isProd ? [{ key: 'X-Content-Type-Options', value: 'nosniff' }] : []),
   // Verhindert Referrer-Leakage bei cross-origin Navigation
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Aktiviert HTTPS-Enforcing (nur in Produktion sinnvoll, aber schadet nicht)
