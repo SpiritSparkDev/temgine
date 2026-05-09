@@ -118,6 +118,9 @@ export default function PageCatchAll() {
           console.log('[page-route] static snapshot loaded', {
             routePath,
             htmlLength: staticHtml.length,
+            containsLoadingText: staticHtml.includes('Lädt'),
+            containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
+            preview: staticHtml.slice(0, 220),
           })
           setPage({ title: '', data: {} })
           setHtml(staticHtml)

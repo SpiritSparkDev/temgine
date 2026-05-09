@@ -235,6 +235,21 @@ export default function Home() {
               containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
               preview: staticHtml.slice(0, 220),
             })
+            fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
+              .then(async (metaRes) => {
+                const metaText = await metaRes.text().catch(() => '')
+                console.log('[home-route] static snapshot meta response', {
+                  ok: metaRes.ok,
+                  status: metaRes.status,
+                  contentType: metaRes.headers.get('content-type'),
+                  preview: metaText.slice(0, 240),
+                })
+              })
+              .catch((err) => {
+                console.log('[home-route] static snapshot meta fetch failed', {
+                  error: err?.message || String(err),
+                })
+              })
             setHtml(staticHtml)
             setHomePage({ data: {} })
             setLoading(false)
