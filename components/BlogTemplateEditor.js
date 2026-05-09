@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus, Save, Trash2, Rss, Layout, ChevronLeft, AlertTriangle,
-  CheckCircle2, Circle, MousePointerClick, Code, HelpCircle
+  CheckCircle2, Circle, MousePointerClick, Code, FileCode, HelpCircle
 } from '../lib/muiIcons';
 import CodeEditor from './CodeEditor';
 import ConfirmDialog from './ConfirmDialog';

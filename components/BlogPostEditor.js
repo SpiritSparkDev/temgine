@@ -275,14 +275,14 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
               {/* Cover image */}
               <div className="blog-editor-card">
                 <div className="blog-editor-card__head">
-                  <Image size={12} /> Cover-Bild
+                  <ImageIcon size={12} /> Cover-Bild
                 </div>
                 <div className="blog-editor-card__body">
                   {coverImage ? (
                     <img className="blog-editor-cover-preview" src={coverImage} alt="Cover" onError={e => { e.currentTarget.style.display = 'none'; }} />
                   ) : (
                     <div className="blog-editor-cover-placeholder">
-                      <Image size={16} /> Kein Bild
+                      <ImageIcon size={16} /> Kein Bild
                     </div>
                   )}
                   <div className="blog-editor-field">

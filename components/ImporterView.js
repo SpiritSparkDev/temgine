@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, Code, Eye, Type, ImageIcon, List, Quote, AlignLeft, Layers, X, RefreshCw, Tag } from '../lib/muiIcons';
+import { Upload, ChevronRight, ChevronLeft, Check, AlertTriangle, Code, FileCode, Eye, Type, Image as Image, List, Quote, AlignLeft, Layers, X, RefreshCw, Tag } from '../lib/muiIcons';
 import { guessBlockType, extractHeading, extractTextContent, extractImageSrcs, cleanHtml, generateTemplateName, generateTemplateFromHtml, extractContentElements, applyFieldExtractions } from '../lib/htmlImporter.js';
 import { findBestMatch, extractPropsFromHtml } from '../lib/templateMatcher.js';
 import { extractTemplateVariables } from '../lib/templateParser.js';
