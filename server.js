@@ -19,6 +19,13 @@ const port = process.env.PORT || 3000;
 // Next.js to ignore the production build in .next and return HTML for JS bundle requests.
 const dev = process.env.NODE_ENV === 'development';
 
+console.log('> Server boot config', {
+  nodeEnv: process.env.NODE_ENV || '(unset)',
+  dev,
+  port,
+  cwd: process.cwd(),
+});
+
 // Run database migrations on startup (Plesk: ENV vars are only available here, not in npm scripts)
 if (process.env.DATABASE_URL) {
   try {
@@ -39,6 +46,25 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   createServer((req, res) => {
+    const isNextAssetRequest = typeof req.url === 'string' && req.url.startsWith('/_next/');
+
+    if (isNextAssetRequest) {
+      console.log('> Asset request start', {
+        method: req.method,
+        url: req.url,
+      });
+
+      res.on('finish', () => {
+        console.log('> Asset request complete', {
+          method: req.method,
+          url: req.url,
+          statusCode: res.statusCode,
+          contentType: res.getHeader('content-type') || null,
+          location: res.getHeader('location') || null,
+        });
+      });
+    }
+
     handle(req, res);
   }).listen(port, (err) => {
     if (err) throw err;

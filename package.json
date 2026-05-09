@@ -6,7 +6,7 @@
     "dev": "npm run test && next dev",
     "test": "jest --color",
     "build": "prisma generate && next build",
-    "start": "next start",
+    "start": "node server.js",
     "check-env": "node scripts/check-env.js",
     "migrate": "node scripts/migrate.js",
     "migrate-models": "node ./scripts/migrate-models.js",
