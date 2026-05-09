@@ -47,7 +47,6 @@ const securityHeaders = [
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
-  turbopack: {},
   async headers() {
     return [
       {
