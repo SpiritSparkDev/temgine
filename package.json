@@ -3,7 +3,7 @@
   "version": "0.9.0",
   "private": true,
   "scripts": {
-    "dev": "npm run test && next dev --turbopack",
+    "dev": "npm run test && next dev",
     "test": "jest --color",
     "build": "prisma generate && next build --turbopack",
     "start": "next start",
