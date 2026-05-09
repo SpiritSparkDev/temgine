@@ -229,7 +229,12 @@ export default function Home() {
         })
         .then((staticHtml) => {
           if (staticHtml) {
-            console.log('[home-route] using static snapshot', { htmlLength: staticHtml.length })
+            console.log('[home-route] using static snapshot', {
+              htmlLength: staticHtml.length,
+              containsLoadingText: staticHtml.includes('Lädt'),
+              containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
+              preview: staticHtml.slice(0, 220),
+            })
             setHtml(staticHtml)
             setHomePage({ data: {} })
             setLoading(false)
