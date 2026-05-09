@@ -57,6 +57,18 @@ export default function AdminPageClient() {
   const router = useRouter();
 
   useEffect(() => {
+    console.log('[admin] client render state', {
+      view,
+      initialLoading,
+      hasSession: Boolean(session),
+      user: session?.user?.email || session?.user?.name || null,
+      templateCount: templateList.length,
+      pageCount: pages.length,
+      loadWarningsCount: loadWarnings.length,
+    });
+  }, [view, initialLoading, session, templateList.length, pages.length, loadWarnings.length]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem('adminView');
       const legacyBuilderMap = {
@@ -232,21 +244,32 @@ export default function AdminPageClient() {
 
   async function refreshTemplateList() {
     try {
+      console.log('[admin] loading templates start');
       const tRes = await fetch('/api/templates');
+      console.log('[admin] loading templates response', {
+        ok: tRes.ok,
+        status: tRes.status,
+      });
       if (!tRes.ok) throw new Error(`API error: ${tRes.status}`);
       const t = await tRes.json();
       let list = Array.isArray(t) ? t : [];
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'BLOCK' }));
       }
+      console.log('[admin] loading templates done', {
+        count: list.filter(tpl => !tpl.blogType).length,
+      });
       setTemplateList(list.filter(tpl => !tpl.blogType));
     } catch (e) {
       console.error('[admin] Error loading templates:', e);
+      throw e;
     }
   }
 
   useEffect(() => {
     let isMounted = true;
+
+    console.log('[admin] initial load effect start');
 
     (async () => {
       const warnings = [];
@@ -259,9 +282,17 @@ export default function AdminPageClient() {
       }
 
       try {
+        console.log('[admin] loading pages start');
         const pRes = await fetch('/api/pages?includeDrafts=true');
+        console.log('[admin] loading pages response', {
+          ok: pRes.ok,
+          status: pRes.status,
+        });
         if (!pRes.ok) throw new Error(`API error: ${pRes.status}`);
         const p = await pRes.json();
+        console.log('[admin] loading pages done', {
+          count: Array.isArray(p) ? p.length : (p.pages || []).length,
+        });
         if (isMounted) setPages(Array.isArray(p) ? p : (p.pages || []));
       } catch (e) { 
         console.error('[admin] Error loading pages:', e);
@@ -270,12 +301,18 @@ export default function AdminPageClient() {
       }
 
       if (isMounted) {
+        console.log('[admin] initial load effect complete', {
+          warnings,
+        });
         setLoadWarnings(warnings);
         setInitialLoading(false);
+      } else {
+        console.log('[admin] initial load effect aborted because component unmounted');
       }
     })();
 
     return () => {
+      console.log('[admin] initial load effect cleanup');
       isMounted = false;
     };
   }, []);

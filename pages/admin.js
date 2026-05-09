@@ -19,14 +19,26 @@ const AdminPageClient = dynamic(() => import('../components/AdminPageClient'), {
 });
 
 export async function getServerSideProps(context) {
+  console.log('[admin] getServerSideProps start', {
+    url: context?.resolvedUrl,
+    devMode: process.env.DEV_MODE === 'true',
+  });
+
   // DEV_MODE: skip auth check entirely
   if (process.env.DEV_MODE === 'true') {
+    console.log('[admin] getServerSideProps dev mode bypass');
     return { props: {} };
   }
 
   const session = await getServerSession(context.req, context.res, authOptions);
 
+  console.log('[admin] getServerSideProps session', {
+    hasSession: Boolean(session),
+    user: session?.user?.email || session?.user?.name || null,
+  });
+
   if (!session) {
+    console.log('[admin] getServerSideProps redirecting to login');
     return {
       redirect: {
         destination: '/login?callbackUrl=%2Fadmin',
@@ -35,6 +47,7 @@ export async function getServerSideProps(context) {
     };
   }
 
+  console.log('[admin] getServerSideProps returning props');
   return { props: {} };
 }
 
