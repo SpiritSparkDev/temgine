@@ -7,7 +7,7 @@ import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
-const STATIC_EXPORT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.avif', '.mp4', '.webm', '.pdf', '.txt'])
+const STATIC_EXPORT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.avif', '.mp4', '.webm', '.pdf', '.txt', '.woff', '.woff2', '.ttf', '.otf', '.eot'])
 
 function safeZipPath(input) {
   return String(input || '').replace(/\\/g, '/').replace(/^\/+/, '').split('/').filter(Boolean).map(part => part.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
@@ -146,13 +146,20 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
 function collectReferencedAssetsFromHtml(html) {
   const assets = new Set()
   const source = String(html || '')
-  const regex = /(src|href)=(["'])([^"']+)\2/gi
+  const regex = /(src|href|poster|content)=(['"])([^'"]+)\2/gi
   let match
   while ((match = regex.exec(source))) {
     const value = String(match[3] || '')
-    if (!value || /^https?:\/\//i.test(value) || value.startsWith('data:') || value.startsWith('mailto:') || value.startsWith('#')) continue
-    if (value.startsWith('/')) assets.add(value)
+    const normalized = normalizeAssetPath(value)
+    if (normalized && isStaticAssetCandidate(normalized)) assets.add(`/${normalized}`)
   }
+
+  const cssUrlRegex = /url\((['"]?)([^'")]+)\1\)/gi
+  while ((match = cssUrlRegex.exec(source))) {
+    const normalized = normalizeAssetPath(String(match[2] || ''))
+    if (normalized && isStaticAssetCandidate(normalized)) assets.add(`/${normalized}`)
+  }
+
   return Array.from(assets)
 }
 
@@ -167,6 +174,200 @@ function collectReferencedAssetsFromCss(cssText) {
     if (value.startsWith('/')) assets.add(value)
   }
   return Array.from(assets)
+}
+
+function stripUrlSuffix(value) {
+  const input = String(value || '')
+  const [pathOnly] = input.split(/[?#]/)
+  return pathOnly
+}
+
+function normalizeAssetPath(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  if (/^data:/i.test(raw) || /^mailto:/i.test(raw) || raw.startsWith('#')) return null
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const u = new URL(raw)
+      const p = stripUrlSuffix(u.pathname || '').replace(/^\/+/, '')
+      return p ? decodeURIComponent(p) : null
+    }
+  } catch (_e) {}
+
+  if (raw.startsWith('/')) {
+    const p = stripUrlSuffix(raw).replace(/^\/+/, '')
+    return p ? decodeURIComponent(p) : null
+  }
+
+  const p = stripUrlSuffix(raw)
+  return p ? decodeURIComponent(p) : null
+}
+
+function isStaticAssetCandidate(relPath) {
+  const rel = String(relPath || '').replace(/^\/+/, '').trim()
+  if (!rel || rel === '&') return false
+
+  const lower = rel.toLowerCase()
+  const ext = path.extname(lower)
+
+  if (lower.startsWith('uploads/') || lower.startsWith('assets/') || lower.startsWith('favicon/')) return true
+  if (lower.startsWith('extern_css/')) return true
+
+  if (ext === '.html' || ext === '.htm') return false
+  if (ext === '.css' || ext === '.js') return false
+  if (!ext) return false
+
+  return STATIC_EXPORT_EXTS.has(ext)
+}
+
+function isMediaAssetPath(relPath) {
+  const lower = String(relPath || '').toLowerCase()
+  const ext = path.extname(lower)
+  if (!ext) return false
+  if (ext === '.html' || ext === '.htm' || ext === '.css' || ext === '.js' || ext === '.json') return false
+  return STATIC_EXPORT_EXTS.has(ext)
+}
+
+function buildStaticFontsCss(uploadFonts = [], fontsConfig = null) {
+  const disabled = new Set(Array.isArray(fontsConfig?.disabled) ? fontsConfig.disabled : [])
+  const formatByExt = {
+    '.woff2': 'woff2',
+    '.woff': 'woff',
+    '.ttf': 'truetype',
+    '.otf': 'opentype',
+    '.eot': 'embedded-opentype',
+  }
+
+  const rules = []
+  for (const f of uploadFonts || []) {
+    const rel = String(f?.path || '').replace(/\\/g, '/').replace(/^\/+/, '')
+    if (!rel) continue
+    const id = `uploads/${rel}`
+    if (disabled.has(id)) continue
+    const ext = path.extname(rel).toLowerCase()
+    const fmt = formatByExt[ext]
+    if (!fmt) continue
+    const base = path.basename(rel).replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ')
+    rules.push(`@font-face {\n  font-family: "${base}";\n  src: url("uploads/${rel}") format("${fmt}");\n  font-display: swap;\n}`)
+  }
+  return rules.join('\n\n')
+}
+
+function injectCssLinks(html, cssFiles = [], extraCssFiles = []) {
+  const links = [...(cssFiles || []), ...(extraCssFiles || [])]
+    .map((f) => `<link rel="stylesheet" href="${safeZipPath(f.filename)}">`)
+    .join('\n')
+  if (!links) return String(html || '')
+
+  const source = String(html || '')
+  if (/<\/head>/i.test(source)) {
+    return source.replace(/<\/head>/i, `${links}\n</head>`)
+  }
+  if (/<body[^>]*>/i.test(source)) {
+    return source.replace(/<body([^>]*)>/i, `<body$1>${links}`)
+  }
+  return `${links}\n${source}`
+}
+
+function toFlatHtmlFilename(routePath) {
+  if (!routePath || routePath === '/') return 'index.html'
+  const slug = String(routePath)
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .split('/')
+    .filter(Boolean)
+    .map((part) => part.replace(/[^A-Za-z0-9._-]/g, '-'))
+    .join('-')
+  return `${slug || 'page'}.html`
+}
+
+function rewriteInternalLinksToFlatHtml(html, routeToFileMap) {
+  const source = String(html || '')
+  return source.replace(/href=(['"])(\/[^'"]*)(\1)/gi, (_m, quote, hrefPath, closingQuote) => {
+    const full = String(hrefPath || '')
+    const [pathPart, suffix = ''] = full.split(/(?=[?#])/)
+    const normalized = pathPart.length > 1 ? pathPart.replace(/\/+$/, '') : pathPart
+    const target = routeToFileMap[normalized] || routeToFileMap[pathPart] || (normalized === '/' ? 'index.html' : null)
+    if (!target) return `href=${quote}${hrefPath}${closingQuote}`
+    return `href=${quote}${target}${suffix}${closingQuote}`
+  })
+}
+
+function rewriteCssLinksToRoot(html) {
+  return String(html || '').replace(/href=(['"])\/extern_css\/([^'"]+)(\1)/gi, (_m, quote, filename, closingQuote) => {
+    return `href=${quote}${safeZipPath(filename)}${closingQuote}`
+  })
+}
+
+function rewriteAbsoluteAssetLinks(html) {
+  const source = String(html || '')
+  let result = source.replace(/(src|href|poster|content)=(['"])(\/[^'"]+)(\2)/gi, (_m, attr, quote, rawPath, closingQuote) => {
+    const full = String(rawPath || '')
+    const [pathPart, suffix = ''] = full.split(/(?=[?#])/)
+    if (pathPart.startsWith('/api/') || pathPart.startsWith('/_next/')) {
+      return `${attr}=${quote}${rawPath}${closingQuote}`
+    }
+    const relative = pathPart.replace(/^\/+/, '')
+    return `${attr}=${quote}${relative}${suffix}${closingQuote}`
+  })
+
+  result = result.replace(/(src|href|poster|content)=(['"])(https?:\/\/[^/'"]+\/(?:[^'"]*))(\2)/gi, (_m, attr, quote, rawUrl, closingQuote) => {
+    try {
+      const u = new URL(rawUrl)
+      const p = u.pathname || ''
+      if (p.startsWith('/api/') || p.startsWith('/_next/')) return `${attr}=${quote}${rawUrl}${closingQuote}`
+      const rel = p.replace(/^\/+/, '')
+      const suffix = `${u.search || ''}${u.hash || ''}`
+      return `${attr}=${quote}${rel}${suffix}${closingQuote}`
+    } catch (_e) {
+      return `${attr}=${quote}${rawUrl}${closingQuote}`
+    }
+  })
+
+  result = result.replace(/srcset=(['"])([^'"]+)(\1)/gi, (_m, quote, rawSrcset, closingQuote) => {
+    const converted = String(rawSrcset || '')
+      .split(',')
+      .map((part) => {
+        const trimmed = part.trim()
+        if (!trimmed) return trimmed
+        const tokens = trimmed.split(/\s+/)
+        const src = tokens[0] || ''
+        let nextSrc = src
+        try {
+          if (/^https?:\/\//i.test(src)) {
+            const u = new URL(src)
+            if (!u.pathname.startsWith('/api/') && !u.pathname.startsWith('/_next/')) {
+              nextSrc = `${u.pathname.replace(/^\/+/, '')}${u.search || ''}${u.hash || ''}`
+            }
+          } else if (src.startsWith('/')) {
+            nextSrc = src.replace(/^\/+/, '')
+          }
+        } catch (_e) {}
+        return [nextSrc, ...tokens.slice(1)].join(' ')
+      })
+      .join(', ')
+
+    return `srcset=${quote}${converted}${closingQuote}`
+  })
+
+  result = result.replace(/url\((['"]?)\/(?!\/)([^'")]+)\1\)/gi, (_m, quote, relPath) => {
+    const value = String(relPath || '')
+    if (value.startsWith('api/') || value.startsWith('_next/')) return `url(${quote}/${value}${quote})`
+    return `url(${quote}${value}${quote})`
+  })
+
+  return result
+}
+
+function rewriteCssAssetUrlsToRelative(cssText) {
+  return String(cssText || '').replace(/url\((['"]?)\/(?!\/)([^'")]+)\1\)/gi, (_m, quote, relPath) => {
+    const value = String(relPath || '')
+    if (value.startsWith('api/') || value.startsWith('_next/')) {
+      return `url(${quote}/${value}${quote})`
+    }
+    return `url(${quote}${value}${quote})`
+  })
 }
 
 async function buildStaticExportZip({ pages, templates, navigations, cssFiles, uploadFonts, cssConfig, fontsConfig, meta }) {
@@ -188,8 +389,30 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   for (const nav of navigations) allNavigationsById[nav.id] = nav
   const activeNavigations = navigations.filter((n) => n.isActive === true)
   const publicTree = buildPublicTree(pages)
-  const routeEntries = createRouteEntries(publicTree)
+  const allEntries = createRouteEntries(publicTree)
     .filter((entry, index, arr) => arr.findIndex((x) => x.routePath === entry.routePath) === index)
+  const homepageEntry = allEntries.find((e) => e.routePath === '/')
+  const routeEntries = allEntries.filter((entry) => {
+    if (!homepageEntry?.page?.id) return true
+    if (entry.routePath === '/') return true
+    return entry.page?.id !== homepageEntry.page.id
+  })
+
+  const routeToFileMap = {}
+  const usedNames = new Set()
+  for (const entry of routeEntries) {
+    let filename = toFlatHtmlFilename(entry.routePath)
+    if (usedNames.has(filename)) {
+      const base = filename.replace(/\.html$/i, '')
+      let i = 2
+      while (usedNames.has(`${base}-${i}.html`)) i++
+      filename = `${base}-${i}.html`
+    }
+    usedNames.add(filename)
+    routeToFileMap[entry.routePath] = filename
+  }
+
+  routeToFileMap['/'] = routeToFileMap['/'] || 'index.html'
   console.log('[admin/export] static zip phase', {
     phase: 'routes-built',
     routeCount: routeEntries.length,
@@ -197,36 +420,130 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   })
 
   const copiedAssets = new Set()
-  const copyAssetIfExists = (publicPath) => {
-    const rel = String(publicPath || '').replace(/^\/+/, '')
-    if (!rel || copiedAssets.has(rel)) return null
+  const missingAssets = new Set()
+  const generatedFiles = new Set()
+  const exportTrace = []
+  const pushTrace = (entry) => {
+    const line = `[${new Date().toISOString()}] ${entry}`
+    exportTrace.push(line)
+    if (exportTrace.length > 5000) exportTrace.shift()
+  }
+  pushTrace('START static export build')
+
+  const addFallbackMediaFromPublicDir = (publicSubDir) => {
+    const root = path.join(process.cwd(), 'public', publicSubDir)
+    if (!fs.existsSync(root)) {
+      pushTrace(`SKIP fallback-dir-missing dir=${publicSubDir}`)
+      return
+    }
+
+    let added = 0
+    const walk = (dir, relBase = '') => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const rel = relBase ? `${relBase}/${entry.name}` : entry.name
+        const abs = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(abs, rel)
+          continue
+        }
+        const zipRel = `${publicSubDir}/${rel}`.replace(/\\/g, '/')
+        if (!isMediaAssetPath(zipRel)) continue
+        if (copiedAssets.has(zipRel)) continue
+        try {
+          publicFolder.file(zipRel, fs.readFileSync(abs))
+          copiedAssets.add(zipRel)
+          added += 1
+        } catch (_e) {}
+      }
+    }
+
+    walk(root)
+    pushTrace(`FALLBACK dir=${publicSubDir} added=${added}`)
+  }
+  const copyAssetIfExists = (publicPath, source = 'unknown') => {
+    const rel = normalizeAssetPath(publicPath)
+    if (!rel) {
+      pushTrace(`SKIP invalid-path source=${source} raw=${String(publicPath || '')}`)
+      return null
+    }
+    if (copiedAssets.has(rel)) {
+      pushTrace(`SKIP duplicate source=${source} path=${rel}`)
+      return null
+    }
+    if (generatedFiles.has(rel)) {
+      pushTrace(`SKIP generated-file source=${source} path=${rel}`)
+      return null
+    }
+    if (!isStaticAssetCandidate(rel)) {
+      pushTrace(`SKIP non-asset source=${source} path=${rel}`)
+      return null
+    }
     const abs = path.join(process.cwd(), 'public', rel)
-    if (!abs.startsWith(path.join(process.cwd(), 'public'))) return null
-    if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) return null
+    if (!abs.startsWith(path.join(process.cwd(), 'public'))) {
+      pushTrace(`SKIP unsafe-path source=${source} path=${rel}`)
+      return null
+    }
+    if (!fs.existsSync(abs) || fs.statSync(abs).isDirectory()) {
+      missingAssets.add(rel)
+      pushTrace(`MISS source=${source} path=${rel}`)
+      return null
+    }
     const ext = path.extname(rel).toLowerCase()
-    if (!STATIC_EXPORT_EXTS.has(ext) && !rel.startsWith('uploads/') && !rel.startsWith('extern_css/')) return null
+    if (!STATIC_EXPORT_EXTS.has(ext) && !rel.startsWith('uploads/') && !rel.startsWith('extern_css/')) {
+      pushTrace(`SKIP ext-filter source=${source} path=${rel}`)
+      return null
+    }
     copiedAssets.add(rel)
+    pushTrace(`ADD source=${source} path=${rel}`)
     return { rel, abs }
   }
 
   for (const cssFile of cssFiles) {
-    publicFolder.file(`extern_css/${safeZipPath(cssFile.filename)}`, cssFile.content || '')
+    const normalizedCss = rewriteCssAssetUrlsToRelative(cssFile.content || '')
+    const cssFilename = safeZipPath(cssFile.filename)
+    generatedFiles.add(cssFilename)
+    publicFolder.file(cssFilename, normalizedCss)
     for (const assetPath of collectReferencedAssetsFromCss(cssFile.content)) {
-      const rel = assetPath.replace(/^\/+/, '')
-      const asset = copyAssetIfExists(rel)
+      const rel = normalizeAssetPath(assetPath)
+      const asset = copyAssetIfExists(rel, `css:${cssFile.filename}`)
       if (!asset) continue
       try {
         const content = fs.readFileSync(asset.abs)
         publicFolder.file(asset.rel, content)
+        if (copiedAssets.size % 25 === 0) {
+          console.log('[admin/export] static asset progress', { copied: copiedAssets.size, missing: missingAssets.size, last: asset.rel })
+        }
       } catch (_e) {}
     }
   }
+  pushTrace(`CSS phase done files=${cssFiles.length}`)
 
   for (const font of uploadFonts) {
     const rel = safeZipPath(font.path || '')
     if (!rel) continue
-    publicFolder.file(rel, Buffer.from(String(font.content || ''), 'base64'))
+    publicFolder.file(`uploads/${rel}`, Buffer.from(String(font.content || ''), 'base64'))
   }
+
+  const fontsCss = buildStaticFontsCss(uploadFonts, fontsConfig)
+  const extraCssFiles = []
+  if (fontsCss) {
+    generatedFiles.add('temgine-fonts.css')
+    publicFolder.file('temgine-fonts.css', fontsCss)
+    extraCssFiles.push({ filename: 'temgine-fonts.css' })
+    for (const assetPath of collectReferencedAssetsFromCss(fontsCss)) {
+      const rel = normalizeAssetPath(assetPath)
+      const asset = copyAssetIfExists(rel, 'fonts-css')
+      if (!asset) continue
+      try {
+        const content = fs.readFileSync(asset.abs)
+        publicFolder.file(asset.rel, content)
+        if (copiedAssets.size % 25 === 0) {
+          console.log('[admin/export] static asset progress', { copied: copiedAssets.size, missing: missingAssets.size, last: asset.rel })
+        }
+      } catch (_e) {}
+    }
+  }
+  pushTrace(`Fonts phase done hasFontsCss=${fontsCss ? 'yes' : 'no'} uploadFonts=${uploadFonts.length}`)
 
   for (const rootAsset of ['favicon.ico', 'robots.txt', 'manifest.json']) {
     const abs = path.join(process.cwd(), 'public', rootAsset)
@@ -236,6 +553,10 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       } catch (_e) {}
     }
   }
+
+  // Deterministic fallback so images are present even if no direct references were detected.
+  addFallbackMediaFromPublicDir('uploads')
+  addFallbackMediaFromPublicDir('assets')
 
   for (const entry of routeEntries) {
     try {
@@ -253,17 +574,25 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       }
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
-      const html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage)
-      const routeFolder = entry.routePath === '/' ? publicFolder : publicFolder.folder(safeZipPath(entry.routePath))
-      routeFolder.file('index.html', String(html || ''))
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage)
+      html = rewriteCssLinksToRoot(html)
+      html = injectCssLinks(html, cssFiles, extraCssFiles)
+      html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)
+      html = rewriteAbsoluteAssetLinks(html)
+      const htmlFilename = routeToFileMap[entry.routePath] || 'index.html'
+      generatedFiles.add(htmlFilename)
+      publicFolder.file(htmlFilename, String(html || ''))
 
       for (const assetPath of collectReferencedAssetsFromHtml(html)) {
-        const rel = assetPath.replace(/^\/+/, '')
-        const asset = copyAssetIfExists(rel)
+        const rel = normalizeAssetPath(assetPath)
+        const asset = copyAssetIfExists(rel, `html:${entry.routePath}`)
         if (!asset) continue
         try {
           const content = fs.readFileSync(asset.abs)
           publicFolder.file(asset.rel, content)
+          if (copiedAssets.size % 25 === 0) {
+            console.log('[admin/export] static asset progress', { copied: copiedAssets.size, missing: missingAssets.size, last: asset.rel })
+          }
         } catch (_e) {}
       }
     } catch (e) {
@@ -273,12 +602,23 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       })
     }
   }
+  pushTrace(`HTML phase done routes=${routeEntries.length}`)
 
   publicFolder.file('404.html', '<!doctype html><html><head><meta charset="utf-8"><title>404</title></head><body><h1>Seite nicht gefunden</h1></body></html>')
   publicFolder.file('__export.json', JSON.stringify(meta, null, 2))
+  publicFolder.file('asset-manifest.json', JSON.stringify({
+    copiedAssets: Array.from(copiedAssets).sort(),
+    missingAssets: Array.from(missingAssets).sort(),
+    copiedCount: copiedAssets.size,
+    missingCount: missingAssets.size,
+  }, null, 2))
+  pushTrace(`SUMMARY copied=${copiedAssets.size} missing=${missingAssets.size}`)
+  publicFolder.file('export-trace.log', exportTrace.join('\n'))
   console.log('[admin/export] static zip phase', {
     phase: 'metadata-written',
     assetsCopied: copiedAssets.size,
+    assetsMissing: missingAssets.size,
+    traceLines: exportTrace.length,
   })
 
   if (cssConfig) publicFolder.file('css-config.json', JSON.stringify(cssConfig, null, 2))
@@ -418,7 +758,8 @@ export default async function handler(req, res) {
     ])
 
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
-    const uploadFonts = shouldBuildProjectTransfer ? loadUploadFonts() : []
+    const shouldBuildStaticSite = wantStaticSite
+    const uploadFonts = (shouldBuildProjectTransfer || shouldBuildStaticSite) ? loadUploadFonts() : []
     const uploadedFiles = shouldBuildProjectTransfer ? loadUploadFiles() : []
 
     const cssConfig = loadJsonConfig('css-config.json')
@@ -566,15 +907,61 @@ export default async function handler(req, res) {
         fontsConfig,
         meta: exportMetadata,
       })
-      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-      console.log('[admin/export] static site zip ready', {
-        baseName,
-        bytes: zipBuffer.length,
-      })
+      console.log('[admin/export] static zip stream start', { baseName })
       res.setHeader('Content-Type', 'application/zip')
       res.setHeader('Content-Disposition', `attachment; filename="${baseName}-static-site.zip"`)
-      res.setHeader('Content-Length', zipBuffer.length)
-      return res.status(200).send(zipBuffer)
+
+      const zipStream = zip.generateNodeStream({
+        streamFiles: true,
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      })
+
+      let streamedBytes = 0
+      let lastLoggedMb = 0
+
+      zipStream.on('data', (chunk) => {
+        streamedBytes += chunk.length
+        const mb = Math.floor(streamedBytes / (1024 * 1024))
+        if (mb >= lastLoggedMb + 25) {
+          lastLoggedMb = mb
+          console.log('[admin/export] static zip stream progress', {
+            baseName,
+            streamedMB: mb,
+          })
+        }
+      })
+
+      return await new Promise((resolve, reject) => {
+        zipStream.on('error', (err) => {
+          console.error('[admin/export] static zip stream error', {
+            baseName,
+            error: err?.message || String(err),
+          })
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Static ZIP stream failed', details: err?.message || String(err) })
+          }
+          reject(err)
+        })
+
+        res.on('close', () => {
+          console.log('[admin/export] static zip stream closed', {
+            baseName,
+            streamedBytes,
+          })
+          resolve()
+        })
+
+        zipStream.on('end', () => {
+          console.log('[admin/export] static zip stream complete', {
+            baseName,
+            streamedBytes,
+          })
+          resolve()
+        })
+
+        zipStream.pipe(res)
+      })
     }
 
     const backup = {
