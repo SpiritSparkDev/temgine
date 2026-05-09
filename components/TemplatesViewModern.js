@@ -1115,21 +1115,22 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                     return (
                       <div className="tce-icons-grid">
                         {filtered.length > 0 ? (
-                          filtered.map(icon => (
-                            <button
-                              key={icon.name}
-                              className="tce-icon-card"
-                              onClick={() => {
-                                const iconHtml = getIconHtml(icon.name);
-                                setTemplateCode(c => c + iconHtml);
-                              }}
-                              title={icon.label}
-                              aria-label={`Icon ${icon.label} einfügen`}
-                            >
-                              <i className={`fas fa-${icon.name} tce-icon-preview`} aria-hidden="true" />
-                              <span className="tce-icon-name">{icon.name}</span>
-                            </button>
-                          ))
+                          filtered.map(icon => {
+                            const iconHtml = getIconHtml(icon);
+                            const iconPrefix = icon.prefix || 'fas';
+                            return (
+                              <button
+                                key={`${iconPrefix}-${icon.name}`}
+                                className="tce-icon-card"
+                                {...createButtonHandlers(iconHtml, () => setTemplateCode(c => c + iconHtml))}
+                                title={icon.label}
+                                aria-label={`Icon ${icon.label} einfügen`}
+                              >
+                                <i className={`${iconPrefix} fa-${icon.name} tce-icon-preview`} aria-hidden="true" />
+                                <span className="tce-icon-name">{icon.name}</span>
+                              </button>
+                            );
+                          })
                         ) : (
                           <div className="tce-icons-empty">
                             Keine Icons für „{iconSearch}" gefunden

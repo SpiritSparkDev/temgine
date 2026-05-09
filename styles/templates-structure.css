@@ -2925,6 +2925,9 @@
 .tce-icons-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  grid-auto-rows: min-content;
+  padding: 5px; 
+  align-content: start;
   gap: .5rem;
   overflow-y: auto;
   flex: 1;
