@@ -1,7 +1,8 @@
-﻿import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical } from '../lib/muiIcons';
+import { Plus, Trash2, Layout, Grid, Code, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical, Search } from '../lib/muiIcons';
 import { createButtonHandlers } from '../lib/insertHelper';
+import { FONT_AWESOME_ICONS, getIconHtml } from '../lib/fontAwesomeIcons';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -609,7 +610,8 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
   const [templateCode, setTemplateCode] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [rightTab, setRightTab] = useState('variables');
+  const [rightTab, setRightTab] = useState('referenz');
+  const [iconSearch, setIconSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [presetCategory, setPresetCategory] = useState('HERO');
@@ -1005,28 +1007,21 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
             <div className="tce-props-tabs" role="tablist">
               <button
                 role="tab"
-                aria-selected={rightTab === 'variables'}
-                className={`tce-props-tab${rightTab === 'variables' ? ' active' : ''}`}
-                onClick={() => setRightTab('variables')}
-              >
-                Variablen
-              </button>
-              <button
-                role="tab"
-                aria-selected={rightTab === 'settings'}
-                className={`tce-props-tab${rightTab === 'settings' ? ' active' : ''}`}
-                onClick={() => setRightTab('settings')}
-              >
-                Settings
-              </button>
-              <button
-                role="tab"
                 aria-selected={rightTab === 'referenz'}
                 className={`tce-props-tab${rightTab === 'referenz' ? ' active' : ''}`}
                 onClick={() => setRightTab('referenz')}
               >
                 <BookOpen size={11} aria-hidden="true" />
                 Referenz
+              </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'icons'}
+                className={`tce-props-tab${rightTab === 'icons' ? ' active' : ''}`}
+                onClick={() => setRightTab('icons')}
+              >
+                <Sparkles size={11} aria-hidden="true" />
+                Icons
               </button>
               <button
                 role="tab"
@@ -1043,46 +1038,6 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
             </div>
 
             <div className="tce-props-body">
-              {rightTab === 'variables' && (
-                <div className="tce-vars">
-                  <div className="tce-vars-section">
-                    <div className="tce-vars-title">Systemwerte</div>
-                    {SYSTEM_PLACEHOLDERS.map((s) => (
-                      <button
-                        key={s.label}
-                        className="tce-var-row"
-                        {...createButtonHandlers(s.snippet, () =>
-                          setTemplateCode((c) => c + s.snippet)
-                        )}
-                        aria-label={`${s.label} einfügen`}
-                        title={`${s.label} einfügen`}
-                      >
-                        <span className="tce-var-code">{s.snippet}</span>
-                        <span className="tce-var-label">{s.label}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {extractedVars.length > 0 && (
-                    <div className="tce-vars-section">
-                      <div className="tce-vars-title">Im Template erkannt</div>
-                      {extractedVars.map((v) => (
-                        <button
-                          key={v}
-                          className="tce-var-row tce-var-row--detected"
-                          onClick={() => setTemplateCode((c) => c + `{{${v}}}`)}
-                          aria-label={`{{${v}}} einfügen`}
-                          title={`{{${v}}} einfügen`}
-                        >
-                          <span className="tce-var-code">{`{{${v}}}`}</span>
-                          <span className="tce-var-label">einfügen</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {rightTab === 'referenz' && (
                 <div className="tce-ref-tab">
 
@@ -1135,24 +1090,54 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                 </div>
               )}
 
-              {rightTab === 'settings' && (
-                <div className="tce-settings-tab">
-                  <div className="tce-setting-group">
-                    <label className="tce-setting-label" htmlFor="tce-settings-name">
-                      Name
-                    </label>
+              {rightTab === 'icons' && (
+                <div className="tce-icons-tab">
+                  <div className="tce-icons-search">
+                    <Search size={16} />
                     <input
-                      id="tce-settings-name"
                       type="text"
-                      className="tce-setting-input"
-                      value={templateName}
-                      onChange={(e) => setTemplateName(e.target.value)}
+                      placeholder="Icons suchen..."
+                      value={iconSearch}
+                      onChange={(e) => setIconSearch(e.target.value)}
+                      aria-label="Font Awesome Icons suchen"
+                      autoFocus
                     />
                   </div>
-                  <div className="tce-setting-group">
-                    <span className="tce-setting-label">Typ</span>
-                    <div className="tce-type-badge">BLOCK</div>
-                  </div>
+
+                  {(() => {
+                    const q = iconSearch.trim().toLowerCase();
+                    const filtered = q 
+                      ? FONT_AWESOME_ICONS.filter(icon => 
+                          icon.name.includes(q) || icon.label.toLowerCase().includes(q)
+                        )
+                      : FONT_AWESOME_ICONS;
+
+                    return (
+                      <div className="tce-icons-grid">
+                        {filtered.length > 0 ? (
+                          filtered.map(icon => (
+                            <button
+                              key={icon.name}
+                              className="tce-icon-card"
+                              onClick={() => {
+                                const iconHtml = getIconHtml(icon.name);
+                                setTemplateCode(c => c + iconHtml);
+                              }}
+                              title={icon.label}
+                              aria-label={`Icon ${icon.label} einfügen`}
+                            >
+                              <i className={`fas fa-${icon.name} tce-icon-preview`} aria-hidden="true" />
+                              <span className="tce-icon-name">{icon.name}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="tce-icons-empty">
+                            Keine Icons für „{iconSearch}" gefunden
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

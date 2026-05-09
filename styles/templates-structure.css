@@ -2884,3 +2884,99 @@
   color: var(--accent-primary) !important;
   font-weight: 600;
 }
+
+/* ─ Icon Browser Tab ────────────────────────────────────────────────────── */
+
+.tce-icons-tab {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  padding: .75rem .875rem;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.tce-icons-search {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .325rem .6rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+}
+
+.tce-icons-search input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: .78rem;
+  outline: none;
+  padding: 0;
+}
+
+.tce-icons-search input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.tce-icons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: .5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tce-icon-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .25rem;
+  padding: .5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, transform .12s;
+  font-size: .7rem;
+}
+
+.tce-icon-card:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border-color: var(--accent-primary);
+  transform: scale(1.05);
+}
+
+.tce-icon-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tce-icon-name {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  text-align: center;
+  font-family: 'Fira Code', monospace;
+}
+
+.tce-icons-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+  font-size: .8rem;
+  text-align: center;
+}
