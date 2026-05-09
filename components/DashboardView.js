@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-    TrendingUp,
-    AlertTriangle,
-    CheckCircle2,
-    HardDrive,
+    CheckCircle,
+    AlertCircle,
+    Loader,
+    ChevronRight,
+    Database,
+    Layout as LayoutTemplate,
     Download,
     FileText,
-    DashboardCustomize,
     RefreshCw,
     Upload,
     XCircle,
@@ -260,7 +261,7 @@ export default function DashboardView({ templateList, pages, setView, showToast 
                                             <strong>{action.title}</strong>
                                             <span>{action.description}</span>
                                         </span>
-                                        <ArrowRight size={18} className="dashboard-quick-arrow" />
+                                        <ChevronRight size={18} className="dashboard-quick-arrow" />
                                     </button>
                                 );
                             })}
@@ -332,7 +333,7 @@ export default function DashboardView({ templateList, pages, setView, showToast 
                         <div className={`dashboard-system-card tone-${dbStatusTone}`}>
                             <div className="dashboard-system-topline">
                                 <div className="dashboard-system-icon-wrap">
-                                    {dbLoading ? <Activity size={18} /> : dbHealth?.connected ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                                    {dbLoading ? <Loader size={18} /> : dbHealth?.connected ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                                 </div>
                                 <div>
                                     <strong>{dbStatusLabel}</strong>
