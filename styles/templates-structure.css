@@ -592,7 +592,6 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   font-family: 'Fira Code', monospace;
-  font-size: ;
 }
 
 .settings-tab-btn.active {
@@ -2471,9 +2470,24 @@
   font-size: 0;
 }
 
-.icon-picker-item i {
-  font-size: 24px;
+.icon-picker-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   color: var(--text-primary);
+}
+
+.icon-picker-preview svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.icon-picker-preview i {
+  font-size: 24px;
+  line-height: 1;
 }
 
 .icon-picker-item:hover {
@@ -2960,6 +2974,17 @@
   width: 28px;
   height: 28px;
   color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tce-icon-preview svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.tce-icon-preview i {
   font-size: 20px;
   line-height: 1;
 }

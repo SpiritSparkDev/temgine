@@ -1108,7 +1108,9 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                     const q = iconSearch.trim().toLowerCase();
                     const filtered = q 
                       ? FONT_AWESOME_ICONS.filter(icon => 
-                          icon.name.includes(q) || icon.label.toLowerCase().includes(q)
+                          icon.name.includes(q) ||
+                          icon.label.toLowerCase().includes(q) ||
+                          (icon.provider || '').includes(q)
                         )
                       : FONT_AWESOME_ICONS;
 
@@ -1117,16 +1119,15 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         {filtered.length > 0 ? (
                           filtered.map(icon => {
                             const iconHtml = getIconHtml(icon);
-                            const iconPrefix = icon.prefix || 'fas';
                             return (
                               <button
-                                key={`${iconPrefix}-${icon.name}`}
+                                key={`${icon.provider || 'legacy'}-${icon.name}`}
                                 className="tce-icon-card"
                                 {...createButtonHandlers(iconHtml, () => setTemplateCode(c => c + iconHtml))}
                                 title={icon.label}
                                 aria-label={`Icon ${icon.label} einfügen`}
                               >
-                                <i className={`${iconPrefix} fa-${icon.name} tce-icon-preview`} aria-hidden="true" />
+                                <span className="tce-icon-preview" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconHtml }} />
                                 <span className="tce-icon-name">{icon.name}</span>
                               </button>
                             );

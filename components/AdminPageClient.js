@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield } from '../lib/muiIcons';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions } from '../lib/muiIcons';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -651,8 +651,8 @@ export default function AdminPageClient() {
 
               <li className="menu-group-label">Design</li>
               <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
-              <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Code size={18} /> CSS</button></li>
-              <li><button className={`menu-item ${view==='js'?'active':''}`} onClick={() => handleSelectView('js')}><Code size={18} /> JS</button></li>
+              <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Palette size={18} /> CSS</button></li>
+              <li><button className={`menu-item ${view==='js'?'active':''}`} onClick={() => handleSelectView('js')}><Functions size={18} /> JS</button></li>
               <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
               <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
 

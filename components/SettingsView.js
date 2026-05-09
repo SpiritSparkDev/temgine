@@ -28,6 +28,14 @@ export default function SettingsView({ showToast }) {
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
   const [isSavingFolderDragDrop, setIsSavingFolderDragDrop] = useState(false);
+  const [liveRenderMode, setLiveRenderMode] = useState('dynamic');
+  const [isSavingLiveMode, setIsSavingLiveMode] = useState(false);
+  const [isRenderingLive, setIsRenderingLive] = useState(false);
+  const [liveRenderStatus, setLiveRenderStatus] = useState('');
+  const [liveRenderLastAt, setLiveRenderLastAt] = useState('');
+  const [liveRenderLastDurationMs, setLiveRenderLastDurationMs] = useState('');
+  const [liveRenderLastRoutes, setLiveRenderLastRoutes] = useState('');
+  const [liveRenderLastError, setLiveRenderLastError] = useState('');
 
   // --- Email & Forms tab state ---
   const [smtpHost, setSmtpHost]               = useState('');
@@ -71,9 +79,74 @@ export default function SettingsView({ showToast }) {
         if (data.contact_sender_name)       setSenderName(data.contact_sender_name);
         if (data.contact_sender_email)      setSenderEmail(data.contact_sender_email);
         if (data.contact_subject_prefix)    setSubjectPrefix(data.contact_subject_prefix);
+        if (data.liveRenderMode)            setLiveRenderMode(data.liveRenderMode);
+        if (data.liveRenderLastStatus)      setLiveRenderStatus(data.liveRenderLastStatus);
+        if (data.liveRenderLastAt)          setLiveRenderLastAt(data.liveRenderLastAt);
+        if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
+        if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
+        if (data.liveRenderLastError)       setLiveRenderLastError(data.liveRenderLastError);
       })
       .catch(() => {});
   }, []);
+
+  const reloadLiveRenderSettings = async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.liveRenderMode)            setLiveRenderMode(data.liveRenderMode);
+      if (data.liveRenderLastStatus)      setLiveRenderStatus(data.liveRenderLastStatus);
+      if (data.liveRenderLastAt)          setLiveRenderLastAt(data.liveRenderLastAt);
+      if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
+      if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
+      if (data.liveRenderLastError !== undefined) setLiveRenderLastError(data.liveRenderLastError || '');
+    } catch (_e) {}
+  };
+
+  const handleSaveLiveMode = async (nextMode) => {
+    setIsSavingLiveMode(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'liveRenderMode', value: nextMode }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Fehler beim Speichern');
+      }
+      setLiveRenderMode(nextMode);
+      showToast(`Live-Modus gespeichert: ${nextMode === 'static' ? 'Statisch' : 'Dynamisch'}`, 'success');
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingLiveMode(false);
+    }
+  };
+
+  const handleRenderLiveNow = async () => {
+    setIsRenderingLive(true);
+    setLiveRenderStatus('running');
+    setLiveRenderLastError('');
+    try {
+      const res = await fetch('/api/admin/render-live', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Render fehlgeschlagen');
+      }
+      showToast(`Live erfolgreich gerendert (${data.renderedRoutes || 0} Seiten)`, 'success');
+      await reloadLiveRenderSettings();
+    } catch (e) {
+      setLiveRenderStatus('error');
+      setLiveRenderLastError(e.message || 'Render fehlgeschlagen');
+      showToast(e.message || 'Render fehlgeschlagen', 'error');
+    } finally {
+      setIsRenderingLive(false);
+    }
+  };
 
   const handleSaveFolderDragDrop = async (enabled) => {
     setIsSavingFolderDragDrop(true);
@@ -344,6 +417,65 @@ export default function SettingsView({ showToast }) {
 
               <small style={{ color: '#6b7280' }}>
                 Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
+              </small>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>Staging / Live-Auslieferung</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Vorschau bleibt dynamisch über die Datenbank. Für eine ausfallsichere Live-Seite kannst du hier einen statischen Snapshot rendern.
+              </p>
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                <label style={{ fontWeight: 600 }}>Live-Modus</label>
+                <select
+                  value={liveRenderMode}
+                  onChange={(e) => handleSaveLiveMode(e.target.value)}
+                  disabled={isSavingLiveMode}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  <option value="dynamic">Dynamisch (DB/API)</option>
+                  <option value="static">Statisch (Snapshot)</option>
+                </select>
+
+                <button
+                  onClick={handleRenderLiveNow}
+                  disabled={isRenderingLive}
+                  style={{
+                    padding: '0.6rem 1.5rem',
+                    background: '#2563eb',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    cursor: isRenderingLive ? 'not-allowed' : 'pointer',
+                    opacity: isRenderingLive ? 0.6 : 1,
+                  }}
+                >
+                  {isRenderingLive ? 'Rendere Live…' : 'Live jetzt rendern'}
+                </button>
+              </div>
+
+              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <div>Status: <strong>{liveRenderStatus || 'n/a'}</strong></div>
+                <div>Letzter Render: <strong>{liveRenderLastAt || 'n/a'}</strong></div>
+                <div>Dauer: <strong>{liveRenderLastDurationMs ? `${liveRenderLastDurationMs} ms` : 'n/a'}</strong></div>
+                <div>Gerenderte Seiten: <strong>{liveRenderLastRoutes || 'n/a'}</strong></div>
+                {liveRenderLastError && (
+                  <div style={{ color: '#b91c1c' }}>
+                    Letzter Fehler: {liveRenderLastError}
+                  </div>
+                )}
+              </div>
+
+              <small style={{ color: 'var(--text-tertiary)', display: 'block', marginTop: '0.75rem' }}>
+                Tipp: Mit <strong>?preview=1</strong> am Seiten-URL kannst du die dynamische Vorschau erzwingen.
               </small>
             </section>
           </>

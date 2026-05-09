@@ -10,12 +10,14 @@ export default function IconPickerModal({ isOpen, onClose, onInsert }) {
     
     const term = searchTerm.toLowerCase();
     return FONT_AWESOME_ICONS.filter(icon => 
-      icon.name.includes(term) || icon.label.toLowerCase().includes(term)
+      icon.name.includes(term) ||
+      icon.label.toLowerCase().includes(term) ||
+      (icon.provider || '').includes(term)
     );
   }, [searchTerm]);
 
-  const handleIconClick = (iconName) => {
-    const iconHtml = getIconHtml(iconName);
+  const handleIconClick = (icon) => {
+    const iconHtml = getIconHtml(icon);
     onInsert(iconHtml);
     onClose();
   };
@@ -26,7 +28,7 @@ export default function IconPickerModal({ isOpen, onClose, onInsert }) {
     <div className="icon-picker-overlay" onClick={onClose}>
       <div className="icon-picker-modal" onClick={(e) => e.stopPropagation()}>
         <div className="icon-picker-header">
-          <h3>Font Awesome Icons</h3>
+          <h3>Simple Icons</h3>
           <button className="icon-picker-close" onClick={onClose}>
             <X size={20} />
           </button>
@@ -36,7 +38,7 @@ export default function IconPickerModal({ isOpen, onClose, onInsert }) {
           <Search size={18} />
           <input
             type="text"
-            placeholder="Icons suchen... (z.B. plus, trash, arrow)"
+            placeholder="Icons suchen... (z.B. discord, bluesky, mastodon)"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             autoFocus
@@ -47,12 +49,12 @@ export default function IconPickerModal({ isOpen, onClose, onInsert }) {
           {filteredIcons.length > 0 ? (
             filteredIcons.map(icon => (
               <button
-                key={icon.name}
+                key={`${icon.provider || 'legacy'}-${icon.name}`}
                 className="icon-picker-item"
-                onClick={() => handleIconClick(icon.name)}
+                onClick={() => handleIconClick(icon)}
                 title={icon.label}
               >
-                <i className={`fas fa-${icon.name}`}></i>
+                <span className="icon-picker-preview" aria-hidden="true" dangerouslySetInnerHTML={{ __html: getIconHtml(icon) }} />
                 <span className="icon-name">{icon.name}</span>
               </button>
             ))

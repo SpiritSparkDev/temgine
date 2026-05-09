@@ -84,7 +84,36 @@ export default function PageCatchAll() {
     const segments = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : []);
 
     (async () => {
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
+
+    if (!isLocal && !previewMode) {
+      try {
+        const routePath = segments.length ? `/${segments.join('/')}` : '/'
+        const staticRoute = routePath === '/' ? '/__live/index.html' : `/__live${routePath}/index.html`
+        const staticRes = await fetch(`${staticRoute}?_t=${Date.now()}`, { cache: 'no-store' })
+        if (staticRes.ok) {
+          const staticHtml = await staticRes.text()
+          setPage({ title: '', data: {} })
+          setHtml(staticHtml)
+          setLoading(false)
+          return
+        }
+
+        const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
+        if (metaRes.ok) {
+          const notFoundRes = await fetch(`/__live/404.html?_t=${Date.now()}`, { cache: 'no-store' })
+          if (notFoundRes.ok) {
+            const notFoundHtml = await notFoundRes.text()
+            setPage({ title: '404', data: {} })
+            setHtml(notFoundHtml)
+            setLoading(false)
+            return
+          }
+        }
+      } catch (_e) {}
+    }
+
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
 
     // Prüfe zuerst Wartungsmodus

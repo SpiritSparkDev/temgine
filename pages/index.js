@@ -73,12 +73,12 @@ export default function Home() {
 
   useEffect(() => {
     setLoading(true)
-    
-    // Lade Seiten-Daten und finde Startseite
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`;
-    
-    fetch(pagesUrl)
+
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
+    const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`
+
+    const startDynamicRender = () => fetch(pagesUrl)
       .then(r => r.json())
       .then(async pages => {
         // Prüfe zuerst Wartungsmodus
@@ -214,6 +214,29 @@ export default function Home() {
         console.error('Fehler beim Laden:', err)
         setLoading(false)
       })
+
+    if (!isLocal && !previewMode) {
+      fetch(`/__live/index.html?_t=${Date.now()}`, { cache: 'no-store' })
+        .then(async (res) => {
+          if (!res.ok) return null
+          return res.text()
+        })
+        .then((staticHtml) => {
+          if (staticHtml) {
+            setHtml(staticHtml)
+            setHomePage({ data: {} })
+            setLoading(false)
+            return
+          }
+          startDynamicRender()
+        })
+        .catch(() => {
+          startDynamicRender()
+        })
+      return
+    }
+
+    startDynamicRender()
   }, [])
 
   if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
