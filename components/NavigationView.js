@@ -712,7 +712,7 @@ export default function NavigationView({ showToast }) {
           </div>
         ) : (
           <div className="nav-editor-panel nav-editor-empty">
-            <Navigation size={40} strokeWidth={1} />
+            <Compass size={40} strokeWidth={1} />
             <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
             <p className="nav-editor-empty-hint">
               Aktive Navigationen werden via <code>{`{{{nav:main}}}`}</code>,
