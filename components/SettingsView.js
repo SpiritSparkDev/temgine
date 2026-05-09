@@ -104,6 +104,7 @@ export default function SettingsView({ showToast }) {
   };
 
   const handleSaveLiveMode = async (nextMode) => {
+    console.log('[settings] save live mode requested', { nextMode });
     setIsSavingLiveMode(true);
     try {
       const res = await fetch('/api/settings', {
@@ -115,9 +116,11 @@ export default function SettingsView({ showToast }) {
         const d = await res.json();
         throw new Error(d.error || 'Fehler beim Speichern');
       }
+      console.log('[settings] live mode saved', { nextMode, status: res.status });
       setLiveRenderMode(nextMode);
       showToast(`Live-Modus gespeichert: ${nextMode === 'static' ? 'Statisch' : 'Dynamisch'}`, 'success');
     } catch (e) {
+      console.error('[settings] save live mode failed', e);
       showToast(e.message || 'Fehler beim Speichern', 'error');
     } finally {
       setIsSavingLiveMode(false);
@@ -125,6 +128,10 @@ export default function SettingsView({ showToast }) {
   };
 
   const handleRenderLiveNow = async () => {
+    console.log('[settings] render live requested', {
+      liveRenderMode,
+      liveRenderStatus,
+    });
     setIsRenderingLive(true);
     setLiveRenderStatus('running');
     setLiveRenderLastError('');
@@ -133,13 +140,26 @@ export default function SettingsView({ showToast }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
+      console.log('[settings] render live response received', {
+        ok: res.ok,
+        status: res.status,
+      });
       const data = await res.json();
+      console.log('[settings] render live payload', {
+        ok: data.ok,
+        activatedMode: data.activatedMode,
+        renderedRoutes: data.renderedRoutes,
+        totalRoutes: data.totalRoutes,
+        durationMs: data.durationMs,
+        errorCount: Array.isArray(data.errors) ? data.errors.length : null,
+      });
       if (!res.ok) {
         throw new Error(data.error || 'Render fehlgeschlagen');
       }
       showToast(`Live erfolgreich gerendert (${data.renderedRoutes || 0} Seiten)`, 'success');
       await reloadLiveRenderSettings();
     } catch (e) {
+      console.error('[settings] render live failed', e);
       setLiveRenderStatus('error');
       setLiveRenderLastError(e.message || 'Render fehlgeschlagen');
       showToast(e.message || 'Render fehlgeschlagen', 'error');

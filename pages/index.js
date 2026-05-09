@@ -216,26 +216,36 @@ export default function Home() {
       })
 
     if (!isLocal && !previewMode) {
+      console.log('[home-route] trying static snapshot', { route: '/__live/index.html' })
       fetch(`/__live/index.html?_t=${Date.now()}`, { cache: 'no-store' })
         .then(async (res) => {
+          console.log('[home-route] static snapshot response', {
+            ok: res.ok,
+            status: res.status,
+            contentType: res.headers.get('content-type'),
+          })
           if (!res.ok) return null
           return res.text()
         })
         .then((staticHtml) => {
           if (staticHtml) {
+            console.log('[home-route] using static snapshot', { htmlLength: staticHtml.length })
             setHtml(staticHtml)
             setHomePage({ data: {} })
             setLoading(false)
             return
           }
+          console.log('[home-route] static snapshot missing, falling back to dynamic render')
           startDynamicRender()
         })
         .catch(() => {
+          console.log('[home-route] static snapshot fetch failed, falling back to dynamic render')
           startDynamicRender()
         })
       return
     }
 
+    console.log('[home-route] rendering dynamically without static snapshot')
     startDynamicRender()
   }, [])
 

@@ -21,6 +21,12 @@ async function upsertSetting(key, value) {
 
 export default async function handler(req, res) {
   try {
+    console.log('[render-live] request start', {
+      method: req.method,
+      userAgent: req.headers['user-agent'] || null,
+      nodeEnv: process.env.NODE_ENV || '(unset)',
+    });
+
     if (req.method !== 'POST') {
       const [status, payload] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
       return res.status(status).json(payload);
@@ -32,17 +38,26 @@ export default async function handler(req, res) {
     }
 
     if (renderInProgress) {
+      console.log('[render-live] rejected: render already in progress');
       const [status, payload] = errorResponse(409, 'Render läuft bereits', 'RENDER_IN_PROGRESS');
       return res.status(status).json(payload);
     }
 
     renderInProgress = true;
+    console.log('[render-live] render locked');
 
     try {
       await upsertSetting('liveRenderLastStatus', 'running');
       await upsertSetting('liveRenderLastError', '');
 
+      console.log('[render-live] snapshot generation starting');
       const meta = await renderLiveSnapshot();
+      console.log('[render-live] snapshot generation finished', {
+        renderedRoutes: meta.renderedRoutes,
+        totalRoutes: meta.totalRoutes,
+        durationMs: meta.durationMs,
+        errorCount: Array.isArray(meta.errors) ? meta.errors.length : 0,
+      });
       const hasErrors = Array.isArray(meta.errors) && meta.errors.length > 0;
 
       await upsertSetting('liveRenderMode', 'static');
@@ -70,6 +85,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ ok: true, activatedMode: 'static', ...meta });
     } catch (e) {
+      console.error('[render-live] render failed', e);
       await upsertSetting('liveRenderLastStatus', 'error');
       await upsertSetting('liveRenderLastError', String(e?.message || 'Render fehlgeschlagen'));
 
@@ -89,8 +105,10 @@ export default async function handler(req, res) {
       return res.status(status).json(payload);
     } finally {
       renderInProgress = false;
+      console.log('[render-live] render unlocked');
     }
   } catch (e) {
+    console.error('[render-live] handler failed', e);
     const [status, payload] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', {
       message: process.env.NODE_ENV === 'production' ? undefined : e?.message
     });
