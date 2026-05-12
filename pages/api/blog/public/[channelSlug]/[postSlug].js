@@ -21,7 +21,15 @@ export default async function handler(req, res) {
 
   res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
   return res.status(200).json({
-    channel: { id: channel.id, name: channel.name, slug: channel.slug },
+    channel: {
+      id: channel.id,
+      name: channel.name,
+      slug: channel.slug,
+      templateReading: channel.templateReading || null,
+      templateDetailPreview: channel.templateDetailPreview || null,
+      templateSimplePreview: channel.templateSimplePreview || null,
+      templateArchiveEntry: channel.templateArchiveEntry || null,
+    },
     post: { ...post, ...(post.templateData || {}), templateData: undefined },
   });
 }

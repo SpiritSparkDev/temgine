@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Search, ChevronLeft, FileText, Rss } from '../lib/muiIcons';
 import BlogPostEditor from './BlogPostEditor';
 import ConfirmDialog from './ConfirmDialog';
@@ -20,12 +20,13 @@ const STATUS_COLORS = {
   SCHEDULED: { bg: 'rgba(139,92,246,.15)',  text: '#8b5cf6', border: 'rgba(139,92,246,.3)' },
 };
 
-export default function BlogPostsView({ channel, onBack, showToast: parentShowToast, templates = [] }) {
+export default function BlogPostsView({ channel, onBack, showToast: parentShowToast, templates = [], embedded = false }) {
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortBy, setSortBy] = useState('createdDesc');
   const [editingPost, setEditingPost] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState(null);
@@ -86,6 +87,32 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
     !searchQuery || p.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const filteredAndSorted = useMemo(() => {
+    const list = [...filtered];
+    const statusRank = { DRAFT: 0, REVIEW: 1, APPROVED: 2, SCHEDULED: 3, PUBLISHED: 4 };
+
+    switch (sortBy) {
+      case 'createdAsc':
+        list.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        break;
+      case 'titleAsc':
+        list.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'de', { sensitivity: 'base' }));
+        break;
+      case 'titleDesc':
+        list.sort((a, b) => String(b.title || '').localeCompare(String(a.title || ''), 'de', { sensitivity: 'base' }));
+        break;
+      case 'status':
+        list.sort((a, b) => (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99));
+        break;
+      case 'createdDesc':
+      default:
+        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        break;
+    }
+
+    return list;
+  }, [filtered, sortBy]);
+
   if (editingPost !== null) {
     const readingTpl = templates.find(t => t.name === channel.templateReading);
     return (
@@ -102,7 +129,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
   }
 
   return (
-    <div className="blog-posts-view">
+    <div className={`blog-posts-view${embedded ? ' blog-posts-view--embedded' : ''}`}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {confirmDelete && (
         <ConfirmDialog
@@ -113,25 +140,32 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
       )}
 
       {/* Top bar */}
-      <div className="blog-topbar">
-        <button className="blog-topbar__back" onClick={onBack} title="Zurück zur Kanalübersicht">
-          <ChevronLeft size={16} />
-        </button>
-        <div className="blog-topbar__breadcrumb">
-          <Rss size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-          <span className="blog-topbar__channel">{channel.name}</span>
-          <span className="blog-topbar__sep">/</span>
-          <span className="blog-topbar__slug">/{channel.slug}</span>
-        </div>
-        <div className="blog-topbar__actions">
-          <button className="btn-modern" onClick={() => setEditingPost('new')}>
-            <Plus size={14} /> Neuer Beitrag
+      {!embedded && (
+        <div className="blog-topbar">
+          <button className="blog-topbar__back" onClick={onBack} title="Zurück zur Kanalübersicht">
+            <ChevronLeft size={16} />
           </button>
+          <div className="blog-topbar__breadcrumb">
+            <Rss size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+            <span className="blog-topbar__channel">{channel.name}</span>
+            <span className="blog-topbar__sep">/</span>
+            <span className="blog-topbar__slug">/{channel.slug}</span>
+          </div>
+          <div className="blog-topbar__actions">
+            <button className="btn-modern" onClick={() => setEditingPost('new')}>
+              <Plus size={14} /> Neuer Beitrag
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Toolbar */}
       <div className="blog-toolbar">
+        {embedded && (
+          <div className="blog-toolbar__count" style={{ marginRight: 8 }}>
+            {channel.name} (/{channel.slug})
+          </div>
+        )}
         <div className="blog-search">
           <Search size={13} className="blog-search__icon" />
           <input
@@ -141,6 +175,17 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
             onChange={e => setSearchQuery(e.target.value)}
           />
         </div>
+        <select
+          className="blog-filter-select"
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+        >
+          <option value="createdDesc">Neueste zuerst</option>
+          <option value="createdAsc">Älteste zuerst</option>
+          <option value="titleAsc">Titel A-Z</option>
+          <option value="titleDesc">Titel Z-A</option>
+          <option value="status">Status</option>
+        </select>
         <select
           className="blog-filter-select"
           value={statusFilter}
@@ -153,8 +198,13 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
         </select>
         {!loading && (
           <span className="blog-toolbar__count">
-            {filtered.length} / {total} Beiträge
+            {filteredAndSorted.length} / {total} Beiträge
           </span>
+        )}
+        {embedded && (
+          <button className="btn-modern" onClick={() => setEditingPost('new')}>
+            <Plus size={14} /> Neuer Beitrag
+          </button>
         )}
       </div>
 
@@ -164,7 +214,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           <div className="blog-posts-loading">
             <FileText size={18} style={{ opacity: 0.35 }} /> Lade Beiträge…
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filteredAndSorted.length === 0 ? (
           <div className="blog-posts-empty">
             <FileText size={48} />
             <strong style={{ fontSize: 15, color: 'var(--text-primary)' }}>
@@ -178,7 +228,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
             )}
           </div>
         ) : (
-          filtered.map(post => <PostRow key={post.id} post={post} channel={channel} onOpen={() => setEditingPost(post)} onDelete={e => { e.stopPropagation(); setConfirmDelete(post); }} />)
+          filteredAndSorted.map(post => <PostRow key={post.id} post={post} channel={channel} onOpen={() => setEditingPost(post)} onDelete={e => { e.stopPropagation(); setConfirmDelete(post); }} />)
         )}
       </div>
     </div>

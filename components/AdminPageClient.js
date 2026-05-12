@@ -265,7 +265,7 @@ export default function AdminPageClient() {
   async function refreshTemplateList() {
     try {
       console.log('[admin] loading templates start');
-      const tRes = await fetch('/api/templates');
+      const tRes = await fetch('/api/templates?scope=normal');
       console.log('[admin] loading templates response', {
         ok: tRes.ok,
         status: tRes.status,
@@ -277,9 +277,9 @@ export default function AdminPageClient() {
         list = list.map(n => ({ name: n, type: 'BLOCK' }));
       }
       console.log('[admin] loading templates done', {
-        count: list.filter(tpl => !tpl.blogType).length,
+        count: list.length,
       });
-      setTemplateList(list.filter(tpl => !tpl.blogType));
+      setTemplateList(list);
     } catch (e) {
       console.error('[admin] Error loading templates:', e);
       throw e;
@@ -444,7 +444,7 @@ export default function AdminPageClient() {
       
       setTemplateName('');
       setTemplateCode('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n     </div>\n</section>');
-      const t = await fetch('/api/templates').then(r => r.json()).catch(() => []);
+      const t = await fetch('/api/templates?scope=normal').then(r => r.json()).catch(() => []);
       setTemplateList(Array.isArray(t) ? t : (t.templates || []));
       showToast('Template erfolgreich gelöscht', 'success');
     } catch (error) {

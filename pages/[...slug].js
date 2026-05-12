@@ -422,7 +422,7 @@ export default function PageCatchAll() {
   }, [html])
 
   // Hydrate blog-channel placeholder divs after HTML is set.
-  // Each <div class="blog-channel-block" data-channel="…" data-slot="…" data-limit="…">
+  // Each <div class="blog-channel-block" data-channel="…" data-slot="…" data-template="…" data-limit="…">
   // is filled with rendered post cards fetched from the public API.
   useEffect(() => {
     if (!html) return;
@@ -435,6 +435,7 @@ export default function PageCatchAll() {
     blocks.forEach(async (el) => {
       const channelSlug = el.getAttribute('data-channel');
       const templateSlot = el.getAttribute('data-slot') || 'templateDetailPreview';
+      const directTemplateName = String(el.getAttribute('data-template') || '').trim();
       const limit = parseInt(el.getAttribute('data-limit'), 10) || 6;
       if (!channelSlug) return;
 
@@ -444,18 +445,42 @@ export default function PageCatchAll() {
         if (!postsRes.ok) return;
         const { channel, posts } = await postsRes.json();
 
-        // 2. Determine template name for the chosen slot
-        const templateName = channel && channel[templateSlot];
-        if (!templateName || !posts || !posts.length) {
+        if (!posts || !posts.length) {
           el.innerHTML = '';
           return;
         }
 
-        // 3. Load template code
-        const tRes = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}`);
-        if (!tRes.ok) return;
-        const tData = await tRes.json();
-        const tCode = tData.code;
+        // 2. Resolve template candidates: explicit override first, then channel slot
+        const slotTemplateName = channel && channel[templateSlot] ? String(channel[templateSlot]).trim() : '';
+        const candidates = [];
+        if (directTemplateName) candidates.push(directTemplateName);
+        if (slotTemplateName && slotTemplateName !== directTemplateName) candidates.push(slotTemplateName);
+
+        let tCode = '';
+        for (const name of candidates) {
+          try {
+            const tRes = await fetch(`/api/templates?name=${encodeURIComponent(name)}`);
+            if (!tRes.ok) continue;
+            const tData = await tRes.json();
+            if (tData && tData.code) {
+              tCode = String(tData.code);
+              break;
+            }
+          } catch (_) {
+            // keep trying next candidate
+          }
+        }
+
+        // 3. Render fallback when no template could be loaded
+        if (!tCode) {
+          el.innerHTML = posts.map((p) => (
+            `<article class="blog-fallback-card">`
+            + `<h3>${String(p.title || '')}</h3>`
+            + `${p.excerpt ? `<p>${String(p.excerpt)}</p>` : ''}`
+            + `</article>`
+          )).join('\n');
+          return;
+        }
 
         // 4. Render each post and set innerHTML
         const rendered = posts.map(p =>

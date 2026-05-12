@@ -631,14 +631,13 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
 
   function loadTemplates() {
     Promise.all([
-      fetch('/api/templates').then(r => r.json()),
+      fetch('/api/templates?scope=normal').then(r => r.json()),
       fetch('/api/templates/order').then(r => r.json()).catch(() => ({ order: [] })),
     ]).then(([data, orderData]) => {
       let list = Array.isArray(data) ? data : [];
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'BLOCK' }));
       }
-      list = list.filter(t => !t.blogType);
       const order = Array.isArray(orderData.order) ? orderData.order : [];
       if (order.length > 0) {
         const ordered = [];

@@ -1,54 +1,31 @@
 import React, { useState } from 'react';
 import { X, Save, Rss, Layout, AlertTriangle } from '../lib/muiIcons';
 
-const TEMPLATE_SLOTS = [
-  {
-    key: 'templateDetailPreview',
-    label: 'Detail-Vorschau',
-    icon: '⊞',
-    hint: 'Bild, Titel, Excerpt – für Kacheln auf Übersichtsseiten',
-  },
-  {
-    key: 'templateSimplePreview',
-    label: 'Einfache Vorschau',
-    icon: '≡',
-    hint: 'Titel + Excerpt – für kompakte Listen',
-  },
-  {
-    key: 'templateArchiveEntry',
-    label: 'Archiv-Eintrag',
-    icon: '—',
-    hint: 'Überschrift + Datum – für Archivlisten',
-  },
-  {
-    key: 'templateReading',
-    label: 'Leseseite',
-    icon: '▤',
-    hint: 'Vollständiger Artikel – für die Detailseite',
-  },
-];
-
 const slugify = (v) =>
   String(v || '').toLowerCase().trim()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
     .replace(/-+/g, '-');
 
+function isMasterTemplate(tpl) {
+  const role = String(tpl?.blogRole || '').toLowerCase();
+  if (role === 'master') return true;
+  const blogType = String(tpl?.blogType || '').toLowerCase();
+  return blogType === 'master' || blogType === 'reading';
+}
+
 export default function BlogChannelEditor({ channel, templates = [], onSave, onClose }) {
   const [name, setName] = useState(channel?.name ?? '');
   const [slug, setSlug] = useState(channel?.slug ?? '');
   const [description, setDescription] = useState(channel?.description ?? '');
-  const [templateMap, setTemplateMap] = useState({
-    templateDetailPreview: channel?.templateDetailPreview ?? '',
-    templateSimplePreview: channel?.templateSimplePreview ?? '',
-    templateArchiveEntry: channel?.templateArchiveEntry ?? '',
-    templateReading: channel?.templateReading ?? '',
-  });
+  const [masterTemplate, setMasterTemplate] = useState(
+    channel?.templateReading ?? channel?.templateDetailPreview ?? channel?.templateSimplePreview ?? channel?.templateArchiveEntry ?? ''
+  );
   const [slugManual, setSlugManual] = useState(!!channel);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const blockTemplates = templates.filter(t => t.type === 'BLOCK' || !t.type);
+  const masterTemplates = templates.filter(t => (t.type === 'BLOCK' || !t.type) && isMasterTemplate(t));
 
   function handleNameChange(v) {
     setName(v);
@@ -71,7 +48,12 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
       name: name.trim(),
       slug: slug.trim(),
       description: description.trim() || null,
-      ...Object.fromEntries(Object.entries(templateMap).map(([k, v]) => [k, v || null])),
+      // Legacy compatibility: existing renderer still reads slot fields.
+      // Restricting assignment to a single master keeps workflow simple.
+      templateReading: masterTemplate || null,
+      templateDetailPreview: masterTemplate || null,
+      templateSimplePreview: masterTemplate || null,
+      templateArchiveEntry: masterTemplate || null,
     });
     setSaving(false);
     if (!ok) setError('Fehler beim Speichern');
@@ -153,26 +135,26 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
               <Layout size={11} /> Template-Zuweisung
             </div>
 
-            <div className="template-slot-grid">
-              {TEMPLATE_SLOTS.map(slot => (
-                <div key={slot.key} className="template-slot-card">
-                  <div className="template-slot-card__label">
-                    <span style={{ fontSize: 14 }}>{slot.icon}</span>
-                    {slot.label}
-                  </div>
-                  <select
-                    className="blog-form-select"
-                    value={templateMap[slot.key]}
-                    onChange={e => setTemplateMap(m => ({ ...m, [slot.key]: e.target.value }))}
-                  >
-                    <option value="">(kein Template)</option>
-                    {blockTemplates.map(t => (
-                      <option key={t.name} value={t.name}>{t.name}</option>
-                    ))}
-                  </select>
-                  <p className="template-slot-card__hint">{slot.hint}</p>
+            <div className="template-slot-grid" style={{ gridTemplateColumns: '1fr' }}>
+              <div className="template-slot-card">
+                <div className="template-slot-card__label">
+                  <span style={{ fontSize: 14 }}>▤</span>
+                  Master-Template
                 </div>
-              ))}
+                <select
+                  className="blog-form-select"
+                  value={masterTemplate}
+                  onChange={e => setMasterTemplate(e.target.value)}
+                >
+                  <option value="">(kein Template)</option>
+                  {masterTemplates.map(t => (
+                    <option key={t.name} value={t.name}>{t.name}</option>
+                  ))}
+                </select>
+                <p className="template-slot-card__hint">
+                  Der Kanal nutzt ein Master-Template. Vorschauen werden daraus abgeleitet.
+                </p>
+              </div>
             </div>
           </div>
 

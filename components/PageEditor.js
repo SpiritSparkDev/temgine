@@ -14,6 +14,16 @@ import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole }) {
+  const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
+  const CHANNEL_TEMPLATE_LABEL_PREFIX = 'Kanal: ';
+
+  const makeChannelTemplateValue = (slug) => `${CHANNEL_TEMPLATE_VALUE_PREFIX}${slug}`;
+  const parseChannelTemplateValue = (value) => {
+    const normalized = String(value || '');
+    if (!normalized.startsWith(CHANNEL_TEMPLATE_VALUE_PREFIX)) return null;
+    return normalized.slice(CHANNEL_TEMPLATE_VALUE_PREFIX.length).trim() || null;
+  };
+
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -59,6 +69,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
   const [blogChannels, setBlogChannels] = useState([]);
+  const [blogTemplates, setBlogTemplates] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -147,6 +158,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
+  const channelTemplateOptions = [...blogChannels]
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
+    .map(ch => ({
+      value: makeChannelTemplateValue(String(ch.slug || '')),
+      label: `${CHANNEL_TEMPLATE_LABEL_PREFIX}${String(ch.name || ch.slug || '').trim()}`,
+      slug: String(ch.slug || '').trim(),
+    }))
+    .filter(opt => opt.slug);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -417,6 +436,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }, []);
 
   useEffect(() => {
+    // Lade Blog-Templates für freie Darstellungsauswahl
+    const loadBlogTemplates = async () => {
+      try {
+        const res = await fetch('/api/templates?scope=blog&type=BLOCK');
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : [];
+          setBlogTemplates(
+            list
+              .filter(t => t && (t.type === 'BLOCK' || !t.type) && t.name)
+              .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de', { sensitivity: 'base' }))
+          );
+        }
+      } catch (e) {
+        // Silently ignore — optional for page editing
+      }
+    };
+    loadBlogTemplates();
+  }, []);
+
+  useEffect(() => {
     // Lade aktivierte CSS-Dateien für Vorschau
     fetch('/api/css')
       .then(r => r.json())
@@ -658,7 +698,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         : type === 'gallery'
           ? { images: [] }
           : type === 'blog-channel'
-            ? { channelSlug: '', templateSlot: 'templateDetailPreview', postLimit: 6 }
+            ? { channelSlug: '', templateSlot: 'templateDetailPreview', templateName: '', postLimit: 6 }
             : {}
     };
     setBlocks([...blocks, newBlock]);
@@ -836,11 +876,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const updateNestedBlockTemplate = (path, templateName) => {
     const copy = JSON.parse(JSON.stringify(blocks || []));
     const parts = String(path).split('.').map(p => parseInt(p, 10));
+    const selectedChannelSlug = parseChannelTemplateValue(templateName);
     let cur = copy;
     for (let i = 0; i < parts.length; i++) {
       const idx = parts[i];
       if (i === parts.length - 1) {
+        if (selectedChannelSlug) {
+          cur[idx].type = 'blog-channel';
+          cur[idx].template = '';
+          cur[idx].props = {
+            channelSlug: selectedChannelSlug,
+            templateSlot: cur[idx]?.props?.templateSlot || 'templateDetailPreview',
+            templateName: cur[idx]?.props?.templateName || '',
+            postLimit: Number.parseInt(cur[idx]?.props?.postLimit, 10) || 6,
+          };
+          break;
+        }
+
         cur[idx].template = templateName || '';
+        if (cur[idx].type === 'blog-channel') {
+          cur[idx].type = 'content';
+        }
+
         if (templateName && templateCodes && templateCodes[templateName]) {
           try {
             const defaultProps = generateDefaultProps(templateCodes[templateName]);
@@ -1451,7 +1508,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 aria-label="Anchor-ID"
               />
               <select
-                value={block.template || ''}
+                value={block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '') : (block.template || '')}
                 onChange={e => { e.stopPropagation(); updateNestedBlockTemplate(path, e.target.value); }}
                 onClick={e => e.stopPropagation()}
                 className="block-template-select"
@@ -1461,6 +1518,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <option value="">-- Template --</option>
                 {blockTemplateNames.map(tn => (
                   <option key={tn} value={tn}>{tn}</option>
+                ))}
+                {channelTemplateOptions.length > 0 && <option disabled>──────────</option>}
+                {channelTemplateOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
 
@@ -1923,15 +1984,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <label className="block-field-label">Darstellung</label>
                 <select
                   className="block-template-select"
-                  value={block.props.templateSlot || 'templateDetailPreview'}
-                  onChange={e => updateNestedBlock(path, { templateSlot: e.target.value })}
+                  value={block.props?.templateName ? String(block.props.templateName) : ''}
+                  onChange={e => {
+                    const selected = String(e.target.value || '');
+                    updateNestedBlock(path, { templateName: selected });
+                  }}
                   onClick={e => e.stopPropagation()}
                 >
-                  <option value="templateDetailPreview">Detail-Vorschau</option>
-                  <option value="templateSimplePreview">Einfache Vorschau</option>
-                  <option value="templateArchiveEntry">Archiv-Eintrag</option>
-                  <option value="templateReading">Leseseite</option>
+                  <option value="">Master-Template des Kanals verwenden</option>
+                  {blogTemplates.map(t => (
+                    <option key={t.id || t.name} value={t.name}>{`Template: ${t.name}`}</option>
+                  ))}
                 </select>
+                <p className="blog-channel-editor__hint">
+                  Wähle ein beliebiges Master/Vorschau-Template oder nutze das Master-Template des Kanals.
+                </p>
               </div>
               <div className="blog-channel-editor__field">
                 <label className="block-field-label">Max. Beiträge</label>
@@ -1950,6 +2017,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <div className="blog-channel-editor__preview">
                   <span style={{ fontSize: 11, opacity: .6 }}>Kanal: </span>
                   <code style={{ fontSize: 11 }}>/{block.props.channelSlug}</code>
+                  <span style={{ marginLeft: 10, fontSize: 11, opacity: .6 }}>Template: </span>
+                  <code style={{ fontSize: 11 }}>
+                    {block.props.templateName || 'Kanal-Master'}
+                  </code>
                 </div>
               )}
             </div>
@@ -2265,7 +2336,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     <button
                       type="button"
-                      className="pe-tb-btn"
+                      className="pe-tb-btn inspector-ga-blogchannel"
                       onClick={() => { const p = String((blocks || []).length); handleAddBlock('blog-channel'); setSelectedBlockPath(p); }}
                       title={devTitle('Blog-Kanal-Block anlegen')}
                     >
@@ -2273,7 +2344,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     <button
                       type="button"
-                      className="pe-tb-btn"
+                      className="pe-tb-btn inspector-ga-kindblock"
                       onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
                       title={devTitle('Unterblock anlegen')}
                     >

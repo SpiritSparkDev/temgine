@@ -42,13 +42,12 @@ export default function TemplatesView({
 
   const loadAllTemplates = async () => {
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates?scope=normal');
       const data = await res.json();
       let list = Array.isArray(data) ? data : [];
       if (list.length > 0 && typeof list[0] === 'string') {
         list = list.map(n => ({ name: n, type: 'SITE' }));
       }
-      list = list.filter(t => !t.blogType);
       console.log('Geladene Templates:', list);
       setAllTemplates(list || []);
     } catch (error) {
@@ -109,7 +108,7 @@ export default function TemplatesView({
 
   const exportAllTemplates = async () => {
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates?scope=normal');
       const list = await res.json();
       let names = Array.isArray(list) ? list : [];
       if (names.length > 0 && typeof names[0] !== 'string') {

@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Rss, FileText, ChevronRight, CheckCircle2, Circle, Layout } from '../lib/muiIcons';
+import { Plus, Edit2, Trash2, Rss, FileText, Layout } from '../lib/muiIcons';
 import BlogPostsView from './BlogPostsView';
 import BlogChannelEditor from './BlogChannelEditor';
 import BlogTemplateEditor from './BlogTemplateEditor';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
 
-const SLOT_LABELS = {
-  templateDetailPreview: 'Detail-Vorschau',
-  templateSimplePreview: 'Einfache Vorschau',
-  templateArchiveEntry: 'Archiv-Eintrag',
-  templateReading: 'Leseseite',
-};
-
 export default function BlogView({ showToast: parentShowToast }) {
   const [activeTab, setActiveTab] = useState('channels');
   const [channels, setChannels] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [activeChannelId, setActiveChannelId] = useState('');
   const [editingChannel, setEditingChannel] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState(null);
@@ -27,9 +20,18 @@ export default function BlogView({ showToast: parentShowToast }) {
 
   useEffect(() => { loadChannels(); loadTemplates(); }, []);
 
+  useEffect(() => {
+    if (!channels.length) {
+      setActiveChannelId('');
+      return;
+    }
+    const hasActive = channels.some(ch => ch.id === activeChannelId);
+    if (!hasActive) setActiveChannelId(channels[0].id);
+  }, [channels, activeChannelId]);
+
   async function loadTemplates() {
     try {
-      const res = await fetch('/api/templates');
+      const res = await fetch('/api/templates?scope=blog&type=BLOCK');
       if (res.ok) {
         const data = await res.json();
         setTemplates(Array.isArray(data) ? data : []);
@@ -71,23 +73,11 @@ export default function BlogView({ showToast: parentShowToast }) {
     const res = await fetch(`/api/blog/channels/${channel.id}`, { method: 'DELETE' });
     if (res.ok) {
       showToast('Kanal gelöscht', 'success');
-      if (selectedChannel?.id === channel.id) setSelectedChannel(null);
       await loadChannels();
     } else {
       showToast('Fehler beim Löschen', 'error');
     }
     setConfirmDelete(null);
-  }
-
-  if (selectedChannel) {
-    return (
-      <BlogPostsView
-        channel={selectedChannel}
-        templates={templates}
-        onBack={() => setSelectedChannel(null)}
-        showToast={showToast}
-      />
-    );
   }
 
   if (activeTab === 'templates') {
@@ -99,6 +89,8 @@ export default function BlogView({ showToast: parentShowToast }) {
       />
     );
   }
+
+  const activeChannel = channels.find(ch => ch.id === activeChannelId) || channels[0] || null;
 
   return (
     <div className="blog-view">
@@ -163,16 +155,46 @@ export default function BlogView({ showToast: parentShowToast }) {
             </button>
           </div>
         ) : (
-          <div className="channel-grid">
-            {channels.map(ch => (
-              <ChannelCard
-                key={ch.id}
-                channel={ch}
-                onOpen={() => setSelectedChannel(ch)}
-                onEdit={(e) => { e.stopPropagation(); setEditingChannel(ch); }}
-                onDelete={(e) => { e.stopPropagation(); setConfirmDelete(ch); }}
-              />
-            ))}
+          <div className="blog-channel-tabs-layout">
+            <div className="blog-channel-tabs" role="tablist" aria-label="Blog-Kanäle">
+              {channels.map(ch => {
+                const postCount = ch._count?.posts ?? 0;
+                const isActive = ch.id === activeChannel?.id;
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    className={`blog-channel-tab${isActive ? ' blog-channel-tab--active' : ''}`}
+                    onClick={() => setActiveChannelId(ch.id)}
+                  >
+                    <span className="blog-channel-tab__name">{ch.name}</span>
+                    <span className="blog-channel-tab__slug">/{ch.slug}</span>
+                    <span className="blog-channel-tab__count">{postCount}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeChannel && (
+              <>
+                <ChannelCard
+                  channel={activeChannel}
+                  onEdit={(e) => { e.stopPropagation(); setEditingChannel(activeChannel); }}
+                  onDelete={(e) => { e.stopPropagation(); setConfirmDelete(activeChannel); }}
+                />
+
+                <BlogPostsView
+                  key={activeChannel.id}
+                  channel={activeChannel}
+                  templates={templates}
+                  onBack={() => {}}
+                  showToast={showToast}
+                  embedded
+                />
+              </>
+            )}
           </div>
         )}
       </div>
@@ -180,12 +202,12 @@ export default function BlogView({ showToast: parentShowToast }) {
   );
 }
 
-function ChannelCard({ channel: ch, onOpen, onEdit, onDelete }) {
+function ChannelCard({ channel: ch, onEdit, onDelete }) {
   const postCount = ch._count?.posts ?? 0;
+  const masterTemplateName = ch.templateReading || ch.templateDetailPreview || ch.templateSimplePreview || ch.templateArchiveEntry || '';
 
   return (
-    <div className="channel-card" onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => e.key === 'Enter' && onOpen()}>
+    <div className="channel-card">
       <div className="channel-card__accent" />
       <div className="channel-card__body">
         {/* Name + post count */}
@@ -208,25 +230,14 @@ function ChannelCard({ channel: ch, onOpen, onEdit, onDelete }) {
           <div className="channel-card__description">{ch.description}</div>
         )}
 
-        {/* Template slots */}
-        <div className="channel-card__templates">
-          {Object.entries(SLOT_LABELS).map(([key, label]) => {
-            const isSet = !!ch[key];
-            return (
-              <span key={key} className={`channel-card__chip ${isSet ? 'channel-card__chip--set' : 'channel-card__chip--unset'}`}>
-                {isSet ? <CheckCircle2 size={10} /> : <Circle size={10} />}
-                {label}
-              </span>
-            );
-          })}
+        <div className="channel-card__description" style={{ marginTop: 2 }}>
+          Master-Template: {masterTemplateName || 'Nicht gesetzt'}
         </div>
       </div>
 
       {/* Action bar */}
       <div className="channel-card__actions" onClick={(e) => e.stopPropagation()}>
-        <span className="channel-card__open-hint">
-          <ChevronRight size={12} /> Beiträge anzeigen
-        </span>
+        <span className="channel-card__open-hint">Beiträge im Tab-Bereich unten</span>
         <button
           className="icon-btn-small"
           title="Kanal bearbeiten"

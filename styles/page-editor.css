@@ -383,7 +383,8 @@
 
 .page-editor-inspector {
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .page-editor-inspector-content {
@@ -1490,11 +1491,48 @@
 
 /* Inspector block action bar (Neuer Block / Kind / Löschen) */
 .inspector-block-bar {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "newblock blogchannel"
+    "kind delete";
   gap: 6px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-tertiary));
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.inspector-block-bar .pe-tb-btn {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+  font-size: 0.76rem;
+  padding: 7px 8px;
+}
+
+.inspector-block-bar .pe-tb-btn svg {
+  flex-shrink: 0;
+}
+
+.inspector-ga-newblock {
+  grid-area: newblock;
+}
+
+.inspector-ga-blogchannel {
+  grid-area: blogchannel;
+}
+
+.inspector-ga-kindblock {
+  grid-area: kind;
+}
+
+.inspector-ga-delete {
+  grid-area: delete;
+  max-width: 44px;
+  justify-self: end;
 }
 
 /* === BLOCK INSPECTOR REDESIGN === */
@@ -1504,6 +1542,10 @@
   align-items: flex-start;
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bg-secondary);
 }
 .inspector-header-left {
   display: flex;
@@ -1530,6 +1572,7 @@
 
 .inspector-section {
   border-bottom: 1px solid var(--border-color);
+  scroll-margin-top: 106px;
 }
 
 .inspector-section-divider {

@@ -292,7 +292,7 @@ const [step, setStep] = useState(1); // 1: input, 2: review blocks, 3: mark fiel
 
   // Load available templates once on mount
   useEffect(() => {
-    fetch('/api/templates')
+    fetch('/api/templates?scope=normal')
       .then(r => r.json())
       .then(data => setTemplates(Array.isArray(data) ? data : []))
       .catch(() => setTemplates([]));
