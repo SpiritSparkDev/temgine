@@ -2,6 +2,8 @@
 
 **Temgine CMS** ist ein modernes, template-basiertes Content Management System gebaut mit Next.js 14, React 18 und Prisma ORM.
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I6Z720R1UN)
+
 ## Features
 
 - **Template Engine** — Mustache-basierte Templates für flexible Layouts
