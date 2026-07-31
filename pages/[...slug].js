@@ -3,13 +3,31 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml } from '../lib/templateEngine'
 
-export default function PageCatchAll() {
+const defaultLoadingHtml = '<div style="padding: 20px;">Laedt...</div>'
+
+const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
+  const value = String(sourceHtml || '')
+  const styleTag = cssCode ? `<style>\n${String(cssCode)}\n</style>` : ''
+  const scriptTag = jsCode ? `<script>\n${String(jsCode)}\n</script>` : ''
+  const assets = `${styleTag}${scriptTag}`
+  if (!assets) return value
+
+  if (/<\/body>/i.test(value)) {
+    return value.replace(/<\/body>/i, `${assets}\n</body>`)
+  }
+  return `${value}${assets}`
+}
+
+export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
   const router = useRouter()
   const { query } = router
   const { data: session, status: sessionStatus } = useSession()
   const [page, setPage] = useState(null)
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadingScreenHtml, setLoadingScreenHtml] = useState(
+    applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
+  )
   const [accessDenied, setAccessDenied] = useState(false)
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
@@ -46,6 +64,23 @@ export default function PageCatchAll() {
     return `${cssLinks}${value}`
   }
 
+  const loadMaintenanceSettings = async () => {
+    try {
+      const settingsRes = await fetch('/api/settings')
+      if (!settingsRes.ok) return null
+      return await settingsRes.json()
+    } catch (_) {
+      return null
+    }
+  }
+
+  const buildMaintenanceHtml = (settings, keyPrefix, defaultHtml) => {
+    const html = settings?.[`${keyPrefix}_html`] || defaultHtml
+    const css = settings?.[`${keyPrefix}_css`] || ''
+    const js = settings?.[`${keyPrefix}_js`] || ''
+    return applyMaintenanceAssets(html, css, js)
+  }
+
   const checkMaintenanceMode = async () => {
     try {
       const settingsRes = await fetch('/api/settings')
@@ -58,25 +93,18 @@ export default function PageCatchAll() {
   }
 
   const loadMaintenance404Html = async () => {
-    try {
-      const settingsRes = await fetch('/api/settings')
-      if (!settingsRes.ok) return default404Html
-      const settings = await settingsRes.json()
-      return settings?.maintenance_404_html || default404Html
-    } catch (_) {
-      return default404Html
-    }
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_404', default404Html)
   }
 
   const load503Html = async () => {
-    try {
-      const settingsRes = await fetch('/api/settings')
-      if (!settingsRes.ok) return default503Html
-      const settings = await settingsRes.json()
-      return settings?.maintenance_503_html || default503Html
-    } catch (_) {
-      return default503Html
-    }
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_503', default503Html)
+  }
+
+  const loadLoadingScreenHtml = async () => {
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_loading', defaultLoadingHtml)
   }
 
   const loadLiveRenderMode = async () => {
@@ -405,6 +433,10 @@ export default function PageCatchAll() {
     })() // end IIFE
   }, [query.slug, session, sessionStatus])
 
+  useEffect(() => {
+    loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
+  }, [])
+
   // Führe inline <script>-Tags im gerenderten HTML aus.
   // React's dangerouslySetInnerHTML wertet Scripts nicht aus — dieser Effect holt das nach.
   // Nur Scripts ohne src-Attribut werden ausgeführt (keine externen URLs).
@@ -502,7 +534,7 @@ export default function PageCatchAll() {
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
   const showDebug = params && params.get('debug') === '1'
 
-  if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
+  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
   if (accessDenied) return (
     <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
       <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Kein Zugriff</h1>
@@ -526,4 +558,32 @@ export default function PageCatchAll() {
       )}
     </div>
   )
+}
+
+export async function getServerSideProps() {
+  try {
+    const { prisma } = await import('../lib/prisma')
+    const keys = ['maintenance_loading_html', 'maintenance_loading_css', 'maintenance_loading_js']
+    const rows = await prisma.setting.findMany({ where: { key: { in: keys } } })
+    const map = {}
+    for (const row of rows || []) {
+      map[row.key] = row.value
+    }
+
+    return {
+      props: {
+        initialLoadingScreenHtml: map.maintenance_loading_html || defaultLoadingHtml,
+        initialLoadingScreenCss: map.maintenance_loading_css || '',
+        initialLoadingScreenJs: map.maintenance_loading_js || '',
+      },
+    }
+  } catch (_e) {
+    return {
+      props: {
+        initialLoadingScreenHtml: defaultLoadingHtml,
+        initialLoadingScreenCss: '',
+        initialLoadingScreenJs: '',
+      },
+    }
+  }
 }

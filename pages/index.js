@@ -2,10 +2,28 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage } from '../lib/templateEngine'
 
-export default function Home() {
+const defaultLoadingHtml = '<div style="padding: 20px;">Laedt...</div>'
+
+const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
+  const value = String(sourceHtml || '')
+  const styleTag = cssCode ? `<style>\n${String(cssCode)}\n</style>` : ''
+  const scriptTag = jsCode ? `<script>\n${String(jsCode)}\n</script>` : ''
+  const assets = `${styleTag}${scriptTag}`
+  if (!assets) return value
+
+  if (/<\/body>/i.test(value)) {
+    return value.replace(/<\/body>/i, `${assets}\n</body>`)
+  }
+  return `${value}${assets}`
+}
+
+export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
   const router = useRouter()
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadingScreenHtml, setLoadingScreenHtml] = useState(
+    applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
+  )
   const [homePage, setHomePage] = useState(null)
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
@@ -42,6 +60,23 @@ export default function Home() {
     return `${cssLinks}${value}`
   }
 
+  const loadMaintenanceSettings = async () => {
+    try {
+      const res = await fetch('/api/settings')
+      if (!res.ok) return null
+      return await res.json()
+    } catch (_) {
+      return null
+    }
+  }
+
+  const buildMaintenanceHtml = (settings, keyPrefix, defaultHtml) => {
+    const html = settings?.[`${keyPrefix}_html`] || defaultHtml
+    const css = settings?.[`${keyPrefix}_css`] || ''
+    const js = settings?.[`${keyPrefix}_js`] || ''
+    return applyMaintenanceAssets(html, css, js)
+  }
+
   const checkMaintenanceMode = async () => {
     try {
       const res = await fetch('/api/settings')
@@ -54,28 +89,22 @@ export default function Home() {
   }
 
   const loadNoHomepageHtml = async () => {
-    try {
-      const res = await fetch('/api/settings')
-      if (!res.ok) return defaultNoHomepageHtml
-      const settings = await res.json()
-      return settings?.maintenance_no_homepage_html || defaultNoHomepageHtml
-    } catch (_) {
-      return defaultNoHomepageHtml
-    }
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_no_homepage', defaultNoHomepageHtml)
   }
 
   const load503Html = async () => {
-    try {
-      const res = await fetch('/api/settings')
-      if (!res.ok) return default503Html
-      const settings = await res.json()
-      return settings?.maintenance_503_html || default503Html
-    } catch (_) {
-      return default503Html
-    }
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_503', default503Html)
+  }
+
+  const loadLoadingScreenHtml = async () => {
+    const settings = await loadMaintenanceSettings()
+    return buildMaintenanceHtml(settings, 'maintenance_loading', defaultLoadingHtml)
   }
 
   useEffect(() => {
+    loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
     setLoading(true)
 
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
@@ -290,11 +319,39 @@ export default function Home() {
     })()
   }, [])
 
-  if (loading) return <div style={{ padding: 20 }}>Lädt...</div>
+  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
 
   const wrapperProps = {};
   if (homePage?.data?.wrapperId) wrapperProps.id = homePage.data.wrapperId;
   if (homePage?.data?.wrapperClass) wrapperProps.className = homePage.data.wrapperClass;
 
   return <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: html }} />
+}
+
+export async function getServerSideProps() {
+  try {
+    const { prisma } = await import('../lib/prisma')
+    const keys = ['maintenance_loading_html', 'maintenance_loading_css', 'maintenance_loading_js']
+    const rows = await prisma.setting.findMany({ where: { key: { in: keys } } })
+    const map = {}
+    for (const row of rows || []) {
+      map[row.key] = row.value
+    }
+
+    return {
+      props: {
+        initialLoadingScreenHtml: map.maintenance_loading_html || defaultLoadingHtml,
+        initialLoadingScreenCss: map.maintenance_loading_css || '',
+        initialLoadingScreenJs: map.maintenance_loading_js || '',
+      },
+    }
+  } catch (_e) {
+    return {
+      props: {
+        initialLoadingScreenHtml: defaultLoadingHtml,
+        initialLoadingScreenCss: '',
+        initialLoadingScreenJs: '',
+      },
+    }
+  }
 }
