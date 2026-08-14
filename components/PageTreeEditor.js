@@ -61,15 +61,35 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   async function handleAdd(parentId = null) {
     const id = Math.random().toString(36).substr(2, 9);
     const makeSlug = (text) => {
-      return String(text || 'neue-seite')
+      const result = String(text || 'neue-seite')
         .toLowerCase()
         .trim()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-');
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      return result || 'neue-seite';
+    };
+    const getAllSlugs = (nodes) => {
+      const slugs = new Set();
+      const collect = (items) => {
+        for (const n of items || []) {
+          if (n.slug) slugs.add(n.slug);
+          collect(n.children || []);
+        }
+      };
+      collect(nodes);
+      return slugs;
     };
     const title = newTitle || 'Neue Seite';
-    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
+    let slug = makeSlug(title);
+    const existingSlugs = getAllSlugs(tree);
+    if (existingSlugs.has(slug)) {
+      let counter = 2;
+      while (existingSlugs.has(`${slug}-${counter}`)) counter++;
+      slug = `${slug}-${counter}`;
+    }
+    const newPage = { id, title, slug, children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
@@ -99,13 +119,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     const source = findNode(tree);
     if (!source) return;
 
-    const makeSlug = (text) =>
-      String(text || 'seite')
+    const makeSlug = (text) => {
+      const result = String(text || 'seite')
         .toLowerCase()
         .trim()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-');
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      return result || 'seite';
+    };
 
     const deepClone = (node) => ({
       ...JSON.parse(JSON.stringify(node)),
@@ -138,15 +161,36 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
   async function handleAddSibling(nodeId) {
     const id = Math.random().toString(36).substr(2, 9);
-    const makeSlug = (text) =>
-      String(text || 'neue-seite')
+    const makeSlug = (text) => {
+      const result = String(text || 'neue-seite')
         .toLowerCase()
         .trim()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-');
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+      return result || 'neue-seite';
+    };
+    const getAllSlugs = (nodes) => {
+      const slugs = new Set();
+      const collect = (items) => {
+        for (const n of items || []) {
+          if (n.slug) slugs.add(n.slug);
+          collect(n.children || []);
+        }
+      };
+      collect(nodes);
+      return slugs;
+    };
     const title = newTitle || 'Neue Seite';
-    const newPage = { id, title, slug: makeSlug(title), children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
+    let slug = makeSlug(title);
+    const existingSlugs = getAllSlugs(tree);
+    if (existingSlugs.has(slug)) {
+      let counter = 2;
+      while (existingSlugs.has(`${slug}-${counter}`)) counter++;
+      slug = `${slug}-${counter}`;
+    }
+    const newPage = { id, title, slug, children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
 
     // Insert sibling directly after nodeId at the same level
     const insertAfter = (nodes) => {

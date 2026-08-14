@@ -16,11 +16,22 @@ export default function PagesView({
 }) {
   const [toast, setToast] = useState(null);
   const [pagesTab, setPagesTab] = useState('pages'); // 'pages' or 'maintenance'
-  const [maintenance404Html, setMaintenance404Html] = useState('');
-  const [maintenance503Html, setMaintenance503Html] = useState('');
-  const [maintenanceNoHomepageHtml, setMaintenanceNoHomepageHtml] = useState('');
+  const [maintenanceTab, setMaintenanceTab] = useState('404');
+  const [maintenanceContent, setMaintenanceContent] = useState({
+    '404': { html: '', css: '', js: '' },
+    '503': { html: '', css: '', js: '' },
+    noHomepage: { html: '', css: '', js: '' },
+    loading: { html: '', css: '', js: '' },
+  });
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
   const [maintenanceLoaded, setMaintenanceLoaded] = useState(false);
+
+  const maintenanceTabs = [
+    { id: '404', label: '404 Seite' },
+    { id: '503', label: '503 Seite' },
+    { id: 'noHomepage', label: 'Keine Startseite' },
+    { id: 'loading', label: 'Ladebildschirm' },
+  ];
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -31,21 +42,59 @@ export default function PagesView({
       const res = await fetch('/api/settings');
       if (!res.ok) return;
       const settings = await res.json();
-      setMaintenance404Html(settings?.maintenance_404_html || '');
-      setMaintenance503Html(settings?.maintenance_503_html || '');
-      setMaintenanceNoHomepageHtml(settings?.maintenance_no_homepage_html || '');
+      setMaintenanceContent({
+        '404': {
+          html: settings?.maintenance_404_html || '',
+          css: settings?.maintenance_404_css || '',
+          js: settings?.maintenance_404_js || '',
+        },
+        '503': {
+          html: settings?.maintenance_503_html || '',
+          css: settings?.maintenance_503_css || '',
+          js: settings?.maintenance_503_js || '',
+        },
+        noHomepage: {
+          html: settings?.maintenance_no_homepage_html || '',
+          css: settings?.maintenance_no_homepage_css || '',
+          js: settings?.maintenance_no_homepage_js || '',
+        },
+        loading: {
+          html: settings?.maintenance_loading_html || '',
+          css: settings?.maintenance_loading_css || '',
+          js: settings?.maintenance_loading_js || '',
+        },
+      });
       setMaintenanceLoaded(true);
     } catch (e) {
       console.error('Error loading maintenance pages:', e);
     }
   };
 
+  const updateMaintenanceField = (tabId, field, value) => {
+    setMaintenanceContent(prev => ({
+      ...prev,
+      [tabId]: {
+        ...(prev[tabId] || { html: '', css: '', js: '' }),
+        [field]: value,
+      },
+    }));
+  };
+
   const handleSaveMaintenance = async () => {
     setIsSavingMaintenance(true);
     const pairs = [
-      ['maintenance_404_html', maintenance404Html],
-      ['maintenance_503_html', maintenance503Html],
-      ['maintenance_no_homepage_html', maintenanceNoHomepageHtml],
+      ['maintenance_404_html', maintenanceContent['404']?.html || ''],
+      ['maintenance_404_css', maintenanceContent['404']?.css || ''],
+      ['maintenance_404_js', maintenanceContent['404']?.js || ''],
+      ['maintenance_503_html', maintenanceContent['503']?.html || ''],
+      ['maintenance_503_css', maintenanceContent['503']?.css || ''],
+      ['maintenance_503_js', maintenanceContent['503']?.js || ''],
+      ['maintenance_no_homepage_html', maintenanceContent.noHomepage?.html || ''],
+      ['maintenance_no_homepage_css', maintenanceContent.noHomepage?.css || ''],
+      ['maintenance_no_homepage_js', maintenanceContent.noHomepage?.js || ''],
+      ['maintenance_loading_html', maintenanceContent.loading?.html || ''],
+      ['maintenance_loading_css', maintenanceContent.loading?.css || ''],
+      ['maintenance_loading_js', maintenanceContent.loading?.js || ''],
     ];
 
     try {
@@ -63,6 +112,35 @@ export default function PagesView({
     } finally {
       setIsSavingMaintenance(false);
     }
+  };
+
+  const buildMaintenancePreviewDoc = (entry) => {
+    const html = String(entry?.html || '').trim() || '<div style="padding:32px;text-align:center;color:#666;">Keine HTML-Inhalte hinterlegt</div>';
+    const css = String(entry?.css || '');
+    const js = String(entry?.js || '');
+
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body { margin: 0; padding: 0; min-height: 100%; }
+      body { font-family: system-ui, -apple-system, Segoe UI, sans-serif; }
+      ${css}
+    </style>
+  </head>
+  <body>
+    ${html}
+    <script>
+      try {
+        ${js}
+      } catch (e) {
+        console.error('Maintenance preview JS error:', e);
+      }
+    </script>
+  </body>
+</html>`;
   };
 
   return (
@@ -234,82 +312,188 @@ export default function PagesView({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              HTML-Inhalte für Fallback-Seiten. Diese Inhalte werden direkt gerendert.
+              Für jede Maintenance-Seite können HTML, CSS und JS separat gepflegt werden.
             </p>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                404 Seite (Nicht gefunden)
-              </label>
-              <textarea
-                value={maintenance404Html}
-                onChange={e => setMaintenance404Html(e.target.value)}
-                placeholder="<h1>Seite nicht gefunden</h1>"
-                rows={8}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+              {maintenanceTabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setMaintenanceTab(tab.id)}
+                  style={{
+                    padding: '0.45rem 0.95rem',
+                    borderRadius: '6px',
+                    border: maintenanceTab === tab.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                    background: maintenanceTab === tab.id ? 'var(--accent-primary-soft, rgba(59,130,246,0.12))' : 'var(--bg-secondary)',
+                    color: maintenanceTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '1rem',
+              alignItems: 'start',
+            }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  HTML
+                </label>
+                <textarea
+                  value={maintenanceContent[maintenanceTab]?.html || ''}
+                  onChange={e => updateMaintenanceField(maintenanceTab, 'html', e.target.value)}
+                  placeholder="<h1>Maintenance Inhalt</h1>"
+                  rows={14}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    boxSizing: 'border-box',
+                    minHeight: '280px',
+                    resize: 'vertical',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  CSS
+                </label>
+                <textarea
+                  value={maintenanceContent[maintenanceTab]?.css || ''}
+                  onChange={e => updateMaintenanceField(maintenanceTab, 'css', e.target.value)}
+                  placeholder="body { font-family: sans-serif; }"
+                  rows={14}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    boxSizing: 'border-box',
+                    minHeight: '280px',
+                    resize: 'vertical',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  JS
+                </label>
+                <textarea
+                  value={maintenanceContent[maintenanceTab]?.js || ''}
+                  onChange={e => updateMaintenanceField(maintenanceTab, 'js', e.target.value)}
+                  placeholder="console.log('Maintenance Screen');"
+                  rows={14}
+                  style={{
+                    width: '100%',
+                    padding: '0.55rem 0.75rem',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '6px',
+                    fontSize: '0.9rem',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)',
+                    boxSizing: 'border-box',
+                    minHeight: '280px',
+                    resize: 'vertical',
+                    fontFamily: 'monospace',
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              padding: '0.9rem',
+              background: 'var(--bg-secondary)',
+            }}>
+              <div style={{ marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Maintenance'})
+              </div>
+              <iframe
+                title={`maintenance-preview-${maintenanceTab}`}
+                srcDoc={buildMaintenancePreviewDoc(maintenanceContent[maintenanceTab])}
+                sandbox="allow-scripts"
                 style={{
                   width: '100%',
-                  padding: '0.55rem 0.75rem',
+                  minHeight: '380px',
                   border: '1px solid var(--border-color)',
                   borderRadius: '6px',
-                  fontSize: '0.9rem',
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  boxSizing: 'border-box',
-                  minHeight: '180px',
-                  resize: 'vertical',
-                  fontFamily: 'monospace',
+                  background: '#fff',
                 }}
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                503 Seite (Service nicht verfügbar)
-              </label>
-              <textarea
-                value={maintenance503Html}
-                onChange={e => setMaintenance503Html(e.target.value)}
-                placeholder="<h1>Wartungsarbeiten</h1>"
-                rows={8}
-                style={{
-                  width: '100%',
-                  padding: '0.55rem 0.75rem',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  fontSize: '0.9rem',
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  boxSizing: 'border-box',
-                  minHeight: '180px',
-                  resize: 'vertical',
-                  fontFamily: 'monospace',
-                }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Keine Startseite gefunden
-              </label>
-              <textarea
-                value={maintenanceNoHomepageHtml}
-                onChange={e => setMaintenanceNoHomepageHtml(e.target.value)}
-                placeholder="<h1>Keine Startseite gefunden</h1>"
-                rows={8}
-                style={{
-                  width: '100%',
-                  padding: '0.55rem 0.75rem',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  fontSize: '0.9rem',
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  boxSizing: 'border-box',
-                  minHeight: '180px',
-                  resize: 'vertical',
-                  fontFamily: 'monospace',
-                }}
-              />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Maintenance-Seiten</div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                gap: '0.75rem',
+              }}>
+                {maintenanceTabs.map(tab => (
+                  <div
+                    key={`preview-${tab.id}`}
+                    style={{
+                      border: maintenanceTab === tab.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                      borderRadius: '8px',
+                      padding: '0.5rem',
+                      background: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.4rem',
+                    }}>
+                      <strong style={{ color: 'var(--text-primary)', fontSize: '0.84rem' }}>{tab.label}</strong>
+                      <button
+                        onClick={() => setMaintenanceTab(tab.id)}
+                        style={{
+                          border: '1px solid var(--border-color)',
+                          background: '#fff',
+                          borderRadius: '6px',
+                          padding: '0.2rem 0.45rem',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                        }}
+                      >
+                        Bearbeiten
+                      </button>
+                    </div>
+                    <iframe
+                      title={`maintenance-preview-card-${tab.id}`}
+                      srcDoc={buildMaintenancePreviewDoc(maintenanceContent[tab.id])}
+                      sandbox="allow-scripts"
+                      style={{
+                        width: '100%',
+                        minHeight: '180px',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        background: '#fff',
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>
