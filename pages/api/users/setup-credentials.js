@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       },
       message: authMethod === 'credentials' 
         ? 'Account erstellt. Sie können sich jetzt anmelden.'
-        : 'Account erstellt. Sie können sich mit GitHub/Google anmelden.'
+        : 'Account erstellt. Sie können sich jetzt mit GitHub anmelden.'
     });
   } catch (error) {
     console.error('Accept invitation error:', error);

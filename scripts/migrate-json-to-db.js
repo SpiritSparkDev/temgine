@@ -55,7 +55,7 @@ async function migrateData() {
     for (const snippet of snippetsData) {
       // Use the label directly as the DB key so the admin UI maps keys to labels consistently.
       const key = String(snippet.label || '').trim();
-      // Preserve metadata (type/handler) by JSON-encoding the value when present — aligns with pages/api/snippets.js
+      // Preserve metadata (type/handler) by JSON-encoding the value when present
       let value = String(snippet.snippet || '');
       if (snippet.type || snippet.handler) {
         value = JSON.stringify({ snippet: snippet.snippet || '', type: snippet.type || 'free', handler: snippet.handler || '' });

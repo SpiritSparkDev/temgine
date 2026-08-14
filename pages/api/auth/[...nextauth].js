@@ -132,7 +132,7 @@ export const authOptions = {
       return token;
     },
     async signIn({ user, account, profile }) {
-      if (account && (account.provider === 'github' || account.provider === 'google')) {
+      if (account && account.provider === 'github') {
         const { prisma } = await import('../../../lib/prisma');
         try {
           const existingUsers = await prisma.user.count();

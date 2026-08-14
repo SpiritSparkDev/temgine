@@ -161,7 +161,6 @@ export default function UsersViewModern({ showToast }) {
               <li>Seiten verwalten</li>
               <li>Templates bearbeiten</li>
               <li>CSS & Navigation</li>
-              <li>Snippets verwalten</li>
             </ul>
           </div>
 
@@ -172,7 +171,6 @@ export default function UsersViewModern({ showToast }) {
             <ul>
               <li>Seiten bearbeiten</li>
               <li>Dateien hochladen</li>
-              <li>Snippets ansehen</li>
               <li>Nur Inhalte</li>
             </ul>
           </div>

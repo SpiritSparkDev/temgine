@@ -190,7 +190,7 @@ npm run check-env    # Umgebungsvariablen prüfen
 
 | Bereich | Technologie |
 |---|---|
-| Framework | Next.js 14 |
+| Framework | Next.js 16 |
 | UI | React 18 |
 | Styling | CSS Custom Properties |
 | Auth | NextAuth.js 4 |
@@ -209,10 +209,9 @@ Proprietär — alle Rechte vorbehalten.
 
 ## Admin-Zugang
 
-Nach dem ersten Start:
+Es gibt zwei unabhängige Wege, den ersten Admin-Account anzulegen — beide sind gleichzeitig aktiv, welcher zuerst genutzt wird, gewinnt:
 
-1. Navigieren Sie zu `/admin`
-2. Melden Sie sich mit GitHub OAuth an
-3. Der erste Benutzer wird automatisch als Admin registriert
+1. **`/setup` mit `SETUP_TOKEN`** (siehe oben) — legt einen Credentials-Login-Account (Benutzername/Passwort) als ADMIN an. Der Endpunkt sperrt sich selbst, sobald ein User existiert.
+2. **Erster GitHub-OAuth-Login** — navigieren Sie zu `/admin`, melden Sie sich mit GitHub an; der *erste* Benutzer, der sich so einloggt, wird automatisch als ADMIN registriert (nur falls `GITHUB_ID`/`GITHUB_SECRET` konfiguriert sind).
 
 Siehe [OAUTH_SETUP.md](./OAUTH_SETUP.md) für Details zur OAuth-Konfiguration.

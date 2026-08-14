@@ -35,7 +35,7 @@ Write-Host "📤 Upload everything to ~/httpdocs/ on the server via rsync/FTP:" 
 Write-Host "   .next/              (production build)"
 Write-Host "   node_modules/       (pruned, no devDeps)"
 Write-Host "   pages/, components/, lib/, public/, prisma/, scripts/"
-Write-Host "   package.json, next.config.js, middleware.js, server.js"
+Write-Host "   package.json, next.config.js, server.js"
 Write-Host ""
 Write-Host "💡 Recommended rsync command:" -ForegroundColor Cyan
 Write-Host "   rsync -av --exclude=.git --exclude=.next-dev --exclude='node_modules/.cache' ./ <user>@<server>:~/httpdocs/"
