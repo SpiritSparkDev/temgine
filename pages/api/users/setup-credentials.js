@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../../../lib/prisma';
 
 export default async function handler(req, res) {
@@ -59,9 +59,7 @@ export default async function handler(req, res) {
     };
 
     if (authMethod === 'credentials') {
-      // Hash Passwort (einfaches Hashing für Demo - in Produktion bcrypt verwenden!)
-      const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-      userData.password = hashedPassword;
+      userData.password = await bcrypt.hash(password, 12);
     }
 
     const user = await prisma.user.create({

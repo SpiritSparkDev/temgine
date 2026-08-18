@@ -58,7 +58,7 @@ export default function CSSManagerViewModern({ showToast }) {
     const f = ev.target.files && ev.target.files[0];
     if (!f) return;
     if (!f.name || !f.name.toLowerCase().endsWith('.css')) {
-      showToast('Bitte eine .css Datei auswÃ¤hlen', 'error');
+      showToast('Bitte eine .css Datei auswählen', 'error');
       return;
     }
 
@@ -128,7 +128,7 @@ export default function CSSManagerViewModern({ showToast }) {
       body: JSON.stringify({ filename: fileObj.name })
     })
       .then(() => {
-        showToast('CSS-Datei gelÃ¶scht', 'success');
+        showToast('CSS-Datei gelöscht', 'success');
         loadCSSFiles();
         if (selectedFile === index) {
           setIsEditing(false);
@@ -220,7 +220,7 @@ export default function CSSManagerViewModern({ showToast }) {
                       <button
                         className="icon-btn-small delete"
                         onClick={(e) => { e.stopPropagation(); handleDelete(fileObj, index); }}
-                        title="LÃ¶schen"
+                        title="Löschen"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -301,7 +301,7 @@ export default function CSSManagerViewModern({ showToast }) {
         ) : (
           <div className="editor-empty-state">
             <FileCode size={48} strokeWidth={1} />
-            <h3>WÃ¤hle eine CSS-Datei zum Bearbeiten</h3>
+            <h3>Wähle eine CSS-Datei zum Bearbeiten</h3>
             <p>oder erstelle eine neue mit dem <Plus size={16} style={{verticalAlign: 'middle'}} /> Button</p>
           </div>
         )}

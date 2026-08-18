@@ -15,6 +15,7 @@ node_modules/
 /build
 /public/uploads
 /public/extern_css
+/public/extern_js
 
 # Static site imports (lokal, nicht versioniert)
 /static_imports/

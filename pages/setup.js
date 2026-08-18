@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { prisma } from '../lib/prisma';
 
@@ -17,6 +17,11 @@ export default function SetupPage({ hasUsers }) {
   const [confirm, setConfirm]   = useState('');
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
+
+  // Prefill from the setup link logged at server boot (?token=...)
+  useEffect(() => {
+    if (typeof router.query.token === 'string') setToken(router.query.token);
+  }, [router.query.token]);
 
   // Already set up – just show a message
   if (hasUsers) {
@@ -73,7 +78,9 @@ export default function SetupPage({ hasUsers }) {
         <h1>Ersteinrichtung</h1>
         <p className="auth-hint">
           Kein Benutzer gefunden. Lege jetzt den ersten Admin-Account an.
-          Du benötigst den <strong>Setup-Token</strong> aus der Server-Konfiguration.
+          {token
+            ? ' Der Setup-Token wurde aus dem Link übernommen.'
+            : ' Öffne den Setup-Link aus der Server-Konsole, oder trage den Setup-Token manuell ein.'}
         </p>
 
         <form onSubmit={handleSubmit} className="auth-form">
@@ -82,7 +89,7 @@ export default function SetupPage({ hasUsers }) {
               type="password"
               value={token}
               onChange={e => setToken(e.target.value)}
-              placeholder="Aus .env.local: SETUP_TOKEN"
+              placeholder="Aus dem Setup-Link in der Server-Konsole"
               autoComplete="off"
               required
             />

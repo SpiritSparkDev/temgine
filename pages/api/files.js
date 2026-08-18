@@ -24,7 +24,7 @@ const uploadLimiter = rateLimit({ windowMs: 60_000, max: 500 });
 function resolveSafeDir(folderParam) {
   const safe = (folderParam || '').replace(/\.\./g, '').replace(/^\/+/, '').replace(/\/+$/, '');
   const resolved = path.resolve(UPLOAD_DIR, safe);
-  if (!resolved.startsWith(UPLOAD_DIR)) throw new Error('UngÃ¼ltiger Pfad');
+  if (!resolved.startsWith(UPLOAD_DIR)) throw new Error('Ungültiger Pfad');
   return { resolved, safe };
 }
 
@@ -541,7 +541,7 @@ export default async function handler(req, res) {
           fs.mkdirSync(targetUploadDir, { recursive: true });
         }
       } catch (e) {
-        return res.status(400).json({ error: 'UngÃ¼ltiger Ordner' });
+        return res.status(400).json({ error: 'Ungültiger Ordner' });
       }
     }
 
@@ -596,7 +596,7 @@ export default async function handler(req, res) {
           const { relativeDir, filename } = sanitizeRelativePath(relativePathField);
           const nestedTargetDir = relativeDir ? path.join(targetUploadDir, relativeDir) : targetUploadDir;
           if (!nestedTargetDir.startsWith(UPLOAD_DIR)) {
-            throw new Error('UngÃ¼ltiger relativer Pfad');
+            throw new Error('Ungültiger relativer Pfad');
           }
           fs.mkdirSync(nestedTargetDir, { recursive: true });
 
@@ -669,14 +669,14 @@ export default async function handler(req, res) {
       }
       // Keine Pfad-Trennzeichen oder Sonderzeichen im Ordnernamen
       if (/[<>:"/\\|?*\x00-\x1f]/.test(folderName) || folderName === '.' || folderName === '..') {
-        return res.status(400).json({ error: 'UngÃ¼ltiger Ordnername' });
+        return res.status(400).json({ error: 'Ungültiger Ordnername' });
       }
 
       const { resolved: parentPath } = resolveSafeDir(parentFolder || '');
       const newFolderPath = path.join(parentPath, folderName);
 
       if (!newFolderPath.startsWith(UPLOAD_DIR)) {
-        return res.status(400).json({ error: 'UngÃ¼ltiger Pfad' });
+        return res.status(400).json({ error: 'Ungültiger Pfad' });
       }
 
       if (fs.existsSync(newFolderPath)) {
@@ -731,20 +731,20 @@ export default async function handler(req, res) {
 
       // Path-Traversal-Schutz
       if (!filePath.startsWith(UPLOAD_DIR)) {
-        return res.status(400).json({ error: 'UngÃ¼ltiger Pfad' });
+        return res.status(400).json({ error: 'Ungültiger Pfad' });
       }
 
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
 
-        // Wenn es ein Bild ist, lÃ¶sche auch die optimierten Versionen
+        // Wenn es ein Bild ist, lösche auch die optimierten Versionen
         const ext = path.extname(cleanFilename).toLowerCase();
         if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
           const basename = path.basename(cleanFilename, ext);
           const imageDir = path.join(process.cwd(), 'public', 'uploads', 'images');
           const thumbDir = path.join(imageDir, 'thumbnails');
 
-          // LÃ¶sche alle GrÃ¶ÃŸen
+          // Lösche alle Größen
           const sizes = ['', '_thumbnail', '_small', '_medium', '_large'];
           sizes.forEach(suffix => {
             const imagePath = path.join(imageDir, `${basename}${suffix}.webp`);
@@ -758,13 +758,13 @@ export default async function handler(req, res) {
           });
         }
 
-        res.status(200).json({ success: true, message: 'Datei gelÃ¶scht' });
+        res.status(200).json({ success: true, message: 'Datei gelöscht' });
       } else {
         res.status(404).json({ error: 'Datei nicht gefunden: ' + cleanFilename });
       }
     } catch (error) {
       console.error('Delete error:', error);
-      res.status(500).json({ error: 'Fehler beim LÃ¶schen: ' + error.message });
+      res.status(500).json({ error: 'Fehler beim Löschen: ' + error.message });
     }
   } else {
     res.status(405).json({ error: 'Methode nicht erlaubt' });

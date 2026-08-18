@@ -1,5 +1,7 @@
 import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 import { prisma } from '../../../lib/prisma'
+import { getSetupToken } from '../../../lib/setupToken'
 
 /**
  * POST /api/setup/create-admin
@@ -17,11 +19,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  // Reject if no token is configured server-side (prevents accidental exposure)
-  const configuredToken = process.env.SETUP_TOKEN
-  if (!configuredToken) {
-    return res.status(503).json({ error: 'Setup nicht konfiguriert (SETUP_TOKEN fehlt).' })
-  }
+  const configuredToken = getSetupToken()
 
   // Abort if any user already exists — endpoint is single-use
   let userCount
@@ -62,7 +60,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Passwort muss mindestens 8 Zeichen haben.' })
   }
 
-  const hashedPassword = crypto.createHash('sha256').update(cleanPw).digest('hex')
+  const hashedPassword = await bcrypt.hash(cleanPw, 12)
 
   try {
     await prisma.user.create({

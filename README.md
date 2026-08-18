@@ -66,12 +66,14 @@ DATABASE_URL=postgresql://USER:PASS@localhost:5432/temgine_cms
 # Entwicklungsmodus (deaktiviert Login lokal)
 DEV_MODE=true
 NEXT_PUBLIC_DEV_MODE=true
-
-# Erstlogin-Token (für /setup)
-SETUP_TOKEN=<zufälliger-string>
 ```
 
-`NEXTAUTH_SECRET` und `SETUP_TOKEN` können so generiert werden:
+`SETUP_TOKEN` für `/setup` ist optional — ohne ihn generiert der Server beim
+Start selbst einen und loggt einen fertigen Klick-Link in die Konsole (siehe
+Schritt 5). Nur explizit setzen, wenn mehrere Server-Instanzen denselben
+Token teilen müssen.
+
+`NEXTAUTH_SECRET` kann so generiert werden:
 
 ```bash
 # Linux/macOS
@@ -93,14 +95,16 @@ npx prisma generate
 
 ### 5. Ersten Admin-Account anlegen
 
-Starte den Dev-Server und rufe `/setup` auf:
+Starte den Dev-Server:
 
 ```bash
 npm run dev
-# Öffne http://localhost:3000/setup
 ```
 
-Gib das `SETUP_TOKEN` aus deiner `.env.local` ein und lege Name, E-Mail und Passwort fest. Danach ist `/setup` dauerhaft gesperrt (sobald ein User existiert).
+Solange noch kein User existiert, gibt die Server-Konsole beim Start einen
+fertigen Setup-Link aus (`[setup] http://localhost:3000/setup?token=...`).
+Link öffnen, Name/E-Mail/Passwort eintragen — der Token ist schon
+vorausgefüllt. Danach ist `/setup` dauerhaft gesperrt (sobald ein User existiert).
 
 ### 6. Development-Server starten
 
@@ -131,7 +135,7 @@ npm run dev
 | `NEXTAUTH_SECRET` | Neu generierten Zufallswert (≥ 32 Zeichen) |
 | `DATABASE_URL` | `postgresql://USER:PASS@localhost:5432/DBNAME` |
 | `DEV_MODE` | `false` |
-| `SETUP_TOKEN` | Zufälliger Token für den ersten Admin |
+| `SETUP_TOKEN` | Optional — ohne ihn generiert der Server selbst einen und loggt den Setup-Link |
 
 > **Wichtig:** Passwörter mit Sonderzeichen in der `DATABASE_URL` müssen URL-kodiert sein  
 > (z. B. `@` → `%40`, `#` → `%23`, `!` → `%21`).
@@ -159,10 +163,10 @@ npm run build
 
 Nach dem ersten Deploy, solange noch kein Benutzer existiert:
 
-1. `https://deine-domain.de/setup` aufrufen
-2. `SETUP_TOKEN` eingeben
-3. Admin-Account anlegen
-4. `/setup` ist danach dauerhaft gesperrt
+1. Node-App-Log in Plesk öffnen (Plesk UI → Node.js → Logs) und den beim Start
+   ausgegebenen Setup-Link suchen (`[setup] https://deine-domain.de/setup?token=...`)
+2. Link öffnen, Admin-Account anlegen (Token ist schon vorausgefüllt)
+3. `/setup` ist danach dauerhaft gesperrt
 
 ### System-Status prüfen
 
@@ -213,7 +217,7 @@ Proprietär — alle Rechte vorbehalten.
 
 Es gibt zwei unabhängige Wege, den ersten Admin-Account anzulegen — beide sind gleichzeitig aktiv, welcher zuerst genutzt wird, gewinnt:
 
-1. **`/setup` mit `SETUP_TOKEN`** (siehe oben) — legt einen Credentials-Login-Account (Benutzername/Passwort) als ADMIN an. Der Endpunkt sperrt sich selbst, sobald ein User existiert.
+1. **`/setup`-Link** (siehe oben) — legt einen Credentials-Login-Account (Benutzername/Passwort) als ADMIN an. Der Endpunkt sperrt sich selbst, sobald ein User existiert.
 2. **Erster GitHub-OAuth-Login** — navigieren Sie zu `/admin`, melden Sie sich mit GitHub an; der *erste* Benutzer, der sich so einloggt, wird automatisch als ADMIN registriert (nur falls `GITHUB_ID`/`GITHUB_SECRET` konfiguriert sind).
 
 Siehe [OAUTH_SETUP.md](./OAUTH_SETUP.md) für Details zur OAuth-Konfiguration.

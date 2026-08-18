@@ -4,7 +4,7 @@ import GithubProvider from 'next-auth/providers/github';
 
 export const authOptions = {
   providers: [
-    // ── Admin / Editor login (SHA-256 passwords) ─────────────────────────────
+    // ── Admin / Editor login (bcrypt passwords) ───────────────────────────────
     CredentialsProvider({
       id: 'admin-credentials',
       name: 'Admin Login',
@@ -14,12 +14,13 @@ export const authOptions = {
       },
       async authorize(credentials) {
         const { prisma } = await import('../../../lib/prisma');
+        const bcrypt = await import('bcryptjs');
         const crypto = await import('crypto');
         const username = credentials?.username?.trim();
         const password = credentials?.password;
 
         if (!username || !password) return null;
-        
+
         try {
           // Case-insensitive lookup: setup stores email as lowercase,
           // but user might type it with capitals on the login form.
@@ -39,13 +40,26 @@ export const authOptions = {
             return null;
           }
 
-          const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-          if (user.password === hashedPassword) {
+          // Accounts created before the bcrypt switch still have a plain
+          // SHA-256 hex hash (64 chars, no bcrypt '$2' prefix). Accept it
+          // once, then transparently upgrade to bcrypt on this login.
+          const isLegacyHash = !user.password.startsWith('$2');
+          let valid;
+          if (isLegacyHash) {
+            const legacyHash = crypto.createHash('sha256').update(password).digest('hex');
+            valid = user.password === legacyHash;
+            if (valid) {
+              const upgraded = await bcrypt.hash(password, 12);
+              await prisma.user.update({ where: { id: user.id }, data: { password: upgraded } });
+            }
+          } else {
+            valid = await bcrypt.compare(password, user.password);
+          }
+
+          if (valid) {
             return { id: user.id, name: user.name, email: user.email, role: user.role, accountType: 'admin' };
           }
-          console.error('[auth] Password mismatch for user:', user.email,
-            '| stored:', user.password.slice(0, 8) + '…',
-            '| computed:', hashedPassword.slice(0, 8) + '…');
+          console.error('[auth] Password mismatch for user:', user.email);
         } catch (error) {
           console.error('Admin auth error:', error);
         }
