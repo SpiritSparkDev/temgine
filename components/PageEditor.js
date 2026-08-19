@@ -2367,7 +2367,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   <div className="inspector-block-bar">
                     <button
                       type="button"
-                      className="pe-tb-btn pe-tb-btn-primary inspector-ga-newblock"
+                      className="pe-tb-btn pe-tb-btn-primary"
                       onClick={() => { const p = String((blocks || []).length); handleAddBlock('content'); setSelectedBlockPath(p); }}
                       title={devTitle('Neuen Top-Level-Block anlegen')}
                     >
@@ -2375,7 +2375,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     <button
                       type="button"
-                      className="pe-tb-btn inspector-ga-blogchannel"
+                      className="pe-tb-btn"
                       onClick={() => { const p = String((blocks || []).length); handleAddBlock('blog-channel'); setSelectedBlockPath(p); }}
                       title={devTitle('Blog-Kanal-Block anlegen')}
                     >
@@ -2383,7 +2383,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     <button
                       type="button"
-                      className="pe-tb-btn inspector-ga-kindblock"
+                      className="pe-tb-btn"
                       onClick={() => addNestedBlock(selectedBlockPath, 'content', true)}
                       title={devTitle('Unterblock anlegen')}
                     >
@@ -2391,7 +2391,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </button>
                     <button
                       type="button"
-                      className="pe-tb-btn pe-tb-btn-danger"
+                      className="pe-tb-btn pe-tb-btn-danger inspector-block-bar-delete"
                       onClick={() => {
                         const currentPath = selectedBlockPath;
                         handleDeleteBlock(currentPath);
