@@ -1048,22 +1048,23 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>:textarea</code></td><td>Richtext-Editor</td></tr>
                         <tr><td><code>:number</code></td><td>Zahlenfeld</td></tr>
                         <tr><td><code>:url</code></td><td>URL + Datei-Picker</td></tr>
-                        <tr><td><code>:image</code></td><td>Bildpfad-Picker</td></tr>
-                        <tr><td><code>:date</code></td><td>Datumsfeld</td></tr>
-                        <tr><td><code>:color</code></td><td>Farbauswahl</td></tr>
+                        <tr><td><code>:image</code></td><td>Bildpfad-Picker + Vorschau</td></tr>
+                        <tr><td><code>:date</code></td><td>Datumsfeld (nativer Picker)</td></tr>
+                        <tr><td><code>:color</code></td><td>Farbauswahl (nativer Picker)</td></tr>
                         <tr><td><code>:array</code></td><td>Liste (zeilenweise)</td></tr>
+                        <tr><td><code>:select</code></td><td>Wie :text — eigenes Widget noch nicht gebaut</td></tr>
                       </tbody>
                     </table>
                   </div>
 
                   <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Systemvariablen</div>
+                    <div className="tce-ref-heading">Systemvariablen (überall)</div>
                     <table className="tce-ref-table">
                       <tbody>
                         <tr><td><code>{'{{page.title}}'}</code></td><td>Seitentitel</td></tr>
                         <tr><td><code>{'{{page.slug}}'}</code></td><td>Seiten-Slug</td></tr>
                         <tr><td><code>{'{{inner}}'}</code></td><td>HTML der Kindblöcke</td></tr>
-                        <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Hauptnavigation (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Hauptnavigation (HTML, wird zusätzlich automatisch eingefügt)</td></tr>
                         <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation (HTML)</td></tr>
                         <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Mobile-Navigation (HTML)</td></tr>
                         <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
@@ -1072,16 +1073,28 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                   </div>
 
                   <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Mustache-Syntax</div>
+                    <div className="tce-ref-heading">Mustache-Syntax (überall)</div>
                     <table className="tce-ref-table">
                       <tbody>
                         <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped)</td></tr>
                         <tr><td><code>{'{{{'}<span>{'var}'}</span>{'}'}</code></td><td>Variable (HTML roh)</td></tr>
-                        <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Abschnitt / Schleife</td></tr>
-                        <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Invertierter Abschnitt</td></tr>
+                        <tr><td><code>{'{{#each:name}}…{{/each:name}}'}</code></td><td>Wiederholbare Gruppe (Liste)</td></tr>
+                        <tr><td><code>{'{{#if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name nicht leer</td></tr>
+                        <tr><td><code>{'{{^if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name leer</td></tr>
+                        <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Roher Mustache-Abschnitt (Sonderfälle)</td></tr>
+                        <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Roher invertierter Abschnitt</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="tce-ref-group">
+                    <div className="tce-ref-heading">Nur in Navigations-Templates</div>
+                    <table className="tce-ref-table">
+                      <tbody>
                         <tr><td><code>{'{{#hasChildren}}'}</code></td><td>Wenn Unterseiten existieren</td></tr>
                         <tr><td><code>{'{{#children}}'}</code></td><td>Unterseiten iterieren</td></tr>
-                        <tr><td><code>{'{{#pages}}'}</code></td><td>Nav-Seiten iterieren</td></tr>
+                        <tr><td><code>{'{{#pages}}'}</code></td><td>Nav-Seiten iterieren (Typ Haupt/Mobile)</td></tr>
+                        <tr><td><code>{'{{#anchors}}'}</code></td><td>Anker iterieren (Typ Seite)</td></tr>
                       </tbody>
                     </table>
                   </div>

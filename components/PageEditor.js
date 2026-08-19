@@ -1671,7 +1671,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     );
                   }
 
-                  if (isUrlVariable(varName)) {
+                  if (inputType === 'date') {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        <input ref={(el) => setFieldRef(path, varName, el)} type="date" value={value || ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
+                      </div>
+                    );
+                  }
+
+                  if (inputType === 'color') {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        <div className="field-url-row">
+                          <input ref={(el) => setFieldRef(path, varName, el)} type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small" />
+                          <input type="text" value={value || ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} placeholder="#rrggbb" className="input-field-small field-input-full" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (isUrlVariable(varName) || inputType === 'url') {
                     return (
                       <div key={varName} className="field-item">
                         <label className="field-label-xs">{label}</label>
