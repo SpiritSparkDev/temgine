@@ -193,7 +193,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
-      setCollapsedBlocks(new Set());
+      // Minimized-block state is an editor-only UI preference (not page content),
+      // so it lives in localStorage per page rather than being saved to the DB.
+      let restoredCollapsed = new Set();
+      try {
+        const raw = page.id ? localStorage.getItem(`collapsedBlocks:${page.id}`) : null;
+        if (raw) restoredCollapsed = new Set(JSON.parse(raw));
+      } catch (_e) {
+        // malformed/unavailable storage — fall back to all-expanded
+      }
+      setCollapsedBlocks(restoredCollapsed);
       setLightboxBlockPath('');
 
       // Check if page needs DOM migration and migrate if necessary
@@ -224,6 +233,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       onDirtyChange?.(false);
     }
   }, [page]);
+
+  useEffect(() => {
+    if (!page?.id) return;
+    try {
+      localStorage.setItem(`collapsedBlocks:${page.id}`, JSON.stringify([...collapsedBlocks]));
+    } catch (_e) {
+      // storage unavailable (private browsing quota, etc.) — non-critical
+    }
+  }, [collapsedBlocks, page?.id]);
 
   useEffect(() => {
     if (!initialSnapshotRef.current) {

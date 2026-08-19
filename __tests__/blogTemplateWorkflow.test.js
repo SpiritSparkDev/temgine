@@ -1,7 +1,5 @@
 const {
   extractTemplatePlaceholders,
-  parseBlogTemplateMeta,
-  encodeBlogTemplateMeta,
   validatePreviewSubset,
 } = require('../lib/blogTemplateWorkflow');
 
@@ -17,23 +15,6 @@ describe('blogTemplateWorkflow', () => {
 
     expect(Array.from(vars)).toEqual(expect.arrayContaining(['title', 'author', 'label']));
     expect(vars.has('if:showMeta')).toBe(false);
-  });
-
-  test('parse and encode blog meta for master and preview', () => {
-    expect(parseBlogTemplateMeta('master')).toEqual({
-      blogRole: 'master',
-      masterTemplateName: null,
-      raw: 'master',
-    });
-
-    expect(parseBlogTemplateMeta('preview:Artikel Master')).toEqual({
-      blogRole: 'preview',
-      masterTemplateName: 'Artikel Master',
-      raw: 'preview:Artikel Master',
-    });
-
-    expect(encodeBlogTemplateMeta('master', null, null)).toBe('master');
-    expect(encodeBlogTemplateMeta('preview', 'Artikel Master', null)).toBe('preview:Artikel Master');
   });
 
   test('validatePreviewSubset rejects placeholders outside master vars', () => {

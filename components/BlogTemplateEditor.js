@@ -200,7 +200,7 @@ export default function BlogTemplateEditor({ templates: initialTemplates = [], s
 
     setSaving(true);
     try {
-      const res = await fetch(`/api/templates/${selected.id}`, {
+      const res = await fetch(`/api/templates/${encodeURIComponent(selected.name)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -218,7 +218,11 @@ export default function BlogTemplateEditor({ templates: initialTemplates = [], s
         showToast(err.error ? `${err.error}${invalid ? `: ${invalid}` : ''}` : 'Fehler beim Speichern', 'error');
       } else {
         const updated = await res.json();
-        setTemplates(prev => prev.map(t => t.id === updated.id ? updated : t));
+        // Match by the pre-save id: renaming changes `name` (and therefore
+        // `id`, since file-based templates have no id separate from name),
+        // so matching on the new id would miss the existing list entry.
+        setTemplates(prev => prev.map(t => t.id === selected.id ? updated : t));
+        setSelectedId(updated.id);
         setDirty(false);
         showToast('Template gespeichert', 'success');
       }
@@ -285,7 +289,7 @@ export default function BlogTemplateEditor({ templates: initialTemplates = [], s
   }
 
   async function handleDelete(tpl) {
-    const res = await fetch(`/api/templates/${tpl.id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/templates/${encodeURIComponent(tpl.id)}`, { method: 'DELETE' });
     if (res.ok || res.status === 204) {
       setTemplates(prev => prev.filter(t => t.id !== tpl.id));
       if (selectedId === tpl.id) { setSelectedId(null); setCode(''); setName(''); setDirty(false); }

@@ -10,6 +10,7 @@
     "check-env": "node scripts/check-env.js",
     "migrate": "node scripts/migrate.js",
     "migrate-models": "node ./scripts/migrate-models.js",
+    "migrate-templates-to-files": "node ./scripts/migrate-templates-to-files.js",
     "rollback-model-migration": "node ./scripts/rollback-model-migration.js",
     "postinstall": "node scripts/postinstall.js",
     "publish-scheduled": "node ./scripts/publish-scheduled.js",

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml } from '../lib/templateEngine'
 
-const defaultLoadingHtml = '<div style="padding: 20px;">Laedt...</div>'
+const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
 const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   const value = String(sourceHtml || '')

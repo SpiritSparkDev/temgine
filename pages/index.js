@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage } from '../lib/templateEngine'
 
-const defaultLoadingHtml = '<div style="padding: 20px;">Laedt...</div>'
+const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
 const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   const value = String(sourceHtml || '')

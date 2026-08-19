@@ -409,10 +409,10 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     return STATUS_LABELS[node.status] || node.status || 'Entwurf';
   }
 
-  function renderNodeMeta(node) {
+  function renderNodeMeta(node, fullPath) {
     const nav = navigations.find(n => n.id === node.data?.pageNav);
     return [
-      `/${node.slug || ''}`,
+      `/${fullPath || node.slug || ''}`,
       nav ? `Nav: ${nav.name}` : 'Keine Nav',
     ].join(' · ');
   }
@@ -487,13 +487,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     }
   }
 
-  function renderCardGrid(nodes, depth = 0) {
+  function renderCardGrid(nodes, depth = 0, parentPath = '') {
     return (
       <div className={`page-card-row depth-${depth}`}>
         {nodes.map((node, index) => {
           const nav = navigations.find(n => n.id === node.data?.pageNav);
           const hasChildren = (node.children || []).length > 0;
           const isLoaded = iframeLoaded[node.id];
+          // Nested pages live at /parent/child, matching findPageByPath()
+          // in pages/[...slug].js and buildNestedPages() for the live nav —
+          // node.slug alone (the leaf segment) is not a valid route.
+          const fullPath = parentPath ? `${parentPath}/${node.slug}` : node.slug;
 
           return (
             <div key={node.id} className="page-card-group">
@@ -516,7 +520,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                   {node.status === 'PUBLISHED' && isLoaded ? (
                     <div className="page-card-iframe-wrap">
                       <iframe
-                        src={`/${node.slug}`}
+                        src={`/${fullPath}`}
                         title={node.title}
                         tabIndex={-1}
                         scrolling="no"
@@ -542,7 +546,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                 {/* Body */}
                 <div className="page-card-body">
                   <a
-                    href={`/${node.slug}`}
+                    href={`/${fullPath}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="page-card-title"
@@ -550,7 +554,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                   >
                     {node.title}
                   </a>
-                  <p className="page-card-meta">{renderNodeMeta(node)}</p>
+                  <p className="page-card-meta">{renderNodeMeta(node, fullPath)}</p>
                   <select
                     value={node.data?.pageNav || ''}
                     onChange={(e) => handleNavChange(node.id, e.target.value)}
@@ -665,7 +669,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
               {/* Children with connector */}
               {hasChildren && (
                 <div className="page-card-children">
-                  {renderCardGrid(node.children, depth + 1)}
+                  {renderCardGrid(node.children, depth + 1, fullPath)}
                 </div>
               )}
             </div>

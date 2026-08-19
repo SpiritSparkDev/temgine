@@ -16,6 +16,9 @@ node_modules/
 /public/uploads
 /public/extern_css
 /public/extern_js
+/public/assets/
+/public/assets/template/
+/public/assets/template_blog/
 
 # Static site imports (lokal, nicht versioniert)
 /static_imports/
