@@ -232,7 +232,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setAutosaveStatus('gespeichert');
       onDirtyChange?.(false);
     }
-  }, [page]);
+    // Deliberately keyed on page.id, not the page object itself: after every
+    // save, the parent passes a brand-new `page` object for the *same* page
+    // (see PagesView.js's onSave -> setEditingPage(updatedPage)). Depending on
+    // the object reference would re-run this initializer on every save and
+    // reset selectedBlockPath to '0', which yanks the scroll position back to
+    // the first block. Re-initializing only when the edited page actually
+    // changes (a different id) avoids that while still loading fresh pages.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page?.id]);
 
   useEffect(() => {
     if (!page?.id) return;
