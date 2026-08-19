@@ -1,27 +1,21 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { prisma } from '../lib/prisma';
 
 /**
  * /setup — Erstlogin-Seite
  *
- * Nur zugänglich wenn noch kein User in der DB existiert.
- * Erstellt den ersten Admin-Account mit dem konfigurierten SETUP_TOKEN.
+ * Nur zugänglich wenn noch kein User in der DB existiert (gleiche Regel
+ * wie der "erster GitHub-Login wird Admin"-Weg in [...nextauth].js).
  */
 export default function SetupPage({ hasUsers }) {
   const router = useRouter();
-  const [token, setToken]       = useState('');
   const [name, setName]         = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
-
-  // Prefill from the setup link logged at server boot (?token=...)
-  useEffect(() => {
-    if (typeof router.query.token === 'string') setToken(router.query.token);
-  }, [router.query.token]);
 
   // Already set up – just show a message
   if (hasUsers) {
@@ -53,7 +47,7 @@ export default function SetupPage({ hasUsers }) {
       const res = await fetch('/api/setup/create-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setupToken: token, name, email, password }),
+        body: JSON.stringify({ name, email, password }),
       });
       const data = await res.json();
 
@@ -78,23 +72,9 @@ export default function SetupPage({ hasUsers }) {
         <h1>Ersteinrichtung</h1>
         <p className="auth-hint">
           Kein Benutzer gefunden. Lege jetzt den ersten Admin-Account an.
-          {token
-            ? ' Der Setup-Token wurde aus dem Link übernommen.'
-            : ' Öffne den Setup-Link aus der Server-Konsole, oder trage den Setup-Token manuell ein.'}
         </p>
 
         <form onSubmit={handleSubmit} className="auth-form">
-          <Field label="Setup-Token *">
-            <input
-              type="password"
-              value={token}
-              onChange={e => setToken(e.target.value)}
-              placeholder="Aus dem Setup-Link in der Server-Konsole"
-              autoComplete="off"
-              required
-            />
-          </Field>
-
           <Field label="Name *">
             <input
               type="text"

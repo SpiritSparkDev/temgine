@@ -1,25 +1,20 @@
-import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../../../lib/prisma'
-import { getSetupToken } from '../../../lib/setupToken'
 
 /**
  * POST /api/setup/create-admin
  *
  * One-time endpoint for bootstrapping the first admin account.
- * Only works when:
- *  1. The `user` table is empty (count === 0)
- *  2. The correct SETUP_TOKEN is supplied in the request body
+ * Only works while the `user` table is empty (count === 0) — same gate as
+ * the "first GitHub login becomes admin" path in [...nextauth].js.
  *
- * Body: { setupToken, name, email, password }
+ * Body: { name, email, password }
  * Returns: { ok: true } — client redirects to /login
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
-
-  const configuredToken = getSetupToken()
 
   // Abort if any user already exists — endpoint is single-use
   let userCount
@@ -35,17 +30,7 @@ export default async function handler(req, res) {
   }
 
   const body = req.body || {}
-  const { setupToken, name, email, password } = body
-
-  // Token validation (timing-safe comparison)
-  const provided = String(setupToken || '')
-  const expected = String(configuredToken)
-  if (
-    provided.length !== expected.length ||
-    !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected))
-  ) {
-    return res.status(401).json({ error: 'Ungültiger Setup-Token.' })
-  }
+  const { name, email, password } = body
 
   // Input validation
   const cleanName  = String(name  || '').trim()

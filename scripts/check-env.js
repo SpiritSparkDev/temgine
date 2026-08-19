@@ -3,7 +3,6 @@ const vars = [
   'DATABASE_URL',
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
-  'SETUP_TOKEN',
   'NODE_ENV',
   'DEV_MODE',
   'NEXT_PUBLIC_DEV_MODE',
@@ -20,8 +19,6 @@ for (const key of vars) {
     // Mask secrets, show first 6 chars only
     const masked = val.length > 6 ? val.slice(0, 6) + '...' : '(kurz)';
     console.log(`✓ ${key} = ${masked}`);
-  } else if (key === 'SETUP_TOKEN') {
-    console.log(`- ${key} = (nicht gesetzt, wird beim Serverstart automatisch generiert)`);
   } else {
     console.log(`✗ ${key} = (nicht gesetzt)`);
   }
