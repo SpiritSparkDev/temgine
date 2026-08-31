@@ -180,6 +180,19 @@ Alternativ: `/api/health` direkt aufrufen.
 
 ---
 
+## Docker-Deployment
+
+Alternative zu Plesk — App und PostgreSQL laufen komplett containerisiert:
+
+```bash
+npm run docker:up    # baut Image, legt .env.local an falls nötig, startet auf freiem Port
+npm run docker:down  # stoppt die Container
+```
+
+Details, Umgebungsvariablen und Troubleshooting: siehe [development_docs/DOCKER.md](./development_docs/DOCKER.md).
+
+---
+
 ## Entwicklungs-Skripte
 
 ```bash
@@ -188,6 +201,8 @@ npm test             # Jest-Tests ausführen
 npm run build        # Production Build
 npm start            # Production-Server starten (Next.js)
 npm run check-env    # Umgebungsvariablen prüfen
+npm run docker:up    # Docker-Compose-Stack starten (siehe development_docs/DOCKER.md)
+npm run docker:down  # Docker-Compose-Stack stoppen
 ```
 
 ---

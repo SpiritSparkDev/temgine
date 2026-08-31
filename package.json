@@ -15,6 +15,8 @@
     "postinstall": "node scripts/postinstall.js",
     "publish-scheduled": "node ./scripts/publish-scheduled.js",
     "import-init": "node ./scripts/import-init.js",
+    "docker:up": "node scripts/docker-up.js",
+    "docker:down": "docker compose down",
     "clean": "if (Test-Path .next) { Remove-Item .next -Recurse -Force }; if (Test-Path .next-dev) { Remove-Item .next-dev -Recurse -Force }; if (Test-Path node_modules/.cache) { Remove-Item node_modules/.cache -Recurse -Force }; Write-Host 'Cleaned build artifacts and caches'"
   },
   "dependencies": {

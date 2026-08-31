@@ -20,7 +20,7 @@ const SIZES = {
 
 // Erstelle Verzeichnisse
 [UPLOAD_DIR, THUMB_DIR].forEach(dir => {
-  if (!fs.existsSync(dir)) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 });

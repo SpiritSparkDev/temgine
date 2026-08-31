@@ -30,6 +30,10 @@ services:
       # Overrides the .env.local value: inside the compose network the DB
       # is reachable as "postgres", not "localhost".
       DATABASE_URL: postgres://${DATABASE_USER:-temgine}:${DATABASE_PASSWORD:-temgine_dev}@postgres:5432/${DATABASE_NAME:-temgine}
+      # Overrides the .env.local value so NextAuth callback URLs match the
+      # actual published port. Set PUBLIC_URL instead when running behind a
+      # real domain (e.g. PUBLIC_URL=https://cms.example.com).
+      NEXTAUTH_URL: ${PUBLIC_URL:-http://localhost:${APP_PORT:-3000}}
       PORT: 3000
     ports:
       - "${APP_PORT:-3000}:3000"
