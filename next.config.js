@@ -47,6 +47,28 @@ const securityHeaders = [
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  async rewrites() {
+    return {
+      fallback: [
+        {
+          source: '/extern_css/:path*',
+          destination: '/extern_css/:path*',
+        },
+        {
+          source: '/uploads/:path*',
+          destination: '/uploads/:path*',
+        },
+        {
+          source: '/assets/:path*',
+          destination: '/assets/:path*',
+        },
+        {
+          source: '/favicon/:path*',
+          destination: '/favicon/:path*',
+        },
+      ],
+    };
+  },
   async headers() {
     return [
       {

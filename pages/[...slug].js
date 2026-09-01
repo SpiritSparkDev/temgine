@@ -560,7 +560,18 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   )
 }
 
-export async function getServerSideProps() {
+export async function getServerSideProps(context) {
+  const rawSlug = context?.params?.slug
+  const slug = Array.isArray(rawSlug) ? rawSlug.filter(Boolean) : (rawSlug ? [rawSlug] : [])
+  const path = slug.length ? `/${slug.join('/')}` : '/'
+  const staticPrefixes = ['/extern_css', '/uploads', '/assets', '/favicon', '/_next']
+
+  if (staticPrefixes.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) {
+    return {
+      notFound: true,
+    }
+  }
+
   try {
     const { prisma } = await import('../lib/prisma')
     const keys = ['maintenance_loading_html', 'maintenance_loading_css', 'maintenance_loading_js']
