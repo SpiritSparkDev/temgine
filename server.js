@@ -15,7 +15,18 @@ const path = require('path');
 const next = require('next');
 
 const PUBLIC_ROOT = path.join(__dirname, 'public');
+const PUBLIC_UPLOAD_ROOT = path.join(PUBLIC_ROOT, 'uploads');
 const PUBLIC_STATIC_PREFIXES = ['/extern_css', '/uploads', '/assets', '/favicon'];
+
+for (const dir of [
+  PUBLIC_ROOT,
+  PUBLIC_UPLOAD_ROOT,
+  path.join(PUBLIC_UPLOAD_ROOT, 'images'),
+  path.join(PUBLIC_UPLOAD_ROOT, 'images', 'thumbnails'),
+  path.join(PUBLIC_UPLOAD_ROOT, 'fonts'),
+]) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 
 const port = process.env.PORT || 3000;
 // Use dev mode only when NODE_ENV is explicitly 'development'.

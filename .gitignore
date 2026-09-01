@@ -13,7 +13,14 @@ node_modules/
 
 # Production
 /build
-/public/uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+!/public/uploads/images/
+/public/uploads/images/*
+!/public/uploads/images/.gitkeep
+!/public/uploads/fonts/
+/public/uploads/fonts/*
+!/public/uploads/fonts/.gitkeep
 /public/extern_css
 /public/extern_js
 /public/assets/
