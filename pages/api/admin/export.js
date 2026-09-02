@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import JSZip from 'jszip'
 import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
+import { buildGlobalContext } from '../../../lib/globalVariables'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
@@ -388,6 +389,10 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   const allNavigationsById = {}
   for (const nav of navigations) allNavigationsById[nav.id] = nav
   const activeNavigations = navigations.filter((n) => n.isActive === true)
+  const activeFooterRow = await prisma.footer.findFirst({ where: { isActive: true } })
+  const footer = activeFooterRow ? { code: activeFooterRow.code, data: {} } : null
+  const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
+  const globalVars = buildGlobalContext(globalVariableRows)
   const publicTree = buildPublicTree(pages)
   const allEntries = createRouteEntries(publicTree)
     .filter((entry, index, arr) => arr.findIndex((x) => x.routePath === entry.routePath) === index)
@@ -574,7 +579,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       }
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage)
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars)
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)

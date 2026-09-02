@@ -248,8 +248,29 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.error('Fehler beim Laden der Navigationen:', e)
         }
 
+        // Lade aktiven Footer (gleiche Logik wie in [...slug].js)
+        let footer = null
+        try {
+          const footerRes = await fetch(`/api/footers?active=true&_t=${Date.now()}`)
+          if (footerRes.ok) {
+            const activeFooter = await footerRes.json()
+            if (activeFooter && activeFooter.code) footer = { code: activeFooter.code, data: {} }
+          }
+        } catch (e) {
+          console.warn('Footer konnte nicht geladen werden:', e.message)
+        }
+
+        // Lade globale Variablen (gleiche Logik wie in [...slug].js)
+        let globalVars = {}
+        try {
+          const globalRes = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`)
+          if (globalRes.ok) globalVars = await globalRes.json()
+        } catch (e) {
+          console.warn('Globale Variablen konnten nicht geladen werden:', e.message)
+        }
+
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)
