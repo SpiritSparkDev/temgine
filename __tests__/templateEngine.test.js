@@ -48,3 +48,36 @@ describe('renderPage HTML-value auto-upgrade (double → triple brace)', () => {
     expect(html).not.toContain('}}}');
   });
 });
+
+describe('renderPage footer + global variables', () => {
+  const page = { title: 'Test', slug: 'test', blocks: [{ template: 'Text', props: {} }] };
+  const blockTemplates = { Text: '<div>{{global.companyName}}</div>' };
+
+  it('appends active footer HTML after blocks content', () => {
+    const footer = { code: '<footer class="site-footer">{{global.copyrightText}}</footer>', data: {} };
+    const html = renderPage(page, blockTemplates, {}, {}, footer, { companyName: 'Temgine', copyrightText: '© 2026' });
+    expect(html).toContain('<footer class="site-footer">© 2026</footer>');
+    expect(html.indexOf('<div>Temgine</div>')).toBeLessThan(html.indexOf('<footer'));
+  });
+
+  it('renders nothing when no active footer is passed', () => {
+    const html = renderPage(page, blockTemplates, {}, {}, null, { companyName: 'Temgine' });
+    expect(html).not.toContain('<footer');
+  });
+
+  it('exposes global.* inside block templates', () => {
+    const html = renderPage(page, blockTemplates, {}, {}, null, { companyName: 'Temgine' });
+    expect(html).toContain('<div>Temgine</div>');
+  });
+
+  it('renders an empty string for a missing global variable instead of crashing', () => {
+    const html = renderPage(page, blockTemplates, {}, {}, null, {});
+    expect(html).toContain('<div></div>');
+  });
+
+  it('exposes global.* inside navigation templates', () => {
+    const navigations = { main: { code: '<nav>{{global.companyName}}</nav>', data: {} } };
+    const html = renderPage(page, blockTemplates, {}, navigations, null, { companyName: 'Temgine' });
+    expect(html).toContain('<nav>Temgine</nav>');
+  });
+});

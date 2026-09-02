@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions } from '../lib/muiIcons';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions, Layers, Tag } from '../lib/muiIcons';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -17,6 +17,8 @@ import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
+import FooterView from './FooterView';
+import GlobalVariablesView from './GlobalVariablesView';
 import FontManagerView from './FontManagerView';
 import BlogView from './BlogView';
 import ContactMessagesView from './ContactMessagesView';
@@ -94,7 +96,7 @@ export default function AdminPageClient() {
       const legacyBuilderMap = {
         templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','js','navigation','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','globalVariables','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -486,6 +488,8 @@ export default function AdminPageClient() {
       { id: 'js', label: 'JS' },
       { id: 'fonts', label: 'Fonts' },
       { id: 'navigation', label: 'Navigation' },
+      { id: 'footer', label: 'Footer' },
+      { id: 'globalVariables', label: 'Globale Variablen' },
       { id: 'users', label: 'Benutzer' },
       { id: 'settings', label: 'Settings' },
       { id: 'backup', label: 'Backup' },
@@ -715,6 +719,8 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
               <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
               <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
+              <li><button className={`menu-item ${view==='footer'?'active':''}`} onClick={() => handleSelectView('footer')}><Layers size={18} /> Footer</button></li>
+              <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
 
               <li className="menu-group-label">Design</li>
               <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
@@ -848,6 +854,8 @@ export default function AdminPageClient() {
             </div>
           )}
           {view === 'navigation' && <NavigationView showToast={showToast} />}
+          {view === 'footer' && <FooterView showToast={showToast} />}
+          {view === 'globalVariables' && <GlobalVariablesView showToast={showToast} />}
           {view === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <div className="settings-tabs-wrapper">

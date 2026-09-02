@@ -423,7 +423,26 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Navigations konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations)
+      let footer = null;
+      try {
+        const footerRes = await fetch(`/api/footers?active=true&_t=${Date.now()}`);
+        if (footerRes.ok) {
+          const activeFooter = await footerRes.json();
+          if (activeFooter && activeFooter.code) footer = { code: activeFooter.code, data: {} };
+        }
+      } catch (e) {
+        console.warn('Footer konnte nicht geladen werden:', e.message);
+      }
+
+      let globalVars = {};
+      try {
+        const globalRes = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`);
+        if (globalRes.ok) globalVars = await globalRes.json();
+      } catch (e) {
+        console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
+      }
+
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars)
       setHtml(html)
       setLoading(false)
     } catch (err) {

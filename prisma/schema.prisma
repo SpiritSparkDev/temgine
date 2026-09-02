@@ -149,6 +149,39 @@ model Navigation {
   updatedAt DateTime @updatedAt
 }
 
+model Footer {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @db.Text
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum GlobalVarType {
+  STRING
+  NUMBER
+  URL
+  IMAGE
+  DATE
+  BOOLEAN
+  ARRAY
+  HTML
+}
+
+model GlobalVariable {
+  id        String        @id @default(cuid())
+  key       String        @unique
+  label     String
+  type      GlobalVarType @default(STRING)
+  value     String        @db.Text
+  fallback  String?       @db.Text
+  isActive  Boolean       @default(true)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
 model ContentType {
   id        String         @id @default(cuid())
   name      String
