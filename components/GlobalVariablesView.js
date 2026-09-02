@@ -136,22 +136,22 @@ export default function GlobalVariablesView({ showToast }) {
     <div className="nav-view">
       <div className="nav-body">
         {/* ── Left: List + search/filter ──────────────────────────────────── */}
-        <div className="nav-list-panel" style={{ width: '360px' }}>
+        <div className="nav-list-panel gv-list-panel">
           <div className="nav-list-header">
             <h3 className="nav-list-title">Globale Variablen</h3>
             <button className="btn-icon-label" onClick={handleNew} title="Neue globale Variable erstellen">
               <Plus size={15} /> Neu
             </button>
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', padding: '0 0.75rem 0.5rem' }}>
+          <div className="gv-filter-row">
             <input
               type="text"
+              className="blog-form-input"
               placeholder="Suche nach Key oder Name…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ flex: 1 }}
             />
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <select className="blog-form-select gv-type-select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
               <option value="">Alle Typen</option>
               {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -172,18 +172,24 @@ export default function GlobalVariablesView({ showToast }) {
                   className={`nav-template-card ${editing?.id === item.id ? 'selected' : ''} ${item.isActive ? 'is-active' : ''}`}
                 >
                   <div className="nav-card-info">
-                    <span className="nav-card-name">{item.label}</span>
-                    <code style={{ fontSize: '0.75rem', opacity: 0.7 }}>{`{{global.${item.key}}}`}</code>
-                    {item.isActive && (
-                      <span className="nav-active-badge">
-                        <Check size={11} /> Aktiv
-                      </span>
-                    )}
+                    <div className="gv-card-title-row">
+                      <span className="nav-card-name">{item.label}</span>
+                      {item.isActive && (
+                        <span className="nav-active-badge">
+                          <Check size={11} /> Aktiv
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="gv-key-chip"
+                      onClick={() => copyPlaceholder(item.key)}
+                      title="Platzhalter kopieren"
+                    >
+                      <Copy size={10} /> {`{{global.${item.key}}}`}
+                    </button>
                   </div>
                   <div className="nav-card-actions">
-                    <button className="nav-card-btn" onClick={() => copyPlaceholder(item.key)} title="Platzhalter kopieren">
-                      <Copy size={13} />
-                    </button>
                     <button
                       className={`nav-card-btn activate ${item.isActive ? 'deactivate' : ''}`}
                       onClick={() => handleToggleActive(item)}
@@ -208,9 +214,10 @@ export default function GlobalVariablesView({ showToast }) {
         {editing ? (
           <div className="nav-editor-panel">
             <div className="nav-editor-header">
-              <span className="nav-name-input" style={{ display: 'flex', alignItems: 'center' }}>
-                {editing.isNew ? 'Neue globale Variable' : form.label}
-              </span>
+              <div className="gv-form-heading">
+                <strong>{editing.isNew ? 'Neue globale Variable' : (form.label || 'Variable bearbeiten')}</strong>
+                {!editing.isNew && form.key && <code>{`{{global.${form.key}}}`}</code>}
+              </div>
               <div className="nav-editor-actions">
                 <button className="nav-card-btn" onClick={handleCancel} title="Abbrechen">
                   <X size={14} /> Abbrechen
@@ -220,34 +227,95 @@ export default function GlobalVariablesView({ showToast }) {
                 </button>
               </div>
             </div>
-            <div style={{ display: 'grid', gap: '0.75rem', padding: '1rem', maxWidth: '520px' }}>
-              <label>Name / Label
-                <input type="text" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} placeholder="z. B. Seitentitel" />
-              </label>
-              <label>Schlüssel / Key
-                <input type="text" value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value }))} placeholder="z. B. pageTitle" />
-              </label>
-              <label>Typ
-                <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
-                  {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </label>
-              <label>Wert{form.type === 'ARRAY' ? ' (JSON-Array)' : ''}
+
+            <div className="gv-form-body">
+              <div className="blog-form-row">
+                <div className="blog-form-field">
+                  <label className="blog-form-label">
+                    Name / Label <span className="blog-form-label__required">*</span>
+                  </label>
+                  <input
+                    className="blog-form-input"
+                    type="text"
+                    value={form.label}
+                    onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
+                    placeholder="z. B. Seitentitel"
+                    autoFocus
+                  />
+                </div>
+                <div className="blog-form-field">
+                  <label className="blog-form-label">
+                    Schlüssel / Key <span className="blog-form-label__required">*</span>
+                  </label>
+                  <input
+                    className="blog-form-input"
+                    type="text"
+                    value={form.key}
+                    onChange={e => setForm(f => ({ ...f, key: e.target.value }))}
+                    placeholder="z. B. pageTitle"
+                    style={{ fontFamily: 'Fira Code, monospace', fontSize: 13 }}
+                  />
+                </div>
+              </div>
+
+              <div className="blog-form-row">
+                <div className="blog-form-field">
+                  <label className="blog-form-label">Typ</label>
+                  <select className="blog-form-select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+                    {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="blog-form-field">
+                  <label className="blog-form-label">Sortierung</label>
+                  <input
+                    className="blog-form-input"
+                    type="number"
+                    value={form.sortOrder}
+                    onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+
+              <div className="blog-form-field">
+                <label className="blog-form-label">
+                  Wert
+                  {form.type === 'ARRAY' && <span className="blog-form-label__hint">JSON-Array</span>}
+                </label>
                 <textarea
+                  className="blog-form-textarea"
                   rows={form.type === 'HTML' || form.type === 'ARRAY' ? 6 : 2}
                   value={form.value}
                   onChange={e => setForm(f => ({ ...f, value: e.target.value }))}
                 />
-              </label>
-              <label>Fallback (optional)
-                <input type="text" value={form.fallback} onChange={e => setForm(f => ({ ...f, fallback: e.target.value }))} />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} /> Aktiv
-              </label>
-              <label>Sortierung
-                <input type="number" value={form.sortOrder} onChange={e => setForm(f => ({ ...f, sortOrder: Number(e.target.value) || 0 }))} />
-              </label>
+                {form.type === 'ARRAY' && (
+                  <div className="blog-form-hint">z. B. [{'{'}"label":"Impressum","url":"/impressum"{'}'}]</div>
+                )}
+              </div>
+
+              <div className="blog-form-field">
+                <label className="blog-form-label">
+                  Fallback
+                  <span className="blog-form-label__hint">optional, greift wenn Wert leer ist</span>
+                </label>
+                <input
+                  className="blog-form-input"
+                  type="text"
+                  value={form.fallback}
+                  onChange={e => setForm(f => ({ ...f, fallback: e.target.value }))}
+                />
+              </div>
+
+              <div className="blog-form-field">
+                <label className="gv-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
+                  />
+                  Aktiv — wird beim Rendern berücksichtigt
+                </label>
+              </div>
+
               {form.key && (
                 <div className="nav-placeholder-ref">
                   <strong>Platzhalter:</strong> <code>{`{{global.${form.key}}}`}</code>
@@ -265,6 +333,88 @@ export default function GlobalVariablesView({ showToast }) {
           </div>
         )}
       </div>
+
+      <style jsx>{`
+        .gv-list-panel {
+          width: 340px;
+        }
+        .gv-filter-row {
+          display: flex;
+          gap: 0.5rem;
+          padding: 0 0.75rem 0.6rem;
+        }
+        .gv-filter-row .blog-form-input {
+          flex: 1;
+        }
+        .gv-type-select {
+          flex-shrink: 0;
+          width: 118px;
+        }
+        .gv-card-title-row {
+          display: flex;
+          align-items: center;
+          gap: 0.4rem;
+        }
+        .gv-key-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.3rem;
+          width: fit-content;
+          max-width: 100%;
+          padding: 0.1rem 0.4rem;
+          border: 1px solid transparent;
+          border-radius: var(--radius-sm);
+          background: var(--bg-tertiary);
+          color: var(--text-tertiary);
+          font-family: 'Fira Code', monospace;
+          font-size: 0.7rem;
+          cursor: pointer;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .gv-key-chip:hover {
+          border-color: var(--accent-primary);
+          color: var(--accent-primary);
+        }
+        .gv-form-heading {
+          display: flex;
+          flex-direction: column;
+          gap: 0.2rem;
+          min-width: 0;
+          overflow: hidden;
+        }
+        .gv-form-heading strong {
+          font-size: 0.92rem;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .gv-form-heading code {
+          font-size: 0.72rem;
+          color: var(--text-tertiary);
+        }
+        .gv-form-body {
+          padding: 1.1rem 1.25rem;
+          max-width: 560px;
+          overflow-y: auto;
+        }
+        .gv-checkbox-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.85rem;
+          color: var(--text-primary);
+          cursor: pointer;
+        }
+        .gv-checkbox-row input {
+          width: 15px;
+          height: 15px;
+          accent-color: var(--accent-primary);
+          cursor: pointer;
+        }
+      `}</style>
     </div>
   );
 }
