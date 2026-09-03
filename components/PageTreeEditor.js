@@ -24,6 +24,7 @@ import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
   const [tree, setTree] = useState([]);
   const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
+  const [footers, setFooters] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
   const [iframeLoaded, setIframeLoaded] = useState({});
@@ -41,6 +42,13 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       .catch(err => console.error('Navigationen laden fehlgeschlagen:', err));
   }, []);
 
+  useEffect(() => {
+    fetch('/api/footers')
+      .then(r => r.json())
+      .then(data => setFooters(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Footer laden fehlgeschlagen:', err));
+  }, []);
+
   const filteredTree = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return tree;
@@ -48,7 +56,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     const filterNodes = (nodes) => nodes.reduce((acc, node) => {
       const children = filterNodes(node.children || []);
       const nodeNav = navigations.find(n => n.id === node.data?.pageNav);
-      const haystack = [node.title, node.slug, nodeNav?.name, node.status].filter(Boolean).join(' ').toLowerCase();
+      const nodeFooter = footers.find(f => f.id === node.data?.pageFooter);
+      const haystack = [node.title, node.slug, nodeNav?.name, nodeFooter?.name, node.status].filter(Boolean).join(' ').toLowerCase();
       if (haystack.includes(term) || children.length > 0) {
         acc.push({ ...node, children });
       }
@@ -363,6 +372,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     onUpdate && onUpdate(updated);
   }
 
+  function handleFooterChange(nodeId, footerId) {
+    const updateFooter = (nodes) => nodes.map(n =>
+      n.id === nodeId
+        ? { ...n, data: { ...(n.data || {}), pageFooter: footerId } }
+        : { ...n, children: updateFooter(n.children || []) }
+    );
+    const updated = updateFooter(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+  }
+
   function handleIndent(nodeId) {
     // Make node a child of its preceding sibling
     const indent = (nodes) => {
@@ -411,9 +431,11 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
   function renderNodeMeta(node, fullPath) {
     const nav = navigations.find(n => n.id === node.data?.pageNav);
+    const footer = footers.find(f => f.id === node.data?.pageFooter);
     return [
       `/${fullPath || node.slug || ''}`,
       nav ? `Nav: ${nav.name}` : 'Keine Nav',
+      footer ? `Footer: ${footer.name}` : 'Standard-Footer',
     ].join(' · ');
   }
 
@@ -564,6 +586,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                     <option value="">Keine Navigation</option>
                     {navigations.map(n => (
                       <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
+                    ))}
+                  </select>
+                  <select
+                    value={node.data?.pageFooter || ''}
+                    onChange={(e) => handleFooterChange(node.id, e.target.value)}
+                    className="page-card-nav-select"
+                    title="Seiten-Footer"
+                  >
+                    <option value="">Standard-Footer (global aktiv)</option>
+                    {footers.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
                     ))}
                   </select>
                 </div>

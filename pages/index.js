@@ -259,6 +259,17 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
         } catch (e) {
           console.warn('Footer konnte nicht geladen werden:', e.message)
         }
+        if (homePage.data?.pageFooter) {
+          try {
+            const pageFooterRes = await fetch(`/api/footers?id=${encodeURIComponent(homePage.data.pageFooter)}&_t=${Date.now()}`)
+            if (pageFooterRes.ok) {
+              const pageFooterData = await pageFooterRes.json()
+              if (pageFooterData && pageFooterData.code) footer = { code: pageFooterData.code, data: {} }
+            }
+          } catch (e) {
+            console.warn('Seiten-spezifischer Footer konnte nicht geladen werden:', e.message)
+          }
+        }
 
         // Lade globale Variablen (gleiche Logik wie in [...slug].js)
         let globalVars = {}

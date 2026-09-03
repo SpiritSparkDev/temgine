@@ -433,6 +433,17 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       } catch (e) {
         console.warn('Footer konnte nicht geladen werden:', e.message);
       }
+      if (foundPage.data?.pageFooter) {
+        try {
+          const pageFooterRes = await fetch(`/api/footers?id=${encodeURIComponent(foundPage.data.pageFooter)}&_t=${Date.now()}`);
+          if (pageFooterRes.ok) {
+            const pageFooterData = await pageFooterRes.json();
+            if (pageFooterData && pageFooterData.code) footer = { code: pageFooterData.code, data: {} };
+          }
+        } catch (e) {
+          console.warn('Seiten-spezifischer Footer konnte nicht geladen werden:', e.message);
+        }
+      }
 
       let globalVars = {};
       try {

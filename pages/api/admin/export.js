@@ -144,6 +144,13 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
   return navigations
 }
 
+function resolveFooterForPage(page, activeFooter, allFootersById) {
+  if (page?.data?.pageFooter && allFootersById[page.data.pageFooter]?.code) {
+    return { code: allFootersById[page.data.pageFooter].code, data: {} }
+  }
+  return activeFooter
+}
+
 function collectReferencedAssetsFromHtml(html) {
   const assets = new Set()
   const source = String(html || '')
@@ -389,8 +396,11 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   const allNavigationsById = {}
   for (const nav of navigations) allNavigationsById[nav.id] = nav
   const activeNavigations = navigations.filter((n) => n.isActive === true)
-  const activeFooterRow = await prisma.footer.findFirst({ where: { isActive: true } })
-  const footer = activeFooterRow ? { code: activeFooterRow.code, data: {} } : null
+  const allFooters = await prisma.footer.findMany({ select: { id: true, code: true, isActive: true } })
+  const activeFooterRow = allFooters.find((f) => f.isActive === true) || null
+  const activeFooter = activeFooterRow ? { code: activeFooterRow.code, data: {} } : null
+  const allFootersById = {}
+  for (const f of allFooters) allFootersById[f.id] = f
   const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
   const globalVars = buildGlobalContext(globalVariableRows)
   const publicTree = buildPublicTree(pages)
@@ -579,6 +589,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       }
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
+      const footer = resolveFooterForPage(entry.page, activeFooter, allFootersById)
       let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars)
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
