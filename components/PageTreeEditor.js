@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -30,10 +30,30 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   const [iframeLoaded, setIframeLoaded] = useState({});
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const thumbObserverRef = useRef(null);
 
   useEffect(() => {
     setTree(pages || []);
   }, [pages]);
+
+  // Preview thumbnails load once a card scrolls into view (no hover needed)
+  // and stay cached — the iframe only reloads when its page's updatedAt
+  // changes, i.e. after a save (see cache-busting src below).
+  useEffect(() => {
+    thumbObserverRef.current = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const id = entry.target.dataset.nodeId;
+        setIframeLoaded(prev => (prev[id] ? prev : { ...prev, [id]: true }));
+        thumbObserverRef.current.unobserve(entry.target);
+      });
+    }, { rootMargin: '200px' });
+    return () => thumbObserverRef.current && thumbObserverRef.current.disconnect();
+  }, []);
+
+  const observeThumbCard = useCallback((el) => {
+    if (el && thumbObserverRef.current) thumbObserverRef.current.observe(el);
+  }, []);
 
   useEffect(() => {
     fetch('/api/navigations')
@@ -509,7 +529,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     }
   }
 
-  function renderCardGrid(nodes, depth = 0, parentPath = '') {
+  function renderCardGrid(nodes, depth = 0, parentPath = '', ancestorUpdatedAt = null) {
     return (
       <div className={`page-card-row depth-${depth}`}>
         {nodes.map((node, index) => {
@@ -520,12 +540,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
           // in pages/[...slug].js and buildNestedPages() for the live nav —
           // node.slug alone (the leaf segment) is not a valid route.
           const fullPath = parentPath ? `${parentPath}/${node.slug}` : node.slug;
+          // Nested pages are embedded JSON on their top-level ancestor's row,
+          // so a save only bumps that ancestor's updatedAt — use it to
+          // cache-bust thumbnails at every depth under it.
+          const cacheKey = ancestorUpdatedAt || node.updatedAt || '';
 
           return (
             <div key={node.id} className="page-card-group">
               <div
                 className={`page-card${node.status === 'PUBLISHED' ? ' published' : ''}${selectedIds.has(node.id) ? ' selected' : ''}`}
-                onMouseEnter={() => setIframeLoaded(prev => ({ ...prev, [node.id]: true }))}
+                ref={isLoaded ? undefined : observeThumbCard}
+                data-node-id={node.id}
               >
                 {/* Bulk selection checkbox */}
                 <button
@@ -542,7 +567,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                   {node.status === 'PUBLISHED' && isLoaded ? (
                     <div className="page-card-iframe-wrap">
                       <iframe
-                        src={`/${fullPath}`}
+                        src={cacheKey ? `/${fullPath}?_thumb=${encodeURIComponent(cacheKey)}` : `/${fullPath}`}
                         title={node.title}
                         tabIndex={-1}
                         scrolling="no"
@@ -702,7 +727,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
               {/* Children with connector */}
               {hasChildren && (
                 <div className="page-card-children">
-                  {renderCardGrid(node.children, depth + 1, fullPath)}
+                  {renderCardGrid(node.children, depth + 1, fullPath, cacheKey)}
                 </div>
               )}
             </div>
