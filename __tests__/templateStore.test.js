@@ -12,11 +12,12 @@ const {
 const TEST_BLOCK_NAME = '__jest_templateStore_block__';
 const TEST_MASTER_NAME = '__jest_templateStore_master__';
 const TEST_PREVIEW_NAME = '__jest_templateStore_preview__';
+const TEST_CONTACT_NAME = '__jest_templateStore_contact__';
 
 const ROOT = path.join(process.cwd(), 'public', 'assets');
 
 function cleanup() {
-  for (const name of [TEST_BLOCK_NAME]) {
+  for (const name of [TEST_BLOCK_NAME, TEST_CONTACT_NAME]) {
     try { deleteTemplateByName(name); } catch (_e) {}
   }
   try { fs.rmSync(path.join(ROOT, 'template_blog', TEST_MASTER_NAME), { recursive: true, force: true }); } catch (_e) {}
@@ -73,5 +74,25 @@ describe('templateStore', () => {
 
     // cleanup the renamed file too (not covered by the shared cleanup() helper)
     deleteTemplateByName(renamed);
+  });
+
+  test('a contact-category template is stored under block/contact and listed with category "contact"', () => {
+    saveTemplate({ name: TEST_CONTACT_NAME, code: '<form></form>', type: 'BLOCK', category: 'contact' });
+
+    const filePath = path.join(ROOT, 'template', 'block', 'contact', `${TEST_CONTACT_NAME}.html`);
+    expect(fs.existsSync(filePath)).toBe(true);
+    // must not also land in the flat block dir
+    expect(fs.existsSync(path.join(ROOT, 'template', 'block', `${TEST_CONTACT_NAME}.html`))).toBe(false);
+
+    const found = getTemplateByName(TEST_CONTACT_NAME);
+    expect(found).toMatchObject({ name: TEST_CONTACT_NAME, category: 'contact', type: 'BLOCK' });
+
+    const listed = listTemplates().find((t) => t.name === TEST_CONTACT_NAME);
+    expect(listed.category).toBe('contact');
+  });
+
+  test('a plain block template lists with category null', () => {
+    saveTemplate({ name: TEST_BLOCK_NAME, code: '<p>hi</p>', type: 'BLOCK' });
+    expect(getTemplateByName(TEST_BLOCK_NAME).category).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ const { createServer } = require('http');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const next = require('next');
 
 const PUBLIC_ROOT = path.join(__dirname, 'public');
@@ -26,6 +27,25 @@ for (const dir of [
   path.join(PUBLIC_UPLOAD_ROOT, 'fonts'),
 ]) {
   fs.mkdirSync(dir, { recursive: true });
+}
+
+// Auto-generate NEXTAUTH_SECRET on first boot if not set (e.g. plain `docker
+// compose up` with no .env.local) and persist it in the data volume so it
+// survives container restarts.
+if (!process.env.NEXTAUTH_SECRET) {
+  const secretFile = path.join(process.cwd(), 'data', '.nextauth_secret');
+  try {
+    process.env.NEXTAUTH_SECRET = fs.existsSync(secretFile)
+      ? fs.readFileSync(secretFile, 'utf8').trim()
+      : (() => {
+          const secret = crypto.randomBytes(32).toString('base64');
+          fs.mkdirSync(path.dirname(secretFile), { recursive: true });
+          fs.writeFileSync(secretFile, secret);
+          return secret;
+        })();
+  } catch (e) {
+    console.error('> Failed to auto-generate NEXTAUTH_SECRET:', e.message);
+  }
 }
 
 const port = process.env.PORT || 3000;

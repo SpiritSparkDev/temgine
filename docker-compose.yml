@@ -25,7 +25,8 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - .env.local
+      - path: .env.local
+        required: false
     environment:
       DATABASE_URL: postgres://${DATABASE_USER:-temgine}:${DATABASE_PASSWORD:-temgine_dev}@postgres:5432/${DATABASE_NAME:-temgine}
       NEXTAUTH_URL: ${PUBLIC_URL:-http://localhost:${APP_PORT:-3000}}

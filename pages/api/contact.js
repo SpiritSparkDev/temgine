@@ -8,9 +8,11 @@
  * - Optionally saves message to DB (controlled by Setting contactSaveToDb)
  */
 
+import { verifySolution } from 'altcha-lib/v1';
 import { rateLimit } from '../../lib/rateLimit';
 import { sendMail } from '../../lib/email';
 import { prisma } from '../../lib/prisma';
+import { ALTCHA_HMAC_KEY } from '../../lib/altcha';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 
@@ -124,6 +126,15 @@ export default async function handler(req, res) {
   }
 
   const body = (req.body && typeof req.body === 'object') ? req.body : {};
+
+  // Spam protection — require a solved ALTCHA proof-of-work challenge
+  const altchaValid = body.altcha
+    ? await verifySolution(body.altcha, ALTCHA_HMAC_KEY).catch(() => false)
+    : false;
+  if (!altchaValid) {
+    return res.status(400).json({ error: 'Spam-Schutz-Verifizierung fehlgeschlagen.' });
+  }
+
   const name = sanitizeText(readName(body), 200);
   const email = sanitizeText(readAlias(body, EMAIL_ALIASES), 200);
   const subject = sanitizeText(readAlias(body, SUBJECT_ALIASES), 300);

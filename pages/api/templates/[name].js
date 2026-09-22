@@ -7,7 +7,7 @@ export default async function handler(req, res) {
 
   try {
     if (req.method === 'PUT') {
-      const { name: newName, code, type, blogRole, masterTemplateName } = req.body || {};
+      const { name: newName, code, type, blogRole, masterTemplateName, category } = req.body || {};
       if (!newName || !code) {
         return res.status(400).json({ error: 'Name und Code erforderlich' });
       }
@@ -52,6 +52,11 @@ export default async function handler(req, res) {
       }
 
       const ttype = String(type || 'BLOCK').toUpperCase() === 'SITE' ? 'SITE' : 'BLOCK';
+      // Preserve the existing category on a plain edit/rename — only an explicit
+      // `category` in the request body may move a template in or out of a category.
+      const cat = category !== undefined
+        ? (String(category || '').trim().toLowerCase() === 'contact' ? 'contact' : null)
+        : (existing.category || null);
       const saved = saveTemplate(
         {
           name: String(newName),
@@ -59,6 +64,7 @@ export default async function handler(req, res) {
           type: ttype,
           blogRole: role,
           masterTemplateName: role === 'preview' ? String(masterTemplateName).trim() : null,
+          category: cat,
         },
         existing.name
       );
@@ -70,6 +76,7 @@ export default async function handler(req, res) {
         type: full.type,
         blogRole: full.blogRole,
         masterTemplateName: full.masterTemplateName,
+        category: full.category || null,
       });
     }
 

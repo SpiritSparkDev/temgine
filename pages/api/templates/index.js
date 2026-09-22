@@ -14,6 +14,7 @@ const toResponseShape = (t) => ({
   type: t.type,
   blogRole: t.blogRole,
   masterTemplateName: t.masterTemplateName,
+  category: t.category || null,
 });
 
 export default async function handler(req, res) {
@@ -34,14 +35,15 @@ export default async function handler(req, res) {
 
       let list = listTemplates()
       if (typeFilter) list = list.filter((t) => t.type === typeFilter)
-      if (scopeFilter === 'normal') list = list.filter((t) => !t.blogRole)
+      if (scopeFilter === 'normal') list = list.filter((t) => !t.blogRole && t.category !== 'contact')
       if (scopeFilter === 'blog') list = list.filter((t) => !!t.blogRole)
+      if (scopeFilter === 'contact') list = list.filter((t) => t.category === 'contact')
 
       return res.status(200).json(list.map(toResponseShape))
     }
 
     if (req.method === 'POST') {
-      const { name, code, type, blogRole, masterTemplateName } = req.body || {}
+      const { name, code, type, blogRole, masterTemplateName, category } = req.body || {}
       if (!name || !code) {
         const missing = [];
         if (!name) missing.push('name');
@@ -76,12 +78,20 @@ export default async function handler(req, res) {
       }
 
       const ttype = String(type || 'BLOCK').toUpperCase() === 'SITE' ? 'SITE' : 'BLOCK'
+      // POST also overwrites an existing template of the same name — preserve its
+      // category unless the caller explicitly passes one, so a plain re-save from
+      // the generic template editor doesn't silently move it out of its category.
+      const existingForSave = getTemplateByName(String(name))
+      const cat = category !== undefined
+        ? (String(category || '').trim().toLowerCase() === 'contact' ? 'contact' : null)
+        : (existingForSave?.category || null)
       const saved = saveTemplate({
         name: String(name),
         code: String(code),
         type: ttype,
         blogRole: role,
         masterTemplateName: role === 'preview' ? String(masterTemplateName).trim() : null,
+        category: cat,
       })
       const full = getTemplateByName(saved.name)
       return res.status(200).json({ ok: true, ...toResponseShape(full) })

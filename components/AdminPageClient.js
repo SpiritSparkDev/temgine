@@ -18,6 +18,7 @@ import ConfirmDialog from './ConfirmDialog';
 import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
 import FooterView from './FooterView';
+import ContactFormTemplatesView from './ContactFormTemplatesView';
 import GlobalVariablesView from './GlobalVariablesView';
 import FontManagerView from './FontManagerView';
 import BlogView from './BlogView';
@@ -96,7 +97,7 @@ export default function AdminPageClient() {
       const legacyBuilderMap = {
         templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','globalVariables','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','contactForms','globalVariables','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -719,6 +720,7 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
               <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
               <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
+              <li><button className={`menu-item ${view==='contactForms'?'active':''}`} onClick={() => handleSelectView('contactForms')}><Mail size={18} /> Kontaktformulare</button></li>
               <li><button className={`menu-item ${view==='footer'?'active':''}`} onClick={() => handleSelectView('footer')}><Layers size={18} /> Footer</button></li>
               <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
 
@@ -854,6 +856,7 @@ export default function AdminPageClient() {
             </div>
           )}
           {view === 'navigation' && <NavigationView showToast={showToast} />}
+          {view === 'contactForms' && <ContactFormTemplatesView showToast={showToast} />}
           {view === 'footer' && <FooterView showToast={showToast} />}
           {view === 'globalVariables' && <GlobalVariablesView showToast={showToast} />}
           {view === 'users' && (

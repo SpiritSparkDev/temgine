@@ -1,7 +1,5 @@
-import { createChallenge } from 'altcha-lib';
-
-// ALTCHA HMAC key – set ALTCHA_HMAC_KEY in your .env to a strong random secret
-const ALTCHA_HMAC_KEY = process.env.ALTCHA_HMAC_KEY || 'temphelix-change-me-in-env';
+import { createChallenge } from 'altcha-lib/v1';
+import { ALTCHA_HMAC_KEY } from '../../../lib/altcha';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
