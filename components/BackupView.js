@@ -241,8 +241,10 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
             })
 
             if (!res.ok) {
-              const error = await res.json()
-              throw new Error(error.error || 'Import failed')
+              const text = await res.text()
+              let message = text
+              try { message = JSON.parse(text).error || message } catch (e) {}
+              throw new Error(message || 'Import failed')
             }
 
             const result = await res.json()

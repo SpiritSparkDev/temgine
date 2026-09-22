@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 // Convenience wrapper around `docker compose up`:
 // - creates .env.local from .env.local.example on first run (with a generated NEXTAUTH_SECRET)
-// - picks a free host port for APP_PORT if the default (3000) is taken
-// (Postgres isn't published to the host at all, so no port-picking needed for it —
-// the DB password itself is generated on first start by the db-init service.)
+// - picks a free host port for APP_PORT on first run and persists it in .env.local, so repeat
+//   runs reuse the same port instead of drifting to a new one every time
+// (Postgres isn't published to the host at all, so no port-picking needed for it — the DB
+// password is generated on first start by the db-init service. Container/network/volume names
+// and per-instance data dirs are namespaced by Compose's project name, which defaults to the
+// current directory — run this from one directory per instance to keep them isolated.)
 'use strict';
 
 const fs = require('fs');
@@ -55,6 +58,14 @@ function readEnvLocalValue(key) {
   return match ? match[1].trim() : null;
 }
 
+function persistEnvLocalValue(key, value) {
+  const content = fs.existsSync('.env.local') ? fs.readFileSync('.env.local', 'utf8') : '';
+  const line = `${key}=${value}`;
+  const re = new RegExp(`^${key}=.*$`, 'm');
+  const next = re.test(content) ? content.replace(re, line) : `${content.replace(/\n?$/, '\n')}${line}\n`;
+  fs.writeFileSync('.env.local', next);
+}
+
 function parseDbCredentials(raw) {
   if (!raw) return {};
   try {
@@ -81,7 +92,16 @@ function dbCredentialsFromUrl() {
 async function main() {
   ensureEnvLocal();
 
-  const appPort = await findFreePort(Number(process.env.APP_PORT) || 3000);
+  // Explicit shell env always wins. Otherwise reuse the port persisted from a
+  // previous run as-is — the container itself holding that port would make a
+  // fresh free-port search drift to a new port on every single restart.
+  // Only search for a free one when there's truly nothing to go on yet, and
+  // persist the result so it stays stable from here on.
+  let appPort = process.env.APP_PORT || readEnvLocalValue('APP_PORT');
+  if (!appPort) {
+    appPort = String(await findFreePort(3000));
+    persistEnvLocalValue('APP_PORT', appPort);
+  }
   console.log(`docker-up: APP_PORT=${appPort}`);
 
   // Explicit shell env vars win; otherwise fall back to DATABASE_URL from

@@ -10,7 +10,7 @@ const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '50mb',
+      sizeLimit: '500mb',
     },
   },
 }

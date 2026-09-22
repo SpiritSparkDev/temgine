@@ -1,3 +1,8 @@
+# No explicit container_name / project name here on purpose: Compose derives both from the
+# current directory by default, so container/network/volume names (and the bind-mount paths
+# below) are automatically namespaced per checkout. To run several isolated instances on one
+# host, check out this repo into one directory per instance (or set COMPOSE_PROJECT_NAME
+# explicitly) — see development_docs/DOCKER.md.
 services:
   # Generates the Postgres password once on first start (or reuses the one
   # from .env.local's DATABASE_URL if set) and persists it into a volume both
@@ -5,7 +10,6 @@ services:
   # password *before* it initializes — it can't generate its own.
   db-init:
     image: alpine:3
-    container_name: temgine-db-init
     env_file:
       - path: .env.local
         required: false
@@ -27,7 +31,6 @@ services:
 
   postgres:
     image: postgres:15-alpine
-    container_name: temgine-db
     restart: unless-stopped
     depends_on:
       db-init:
@@ -47,7 +50,6 @@ services:
 
   app:
     build: .
-    container_name: temgine-app
     restart: unless-stopped
     depends_on:
       postgres:
@@ -64,8 +66,8 @@ services:
       PORT: 3000
     volumes:
       - db_secrets:/run/secrets:ro
-      - /srv/docker/temgine/temgine_data:/app/data
-      - /srv/docker/temgine/temgine_public:/app/public
+      - /srv/docker/${COMPOSE_PROJECT_NAME:-temgine}/temgine_data:/app/data
+      - /srv/docker/${COMPOSE_PROJECT_NAME:-temgine}/temgine_public:/app/public
     ports:
       - "${APP_PORT:-3000}:3000"
 
