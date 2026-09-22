@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Convenience wrapper around `docker compose up`:
 // - creates .env.local from .env.local.example on first run (with a generated NEXTAUTH_SECRET)
-// - picks free host ports for APP_PORT/DATABASE_PORT if the defaults (3000/5432) are taken
+// - picks a free host port for APP_PORT if the default (3000) is taken
+// (Postgres isn't published to the host at all, so no port-picking needed for it —
+// the DB password itself is generated on first start by the db-init service.)
 'use strict';
 
 const fs = require('fs');
@@ -42,9 +44,11 @@ function ensureEnvLocal() {
 }
 
 // DATABASE_URL in .env.local is the single source of truth for DB credentials.
-// The Postgres image itself still needs them as separate POSTGRES_USER/
-// PASSWORD/DB vars, so derive those from DATABASE_URL instead of asking for
-// both forms to be kept in sync by hand.
+// The Postgres image itself still needs user/db name as separate POSTGRES_USER/
+// POSTGRES_DB vars, so derive those from DATABASE_URL instead of asking for
+// both forms to be kept in sync by hand. The password isn't forwarded this way
+// any more — the db-init service in docker-compose.yml reads it directly from
+// .env.local (or generates one) on first start.
 function readEnvLocalValue(key) {
   if (!fs.existsSync('.env.local')) return null;
   const match = fs.readFileSync('.env.local', 'utf8').match(new RegExp(`^${key}=(.*)$`, 'm'));
@@ -78,22 +82,20 @@ async function main() {
   ensureEnvLocal();
 
   const appPort = await findFreePort(Number(process.env.APP_PORT) || 3000);
-  const dbPort = await findFreePort(Number(process.env.DATABASE_PORT) || 5432);
-  console.log(`docker-up: APP_PORT=${appPort} DATABASE_PORT=${dbPort}`);
+  console.log(`docker-up: APP_PORT=${appPort}`);
 
   // Explicit shell env vars win; otherwise fall back to DATABASE_URL from
-  // .env.local; docker-compose.yml's own defaults (temgine/temgine_dev) are
-  // the last resort.
+  // .env.local; docker-compose.yml's own defaults (temgine) are the last resort.
   const derived = dbCredentialsFromUrl();
   const dbEnv = {};
-  for (const key of ['DATABASE_USER', 'DATABASE_PASSWORD', 'DATABASE_NAME']) {
+  for (const key of ['DATABASE_USER', 'DATABASE_NAME']) {
     if (process.env[key]) dbEnv[key] = process.env[key];
     else if (derived[key]) dbEnv[key] = derived[key];
   }
 
   const result = spawnSync('docker', ['compose', 'up', '-d', '--build'], {
     stdio: 'inherit',
-    env: { ...process.env, ...dbEnv, APP_PORT: String(appPort), DATABASE_PORT: String(dbPort) },
+    env: { ...process.env, ...dbEnv, APP_PORT: String(appPort) },
   });
 
   if (result.status === 0) {

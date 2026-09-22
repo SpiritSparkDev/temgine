@@ -1,16 +1,44 @@
 services:
+  # Generates the Postgres password once on first start (or reuses the one
+  # from .env.local's DATABASE_URL if set) and persists it into a volume both
+  # postgres and app read from. Needed because Postgres must have the
+  # password *before* it initializes — it can't generate its own.
+  db-init:
+    image: alpine:3
+    container_name: temgine-db-init
+    env_file:
+      - path: .env.local
+        required: false
+    command: >
+      sh -c '
+        set -e
+        mkdir -p /secrets
+        [ -f /secrets/db_password ] && exit 0
+        if [ -n "$$DATABASE_URL" ]; then
+          PASS=$$(echo "$$DATABASE_URL" | sed -E "s#.*://[^:]*:([^@]*)@.*#\1#")
+        else
+          PASS=$$(head -c 48 /dev/urandom | base64 | tr -dc "a-zA-Z0-9" | head -c 32)
+        fi
+        printf "%s" "$$PASS" > /secrets/db_password
+        chmod 600 /secrets/db_password
+      '
+    volumes:
+      - db_secrets:/secrets
+
   postgres:
     image: postgres:15-alpine
     container_name: temgine-db
     restart: unless-stopped
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
     environment:
       POSTGRES_USER: ${DATABASE_USER:-temgine}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-temgine_dev}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
       POSTGRES_DB: ${DATABASE_NAME:-temgine}
-    ports:
-      - "${DATABASE_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - db_secrets:/run/secrets:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-temgine}"]
       interval: 2s
@@ -28,15 +56,21 @@ services:
       - path: .env.local
         required: false
     environment:
-      DATABASE_URL: postgres://${DATABASE_USER:-temgine}:${DATABASE_PASSWORD:-temgine_dev}@postgres:5432/${DATABASE_NAME:-temgine}
+      DATABASE_HOST: postgres
+      DATABASE_USER: ${DATABASE_USER:-temgine}
+      DATABASE_NAME: ${DATABASE_NAME:-temgine}
+      DATABASE_PASSWORD_FILE: /run/secrets/db_password
       NEXTAUTH_URL: ${PUBLIC_URL:-http://localhost:${APP_PORT:-3000}}
       PORT: 3000
-    ports:
-      - "${APP_PORT:-3000}:3000"
     volumes:
+      - db_secrets:/run/secrets:ro
       - /srv/docker/temgine/temgine_data:/app/data
       - /srv/docker/temgine/temgine_public:/app/public
+    ports:
+      - "${APP_PORT:-3000}:3000"
 
 volumes:
   postgres_data:
+    driver: local
+  db_secrets:
     driver: local

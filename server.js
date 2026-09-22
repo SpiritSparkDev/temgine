@@ -48,6 +48,19 @@ if (!process.env.NEXTAUTH_SECRET) {
   }
 }
 
+// Build DATABASE_URL from the pieces + password file the Docker Compose
+// stack provides, when it isn't already set directly (Plesk/local dev set
+// DATABASE_URL themselves via .env.local, so this is a no-op there).
+if (!process.env.DATABASE_URL && process.env.DATABASE_PASSWORD_FILE) {
+  try {
+    const dbPassword = fs.readFileSync(process.env.DATABASE_PASSWORD_FILE, 'utf8').trim();
+    const { DATABASE_USER = 'temgine', DATABASE_NAME = 'temgine', DATABASE_HOST = 'postgres', DATABASE_PORT = '5432' } = process.env;
+    process.env.DATABASE_URL = `postgres://${DATABASE_USER}:${encodeURIComponent(dbPassword)}@${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}`;
+  } catch (e) {
+    console.error('> Failed to read DATABASE_PASSWORD_FILE:', e.message);
+  }
+}
+
 const port = process.env.PORT || 3000;
 // Use dev mode only when NODE_ENV is explicitly 'development'.
 // Plesk often leaves NODE_ENV unset; defaulting to dev mode here would cause
