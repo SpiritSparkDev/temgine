@@ -3,6 +3,7 @@ import { requireAuth } from '../../../lib/auth'
 import fs from 'fs'
 import path from 'path'
 import JSZip from 'jszip'
+import { listTemplates } from '../../../lib/templateStore'
 import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
@@ -764,10 +765,10 @@ export default async function handler(req, res) {
       return res.status(200).send(merged)
     }
 
-    // Fetch all data in parallel
-    const [pages, templates, snippets, css, navigations] = await Promise.all([
+    // Fetch all data in parallel (templates live as files, not DB rows — read synchronously)
+    const templates = listTemplates()
+    const [pages, snippets, css, navigations] = await Promise.all([
       prisma.page.findMany({ orderBy: { createdAt: 'asc' } }),
-      prisma.template.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.snippet.findMany({ orderBy: { createdAt: 'asc' } }),
       loadCSSFiles(),
       loadNavigations()

@@ -1,6 +1,7 @@
 import { prisma } from '../../../lib/prisma'
 import { sanitizeRecursive } from '../../../lib/htmlSanitize'
 import { requireAuth } from '../../../lib/auth'
+import { listTemplates, saveTemplate, deleteTemplateByName } from '../../../lib/templateStore'
 import fs from 'fs'
 import path from 'path'
 
@@ -366,7 +367,7 @@ export default async function handler(req, res) {
     // Handle replace strategy for database records
     if (strategy === 'replace') {
       try {
-        await prisma.template.deleteMany({})
+        for (const t of listTemplates()) deleteTemplateByName(t.name)
         await prisma.snippet.deleteMany({})
         await prisma.page.deleteMany({})
       } catch (e) {
@@ -374,14 +375,17 @@ export default async function handler(req, res) {
       }
     }
 
-    // Import templates
+    // Import templates (file-based, not DB rows — see lib/templateStore.js)
     for (const t of templates) {
       if (!t.name) continue
       try {
-        await prisma.template.upsert({
-          where: { name: t.name },
-          create: { name: t.name, code: t.code || '', type: t.type || 'SITE' },
-          update: { code: t.code || '', type: t.type || 'SITE' }
+        saveTemplate({
+          name: t.name,
+          code: t.code || '',
+          type: t.type || 'BLOCK',
+          blogRole: t.blogRole || null,
+          masterTemplateName: t.masterTemplateName || null,
+          category: t.category || null
         })
         importStats.templates++
       } catch (e) {
