@@ -131,6 +131,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
     setLoading(true)
 
+    let cancelled = false
+
     const segments = Array.isArray(raw) ? raw.filter(Boolean) : (raw ? [raw] : []);
 
     (async () => {
@@ -187,6 +189,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             })
 
             if (metaLooksValid) {
+              if (cancelled) return
               setPage({ title: '', data: {} })
               setHtml(staticHtml)
               setLoading(false)
@@ -206,6 +209,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
               const looksInvalid404 = notFoundHtml.includes('Lädt') || (notFoundHtml.includes('<!DOCTYPE html>') && notFoundHtml.length < 5000)
               if (!looksInvalid404) {
                 debugLog('[page-route] using static 404 fallback', { htmlLength: notFoundHtml.length })
+                if (cancelled) return
                 setPage({ title: '404', data: {} })
                 setHtml(notFoundHtml)
                 setLoading(false)
@@ -235,6 +239,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         htmlLength: maintenance503Html.length,
         cssLinksLength: cssLinks.length,
       })
+      if (cancelled) return
       setPage({ title: '503', data: {} })
       setHtml(injectCssLinks(maintenance503Html, cssLinks))
       setLoading(false)
@@ -267,6 +272,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             // Fallback: minimal HTML if no template assigned
             postHtml = `<article><h1>${post.title || ''}</h1>${post.body || ''}</article>`
           }
+          if (cancelled) return
           setHtml(postHtml)
           setPage({ title: post.title, data: {} })
           setLoading(false)
@@ -282,6 +288,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     try {
       const pagesRaw = await fetch(pagesUrl)
       const pages = await pagesRaw.json()
+      if (cancelled) return
       if (!Array.isArray(pages)) {
         setPage(null); setLoading(false); return
       }
@@ -315,6 +322,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         if (!foundPage) {
           const maintenance404Html = await loadMaintenance404Html()
           const cssLinks = await loadActiveCssLinks()
+          if (cancelled) return
           setPage({ title: '404', data: {} })
           setHtml(injectCssLinks(maintenance404Html, cssLinks))
           setLoading(false)
@@ -322,6 +330,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         }
       }
 
+      if (cancelled) return
       setPage(foundPage)
 
       // ── Access Control ──────────────────────────────────────────────────
@@ -331,6 +340,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         const memberGroups = Array.isArray(session?.user?.memberGroups) ? session.user.memberGroups : [];
         if (!isMember) {
           // Not logged in → redirect to member login
+          if (cancelled) return;
           const slug = segments.join('/');
           router.replace(`/member-login?redirect=/${slug}`);
           return;
@@ -339,6 +349,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
           // Check specific groups
           const hasAccess = ag.some(g => memberGroups.includes(g));
           if (!hasAccess) {
+            if (cancelled) return;
             setAccessDenied(true);
             setLoading(false);
             return;
@@ -348,6 +359,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       // ────────────────────────────────────────────────────────────────────
 
       if (foundPage.redirectType === 'external' && foundPage.redirectUrl) {
+        if (cancelled) return
         window.location.href = foundPage.redirectUrl
         setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
         setLoading(false)
@@ -454,13 +466,16 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       }
 
       const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars)
+      if (cancelled) return
       setHtml(html)
       setLoading(false)
     } catch (err) {
       console.error('Fehler beim Laden:', err)
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     }
     })() // end IIFE
+
+    return () => { cancelled = true }
   }, [query.slug, session, sessionStatus])
 
   useEffect(() => {

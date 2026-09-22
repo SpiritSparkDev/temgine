@@ -95,7 +95,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
   }, [router && router.pathname, Component]);
 
   return (
-    <SessionProvider session={session}>
+    <SessionProvider session={session} refetchOnWindowFocus={false}>
       <Head>
         {/* Favicon files served from /public/favicon/ */}
         <link rel="icon" href="/favicon/favicon.ico" />
