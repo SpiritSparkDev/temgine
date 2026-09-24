@@ -18,14 +18,17 @@ if (!fs.existsSync(JS_DIR)) {
   fs.mkdirSync(JS_DIR, { recursive: true });
 }
 
-function loadDisabledSet() {
+function loadConfig() {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-      return new Set(Array.isArray(data.disabled) ? data.disabled : []);
+      return {
+        disabled: Array.isArray(data.disabled) ? data.disabled : [],
+        categories: (data.categories && typeof data.categories === 'object') ? data.categories : {},
+      };
     }
   } catch (e) {}
-  return new Set();
+  return { disabled: [], categories: {} };
 }
 
 function resolveSafePath(baseDir, fileName) {
@@ -53,7 +56,7 @@ function scanUploadsForJs(dir, relBase, results = []) {
   return results;
 }
 
-function buildOrderedExternFiles(disabled) {
+function buildOrderedExternFiles(disabled, categories) {
   let fileNames = fs.existsSync(JS_DIR)
     ? fs.readdirSync(JS_DIR).filter(f => f.endsWith('.js'))
     : [];
@@ -83,6 +86,7 @@ function buildOrderedExternFiles(disabled) {
     source: 'extern_js',
     href: `/extern_js/${name}`,
     enabled: !disabled.has(`extern_js/${name}`),
+    category: categories[`extern_js/${name}`] || null,
   }));
 }
 
@@ -169,11 +173,13 @@ export default async function handler(req, res) {
     }
 
     try {
-      const disabled = loadDisabledSet();
-      const externFiles = buildOrderedExternFiles(disabled);
+      const { disabled: disabledList, categories } = loadConfig();
+      const disabled = new Set(disabledList);
+      const externFiles = buildOrderedExternFiles(disabled, categories);
       const uploadFiles = scanUploadsForJs(UPLOADS_DIR, '', []).map(f => ({
         ...f,
         enabled: !disabled.has(f.id),
+        category: categories[f.id] || null,
       }));
 
       res.setHeader('Cache-Control', 'no-store');
@@ -186,11 +192,18 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const payload = parsedBody || {};
 
-    if (!payload.filename && Array.isArray(payload.disabled)) {
+    if (!payload.filename && (Array.isArray(payload.disabled) || payload.categories)) {
       try {
         const dataDir = path.dirname(CONFIG_FILE);
         if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-        fs.writeFileSync(CONFIG_FILE, JSON.stringify({ disabled: payload.disabled }, null, 2), 'utf-8');
+        const current = loadConfig();
+        const next = {
+          disabled: Array.isArray(payload.disabled) ? payload.disabled : current.disabled,
+          categories: (payload.categories && typeof payload.categories === 'object')
+            ? { ...current.categories, ...payload.categories }
+            : current.categories,
+        };
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2), 'utf-8');
         return res.status(200).json({ success: true });
       } catch (error) {
         return res.status(500).json({ error: 'Fehler beim Speichern der Konfiguration' });
