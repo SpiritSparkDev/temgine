@@ -155,7 +155,7 @@ export default function MemberGroupsAdminView({ showToast }) {
                   </div>
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)', marginRight: '4px' }}>{g.memberCount ?? 0} Mitgl.</span>
                   <button onClick={() => { setEditingId(g.id); setEditName(g.name); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--text-secondary)', borderRadius: '4px' }}>
-                    <Pencil size={14} />
+                    <Edit2 size={14} />
                   </button>
                   <button onClick={() => deleteGroup(g.id, g.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#ef4444', borderRadius: '4px' }}>
                     <Trash2 size={14} />

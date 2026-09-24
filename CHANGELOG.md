@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.3] - 2026-09-25
+
+### Fixed
+- Drei weitere Fälle desselben Icon-Import-Musters (Icon im JSX verwendet, aber nicht importiert bzw. nie in `lib/muiIcons.js` vorhanden) — gefunden von einem SSH-Agenten auf einer Prod-Instanz, hier gegen den Code verifiziert und behoben:
+  - `pages/invite/[token].js`: `AlertCircle` (ungültiges/abgelaufenes Einladungstoken) und `CheckCircle` (erfolgreicher Account-Abschluss) fehlten — Absturz beim Aufruf eines ungültigen Einladungslinks bzw. direkt nach erfolgreichem Onboarding
+  - `components/MemberGroupsAdminView.js`: `<Pencil>` wurde verwendet, existiert aber gar nicht in `lib/muiIcons.js` — Absturz der Mitgliedergruppen-Liste, sobald eine Gruppe existiert; auf das bereits importierte `Edit2` umgestellt
+  - `components/MembersAdminView.js`: `<UserCheck>` existierte ebenfalls nicht — Absturz der Mitgliederliste bei gesperrten Mitgliedern; `lib/muiIcons.js` um einen `HowToReg`/`UserCheck`-Eintrag ergänzt
+- Ganzes Projekt (`components/`, `pages/`) auf weitere Fälle dieses Musters durchsucht — keine weiteren gefunden
+
+---
+
 ## [0.14.2] - 2026-09-25
 
 ### Fixed
