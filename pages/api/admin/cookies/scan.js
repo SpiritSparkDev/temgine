@@ -1,6 +1,6 @@
-import { requireAuth } from '../../../lib/auth';
-import { scanForServices } from '../../../lib/cookieScanner';
-import { getServices, saveServices } from '../../../lib/cookieConsentStore';
+import { requireAuth } from '../../../../lib/auth';
+import { scanForServices } from '../../../../lib/cookieScanner';
+import { getServices, saveServices } from '../../../../lib/cookieConsentStore';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
