@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Rss, Layout, AlertTriangle } from '../lib/muiIcons';
+import { X, Save, Rss, Layout, AlertCircle } from '../lib/muiIcons';
 
 const slugify = (v) =>
   String(v || '').toLowerCase().trim()

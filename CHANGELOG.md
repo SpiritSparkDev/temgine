@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.1] - 2026-09-25
+
+### Fixed
+- Absturz im Admin-Bereich „Benutzer → Einladungen": `CheckCircle`-Icon wurde verwendet, aber nicht importiert (`ReferenceError`), sobald mindestens eine Einladung als „Verwendet" markiert war
+- Absturz im Blog-Kanal-Editor bei Speicherfehlern (z. B. ungültige Eingaben): `AlertCircle`-Icon wurde verwendet, aber nicht importiert — überdeckte die eigentliche Fehlermeldung mit einem Absturz
+- Admin-Bereich „Cookies" (Tabs „Erkannte Dienste"/„Banner") verwendete nirgends definierte CSS-Klassen und wirkte dadurch ungestylt; jetzt an die bestehenden Editor-Muster (Tabellen, Tabs, Modal) angeglichen
+
+---
+
 ## [0.14.0] - 2026-09-24
 
 > **⚠️ Wichtiger Hinweis beim Update:** Nach diesem Update werden bestehende externe JS-Dateien (unter „JS" im Admin-Bereich, inkl. hochgeladener `.js`-Dateien) **nicht mehr automatisch geladen**, bis ihnen dort eine Cookie-Kategorie zugewiesen wird (z. B. „Notwendig", falls sie kein Tracking durchführen). Das ist beabsichtigt (sicherer Default).
