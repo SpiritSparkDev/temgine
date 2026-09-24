@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ## [0.14.0] - 2026-09-24
 
+> **⚠️ Wichtiger Hinweis beim Update:** Nach diesem Update werden bestehende externe JS-Dateien (unter „JS" im Admin-Bereich, inkl. hochgeladener `.js`-Dateien) **nicht mehr automatisch geladen**, bis ihnen dort eine Cookie-Kategorie zugewiesen wird (z. B. „Notwendig", falls sie kein Tracking durchführen). Das ist beabsichtigt (sicherer Default).
+
 ### Added
 - Eingebautes Cookie-Consent-System: automatische Erkennung bekannter Dienste (Google Analytics, GTM, Meta Pixel, YouTube/Vimeo-Embeds, Google Maps, Matomo, Hotjar, LinkedIn Insight) per Katalog-Scan gegen externe JS-Dateien und Seiten-/Blog-Inhalte, manuelle Cookie-Einträge, frei per HTML/CSS/JS gestaltbares Banner (neuer Admin-Bereich „Cookies")
 - Technisches Blocking: externe JS-Dateien werden erst nach Zustimmung zur zugeordneten Kategorie geladen, bekannte iframe-Embeds (YouTube, Google Maps, …) werden bis zur Zustimmung durch einen Platzhalter ersetzt

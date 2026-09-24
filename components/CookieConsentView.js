@@ -143,6 +143,12 @@ export default function CookieConsentView({ showToast }) {
               </button>
             </div>
 
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginBottom: 12 }}>
+              Hinweis: Die Kategorie hier dient der Cookie-Erklärung im Banner. Für das tatsächliche Blockieren
+              externer Skripte die Kategorie im <strong>JS-Manager</strong> zuweisen; eingebettete Inhalte
+              (YouTube, Google Maps, …) verwenden immer die eingebaute Kategorie.
+            </p>
+
             <table className="admin-data-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
