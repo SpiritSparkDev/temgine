@@ -1,8 +1,9 @@
 import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
+import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -619,8 +620,20 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     hydrateContactForms(container);
   }, [html]);
 
+  useEffect(() => {
+    if (!html) return;
+    const containerId = page?.data?.wrapperId || 'page-html-output';
+    const container = document.getElementById(containerId);
+    hydrateConsentGatedEmbeds(container);
+  }, [html]);
+
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
   const showDebug = params && params.get('debug') === '1'
+
+  // Strip not-yet-consented embed srcs before React ever inserts the HTML.
+  // Memoized on html only: a consent change must not alter the string, or
+  // React would reset innerHTML and wipe the hydrated DOM.
+  const gatedHtml = useMemo(() => stripBlockedIframeSrcs(html, getConsent()), [html])
 
   if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
   if (accessDenied) return (
@@ -637,7 +650,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
   return (
     <div>
-      <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: html }} />
+      <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
       {showDebug && (
         <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
           <strong>Debug: rendered HTML (first 2000 chars)</strong>

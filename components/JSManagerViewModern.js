@@ -47,6 +47,33 @@ export default function JSManagerViewModern({ showToast }) {
     saveDisabled(next);
   }
 
+  function saveCategory(fileObj, category) {
+    setJsFiles(prev => prev.map(f => f.id === fileObj.id ? { ...f, category } : f));
+    fetch('/api/js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ categories: { [fileObj.id]: category } }),
+    }).catch(err => showToast('Fehler beim Speichern: ' + err.message, 'error'));
+  }
+
+  function categorySelect(fileObj) {
+    return (
+      <select
+        value={fileObj.category || ''}
+        onChange={(e) => saveCategory(fileObj, e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        title="Cookie-Kategorie"
+        style={{ fontSize: 11, flexShrink: 0, maxWidth: 110 }}
+      >
+        <option value="">Nicht kategorisiert</option>
+        <option value="necessary">Notwendig</option>
+        <option value="functional">Funktional</option>
+        <option value="statistics">Statistik</option>
+        <option value="marketing">Marketing</option>
+      </select>
+    );
+  }
+
   function handleNew() {
     setSelectedFile(null);
     setFileName('');
@@ -208,6 +235,7 @@ export default function JSManagerViewModern({ showToast }) {
                     <div className="editor-item-info" onClick={() => handleEdit(fileObj, index)} style={{flex:1, minWidth:0}}>
                       <div className="editor-item-label">{fileObj.name}</div>
                     </div>
+                    {categorySelect(fileObj)}
                     <div className="editor-item-actions">
                       <button
                         className="icon-btn-small"
@@ -255,6 +283,7 @@ export default function JSManagerViewModern({ showToast }) {
                             {fileObj.href}
                           </div>
                         </div>
+                        {categorySelect(fileObj)}
                         <span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>
                           uploads
                         </span>

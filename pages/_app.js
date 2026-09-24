@@ -17,82 +17,121 @@ import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import { installConsentBridge, getConsent, isAllowed } from '../lib/cookieConsentRuntime';
 
 export default function App({ Component, pageProps: { session, ...pageProps } }) {
   const router = useRouter();
 
-  useEffect(() => {
-    // Lade externe CSS-Dateien dynamisch in der richtigen Reihenfolge
-    const loadExternalCSS = async () => {
-      try {
-        const res = await fetch('/api/css');
-        const data = await res.json();
-        const files = data.files || [];
-        
-        // Entferne alte externe CSS Links
-        document.querySelectorAll('link[data-extern-css]').forEach(link => link.remove());
-        
-        // Füge <link> Tags in der angegebenen Reihenfolge hinzu (nur aktivierte Dateien)
-        files.filter(f => f.enabled !== false).forEach((f) => {
-          const link = document.createElement('link');
-          link.rel = 'stylesheet';
-          link.href = typeof f === 'string' ? `/extern_css/${f}` : f.href;
-          link.dataset.externCss = 'true';
-          document.head.appendChild(link);
-        });
-      } catch (error) {
-        console.error('Fehler beim Laden der externen CSS-Dateien:', error);
-      }
-    };
+  const loadExternalCSS = async () => {
+    try {
+      const res = await fetch('/api/css');
+      const data = await res.json();
+      const files = data.files || [];
 
-    const loadExternalJS = async () => {
-      try {
-        const res = await fetch('/api/js');
-        const data = await res.json();
-        const files = data.files || [];
+      document.querySelectorAll('link[data-extern-css]').forEach(link => link.remove());
 
-        // Entferne alte externe JS Tags
-        document.querySelectorAll('script[data-extern-js]').forEach(script => script.remove());
+      files.filter(f => f.enabled !== false).forEach((f) => {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = typeof f === 'string' ? `/extern_css/${f}` : f.href;
+        link.dataset.externCss = 'true';
+        document.head.appendChild(link);
+      });
+    } catch (error) {
+      console.error('Fehler beim Laden der externen CSS-Dateien:', error);
+    }
+  };
 
-        // Füge Skripte in Reihenfolge hinzu (nur aktivierte Dateien)
-        files.filter(f => f.enabled !== false).forEach((f) => {
+  const loadExternalJS = async () => {
+    try {
+      const res = await fetch('/api/js');
+      const data = await res.json();
+      const files = data.files || [];
+      const consent = getConsent();
+
+      // Additive only: removing a <script> doesn't undo it, and re-adding one
+      // re-executes it (duplicate analytics init/pageviews). A consent
+      // withdrawal therefore only takes effect after a reload.
+      const existingSrcs = new Set(
+        Array.from(document.querySelectorAll('script[data-extern-js]')).map((s) => s.src)
+      );
+
+      files
+        .filter(f => f.enabled !== false)
+        .filter(f => isAllowed(f.category || null, consent))
+        .forEach((f) => {
+          const href = typeof f === 'string' ? `/extern_js/${f}` : f.href;
+          if (existingSrcs.has(new URL(href, window.location.origin).href)) return;
           const script = document.createElement('script');
-          script.src = typeof f === 'string' ? `/extern_js/${f}` : f.href;
+          script.src = href;
           script.defer = true;
           script.dataset.externJs = 'true';
           document.body.appendChild(script);
         });
-      } catch (error) {
-        console.error('Fehler beim Laden der externen JS-Dateien:', error);
-      }
-    };
+    } catch (error) {
+      console.error('Fehler beim Laden der externen JS-Dateien:', error);
+    }
+  };
 
-    // Don't load editor-managed external CSS on admin or backend routes
+  const loadFonts = () => {
+    const existing = document.getElementById('temgine-font-face');
+    if (existing) existing.remove();
+
+    const link = document.createElement('link');
+    link.id = 'temgine-font-face';
+    link.rel = 'stylesheet';
+    link.href = '/api/fonts-css';
+    document.head.appendChild(link);
+  };
+
+  const loadCookieConsent = async () => {
+    try {
+      const res = await fetch('/api/cookies');
+      const data = await res.json();
+      installConsentBridge(data.services || []);
+
+      if (!document.getElementById('temgine-cookie-banner-style')) {
+        const style = document.createElement('style');
+        style.id = 'temgine-cookie-banner-style';
+        style.textContent = data.banner?.css || '';
+        document.head.appendChild(style);
+      }
+
+      if (!document.getElementById('temgine-cookie-banner-root')) {
+        const root = document.createElement('div');
+        root.id = 'temgine-cookie-banner-root';
+        root.innerHTML = data.banner?.html || '';
+        document.body.appendChild(root);
+
+        const script = document.createElement('script');
+        script.textContent = data.banner?.js || '';
+        document.body.appendChild(script);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Cookie-Einstellungen:', error);
+    }
+  };
+
+  useEffect(() => {
     const path = router && router.pathname ? router.pathname : '';
     const isBackend = path.startsWith('/admin') || path.startsWith('/api') || path.startsWith('/invite') || path.startsWith('/_next') || path.startsWith('/auth');
 
-    // Allow per-page/component opt-out via `Component.noExternCss` or `pageProps.noExternCss`
     const componentOptOut = !!(Component && Component.noExternCss);
     const propsOptOut = !!(pageProps && pageProps.noExternCss);
 
-    const loadFonts = () => {
-      // Remove any previously injected font link
-      const existing = document.getElementById('temgine-font-face');
-      if (existing) existing.remove();
-
-      const link = document.createElement('link');
-      link.id = 'temgine-font-face';
-      link.rel = 'stylesheet';
-      link.href = '/api/fonts-css';
-      document.head.appendChild(link);
-    };
-
     if (!isBackend && !componentOptOut && !propsOptOut) {
+      loadCookieConsent();
       loadExternalCSS();
       loadExternalJS();
       loadFonts();
     }
   }, [router && router.pathname, Component]);
+
+  useEffect(() => {
+    const handler = () => { loadExternalJS(); };
+    window.addEventListener('temgine:consent-changed', handler);
+    return () => window.removeEventListener('temgine:consent-changed', handler);
+  }, []);
 
   return (
     <SessionProvider session={session} refetchOnWindowFocus={false}>
