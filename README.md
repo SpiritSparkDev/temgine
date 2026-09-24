@@ -18,6 +18,7 @@
 - **Backup-System** — Manuelles Backup und Wiederherstellung
 - **Credentials-Login** — Benutzername/Passwort, optional ergänzt durch GitHub OAuth
 - **Geplante Veröffentlichung** — Seiten mit Datum/Uhrzeit vorplanen
+- **Cookie-Consent-System** — Automatische Erkennung bekannter Tracking-Dienste (Google Analytics, YouTube-Embeds, Google Maps, u. a.), manuelle Cookie-Einträge, technisches Blocking bis zur Zustimmung, frei per HTML/CSS/JS gestaltbares Banner
 
 ---
 
