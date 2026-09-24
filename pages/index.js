@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage, collectNavigationBlockIds } from '../lib/templateEngine'
+import { renderPage, renderTemplate, collectNavigationBlockIds } from '../lib/templateEngine'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
@@ -71,11 +71,23 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     }
   }
 
-  const buildMaintenanceHtml = (settings, keyPrefix, defaultHtml) => {
+  const loadGlobalVars = async () => {
+    try {
+      const res = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`)
+      if (!res.ok) return {}
+      return await res.json()
+    } catch (_) {
+      return {}
+    }
+  }
+
+  const buildMaintenanceHtml = async (settings, keyPrefix, defaultHtml) => {
     const html = settings?.[`${keyPrefix}_html`] || defaultHtml
     const css = settings?.[`${keyPrefix}_css`] || ''
     const js = settings?.[`${keyPrefix}_js`] || ''
-    return applyMaintenanceAssets(html, css, js)
+    const globalVars = await loadGlobalVars()
+    const renderedHtml = renderTemplate(html, { global: globalVars })
+    return applyMaintenanceAssets(renderedHtml, css, js)
   }
 
   const checkMaintenanceMode = async () => {
@@ -392,11 +404,16 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 export async function getServerSideProps() {
   try {
     const { getMaintenancePage } = await import('../lib/maintenanceStore')
+    const { renderTemplate } = await import('../lib/templateEngine')
+    const { buildGlobalContext } = await import('../lib/globalVariables')
+    const { prisma } = await import('../lib/prisma')
     const { html, css, js } = getMaintenancePage('loading')
+    const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
+    const globalVars = buildGlobalContext(globalVariableRows)
 
     return {
       props: {
-        initialLoadingScreenHtml: html || defaultLoadingHtml,
+        initialLoadingScreenHtml: renderTemplate(html || defaultLoadingHtml, { global: globalVars }),
         initialLoadingScreenCss: css || '',
         initialLoadingScreenJs: js || '',
       },

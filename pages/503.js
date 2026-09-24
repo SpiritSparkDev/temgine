@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { renderTemplate } from '../lib/templateEngine'
 
 const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service voruebergehend nicht verfuegbar</h1><p>Bitte versuche es spaeter erneut.</p></div>'
 
@@ -32,6 +33,16 @@ export default function ServiceUnavailablePage() {
     return `${cssLinks}${value}`
   }
 
+  const loadGlobalVars = async () => {
+    try {
+      const res = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`)
+      if (!res.ok) return {}
+      return await res.json()
+    } catch (_) {
+      return {}
+    }
+  }
+
   useEffect(() => {
     let isMounted = true
 
@@ -40,7 +51,8 @@ export default function ServiceUnavailablePage() {
         const res = await fetch('/api/settings')
         if (!res.ok) return
         const settings = await res.json()
-        const nextHtml = settings?.maintenance_503_html || default503Html
+        const globalVars = await loadGlobalVars()
+        const nextHtml = renderTemplate(settings?.maintenance_503_html || default503Html, { global: globalVars })
         const cssLinks = await loadActiveCssLinks()
         if (isMounted) setHtml(injectCssLinks(nextHtml, cssLinks))
       } catch (_) {
