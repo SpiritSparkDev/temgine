@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage, collectNavigationBlockIds } from '../lib/templateEngine'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
+import { hydrateConsentGatedEmbeds } from '../lib/cookieConsentRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -378,6 +379,13 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     const containerId = homePage?.data?.wrapperId || 'page-html-output'
     const container = document.getElementById(containerId)
     hydrateContactForms(container)
+  }, [html])
+
+  useEffect(() => {
+    if (!html) return
+    const containerId = homePage?.data?.wrapperId || 'page-html-output'
+    const container = document.getElementById(containerId)
+    hydrateConsentGatedEmbeds(container)
   }, [html])
 
   if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />

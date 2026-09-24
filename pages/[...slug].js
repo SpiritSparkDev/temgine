@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
+import { hydrateConsentGatedEmbeds } from '../lib/cookieConsentRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -605,6 +606,13 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     const containerId = page?.data?.wrapperId || 'page-html-output';
     const container = document.getElementById(containerId);
     hydrateContactForms(container);
+  }, [html]);
+
+  useEffect(() => {
+    if (!html) return;
+    const containerId = page?.data?.wrapperId || 'page-html-output';
+    const container = document.getElementById(containerId);
+    hydrateConsentGatedEmbeds(container);
   }, [html]);
 
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
