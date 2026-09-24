@@ -783,6 +783,8 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation (HTML)</td></tr>
                         <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Mobile-Navigation (HTML)</td></tr>
                         <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
+                        <tr><td><code>{'{{global.<key>}}'}</code></td><td>Globale Variable (siehe „Globale Variablen")</td></tr>
+                        <tr><td><code>{'{{page.data.<key>}}'}</code></td><td>Freies Datenfeld der aktuellen Seite</td></tr>
                       </tbody>
                     </table>
                   </div>
