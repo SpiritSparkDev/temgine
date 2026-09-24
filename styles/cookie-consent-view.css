@@ -1,0 +1,67 @@
+/* Cookie-Consent admin view: "Erkannte Dienste" table + manual-entry modal + banner editor. */
+
+.cookie-consent-view {
+  padding: 2rem;
+}
+
+.cookie-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.cookie-hint-text {
+  margin: 0 0 16px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.cookie-services-table td {
+  vertical-align: middle;
+}
+
+.cookie-services-table select.blog-form-select {
+  width: auto;
+  min-width: 140px;
+}
+
+.cookie-services-table .cookie-row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.cookie-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.cookie-row .blog-form-input {
+  width: auto;
+  min-width: 0;
+  flex: 1;
+}
+
+.cookie-banner-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cookie-banner-toolbar .spacer {
+  flex: 1;
+}
+
+.cookie-banner-editor-wrapper {
+  height: 500px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}

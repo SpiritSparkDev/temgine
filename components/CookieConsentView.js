@@ -1,7 +1,7 @@
 // components/CookieConsentView.js
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Cookie, RefreshCw, Plus, Trash2, Edit2 } from '../lib/muiIcons';
+import { Cookie, RefreshCw, Plus, Trash2, Edit2, X } from '../lib/muiIcons';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -121,75 +121,86 @@ export default function CookieConsentView({ showToast }) {
   if (loading) return <div className="admin-view-loading">Lade Cookie-Einstellungen...</div>;
 
   return (
-    <div className="editor-container">
-      <div className="editor-sidebar" style={{ width: 200 }}>
-        <div className="editor-header"><h2><Cookie size={18} /> Cookies</h2></div>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-          <li><button className={`menu-item ${activeTab === 'services' ? 'active' : ''}`} onClick={() => setActiveTab('services')}>Erkannte Dienste</button></li>
-          <li><button className={`menu-item ${activeTab === 'banner' ? 'active' : ''}`} onClick={() => setActiveTab('banner')}>Banner</button></li>
-        </ul>
+    <div className="cookie-consent-view">
+      <div className="users-header">
+        <h2><Cookie size={20} style={{ marginRight: 8, verticalAlign: 'text-bottom' }} /> Cookies</h2>
       </div>
 
-      <div className="editor-main" style={{ padding: 20, overflow: 'auto' }}>
+      <div className="tabs-container">
+        <button className={activeTab === 'services' ? 'tab-active' : 'tab-inactive'} onClick={() => setActiveTab('services')}>
+          Erkannte Dienste
+        </button>
+        <button className={activeTab === 'banner' ? 'tab-active' : 'tab-inactive'} onClick={() => setActiveTab('banner')}>
+          Banner
+        </button>
+      </div>
+
+      <div className="tab-content">
         {activeTab === 'services' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-              <button className="btn-secondary" onClick={handleScan} disabled={scanning}>
-                <RefreshCw size={16} style={{ marginRight: 6 }} />
+            <div className="cookie-toolbar">
+              <button className="btn-icon-label" onClick={handleScan} disabled={scanning}>
+                <RefreshCw size={14} />
                 {scanning ? 'Scanne...' : 'Jetzt scannen'}
               </button>
-              <button className="btn-primary" onClick={() => setEditingService(emptyManualService())}>
-                <Plus size={16} style={{ marginRight: 6 }} /> Dienst manuell hinzufügen
+              <button className="btn-icon-label" onClick={() => setEditingService(emptyManualService())}>
+                <Plus size={14} /> Dienst manuell hinzufügen
               </button>
             </div>
 
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginBottom: 12 }}>
+            <p className="cookie-hint-text">
               Hinweis: Die Kategorie hier dient der Cookie-Erklärung im Banner. Für das tatsächliche Blockieren
               externer Skripte die Kategorie im <strong>JS-Manager</strong> zuweisen; eingebettete Inhalte
               (YouTube, Google Maps, …) verwenden immer die eingebaute Kategorie.
             </p>
 
-            <table className="admin-data-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Anbieter</th>
-                  <th>Kategorie</th>
-                  <th>Cookies</th>
-                  <th>Quelle</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {services.map(service => (
-                  <tr key={service.id}>
-                    <td>{service.name}</td>
-                    <td>{service.provider}</td>
-                    <td>
-                      {service.category === 'necessary' ? (
-                        CATEGORY_LABELS.necessary
-                      ) : (
-                        <select value={service.category} onChange={e => handleCategoryChange(service.id, e.target.value)}>
-                          <option value="functional">Funktional</option>
-                          <option value="statistics">Statistik</option>
-                          <option value="marketing">Marketing</option>
-                        </select>
-                      )}
-                    </td>
-                    <td>{(service.cookies || []).map(c => c.name).join(', ')}</td>
-                    <td>{service.source === 'manual' ? 'Manuell' : service.source === 'detected' ? 'Erkannt' : '—'}</td>
-                    <td>
-                      {service.category !== 'necessary' && (
-                        <>
-                          <button className="icon-btn-small" onClick={() => setEditingService(service)}><Edit2 size={14} /></button>
-                          <button className="icon-btn-small delete" onClick={() => handleDeleteService(service.id)}><Trash2 size={14} /></button>
-                        </>
-                      )}
-                    </td>
+            <div className="users-table-wrapper">
+              <table className="users-table cookie-services-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Anbieter</th>
+                    <th>Kategorie</th>
+                    <th>Cookies</th>
+                    <th>Quelle</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {services.map(service => (
+                    <tr key={service.id}>
+                      <td>{service.name}</td>
+                      <td>{service.provider}</td>
+                      <td>
+                        {service.category === 'necessary' ? (
+                          CATEGORY_LABELS.necessary
+                        ) : (
+                          <select
+                            className="blog-form-select"
+                            value={service.category}
+                            onChange={e => handleCategoryChange(service.id, e.target.value)}
+                          >
+                            <option value="functional">Funktional</option>
+                            <option value="statistics">Statistik</option>
+                            <option value="marketing">Marketing</option>
+                          </select>
+                        )}
+                      </td>
+                      <td>{(service.cookies || []).map(c => c.name).join(', ')}</td>
+                      <td>{service.source === 'manual' ? 'Manuell' : service.source === 'detected' ? 'Erkannt' : '—'}</td>
+                      <td>
+                        {service.category !== 'necessary' && (
+                          <div className="cookie-row-actions">
+                            <button className="icon-btn-small" onClick={() => setEditingService(service)} title="Bearbeiten"><Edit2 size={14} /></button>
+                            <button className="icon-btn-small delete" onClick={() => handleDeleteService(service.id)} title="Löschen"><Trash2 size={14} /></button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {editingService && (
               <ServiceEditModal
@@ -203,21 +214,21 @@ export default function CookieConsentView({ showToast }) {
 
         {activeTab === 'banner' && (
           <div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div className="cookie-banner-toolbar">
               {['html', 'css', 'js'].map(field => (
                 <button
                   key={field}
-                  className={`btn-secondary ${bannerTab === field ? 'active' : ''}`}
+                  className={bannerTab === field ? 'tab-active' : 'tab-inactive'}
                   onClick={() => setBannerTab(field)}
                 >
                   {field.toUpperCase()}
                 </button>
               ))}
-              <div style={{ flex: 1 }} />
+              <div className="spacer" />
               <button className="btn-secondary" onClick={() => handleBannerReset(bannerTab)}>Auf Standard zurücksetzen</button>
-              <button className="btn-primary" onClick={() => persistBannerField(bannerTab, banner[bannerTab])}>Speichern</button>
+              <button className="icon-btn" onClick={() => persistBannerField(bannerTab, banner[bannerTab])}>Speichern</button>
             </div>
-            <div style={{ height: 500 }}>
+            <div className="cookie-banner-editor-wrapper">
               <CodeEditor
                 height="100%"
                 language={bannerTab === 'js' ? 'javascript' : bannerTab}
@@ -248,34 +259,51 @@ function ServiceEditModal({ service, onCancel, onSave }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 560 }}>
-        <h3>Dienst {service.source === 'manual' ? 'bearbeiten' : 'anpassen'}</h3>
-        <label>Name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} /></label>
-        <label>Anbieter<input value={draft.provider} onChange={e => setDraft({ ...draft, provider: e.target.value })} /></label>
-        <label>Kategorie
-          <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
-            <option value="functional">Funktional</option>
-            <option value="statistics">Statistik</option>
-            <option value="marketing">Marketing</option>
-          </select>
-        </label>
-        <label>Datenschutzlink<input value={draft.privacyUrl || ''} onChange={e => setDraft({ ...draft, privacyUrl: e.target.value })} /></label>
+    <div className="blog-modal-overlay" onClick={onCancel}>
+      <div className="blog-modal" onClick={e => e.stopPropagation()}>
+        <div className="blog-modal__header">
+          <div className="blog-modal__header-icon"><Cookie size={18} /></div>
+          <h3 className="blog-modal__title">Dienst {service.source === 'manual' ? 'bearbeiten' : 'anpassen'}</h3>
+          <button type="button" className="blog-modal__close" onClick={onCancel} title="Schließen"><X size={16} /></button>
+        </div>
 
-        <h4>Cookies</h4>
-        {draft.cookies.map((c, i) => (
-          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-            <input placeholder="Name" value={c.name} onChange={e => updateCookie(i, 'name', e.target.value)} />
-            <input placeholder="Zweck" value={c.purpose} onChange={e => updateCookie(i, 'purpose', e.target.value)} />
-            <input placeholder="Laufzeit" value={c.duration} onChange={e => updateCookie(i, 'duration', e.target.value)} />
-            <button type="button" className="icon-btn-small delete" onClick={() => removeCookieRow(i)}><Trash2 size={14} /></button>
+        <div className="blog-modal__body">
+          <div className="blog-form-field">
+            <label className="blog-form-label">Name</label>
+            <input className="blog-form-input" value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
           </div>
-        ))}
-        <button type="button" className="btn-secondary" onClick={addCookieRow}><Plus size={14} /> Cookie hinzufügen</button>
+          <div className="blog-form-field">
+            <label className="blog-form-label">Anbieter</label>
+            <input className="blog-form-input" value={draft.provider} onChange={e => setDraft({ ...draft, provider: e.target.value })} />
+          </div>
+          <div className="blog-form-field">
+            <label className="blog-form-label">Kategorie</label>
+            <select className="blog-form-select" value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
+              <option value="functional">Funktional</option>
+              <option value="statistics">Statistik</option>
+              <option value="marketing">Marketing</option>
+            </select>
+          </div>
+          <div className="blog-form-field">
+            <label className="blog-form-label">Datenschutzlink</label>
+            <input className="blog-form-input" value={draft.privacyUrl || ''} onChange={e => setDraft({ ...draft, privacyUrl: e.target.value })} />
+          </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-          <button className="btn-secondary" onClick={onCancel}>Abbrechen</button>
-          <button className="btn-primary" onClick={() => onSave(draft)}>Speichern</button>
+          <div className="blog-modal__section-head">Cookies</div>
+          {draft.cookies.map((c, i) => (
+            <div key={i} className="cookie-row">
+              <input className="blog-form-input" placeholder="Name" value={c.name} onChange={e => updateCookie(i, 'name', e.target.value)} />
+              <input className="blog-form-input" placeholder="Zweck" value={c.purpose} onChange={e => updateCookie(i, 'purpose', e.target.value)} />
+              <input className="blog-form-input" placeholder="Laufzeit" value={c.duration} onChange={e => updateCookie(i, 'duration', e.target.value)} />
+              <button type="button" className="icon-btn-small delete" onClick={() => removeCookieRow(i)} title="Cookie entfernen"><Trash2 size={14} /></button>
+            </div>
+          ))}
+          <button type="button" className="blog-btn blog-btn--secondary" onClick={addCookieRow}><Plus size={14} /> Cookie hinzufügen</button>
+        </div>
+
+        <div className="blog-modal__footer">
+          <button className="blog-btn blog-btn--secondary" onClick={onCancel}>Abbrechen</button>
+          <button className="blog-btn blog-btn--primary" onClick={() => onSave(draft)}>Speichern</button>
         </div>
       </div>
     </div>
