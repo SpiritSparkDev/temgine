@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.2] - 2026-09-25
+
+### Fixed
+- `DELETE /api/users/invitations` (Einladung löschen/widerrufen) lieferte immer HTTP 500: der Handler las den Request-Body ein zweites Mal manuell als Stream, obwohl Next.js ihn für diese Route bereits automatisch geparst hatte (kein `bodyParser: false` gesetzt) — der Stream war zu dem Zeitpunkt schon leer, `JSON.parse('')` warf einen Fehler. Nutzt jetzt wie der `POST`-Handler direkt `req.body`.
+
+---
+
 ## [0.14.1] - 2026-09-25
 
 ### Fixed

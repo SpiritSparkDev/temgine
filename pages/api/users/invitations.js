@@ -89,11 +89,7 @@ export default async function handler(req, res) {
   } else if (req.method === 'DELETE') {
     // Einladung löschen/widerrufen
     try {
-      let body = '';
-      for await (const chunk of req) {
-        body += chunk.toString();
-      }
-      const { id } = JSON.parse(body);
+      const { id } = req.body;
 
       await prisma.userInvitation.delete({
         where: { id }
