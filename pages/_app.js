@@ -49,14 +49,21 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       const files = data.files || [];
       const consent = getConsent();
 
-      document.querySelectorAll('script[data-extern-js]').forEach(script => script.remove());
+      // Additive only: removing a <script> doesn't undo it, and re-adding one
+      // re-executes it (duplicate analytics init/pageviews). A consent
+      // withdrawal therefore only takes effect after a reload.
+      const existingSrcs = new Set(
+        Array.from(document.querySelectorAll('script[data-extern-js]')).map((s) => s.src)
+      );
 
       files
         .filter(f => f.enabled !== false)
         .filter(f => isAllowed(f.category || null, consent))
         .forEach((f) => {
+          const href = typeof f === 'string' ? `/extern_js/${f}` : f.href;
+          if (existingSrcs.has(new URL(href, window.location.origin).href)) return;
           const script = document.createElement('script');
-          script.src = typeof f === 'string' ? `/extern_js/${f}` : f.href;
+          script.src = href;
           script.defer = true;
           script.dataset.externJs = 'true';
           document.body.appendChild(script);
