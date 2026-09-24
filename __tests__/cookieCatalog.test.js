@@ -31,4 +31,13 @@ describe('cookieCatalog', () => {
     expect(extractHostname('https://vimeo.com/123')).toBe('vimeo.com');
     expect(extractHostname('not a url')).toBe('');
   });
+
+  test('extractHostname handles protocol-relative URLs', () => {
+    expect(extractHostname('//www.youtube.com/embed/abc123')).toBe('www.youtube.com');
+    expect(extractHostname('//vimeo.com/123')).toBe('vimeo.com');
+  });
+
+  test('detects YouTube embed with protocol-relative iframe src', () => {
+    expect(findCatalogServiceForIframe('//www.youtube.com/embed/abc123')?.id).toBe('youtube');
+  });
 });
