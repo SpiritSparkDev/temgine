@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.0] - 2026-09-24
+
+### Added
+- Eingebautes Cookie-Consent-System: automatische Erkennung bekannter Dienste (Google Analytics, GTM, Meta Pixel, YouTube/Vimeo-Embeds, Google Maps, Matomo, Hotjar, LinkedIn Insight) per Katalog-Scan gegen externe JS-Dateien und Seiten-/Blog-Inhalte, manuelle Cookie-Einträge, frei per HTML/CSS/JS gestaltbares Banner (neuer Admin-Bereich „Cookies")
+- Technisches Blocking: externe JS-Dateien werden erst nach Zustimmung zur zugeordneten Kategorie geladen, bekannte iframe-Embeds (YouTube, Google Maps, …) werden bis zur Zustimmung durch einen Platzhalter ersetzt
+
+### Changed
+- JS-Manager (`/api/js`) unterstützt jetzt eine Cookie-Kategorie pro Datei
+
+---
+
 ## [0.13.0] - 2026-09-24
 
 ### Added
