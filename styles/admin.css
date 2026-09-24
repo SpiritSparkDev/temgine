@@ -596,6 +596,16 @@ body { /* Einzige Ausnahme für den Scope*/
   cursor: pointer;
 }
 
+.admin-version-badge {
+  position: fixed;
+  bottom: 10px;
+  left: 16px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .admin-sidebar-close {
   display: none;
   margin-bottom: 12px;

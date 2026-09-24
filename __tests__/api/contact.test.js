@@ -7,7 +7,7 @@ jest.disableAutomock();
 
 const mockPrisma = {
   setting: {
-    findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
   contactMessage: {
     create: jest.fn(),
@@ -36,7 +36,7 @@ function makeRes() {
 describe('POST /api/contact', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPrisma.setting.findUnique.mockResolvedValue(null);
+    mockPrisma.setting.findMany.mockResolvedValue([]);
     mockPrisma.contactMessage.create.mockResolvedValue({ id: 'msg-1' });
   });
 
@@ -117,9 +117,10 @@ describe('POST /api/contact', () => {
   });
 
   test('builds auto message from all form fields and keeps multi-value arrays', async () => {
-    mockPrisma.setting.findUnique
-      .mockResolvedValueOnce({ key: 'contactMailTo', value: 'office@example.com' })
-      .mockResolvedValueOnce({ key: 'contactSaveToDb', value: 'false' });
+    mockPrisma.setting.findMany.mockResolvedValue([
+      { key: 'contact_recipient_email', value: 'office@example.com' },
+      { key: 'contactSaveToDb', value: 'false' },
+    ]);
 
     const req = {
       method: 'POST',
@@ -144,6 +145,56 @@ describe('POST /api/contact', () => {
     expect(sent.text).toContain('Budget range: 5k-10k');
     expect(sent.text).toContain('Note: Wir brauchen Landingpage und Kontaktformular.');
     expect(sent.text).not.toContain('altcha');
+  });
+
+  test('appends checkbox/other fields to an explicit message instead of dropping them', async () => {
+    const req = {
+      method: 'POST',
+      headers: {},
+      body: {
+        name: 'Andre',
+        email: 'andre@example.com',
+        tel: '0123456789',
+        anliegen: ['Stil', 'Budget'],
+        nachricht: 'Bitte meldet euch zurück.',
+        altcha: 'stub-token',
+      },
+    };
+    const res = makeRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(sendMail).toHaveBeenCalledTimes(0); // no recipient configured in this test's mocked settings
+  });
+
+  test('appends checkbox/other fields to an explicit message when a recipient is configured', async () => {
+    mockPrisma.setting.findMany.mockResolvedValue([
+      { key: 'contact_recipient_email', value: 'office@example.com' },
+    ]);
+
+    const req = {
+      method: 'POST',
+      headers: {},
+      body: {
+        name: 'Andre',
+        email: 'andre@example.com',
+        tel: '0123456789',
+        anliegen: ['Stil', 'Budget'],
+        nachricht: 'Bitte meldet euch zurück.',
+        altcha: 'stub-token',
+      },
+    };
+    const res = makeRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    const sent = sendMail.mock.calls[0][0];
+    expect(sent.text).toContain('Bitte meldet euch zurück.');
+    expect(sent.text).toContain('Tel: 0123456789');
+    expect(sent.text).toContain('Anliegen: Stil, Budget');
   });
 
   test('rejects request when name is missing', async () => {

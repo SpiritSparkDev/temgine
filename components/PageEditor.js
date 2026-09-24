@@ -24,6 +24,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return normalized.slice(CHANNEL_TEMPLATE_VALUE_PREFIX.length).trim() || null;
   };
 
+  const NAV_TEMPLATE_VALUE_PREFIX = '__nav__:';
+  const NAV_TEMPLATE_LABEL_PREFIX = 'Nav: ';
+
+  const makeNavTemplateValue = (id) => `${NAV_TEMPLATE_VALUE_PREFIX}${id}`;
+  const parseNavTemplateValue = (value) => {
+    const normalized = String(value || '');
+    if (!normalized.startsWith(NAV_TEMPLATE_VALUE_PREFIX)) return null;
+    return normalized.slice(NAV_TEMPLATE_VALUE_PREFIX.length).trim() || null;
+  };
+
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [showRevisions, setShowRevisions] = useState(false);
@@ -70,6 +80,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
   const [blogChannels, setBlogChannels] = useState([]);
   const [blogTemplates, setBlogTemplates] = useState([]);
+  const [pageNavigations, setPageNavigations] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -166,6 +177,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       slug: String(ch.slug || '').trim(),
     }))
     .filter(opt => opt.slug);
+  const navigationOptions = [...pageNavigations]
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
+    .map(nav => ({
+      value: makeNavTemplateValue(String(nav.id || '')),
+      label: `${NAV_TEMPLATE_LABEL_PREFIX}${String(nav.name || '').trim()}`,
+      id: String(nav.id || '').trim(),
+    }))
+    .filter(opt => opt.id);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -459,6 +478,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     };
     loadBlogChannels();
+  }, []);
+
+  useEffect(() => {
+    // Lade Seitennavigationen für Navigations-Blöcke
+    const loadPageNavigations = async () => {
+      try {
+        const res = await fetch('/api/navigations');
+        if (res.ok) {
+          const data = await res.json();
+          const navs = Array.isArray(data) ? data : [];
+          setPageNavigations(navs.filter(n => String(n.type).toUpperCase() === 'PAGE'));
+        }
+      } catch (e) {
+        // Silently ignore — page navigations are optional
+      }
+    };
+    loadPageNavigations();
   }, []);
 
   useEffect(() => {
@@ -903,6 +939,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const copy = JSON.parse(JSON.stringify(blocks || []));
     const parts = String(path).split('.').map(p => parseInt(p, 10));
     const selectedChannelSlug = parseChannelTemplateValue(templateName);
+    const selectedNavigationId = parseNavTemplateValue(templateName);
     let cur = copy;
     for (let i = 0; i < parts.length; i++) {
       const idx = parts[i];
@@ -919,8 +956,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           break;
         }
 
+        if (selectedNavigationId) {
+          cur[idx].type = 'navigation';
+          cur[idx].template = '';
+          cur[idx].props = { navigationId: selectedNavigationId };
+          break;
+        }
+
         cur[idx].template = templateName || '';
-        if (cur[idx].type === 'blog-channel') {
+        if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation') {
           cur[idx].type = 'content';
         }
 
@@ -1534,7 +1578,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 aria-label="Anchor-ID"
               />
               <select
-                value={block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '') : (block.template || '')}
+                value={
+                  block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '')
+                  : block.type === 'navigation' ? makeNavTemplateValue(block.props?.navigationId || '')
+                  : (block.template || '')
+                }
                 onChange={e => { e.stopPropagation(); updateNestedBlockTemplate(path, e.target.value); }}
                 onClick={e => e.stopPropagation()}
                 className="block-template-select"
@@ -1547,6 +1595,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 ))}
                 {channelTemplateOptions.length > 0 && <option disabled>──────────</option>}
                 {channelTemplateOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                {navigationOptions.length > 0 && <option disabled>──────────</option>}
+                {navigationOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -2073,6 +2125,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
           )}
 
+          {/* Navigations-Block: Auswahl passiert im Template-Select oben; Inhalt wird in der Navigation selbst gepflegt */}
+          {block.type === 'navigation' && (
+            <div className="blog-channel-editor__preview">
+              <span style={{ fontSize: 11, opacity: .6 }}>Seitennavigation: </span>
+              <code style={{ fontSize: 11 }}>
+                {pageNavigations.find(n => n.id === block.props?.navigationId)?.name || block.props?.navigationId || '-'}
+              </code>
+            </div>
+          )}
+
           {!block.template && block.type === 'text' && (
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
@@ -2537,6 +2599,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           className="input-field-small"
                           aria-label="ID für den Seiten-Wrapper"
                         />
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
+                        <div className="field-url-row">
+                          <input
+                            type="text"
+                            value={pageData.navImage || ''}
+                            onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
+                            placeholder="Bild-URL"
+                            className="input-field-small field-input-full"
+                            aria-label="Navigations-Bild für diese Seite"
+                          />
+                          <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
+                        </div>
+                        {pageData.navImage && (
+                          <div className="field-image-thumb-row">
+                            <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                          </div>
+                        )}
+                        <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
                       </div>
                     )}
                   </div>

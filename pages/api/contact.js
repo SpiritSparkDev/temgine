@@ -26,6 +26,14 @@ const EMAIL_ALIASES = ['email', 'mail', 'e-mail', 'emailAddress', 'email_address
 const SUBJECT_ALIASES = ['subject', 'betreff'];
 const MESSAGE_ALIASES = ['message', 'nachricht', 'text', 'content'];
 
+// Fields already represented elsewhere in the email (name/email/subject/message
+// header + body) — excluded when appending "extra" fields (checkboxes, phone, …)
+// so they don't show up twice.
+const ALIAS_KEYS = new Set([
+  ...NAME_ALIASES, 'firstName', 'firstname', 'first_name', 'vorname', 'lastName', 'lastname', 'last_name', 'nachname',
+  ...EMAIL_ALIASES, ...SUBJECT_ALIASES, ...MESSAGE_ALIASES,
+]);
+
 // Validate that a string is a plausible email address
 function isValidEmail(str) {
   return typeof str === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
@@ -142,7 +150,14 @@ export default async function handler(req, res) {
   const formFields = buildFormFields(body);
   const explicitMessage = sanitizeText(readAlias(body, MESSAGE_ALIASES), 4000);
   const autoMessage = sanitizeText(buildAutoMessage(formFields), 4000);
-  const message = explicitMessage || autoMessage;
+  // When the form has its own message/nachricht field, other fields (checkboxes,
+  // phone, …) would otherwise be silently dropped — append them instead of
+  // discarding them.
+  const extraFields = formFields.filter((field) => !ALIAS_KEYS.has(field.key));
+  const extraMessage = sanitizeText(buildAutoMessage(extraFields), 4000);
+  const message = explicitMessage
+    ? (extraMessage ? `${explicitMessage}\n\n${extraMessage}` : explicitMessage)
+    : autoMessage;
 
   // Validation
   const errors = {};
@@ -156,14 +171,16 @@ export default async function handler(req, res) {
 
   // Read settings from DB
   let contactMailTo = null;
+  let subjectPrefix = '';
   let saveToDb = false;
   try {
-    const [mailSetting, saveSetting] = await Promise.all([
-      prisma.setting.findUnique({ where: { key: 'contactMailTo' } }),
-      prisma.setting.findUnique({ where: { key: 'contactSaveToDb' } }),
-    ]);
-    contactMailTo = mailSetting?.value || process.env.CONTACT_MAIL_TO || null;
-    saveToDb = saveSetting?.value === 'true';
+    const rows = await prisma.setting.findMany({
+      where: { key: { in: ['contact_recipient_email', 'contactMailTo', 'contact_subject_prefix', 'contactSaveToDb'] } },
+    });
+    const db = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+    contactMailTo = db.contact_recipient_email || db.contactMailTo || process.env.CONTACT_MAIL_TO || null;
+    subjectPrefix = db.contact_subject_prefix || '';
+    saveToDb = db.contactSaveToDb === 'true';
   } catch (e) {
     // DB not available — fall back to env var
     contactMailTo = process.env.CONTACT_MAIL_TO || null;
@@ -175,8 +192,8 @@ export default async function handler(req, res) {
   if (contactMailTo) {
     try {
       const subjectLine = subject
-        ? `Kontaktformular: ${subject}`
-        : `Neue Kontaktanfrage von ${name}`;
+        ? `${subjectPrefix ? subjectPrefix + ' ' : ''}${subject}`
+        : `${subjectPrefix || 'Neue Kontaktanfrage von'} ${name}`;
       await sendMail({
         to: contactMailTo,
         subject: subjectLine,

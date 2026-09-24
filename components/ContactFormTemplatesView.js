@@ -5,9 +5,161 @@ import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
-const BLANK_CODE = '<section class="kontakt-section">\n  <form id="kontakt-form">\n    <!-- Felder + Altcha-Widget -->\n  </form>\n</section>';
+const BLANK_CODE = '<section class="kontakt-section">\n  <form data-temgine-form="contact">\n    <!-- Felder + Altcha-Widget, kein eigenes Script nötig -->\n  </form>\n</section>';
+
+const tabBase = {
+  padding: '0.5rem 1.25rem',
+  border: 'none',
+  borderBottom: '2px solid transparent',
+  background: 'transparent',
+  cursor: 'pointer',
+  fontWeight: 600,
+  fontSize: '0.9rem',
+  color: 'var(--text-secondary)',
+  marginBottom: '-2px',
+  transition: 'color 0.15s, border-color 0.15s',
+};
+const tabActive = { ...tabBase, color: 'var(--accent-primary)', borderBottomColor: 'var(--accent-primary)' };
+
+const inputStyle = {
+  width: '100%', padding: '0.55rem 0.75rem',
+  border: '1px solid var(--border-color)',
+  borderRadius: '6px', fontSize: '0.9rem',
+  background: 'var(--bg-secondary)',
+  color: 'var(--text-primary)',
+  boxSizing: 'border-box',
+};
+
+const Field = React.memo(({ label, children, style }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', ...style }}>
+    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      {label}
+    </label>
+    {children}
+  </div>
+));
+
+const Toggle = ({ checked, onChange, disabled, label }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={label}
+    onClick={() => !disabled && onChange(!checked)}
+    disabled={disabled}
+    style={{
+      position: 'relative',
+      width: '44px', height: '24px',
+      borderRadius: '999px', border: 'none',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      background: checked ? 'var(--accent-primary)' : 'var(--border-color)',
+      transition: 'background 0.2s',
+      flexShrink: 0,
+      opacity: disabled ? 0.6 : 1,
+    }}
+  >
+    <span style={{
+      position: 'absolute', top: '3px',
+      left: checked ? '23px' : '3px',
+      width: '18px', height: '18px',
+      borderRadius: '50%', background: '#fff',
+      transition: 'left 0.2s',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+    }} />
+  </button>
+);
 
 export default function ContactFormTemplatesView({ showToast }) {
+  const [activeTab, setActiveTab] = useState('forms');
+
+  // --- SMTP tab state ---
+  const [smtpHost, setSmtpHost]               = useState('');
+  const [smtpPort, setSmtpPort]               = useState('587');
+  const [smtpUser, setSmtpUser]               = useState('');
+  const [smtpPass, setSmtpPass]               = useState('');
+  const [smtpSecure, setSmtpSecure]           = useState(false);
+  const [recipientEmail, setRecipientEmail]   = useState('');
+  const [senderName, setSenderName]           = useState('');
+  const [senderEmail, setSenderEmail]         = useState('');
+  const [subjectPrefix, setSubjectPrefix]     = useState('[Kontakt]');
+  const [isSavingSmtp, setIsSavingSmtp]       = useState(false);
+  const [isSendingTest, setIsSendingTest]     = useState(false);
+  const [smtpPassChanged, setSmtpPassChanged] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        if (data.smtp_host)               setSmtpHost(data.smtp_host);
+        if (data.smtp_port)               setSmtpPort(data.smtp_port);
+        if (data.smtp_user)               setSmtpUser(data.smtp_user);
+        if (data.smtp_pass)               setSmtpPass(data.smtp_pass);
+        if (data.smtp_secure)             setSmtpSecure(data.smtp_secure === 'true');
+        if (data.contact_recipient_email) setRecipientEmail(data.contact_recipient_email);
+        if (data.contact_sender_name)     setSenderName(data.contact_sender_name);
+        if (data.contact_sender_email)    setSenderEmail(data.contact_sender_email);
+        if (data.contact_subject_prefix)  setSubjectPrefix(data.contact_subject_prefix);
+      })
+      .catch(() => {});
+  }, []);
+
+  async function handleSaveSmtp() {
+    setIsSavingSmtp(true);
+    const pairs = [
+      ['smtp_host',               smtpHost],
+      ['smtp_port',               smtpPort],
+      ['smtp_user',               smtpUser],
+      ['smtp_secure',             String(smtpSecure)],
+      ['contact_recipient_email', recipientEmail],
+      ['contact_sender_name',     senderName],
+      ['contact_sender_email',    senderEmail],
+      ['contact_subject_prefix',  subjectPrefix],
+    ];
+    if (smtpPassChanged) pairs.push(['smtp_pass', smtpPass]);
+    try {
+      for (const [key, value] of pairs) {
+        const r = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value }),
+        });
+        if (!r.ok) throw new Error((await r.json()).error || 'Fehler');
+      }
+      setSmtpPassChanged(false);
+      showToast('SMTP-Einstellungen gespeichert', 'success');
+    } catch (e) {
+      showToast('Fehler beim Speichern: ' + e.message, 'error');
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  }
+
+  async function handleTestEmail() {
+    setIsSendingTest(true);
+    try {
+      const r = await fetch('/api/settings/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtp_host: smtpHost, smtp_port: smtpPort,
+          smtp_user: smtpUser, smtp_pass: smtpPass,
+          smtp_secure: String(smtpSecure),
+          contact_recipient_email: recipientEmail,
+          contact_sender_name: senderName,
+          contact_sender_email: senderEmail,
+        }),
+      });
+      const d = await r.json();
+      if (r.ok) showToast(d.message || 'Test-E-Mail gesendet', 'success');
+      else showToast(d.error || 'Fehler', 'error');
+    } catch (e) {
+      showToast('Fehler: ' + e.message, 'error');
+    } finally {
+      setIsSendingTest(false);
+    }
+  }
+
   const [list, setList] = useState([]);
   const [editing, setEditing] = useState(null); // { name, isNew }
   const [editName, setEditName] = useState('');
@@ -154,6 +306,13 @@ export default function ContactFormTemplatesView({ showToast }) {
   }
 
   return (
+    <>
+    <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', padding: '0 1.5rem' }}>
+      <button style={activeTab === 'forms' ? tabActive : tabBase} onClick={() => setActiveTab('forms')}>Formulare</button>
+      <button style={activeTab === 'smtp'  ? tabActive : tabBase} onClick={() => setActiveTab('smtp')}>SMTP-Einstellungen</button>
+    </div>
+
+    {activeTab === 'forms' && (
     <div className="nav-view">
       <div className="nav-body">
         {/* ── Left: Kontaktformular-Liste ─────────────────────────────────── */}
@@ -298,5 +457,103 @@ export default function ContactFormTemplatesView({ showToast }) {
         </div>
       )}
     </div>
+    )}
+
+    {activeTab === 'smtp' && (
+      <div className="admin-editor-area">
+        <div className="settings-content" style={{ padding: '2rem', maxWidth: '800px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+
+            {/* SMTP */}
+            <section>
+              <h3 style={{ marginBottom: '0.35rem' }}>SMTP-Server</h3>
+              <p style={{ marginBottom: '1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                Zugangsdaten für den ausgehenden E-Mail-Versand. Das Passwort wird verschlüsselt in der Datenbank gespeichert.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <Field label="SMTP-Host">
+                  <input type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)}
+                    placeholder="smtp.example.com" style={inputStyle} />
+                </Field>
+                <Field label="Port">
+                  <input type="number" value={smtpPort} onChange={e => setSmtpPort(e.target.value)}
+                    placeholder="587" style={{ ...inputStyle, width: '100%' }} />
+                </Field>
+                <Field label="Benutzername / E-Mail">
+                  <input type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)}
+                    placeholder="user@example.com" autoComplete="username" style={inputStyle} />
+                </Field>
+                <Field label="Passwort">
+                  <input type="password" value={smtpPass}
+                    onChange={e => { setSmtpPass(e.target.value); setSmtpPassChanged(true); }}
+                    placeholder={smtpPass ? '••••••••' : 'Passwort eingeben'}
+                    autoComplete="current-password" style={inputStyle} />
+                </Field>
+                <Field label="TLS / SSL (Port 465)" style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
+                    <Toggle checked={smtpSecure} onChange={setSmtpSecure} label="TLS/SSL aktivieren" />
+                    <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                      {smtpSecure ? 'SSL/TLS aktiv (Port 465)' : 'STARTTLS / unverschlüsselt (Port 587 / 25)'}
+                    </span>
+                  </div>
+                </Field>
+              </div>
+            </section>
+
+            {/* Contact form settings */}
+            <section>
+              <h3 style={{ marginBottom: '0.35rem' }}>Kontaktformular</h3>
+              <p style={{ marginBottom: '1.25rem', color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                Wer soll Formular-Einsendungen erhalten, und wie sollen die E-Mails aussehen?
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <Field label="Empfänger-E-Mail" style={{ gridColumn: '1 / -1' }}>
+                  <input type="email" value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)}
+                    placeholder="kontakt@meinefirma.de" style={inputStyle} />
+                </Field>
+                <Field label="Absender-Name">
+                  <input type="text" value={senderName} onChange={e => setSenderName(e.target.value)}
+                    placeholder="Meine Website" style={inputStyle} />
+                </Field>
+                <Field label="Absender-E-Mail">
+                  <input type="email" value={senderEmail} onChange={e => setSenderEmail(e.target.value)}
+                    placeholder="noreply@meinefirma.de" style={inputStyle} />
+                </Field>
+                <Field label="Betreff-Präfix" style={{ gridColumn: '1 / -1' }}>
+                  <input type="text" value={subjectPrefix} onChange={e => setSubjectPrefix(e.target.value)}
+                    placeholder="[Kontakt]" style={{ ...inputStyle, maxWidth: '280px' }} />
+                </Field>
+              </div>
+            </section>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button onClick={handleSaveSmtp} disabled={isSavingSmtp} style={{
+                padding: '0.6rem 1.5rem', background: '#10b981', color: '#fff',
+                border: 'none', borderRadius: '6px', fontWeight: 600,
+                cursor: isSavingSmtp ? 'not-allowed' : 'pointer', opacity: isSavingSmtp ? 0.6 : 1,
+              }}>
+                {isSavingSmtp ? 'Speichern…' : 'Speichern'}
+              </button>
+              <button onClick={handleTestEmail} disabled={isSendingTest} style={{
+                padding: '0.6rem 1.5rem', background: 'var(--bg-tertiary)', color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)', borderRadius: '6px', fontWeight: 600,
+                cursor: isSendingTest ? 'not-allowed' : 'pointer', opacity: isSendingTest ? 0.6 : 1,
+              }}>
+                {isSendingTest ? 'Senden…' : 'Test-E-Mail senden'}
+              </button>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>
+                Test-E-Mail geht an die konfigurierte Empfänger-Adresse.
+              </span>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)', marginTop: '-0.5rem' }}>
+              Einsendungen werden zusätzlich unter <strong>Inhalte → Kontakt-Einsendungen</strong> gespeichert.
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

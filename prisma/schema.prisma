@@ -69,11 +69,6 @@ enum PageStatus {
   SCHEDULED
 }
 
-enum TemplateType {
-  SITE
-  BLOCK
-}
-
 model PageRevision {
   id        String   @id @default(cuid())
   pageId    String
@@ -82,27 +77,6 @@ model PageRevision {
   note      String?
   createdBy String?
   createdAt DateTime @default(now())
-}
-
-model Template {
-  id        String             @id @default(cuid())
-  name      String             @unique
-  code      String
-  type      TemplateType       @default(SITE)
-  blogType  String?
-  revisions TemplateRevision[]
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-}
-
-model TemplateRevision {
-  id         String   @id @default(cuid())
-  templateId String
-  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  data       Json
-  note       String?
-  createdBy  String?
-  createdAt  DateTime @default(now())
 }
 
 model AuditLog {
@@ -129,31 +103,6 @@ model Setting {
   id        String   @id @default(cuid())
   key       String   @unique
   value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-enum NavType {
-  MAIN
-  PAGE
-  MOBILE
-}
-
-model Navigation {
-  id        String   @id @default(cuid())
-  name      String
-  type      NavType
-  code      String   @db.Text
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Footer {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @db.Text
-  isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

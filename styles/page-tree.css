@@ -75,6 +75,147 @@
   margin-top: 8px;
 }
 
+/* ---- VIEW TOGGLE ---- */
+.page-tree-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-secondary);
+  box-shadow: 0 8px 20px var(--shadow);
+}
+
+.page-tree-view-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.page-tree-view-toggle button.active {
+  background: var(--active-bg);
+  color: var(--accent-primary);
+}
+
+/* ---- TABLE VIEW ---- */
+.page-tree-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px var(--shadow);
+}
+
+.page-tree-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--bg-secondary);
+}
+
+.page-tree-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  white-space: nowrap;
+}
+
+.page-tree-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.page-tree-table tr:last-child td {
+  border-bottom: none;
+}
+
+.page-tree-table tr:hover td {
+  background: var(--bg-tertiary);
+}
+
+.page-tree-table tr.selected td {
+  background: var(--active-bg);
+}
+
+.page-tree-cell-select {
+  width: 30px;
+}
+
+.page-tree-cell-select button {
+  display: flex;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.page-tree-cell-select button[aria-pressed="true"] {
+  color: var(--accent-primary);
+}
+
+.page-tree-connector {
+  color: var(--text-tertiary);
+  margin-right: 6px;
+}
+
+.page-tree-cell-title a {
+  font-weight: 600;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.page-tree-cell-title a:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
+.page-tree-cell-path {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.page-tree-cell-nav select,
+.page-tree-cell-footer select {
+  width: 100%;
+  min-width: 140px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.page-tree-cell-nav select:hover,
+.page-tree-cell-footer select:hover {
+  border-color: var(--accent-primary);
+}
+
+.page-tree-cell-actions {
+  display: flex;
+  gap: 2px;
+  white-space: nowrap;
+}
+
 /* ---- CARD ROW: siblings at the same depth ---- */
 .page-card-row {
   display: flex;
@@ -522,4 +663,15 @@
 
 .bulk-btn-ghost {
   color: var(--text-tertiary);
+}
+
+.bulk-select {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
 }

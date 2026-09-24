@@ -2,6 +2,9 @@ import { prisma } from '../../../lib/prisma'
 import { sanitizeRecursive } from '../../../lib/htmlSanitize'
 import { requireAuth } from '../../../lib/auth'
 import { listTemplates, saveTemplate, deleteTemplateByName } from '../../../lib/templateStore'
+import { listNavigations, saveNavigation, deleteNavigation } from '../../../lib/navigationStore'
+import { listFooters, saveFooter, deleteFooter } from '../../../lib/footerStore'
+import { MAINTENANCE_PAGES, saveMaintenanceField } from '../../../lib/maintenanceStore'
 import fs from 'fs'
 import path from 'path'
 
@@ -129,7 +132,7 @@ async function importNavigations(navigations = [], strategy = 'merge') {
 
   if (strategy === 'replace') {
     try {
-      await prisma.navigation.deleteMany({})
+      for (const n of listNavigations()) deleteNavigation(n.id)
     } catch (e) {
       result.errors.push(`Vorhandene Navigationen konnten nicht gelöscht werden: ${e.message}`)
     }
@@ -145,23 +148,16 @@ async function importNavigations(navigations = [], strategy = 'merge') {
     try {
       let saved = null
       if (nav?.id) {
-        // Preserve IDs from backup when available so page.data.pageNav remains valid.
-        saved = await prisma.navigation.upsert({
-          where: { id: String(nav.id) },
-          create: { id: String(nav.id), name, type, code, isActive },
-          update: { name, type, code, isActive }
-        })
+        // Preserve IDs from backup when available so page.data.pageNav remains valid
+        // — saveNavigation creates a navigation under this exact id if it doesn't
+        // exist yet, or updates it in place if it does.
+        saved = saveNavigation({ id: String(nav.id), name, type, code, isActive })
       } else {
         // Legacy backups without nav ID: best-effort match by type+name.
-        const existing = await prisma.navigation.findFirst({ where: { type, name } })
-        if (existing) {
-          saved = await prisma.navigation.update({
-            where: { id: existing.id },
-            data: { code, isActive }
-          })
-        } else {
-          saved = await prisma.navigation.create({ data: { name, type, code, isActive } })
-        }
+        const existing = listNavigations().find((n) => n.type === type && n.name === name)
+        saved = existing
+          ? saveNavigation({ id: existing.id, name, type, code, isActive })
+          : saveNavigation({ name, type, code, isActive })
       }
 
       if (saved?.type === 'MAIN' && saved?.isActive) {
@@ -176,17 +172,13 @@ async function importNavigations(navigations = [], strategy = 'merge') {
   // Ensure only one active navigation per type.
   for (const type of VALID_NAV_TYPES) {
     try {
-      const actives = await prisma.navigation.findMany({
-        where: { type, isActive: true },
-        orderBy: { updatedAt: 'desc' },
-        select: { id: true }
-      })
+      const actives = listNavigations()
+        .filter((n) => n.type === type && n.isActive)
+        .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
       if (actives.length > 1) {
-        const keepId = actives[0].id
-        await prisma.navigation.updateMany({
-          where: { type, isActive: true, id: { not: keepId } },
-          data: { isActive: false }
-        })
+        for (const extra of actives.slice(1)) {
+          saveNavigation({ id: extra.id, isActive: false })
+        }
       }
       if (type === 'MAIN' && !result.activeMainId && actives[0]?.id) {
         result.activeMainId = actives[0].id
@@ -199,13 +191,115 @@ async function importNavigations(navigations = [], strategy = 'merge') {
   return result
 }
 
+async function importGlobalVariables(globalVariables = [], strategy = 'merge') {
+  const result = { imported: 0, errors: [] }
+
+  if (strategy === 'replace') {
+    try {
+      await prisma.globalVariable.deleteMany({})
+    } catch (e) {
+      result.errors.push(`Vorhandene globale Variablen konnten nicht gelöscht werden: ${e.message}`)
+    }
+  }
+
+  for (const gv of globalVariables) {
+    const key = String(gv?.key || '').trim()
+    if (!key) continue
+    try {
+      await prisma.globalVariable.upsert({
+        where: { key },
+        create: {
+          key,
+          label: String(gv.label || key),
+          type: gv.type || 'STRING',
+          value: String(gv.value || ''),
+          fallback: gv.fallback == null ? null : String(gv.fallback),
+          isActive: gv.isActive !== false,
+          sortOrder: Number(gv.sortOrder) || 0
+        },
+        update: {
+          label: String(gv.label || key),
+          type: gv.type || 'STRING',
+          value: String(gv.value || ''),
+          fallback: gv.fallback == null ? null : String(gv.fallback),
+          isActive: gv.isActive !== false,
+          sortOrder: Number(gv.sortOrder) || 0
+        }
+      })
+      result.imported++
+    } catch (e) {
+      result.errors.push(`Globale Variable "${key}" konnte nicht importiert werden: ${e.message}`)
+    }
+  }
+
+  return result
+}
+
+async function importFooters(footers = [], strategy = 'merge') {
+  const result = { imported: 0, errors: [] }
+
+  if (strategy === 'replace') {
+    try {
+      for (const f of listFooters()) deleteFooter(f.id)
+    } catch (e) {
+      result.errors.push(`Vorhandene Footer konnten nicht gelöscht werden: ${e.message}`)
+    }
+  }
+
+  for (const f of footers) {
+    const name = String(f?.name || '').trim() || 'Footer'
+    const code = String(f?.code || '')
+    const isActive = Boolean(f?.isActive)
+    try {
+      if (f?.id) {
+        // Preserve IDs from backup when available so page.data.pageFooter remains valid.
+        saveFooter({ id: String(f.id), name, code, isActive })
+      } else {
+        const existing = listFooters().find((x) => x.name === name)
+        existing ? saveFooter({ id: existing.id, name, code, isActive }) : saveFooter({ name, code, isActive })
+      }
+      result.imported++
+    } catch (e) {
+      result.errors.push(`Footer "${name}" konnte nicht importiert werden: ${e.message}`)
+    }
+  }
+
+  // Ensure only one active footer.
+  try {
+    const actives = listFooters()
+      .filter((f) => f.isActive)
+      .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
+    if (actives.length > 1) {
+      for (const extra of actives.slice(1)) saveFooter({ id: extra.id, isActive: false })
+    }
+  } catch (e) {
+    result.errors.push(`Aktive Footer konnten nicht bereinigt werden: ${e.message}`)
+  }
+
+  return result
+}
+
+async function importMaintenance(maintenance = {}) {
+  const result = { imported: 0, errors: [] }
+  for (const [key, value] of Object.entries(maintenance || {})) {
+    const match = key.match(/^(maintenance_(?:404|503|no_homepage|loading))_(html|css|js)$/)
+    if (!match) continue
+    const page = Object.keys(MAINTENANCE_PAGES).find((p) => MAINTENANCE_PAGES[p] === match[1])
+    if (!page) continue
+    try {
+      saveMaintenanceField(page, match[2], value)
+      result.imported++
+    } catch (e) {
+      result.errors.push(`Maintenance-Seite "${key}" konnte nicht importiert werden: ${e.message}`)
+    }
+  }
+  return result
+}
+
 async function reconcilePageNavReferences(fallbackMainId = null) {
   const result = { fixed: 0, errors: [] }
   try {
-    const navs = await prisma.navigation.findMany({
-      where: { type: { in: ['MAIN', 'PAGE'] } },
-      select: { id: true, type: true, isActive: true }
-    })
+    const navs = listNavigations().filter((n) => n.type === 'MAIN' || n.type === 'PAGE')
     const validIds = new Set(navs.map(n => n.id))
     const activeMainId = fallbackMainId || (navs.find(n => n.type === 'MAIN' && n.isActive)?.id || null)
 
@@ -350,19 +444,22 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
-    
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
+
     const templates = Array.isArray(backup.templates) ? backup.templates : []
     const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
     const pages = Array.isArray(backup.pages) ? backup.pages : []
     const css = Array.isArray(backup.css) ? backup.css : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
+    const globalVariables = Array.isArray(backup.globalVariables) ? backup.globalVariables : []
+    const footers = Array.isArray(backup.footers) ? backup.footers : []
+    const maintenance = (backup.maintenance && typeof backup.maintenance === 'object') ? backup.maintenance : {}
     const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
     const uploadedFiles = Array.isArray(backup.uploadedFiles) ? backup.uploadedFiles : []
     const cssConfig = backup.cssConfig || null
     const fontsConfig = backup.fontsConfig || null
 
-    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
+    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
@@ -491,6 +588,33 @@ export default async function handler(req, res) {
       importStats.errors.push(`Navigations import failed: ${e.message}`)
     }
 
+    // Import global variables
+    try {
+      const globalVarResult = await importGlobalVariables(globalVariables, strategy)
+      importStats.globalVariables = globalVarResult.imported
+      if (globalVarResult.errors.length > 0) importStats.errors.push(...globalVarResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Globale Variablen import failed: ${e.message}`)
+    }
+
+    // Import footers
+    try {
+      const footerResult = await importFooters(footers, strategy)
+      importStats.footers = footerResult.imported
+      if (footerResult.errors.length > 0) importStats.errors.push(...footerResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Footer import failed: ${e.message}`)
+    }
+
+    // Import maintenance pages (404/503/no-homepage/loading)
+    try {
+      const maintenanceResult = await importMaintenance(maintenance)
+      importStats.maintenance = maintenanceResult.imported
+      if (maintenanceResult.errors.length > 0) importStats.errors.push(...maintenanceResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Maintenance import failed: ${e.message}`)
+    }
+
     // Restore uploaded font files so @font-face URLs keep working after restore
     try {
       const uploadFontResult = importUploadFonts(uploadFonts, strategy)
@@ -530,7 +654,7 @@ export default async function handler(req, res) {
       ok: true,
       strategy,
       importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
     })
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)

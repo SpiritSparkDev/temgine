@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage } from '../lib/templateEngine'
+import { renderPage, collectNavigationBlockIds } from '../lib/templateEngine'
+import { hydrateContactForms } from '../lib/contactFormRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -228,19 +229,37 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                 navigations[key] = { code: nav.code, data }
               }
 
-              // If this page has a specific navigation assigned, use it as the MAIN nav
+              // If this page has a specific navigation assigned, use it as the optional page nav
               if (homePage?.data?.pageNav) {
                 try {
                   const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(homePage.data.pageNav)}&_t=${Date.now()}`)
                   if (pageNavRes.ok) {
                     const pageNavData = await pageNavRes.json()
                     if (pageNavData && pageNavData.code) {
-                      navigations['main'] = { code: pageNavData.code, data: { pages: nestedPages } }
+                      navigations['page'] = { code: pageNavData.code, data: { pages: nestedPages, anchors } }
                     }
                   }
                 } catch (e) {
                   console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message)
                 }
+              }
+
+              // Navigations, die als eigener Block (type: 'navigation') platziert wurden,
+              // werden unabhängig von "aktiv" per ID geladen.
+              const navBlockIds = collectNavigationBlockIds(homePage?.blocks)
+              if (navBlockIds.length > 0) {
+                navigations.byId = {}
+                await Promise.all(navBlockIds.map(async (id) => {
+                  try {
+                    const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`)
+                    if (res.ok) {
+                      const nav = await res.json()
+                      if (nav && nav.code) navigations.byId[id] = { code: nav.code, data: { pages: nestedPages, anchors } }
+                    }
+                  } catch (e) {
+                    console.warn('Navigations-Block konnte nicht geladen werden:', e.message)
+                  }
+                }))
               }
             }
           }
@@ -351,9 +370,19 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     })()
   }, [])
 
+  // Wire up any form[data-temgine-form="contact"] rendered inside the home
+  // page's block HTML — see lib/contactFormRuntime.js. Core behaviour, not
+  // part of the disableable /api/js bundle.
+  useEffect(() => {
+    if (!html) return
+    const containerId = homePage?.data?.wrapperId || 'page-html-output'
+    const container = document.getElementById(containerId)
+    hydrateContactForms(container)
+  }, [html])
+
   if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
 
-  const wrapperProps = {};
+  const wrapperProps = { id: 'page-html-output' };
   if (homePage?.data?.wrapperId) wrapperProps.id = homePage.data.wrapperId;
   if (homePage?.data?.wrapperClass) wrapperProps.className = homePage.data.wrapperClass;
 
@@ -362,19 +391,14 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 
 export async function getServerSideProps() {
   try {
-    const { prisma } = await import('../lib/prisma')
-    const keys = ['maintenance_loading_html', 'maintenance_loading_css', 'maintenance_loading_js']
-    const rows = await prisma.setting.findMany({ where: { key: { in: keys } } })
-    const map = {}
-    for (const row of rows || []) {
-      map[row.key] = row.value
-    }
+    const { getMaintenancePage } = await import('../lib/maintenanceStore')
+    const { html, css, js } = getMaintenancePage('loading')
 
     return {
       props: {
-        initialLoadingScreenHtml: map.maintenance_loading_html || defaultLoadingHtml,
-        initialLoadingScreenCss: map.maintenance_loading_css || '',
-        initialLoadingScreenJs: map.maintenance_loading_js || '',
+        initialLoadingScreenHtml: html || defaultLoadingHtml,
+        initialLoadingScreenCss: css || '',
+        initialLoadingScreenJs: js || '',
       },
     }
   } catch (_e) {

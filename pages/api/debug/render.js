@@ -1,5 +1,6 @@
 import { prisma } from '../../../lib/prisma'
 import { renderPage } from '../../../lib/templateEngine'
+import { getTemplateByName } from '../../../lib/templateStore'
 
 export default async function handler(req, res) {
   try {
@@ -38,7 +39,7 @@ export default async function handler(req, res) {
     const missingTemplates = []
     for (const name of templatesToLoad) {
       try {
-        const t = await prisma.template.findFirst({ where: { name: { equals: String(name), mode: 'insensitive' } } })
+        const t = getTemplateByName(String(name))
         if (t) templateCodes[name] = t.code
         else missingTemplates.push(name)
       } catch (e) {

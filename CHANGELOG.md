@@ -5,6 +5,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.13.0] - 2026-09-24
+
+### Added
+- Navigationen, Footer und Maintenance-Seiten (404/503/keine Startseite/Ladebildschirm) liegen jetzt als Dateien vor (`public/assets/template/navigation|footer|maintenance/...`), analog zu den bereits datei-basierten Block-/Site-Templates
+- Automatischer Export-Schritt beim Server-Start (`scripts/auto-export-legacy-db-content.js`): rettet Navigation-/Footer-/Template-/Maintenance-Daten aus der DB in Dateien, bevor die Migration die zugehörigen Tabellen entfernt — nötig für bestehende ältere Instanzen beim Update
+- Backup/Export- und Import-Tool berücksichtigen Navigationen, Footer und Maintenance-Seiten jetzt korrekt (vorher fehlte Maintenance komplett im Export)
+
+### Changed
+- `Template`/`TemplateRevision`-Tabellen entfernt (waren bereits seit der Block-Template-Dateiumstellung ungenutzt)
+
+### Fixed
+- Navigations-Fallback ohne seitenspezifische Navigation lieferte dem PAGE-Typ-Template keine Seitenliste (`pages`), nur `anchors` — betraf u. a. "Weitere Künstler"-Übersichten
+
+---
+
+## [0.12.0] - 2026-09-23
+
+### Added
+- Alternative Tabellenansicht für die Seitenübersicht im Admin-Bereich: kompakte, eingerückte Baumdarstellung als Umschalt-Option neben der Kartenansicht
+
+---
+
+## [0.11.0] - 2026-09-23
+
+### Added
+- Seitennavigationen (Navigation vom Typ PAGE) sind jetzt direkt im Block-Template-Dropdown des Content-Editors auswählbar und lassen sich als eigener Block an beliebiger Stelle in den Seiteninhalt einfügen
+- Neues Feld "Navigations-Bild" in den Seiteneinstellungen, das pro Seite ein Bild speichert und in Seitennavigationen als `{{data.navImage}}` verfügbar macht
+
+---
+
+## [0.10.0] - 2026-09-23
+
+### Added
+- Kontaktformular-Templates: eigener Admin-Bereich mit Presets und kategorisiertem Datei-Store
+- Spam-Schutz (Altcha) für Kontaktformulare
+- Docker: db-init-Service und sicheres Passwort-Handling im Setup
+
+### Changed
+- Verbessertes Verhalten beim Deployment auf bestehende Docker-Stacks
+
+### Fixed
+- Templates werden jetzt korrekt in Backups einbezogen
+
+---
+
 ## [0.9.0] - 2026-05-09
 
 ### Added

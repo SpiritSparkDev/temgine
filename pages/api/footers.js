@@ -1,6 +1,6 @@
-import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/auth';
 import { logAudit } from '../../lib/audit';
+import { listFooters, getFooterById, getActiveFooter, saveFooter, deleteFooter } from '../../lib/footerStore';
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
       // Single item (with code) — used by editor
       if (id) {
-        const footer = await prisma.footer.findUnique({ where: { id: String(id) } });
+        const footer = getFooterById(String(id));
         if (!footer) {
           const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
           return res.status(status).json(resp);
@@ -26,15 +26,14 @@ export default async function handler(req, res) {
 
       // Active footer — used by public rendering (only one can be active)
       if (active === 'true') {
-        const footer = await prisma.footer.findFirst({ where: { isActive: true } });
+        const footer = getActiveFooter();
         return res.status(200).json(footer || null);
       }
 
       // Full list (without code body) — used by FooterView
-      const footers = await prisma.footer.findMany({
-        orderBy: [{ createdAt: 'asc' }],
-        select: { id: true, name: true, isActive: true, updatedAt: true },
-      });
+      const footers = listFooters()
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+        .map((f) => ({ id: f.id, name: f.name, isActive: f.isActive, updatedAt: f.updatedAt }));
       return res.status(200).json(footers);
     }
 
@@ -56,9 +55,7 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      const footer = await prisma.footer.create({
-        data: { name: String(name), code: String(code), isActive: false },
-      });
+      const footer = saveFooter({ name: String(name), code: String(code), isActive: false });
 
       await logAudit({ action: 'CREATE', resource: 'footer', resourceId: footer.id, userId: authResult.user.id, details: { name: footer.name } });
       return res.status(201).json(footer);
@@ -72,39 +69,21 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      try {
-        const existing = await prisma.footer.findUnique({ where: { id: String(id) } });
-        if (!existing) {
-          const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-
-        // If activating: only one footer may be active at a time
-        if (isActive === true) {
-          await prisma.footer.updateMany({
-            where: { isActive: true, id: { not: String(id) } },
-            data: { isActive: false },
-          });
-        }
-
-        const updated = await prisma.footer.update({
-          where: { id: String(id) },
-          data: {
-            ...(name !== undefined && { name: String(name) }),
-            ...(code !== undefined && { code: String(code) }),
-            ...(isActive !== undefined && { isActive: Boolean(isActive) }),
-          },
-        });
-
-        await logAudit({ action: 'UPDATE', resource: 'footer', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
-        return res.status(200).json(updated);
-      } catch (e) {
-        if (e.code === 'P2025') {
-          const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-        throw e;
+      const existing = getFooterById(String(id));
+      if (!existing) {
+        const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
+        return res.status(status).json(resp);
       }
+
+      const updated = saveFooter({
+        id: String(id),
+        ...(name !== undefined && { name: String(name) }),
+        ...(code !== undefined && { code: String(code) }),
+        ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+      });
+
+      await logAudit({ action: 'UPDATE', resource: 'footer', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
+      return res.status(200).json(updated);
     }
 
     // ── DELETE ────────────────────────────────────────────────────────────────
@@ -115,23 +94,15 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      try {
-        const existing = await prisma.footer.findUnique({ where: { id: String(id) } });
-        if (!existing) {
-          const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-
-        await prisma.footer.delete({ where: { id: String(id) } });
-        await logAudit({ action: 'DELETE', resource: 'footer', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
-        return res.status(200).json({ ok: true });
-      } catch (e) {
-        if (e.code === 'P2025') {
-          const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-        throw e;
+      const existing = getFooterById(String(id));
+      if (!existing) {
+        const [status, resp] = errorResponse(404, 'Footer nicht gefunden', 'FOOTER_NOT_FOUND');
+        return res.status(status).json(resp);
       }
+
+      deleteFooter(String(id));
+      await logAudit({ action: 'DELETE', resource: 'footer', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
+      return res.status(200).json({ ok: true });
     }
 
     const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');

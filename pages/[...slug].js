@@ -1,7 +1,8 @@
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { renderPage, renderTemplate, buildNavHtml } from '../lib/templateEngine'
+import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
+import { hydrateContactForms } from '../lib/contactFormRuntime'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -401,33 +402,53 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         if (navRes.ok) {
           const activeNavs = await navRes.json();
           if (Array.isArray(activeNavs)) {
+            const currentPath = segments.join('/');
+            // isCurrent/data let a page-level nav template exclude the page it's
+            // rendered on (e.g. "other artists") and read custom per-page fields
+            // (e.g. data.navImage) without any block-specific plumbing.
             const buildNestedPages = (nodes, parentPath = '') =>
               (nodes || [])
                 .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
                 .map(n => {
                   const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
                   const children = buildNestedPages(n.children || [], slug);
-                  return { slug, title: n.title, hasChildren: children.length > 0, children };
+                  return { slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: slug === currentPath, data: n.data || {} };
                 });
             const nestedPages = buildNestedPages(pages);
             const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
             for (const nav of activeNavs) {
               const key = String(nav.type).toLowerCase();
-              const data = key === 'page' ? { anchors } : { pages: nestedPages };
-              navigations[key] = { code: nav.code, data };
+              navigations[key] = { code: nav.code, data: { pages: nestedPages, anchors } };
             }
-            const currentPath = segments.join('/');
             navigations['auto'] = { code: buildNavHtml(pages, currentPath), data: {} };
             if (foundPage.data?.pageNav) {
               try {
                 const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(foundPage.data.pageNav)}&_t=${Date.now()}`);
                 if (pageNavRes.ok) {
                   const pageNavData = await pageNavRes.json();
-                  if (pageNavData && pageNavData.code) navigations['main'] = { code: pageNavData.code, data: { pages: nestedPages } };
+                  if (pageNavData && pageNavData.code) navigations['page'] = { code: pageNavData.code, data: { pages: nestedPages, anchors } };
                 }
               } catch (e) {
                 console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message);
               }
+            }
+
+            // Navigations, die als eigener Block (type: 'navigation') in dieser
+            // Seite platziert wurden, werden unabhängig von "aktiv" per ID geladen.
+            const navBlockIds = collectNavigationBlockIds(foundPage?.blocks);
+            if (navBlockIds.length > 0) {
+              navigations.byId = {};
+              await Promise.all(navBlockIds.map(async (id) => {
+                try {
+                  const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`);
+                  if (res.ok) {
+                    const nav = await res.json();
+                    if (nav && nav.code) navigations.byId[id] = { code: nav.code, data: { pages: nestedPages, anchors } };
+                  }
+                } catch (e) {
+                  console.warn('Navigations-Block konnte nicht geladen werden:', e.message);
+                }
+              }));
             }
           }
         }
@@ -576,6 +597,16 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     });
   }, [html]);
 
+  // Wire up any form[data-temgine-form="contact"] rendered inside the page's
+  // block HTML — see lib/contactFormRuntime.js. Core behaviour, not part of
+  // the disableable /api/js bundle.
+  useEffect(() => {
+    if (!html) return;
+    const containerId = page?.data?.wrapperId || 'page-html-output';
+    const container = document.getElementById(containerId);
+    hydrateContactForms(container);
+  }, [html]);
+
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
   const showDebug = params && params.get('debug') === '1'
 
@@ -618,19 +649,14 @@ export async function getServerSideProps(context) {
   }
 
   try {
-    const { prisma } = await import('../lib/prisma')
-    const keys = ['maintenance_loading_html', 'maintenance_loading_css', 'maintenance_loading_js']
-    const rows = await prisma.setting.findMany({ where: { key: { in: keys } } })
-    const map = {}
-    for (const row of rows || []) {
-      map[row.key] = row.value
-    }
+    const { getMaintenancePage } = await import('../lib/maintenanceStore')
+    const { html, css, js } = getMaintenancePage('loading')
 
     return {
       props: {
-        initialLoadingScreenHtml: map.maintenance_loading_html || defaultLoadingHtml,
-        initialLoadingScreenCss: map.maintenance_loading_css || '',
-        initialLoadingScreenJs: map.maintenance_loading_js || '',
+        initialLoadingScreenHtml: html || defaultLoadingHtml,
+        initialLoadingScreenCss: css || '',
+        initialLoadingScreenJs: js || '',
       },
     }
   } catch (_e) {

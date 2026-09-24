@@ -3,6 +3,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
 import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions, Layers, Tag } from '../lib/muiIcons';
+import pkg from '../package.json';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
 import PagesView from './PagesView';
@@ -742,6 +743,7 @@ export default function AdminPageClient() {
             </ul>
             <div className="menu-sep" />
           </nav>
+          <div className="admin-version-badge">v{pkg.version}</div>
         </aside>
 
         <aside id="page-editor-inspector-portal" className="page-editor-inspector-portal" aria-label="Seiten-Inspektor" />

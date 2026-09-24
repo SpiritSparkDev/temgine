@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal } from '../lib/muiIcons';
+import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal, Plus, ChevronUp, ChevronDown } from '../lib/muiIcons';
 import RichTextEditor from './RichTextEditor';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
 
@@ -66,6 +66,14 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
   function setCustomField(key, value) {
     setTemplateData(prev => ({ ...prev, [key]: value }));
   }
+
+  function setRepeaterRows(sectionName, rows) {
+    setTemplateData(prev => ({ ...prev, [sectionName]: rows }));
+  }
+
+  const formatLabel = (name) => String(name || '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
 
   function validate() {
     const errs = {};
@@ -253,6 +261,76 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   </div>
                 </div>
               )}
+
+              {/* Repeater fields: {{#each:name}}...{{/each:name}} from the reading template */}
+              {fieldSchema.repeaterBlocks.map(({ sectionName, subFields }) => {
+                const rows = Array.isArray(templateData[sectionName]) ? templateData[sectionName] : [];
+                const addRow = () => {
+                  const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                  setRepeaterRows(sectionName, [...rows, emptyRow]);
+                };
+                return (
+                  <div key={sectionName} className="blog-editor-card">
+                    <div className="blog-editor-card__head">
+                      <SlidersHorizontal size={12} /> {formatLabel(sectionName)}
+                      <button type="button" onClick={addRow} className="btn-modern-small repeater-add-btn" style={{ marginLeft: 'auto' }}>
+                        <Plus size={12} /> Eintrag hinzufügen
+                      </button>
+                    </div>
+                    <div className="blog-editor-card__body">
+                      {rows.length === 0 && (
+                        <div className="blog-editor-field" style={{ opacity: .6, fontSize: 13 }}>Noch keine Einträge.</div>
+                      )}
+                      {rows.map((row, rowIdx) => (
+                        <div key={rowIdx} className="repeater-row">
+                          <div className="repeater-row-header">
+                            <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
+                            <div className="repeater-row-actions">
+                              <button type="button" disabled={rowIdx === 0} className="repeater-row-move" title="Nach oben verschieben"
+                                onClick={() => {
+                                  const next = [...rows];
+                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
+                                  setRepeaterRows(sectionName, next);
+                                }}><ChevronUp size={13} /></button>
+                              <button type="button" disabled={rowIdx === rows.length - 1} className="repeater-row-move" title="Nach unten verschieben"
+                                onClick={() => {
+                                  const next = [...rows];
+                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
+                                  setRepeaterRows(sectionName, next);
+                                }}><ChevronDown size={13} /></button>
+                              <button type="button" className="repeater-row-delete" title={`Eintrag ${rowIdx + 1} entfernen`}
+                                onClick={() => setRepeaterRows(sectionName, rows.filter((_, i) => i !== rowIdx))}>✕</button>
+                            </div>
+                          </div>
+                          <div className="repeater-row-fields">
+                            {subFields.map(sf => (
+                              <div key={sf.name} className="blog-editor-field repeater-subfield">
+                                <label className="blog-editor-label">{formatLabel(sf.name)}</label>
+                                {sf.type === 'textarea' ? (
+                                  <textarea
+                                    className="blog-editor-textarea"
+                                    rows={3}
+                                    value={row[sf.name] ?? ''}
+                                    onChange={e => setRepeaterRows(sectionName, rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r))}
+                                    placeholder={sf.name}
+                                  />
+                                ) : (
+                                  <input
+                                    className="blog-editor-input"
+                                    value={row[sf.name] ?? ''}
+                                    onChange={e => setRepeaterRows(sectionName, rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r))}
+                                    placeholder={sf.type === 'image' ? '/uploads/bild.jpg' : sf.name}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* ── Sidebar ── */}

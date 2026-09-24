@@ -17,7 +17,7 @@ const next = require('next');
 
 const PUBLIC_ROOT = path.join(__dirname, 'public');
 const PUBLIC_UPLOAD_ROOT = path.join(PUBLIC_ROOT, 'uploads');
-const PUBLIC_STATIC_PREFIXES = ['/extern_css', '/uploads', '/assets', '/favicon'];
+const PUBLIC_STATIC_PREFIXES = ['/extern_css', '/extern_js', '/uploads', '/assets', '/favicon'];
 
 for (const dir of [
   PUBLIC_ROOT,
@@ -165,6 +165,13 @@ console.log('> Server boot config', {
 // Run database migrations on startup (Plesk: ENV vars are only available here, not in npm scripts)
 if (process.env.DATABASE_URL) {
   try {
+    // Older instances still have Navigation/Footer/Template rows and
+    // maintenance_* Settings in the DB — the migration below drops those
+    // tables. Export them to files FIRST so updating an old instance can't
+    // silently lose that content the moment migrate deploy runs.
+    console.log('> Exporting legacy DB content (navigation/footer/templates/maintenance) to files if present...');
+    execSync(`node "${path.join(__dirname, 'scripts', 'auto-export-legacy-db-content.js')}"`, { stdio: 'inherit', env: process.env });
+
     console.log('> Running database migrations...');
     const prismaBin = path.join(__dirname, 'node_modules', '.bin', 'prisma');
     execSync(`"${prismaBin}" migrate deploy`, { stdio: 'inherit', env: process.env });

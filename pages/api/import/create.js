@@ -1,5 +1,6 @@
 import { prisma } from '../../../lib/prisma'
 import { sanitizeRecursive } from '../../../lib/htmlSanitize'
+import { saveTemplate } from '../../../lib/templateStore'
 
 /**
  * POST /api/import/create
@@ -52,11 +53,7 @@ export default async function handler(req, res) {
       const tcode = String(t.code || '').trim()
       if (!tname || !tcode) continue
       const ttype = String(t.type || 'BLOCK').toUpperCase() === 'SITE' ? 'SITE' : 'BLOCK'
-      await prisma.template.upsert({
-        where: { name: tname },
-        create: { name: tname, code: tcode, type: ttype },
-        update: { code: tcode, type: ttype },
-      })
+      saveTemplate({ name: tname, code: tcode, type: ttype })
       createdTemplates.push(tname)
     }
 

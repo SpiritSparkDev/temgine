@@ -9,7 +9,9 @@ import {
   EyeOff,
   FileText,
   Globe,
+  Grid,
   Indent,
+  List,
   Outdent,
   Plus,
   Search,
@@ -23,6 +25,15 @@ import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
   const [tree, setTree] = useState([]);
+  const [viewMode, setViewModeState] = useState('cards'); // 'cards' or 'table'
+  useEffect(() => {
+    const saved = sessionStorage.getItem('pageTreeViewMode');
+    if (saved === 'cards' || saved === 'table') setViewModeState(saved);
+  }, []);
+  const setViewMode = (mode) => {
+    setViewModeState(mode);
+    sessionStorage.setItem('pageTreeViewMode', mode);
+  };
   const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
   const [footers, setFooters] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -403,6 +414,32 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     onUpdate && onUpdate(updated);
   }
 
+  function handleBulkNav(navId) {
+    if (selectedIds.size === 0) return;
+    const updateNav = (nodes) => nodes.map(n =>
+      selectedIds.has(n.id)
+        ? { ...n, data: { ...(n.data || {}), pageNav: navId } }
+        : { ...n, children: updateNav(n.children || []) }
+    );
+    const updated = updateNav(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+    setToast({ message: `Navigation für ${selectedIds.size} Seite(n) gesetzt.`, type: 'success' });
+  }
+
+  function handleBulkFooter(footerId) {
+    if (selectedIds.size === 0) return;
+    const updateFooter = (nodes) => nodes.map(n =>
+      selectedIds.has(n.id)
+        ? { ...n, data: { ...(n.data || {}), pageFooter: footerId } }
+        : { ...n, children: updateFooter(n.children || []) }
+    );
+    const updated = updateFooter(tree);
+    setTree(updated);
+    onUpdate && onUpdate(updated);
+    setToast({ message: `Footer für ${selectedIds.size} Seite(n) gesetzt.`, type: 'success' });
+  }
+
   function handleIndent(nodeId) {
     // Make node a child of its preceding sibling
     const indent = (nodes) => {
@@ -736,6 +773,168 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       </div>
     );
   }
+
+  function renderTreeRows(nodes, depth = 0, parentPath = '') {
+    let rows = [];
+    nodes.forEach((node, index) => {
+      const fullPath = parentPath ? `${parentPath}/${node.slug}` : node.slug;
+
+      rows.push(
+        <tr key={node.id} className={`page-tree-row${selectedIds.has(node.id) ? ' selected' : ''}`}>
+          <td className="page-tree-cell-select">
+            <button
+              onClick={() => toggleSelect(node.id)}
+              title={selectedIds.has(node.id) ? 'Auswahl aufheben' : 'Auswählen'}
+              aria-label={selectedIds.has(node.id) ? `${node.title} abwählen` : `${node.title} auswählen`}
+              aria-pressed={selectedIds.has(node.id)}
+            >
+              {selectedIds.has(node.id) ? <CheckSquare size={14} /> : <Square size={14} />}
+            </button>
+          </td>
+          <td className="page-tree-cell-title" style={{ paddingLeft: 12 + depth * 22 }}>
+            {depth > 0 && <span className="page-tree-connector">└</span>}
+            <a href={`/${fullPath}`} target="_blank" rel="noopener noreferrer" title={node.title}>
+              {node.title}
+            </a>
+            {node.isHomepage && <span className="page-badge badge-home">🏠</span>}
+            {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
+            {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
+          </td>
+          <td className="page-tree-cell-path">/{fullPath}</td>
+          <td className="page-tree-cell-status">
+            <span className={`page-badge page-badge-${(STATUS_COLORS[node.status] || 'badge-gray').replace('badge-', '')}`}>
+              {getStatusLabel(node)}
+            </span>
+          </td>
+          <td className="page-tree-cell-nav">
+            <select
+              value={node.data?.pageNav || ''}
+              onChange={(e) => handleNavChange(node.id, e.target.value)}
+              title="Seiten-Navigation"
+            >
+              <option value="">Keine Navigation</option>
+              {navigations.map(n => (
+                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
+              ))}
+            </select>
+          </td>
+          <td className="page-tree-cell-footer">
+            <select
+              value={node.data?.pageFooter || ''}
+              onChange={(e) => handleFooterChange(node.id, e.target.value)}
+              title="Seiten-Footer"
+            >
+              <option value="">Standard-Footer</option>
+              {footers.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </td>
+          <td className="page-tree-cell-actions">
+            <button
+              className="icon-btn"
+              onClick={() => handleMoveUp(node.id)}
+              disabled={index === 0}
+              title="Nach oben"
+              aria-label={`${node.title} nach oben`}
+            >
+              <ChevronUp size={14} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => handleMoveDown(node.id)}
+              disabled={index === nodes.length - 1}
+              title="Nach unten"
+              aria-label={`${node.title} nach unten`}
+            >
+              <ChevronDown size={14} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => handleIndent(node.id)}
+              disabled={index === 0}
+              title="Einrücken (Unterseite des Vorgängers)"
+              aria-label="Einrücken"
+            >
+              <Indent size={14} />
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => handleOutdent(node.id)}
+              disabled={depth === 0}
+              title="Ausrücken (eine Ebene höher)"
+              aria-label="Ausrücken"
+            >
+              <Outdent size={14} />
+            </button>
+            <button
+              className={`icon-btn${node.status === 'PUBLISHED' ? ' active' : ''}`}
+              onClick={() => handleToggleStatus(node.id)}
+              title={node.status === 'PUBLISHED' ? 'Auf Entwurf setzen' : 'Veröffentlichen'}
+              style={{ color: node.status === 'PUBLISHED' ? '#22c55e' : '#94a3b8' }}
+            >
+              {node.status === 'PUBLISHED' ? <Eye size={14} /> : <EyeOff size={14} />}
+            </button>
+            <button className="icon-btn" onClick={() => onSelect && onSelect(node.id)} title="Bearbeiten" aria-label={`${node.title} bearbeiten`}>
+              <Edit2 size={14} />
+            </button>
+            <button className="icon-btn" onClick={() => handleAdd(node.id)} title="Unterseite hinzufügen" aria-label={`Unterseite unter ${node.title} hinzufügen`}>
+              <Plus size={14} />
+            </button>
+            <button
+              className="icon-btn delete"
+              onClick={() => handleDelete(node.id)}
+              disabled={node.id === 'demo-home'}
+              title={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : 'Löschen'}
+              aria-label={node.id === 'demo-home' ? 'Startseite kann nicht gelöscht werden' : `${node.title} löschen`}
+            >
+              <Trash2 size={14} />
+            </button>
+          </td>
+        </tr>
+      );
+
+      if ((node.children || []).length > 0) {
+        rows = rows.concat(renderTreeRows(node.children, depth + 1, fullPath));
+      }
+    });
+    return rows;
+  }
+
+  function renderTreeTable(nodes) {
+    const allIds = collectAllIds(nodes);
+    const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+    return (
+      <div className="page-tree-table-wrap">
+        <table className="page-tree-table">
+          <thead>
+            <tr>
+              <th className="page-tree-cell-select">
+                <button
+                  onClick={() => setSelectedIds(allSelected ? new Set() : new Set(allIds))}
+                  title={allSelected ? 'Alle abwählen' : 'Alle auswählen'}
+                  aria-label={allSelected ? 'Alle abwählen' : 'Alle auswählen'}
+                  aria-pressed={allSelected}
+                >
+                  {allSelected ? <CheckSquare size={14} /> : <Square size={14} />}
+                </button>
+              </th>
+              <th>Titel</th>
+              <th>Pfad</th>
+              <th>Status</th>
+              <th>Navigation</th>
+              <th>Footer</th>
+              <th>Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {renderTreeRows(nodes)}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div className="page-tree">
       {toast && (
@@ -757,6 +956,25 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
               onChange={e => setSearchTerm(e.target.value)}
             />
           </label>
+
+          <div className="page-tree-view-toggle" role="group" aria-label="Ansicht wählen">
+            <button
+              className={viewMode === 'cards' ? 'active' : ''}
+              onClick={() => setViewMode('cards')}
+              title="Kartenansicht"
+              aria-pressed={viewMode === 'cards'}
+            >
+              <Grid size={16} />
+            </button>
+            <button
+              className={viewMode === 'table' ? 'active' : ''}
+              onClick={() => setViewMode('table')}
+              title="Tabellenansicht"
+              aria-pressed={viewMode === 'table'}
+            >
+              <List size={16} />
+            </button>
+          </div>
 
           <div className="controls">
             <input
@@ -806,6 +1024,32 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
             >
               <EyeOff size={14} /> Auf Entwurf
             </button>
+            <select
+              className="bulk-select"
+              disabled={bulkBusy}
+              value="__placeholder__"
+              onChange={(e) => { if (e.target.value !== '__placeholder__') handleBulkNav(e.target.value); }}
+              title="Navigation für alle ausgewählten Seiten setzen"
+            >
+              <option value="__placeholder__" disabled>Navigation setzen…</option>
+              <option value="">Keine Navigation</option>
+              {navigations.map(n => (
+                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
+              ))}
+            </select>
+            <select
+              className="bulk-select"
+              disabled={bulkBusy}
+              value="__placeholder__"
+              onChange={(e) => { if (e.target.value !== '__placeholder__') handleBulkFooter(e.target.value); }}
+              title="Footer für alle ausgewählten Seiten setzen"
+            >
+              <option value="__placeholder__" disabled>Footer setzen…</option>
+              <option value="">Standard-Footer</option>
+              {footers.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
             <button
               className="bulk-btn bulk-btn-danger"
               disabled={bulkBusy}
@@ -826,7 +1070,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
         <div className="page-grid-root">
           {filteredTree.length > 0 ? (
-            renderCardGrid(filteredTree)
+            viewMode === 'table' ? renderTreeTable(filteredTree) : renderCardGrid(filteredTree)
           ) : (
             <div className="page-tree-empty-state">
               <FileText size={20} />

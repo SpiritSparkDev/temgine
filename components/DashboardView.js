@@ -18,6 +18,8 @@ export default function DashboardView({ templateList, pages, setView, showToast 
     const [dbLoading, setDbLoading] = useState(true);
     const [maintenanceModeEnabled, setMaintenanceModeEnabled] = useState(false);
     const [maintenanceModeLoading, setMaintenanceModeLoading] = useState(true);
+    const [smtpConfigured, setSmtpConfigured] = useState(true); // true until checked, avoids a flash of the warning
+    const [smtpLoading, setSmtpLoading] = useState(true);
 
     const blockTemplateCount = templateList.filter(template => template.type === 'BLOCK').length;
     const recentPages = pages.slice(0, 6);
@@ -79,6 +81,7 @@ export default function DashboardView({ templateList, pages, setView, showToast 
     useEffect(() => {
         checkDatabaseHealth();
         loadMaintenanceMode();
+        loadSmtpStatus();
         // Alle 30 Sekunden aktualisieren
         const interval = setInterval(checkDatabaseHealth, 30000);
         return () => clearInterval(interval);
@@ -107,6 +110,21 @@ export default function DashboardView({ templateList, pages, setView, showToast 
             console.error('Error loading maintenance mode:', e);
         } finally {
             setMaintenanceModeLoading(false);
+        }
+    };
+
+    const loadSmtpStatus = async () => {
+        try {
+            const res = await fetch('/api/settings');
+            if (res.ok) {
+                const settings = await res.json();
+                const complete = !!(settings?.smtp_host && settings?.smtp_user && settings?.smtp_pass && settings?.contact_recipient_email);
+                setSmtpConfigured(complete);
+            }
+        } catch (e) {
+            console.error('Error loading SMTP status:', e);
+        } finally {
+            setSmtpLoading(false);
         }
     };
 
@@ -318,6 +336,43 @@ export default function DashboardView({ templateList, pages, setView, showToast 
                             </button>
                         </div>
                     </article>
+
+                    {!smtpLoading && !smtpConfigured && (
+                        <article className="dashboard-panel">
+                            <div className="dashboard-panel-head">
+                                <div>
+                                    <span className="dashboard-panel-kicker">System</span>
+                                    <h3>E-Mail-Versand (SMTP)</h3>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: '8px', border: '1px solid #fca5a5' }}>
+                                <div style={{ flex: 1 }}>
+                                    <strong style={{ display: 'block', marginBottom: '0.25rem', color: '#dc2626' }}>
+                                        SMTP nicht konfiguriert
+                                    </strong>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                        Kontaktformulare können keine E-Mails versenden, solange Host, Zugangsdaten oder Empfänger fehlen.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setView('contactForms')}
+                                    style={{
+                                        padding: '0.6rem 1.25rem',
+                                        background: '#ef4444',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    Jetzt einrichten
+                                </button>
+                            </div>
+                        </article>
+                    )}
 
                     <article className="dashboard-panel">
                         <div className="dashboard-panel-head">

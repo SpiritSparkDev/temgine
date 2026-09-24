@@ -74,6 +74,9 @@ docs/
 
 # Backups (werden nicht versioniert)
 data/backups/
+
+# Auto-generated NEXTAUTH_SECRET (see server.js) — a real per-instance secret, never commit
+data/.nextauth_secret
 development_docs
 
 *.md

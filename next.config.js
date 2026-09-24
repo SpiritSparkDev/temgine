@@ -28,12 +28,12 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js braucht eval
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net", // Next.js braucht eval; jsdelivr für das ALTCHA-Spam-Schutz-Widget
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com",
       "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:",
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob:",
-      "connect-src 'self'",
+      "connect-src 'self' https://cdn.jsdelivr.net",
       "frame-src 'self'",
       "worker-src blob: 'self'",
       "object-src 'none'",

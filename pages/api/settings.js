@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -15,6 +16,10 @@ export default async function handler(req, res) {
       for (const s of settings) {
         map[s.key] = s.value
       }
+      // Maintenance-Seiten (404/503/keine Startseite/Ladebildschirm) liegen als
+      // Dateien vor, nicht in der Setting-Tabelle — unter denselben Keys mergen,
+      // damit bestehende Aufrufer (Admin-UI, pages/[...slug].js, ...) unverändert bleiben.
+      Object.assign(map, getAllMaintenanceAsSettings())
       return res.status(200).json(map)
     }
 
@@ -28,6 +33,12 @@ export default async function handler(req, res) {
       if (value === undefined || value === null) {
         const [status, resp] = errorResponse(400, 'value erforderlich', 'VALIDATION_ERROR', { missing: ['value'] });
         return res.status(status).json(resp);
+      }
+
+      const maintenanceKey = parseSettingKey(key)
+      if (maintenanceKey) {
+        saveMaintenanceField(maintenanceKey.page, maintenanceKey.field, String(value))
+        return res.status(200).json({ key: String(key), value: String(value) })
       }
 
       const setting = await prisma.setting.upsert({

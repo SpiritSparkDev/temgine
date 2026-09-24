@@ -212,6 +212,8 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         pages: data.pages?.length || 0,
         cssFiles: data.css?.length || 0,
         navigations: data.navigations?.length || 0,
+        globalVariables: data.globalVariables?.length || 0,
+        footers: data.footers?.length || 0,
         uploadedFiles: data.uploadedFiles?.length || 0,
         cssConfig: data.cssConfig ? 1 : 0,
         fontsConfig: data.fontsConfig ? 1 : 0
@@ -223,6 +225,8 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 • ${itemCounts.pages} Seiten
 • ${itemCounts.cssFiles} CSS-Dateien
 • ${itemCounts.navigations} Navigationen
+• ${itemCounts.globalVariables} Globale Variablen
+• ${itemCounts.footers} Footer
 • ${itemCounts.uploadedFiles} Upload-Dateien
 • CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
 • Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}

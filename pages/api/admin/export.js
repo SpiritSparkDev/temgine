@@ -4,6 +4,9 @@ import fs from 'fs'
 import path from 'path'
 import JSZip from 'jszip'
 import { listTemplates } from '../../../lib/templateStore'
+import { listNavigations } from '../../../lib/navigationStore'
+import { listFooters } from '../../../lib/footerStore'
+import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
 import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
@@ -135,9 +138,9 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
   }
 
   if (page?.data?.pageNav && allNavigationsById[page.data.pageNav]?.code) {
-    navigations.main = {
+    navigations.page = {
       code: allNavigationsById[page.data.pageNav].code,
-      data: { pages: nestedPages }
+      data: { pages: nestedPages, anchors }
     }
   }
 
@@ -397,7 +400,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   const allNavigationsById = {}
   for (const nav of navigations) allNavigationsById[nav.id] = nav
   const activeNavigations = navigations.filter((n) => n.isActive === true)
-  const allFooters = await prisma.footer.findMany({ select: { id: true, code: true, isActive: true } })
+  const allFooters = loadFooters()
   const activeFooterRow = allFooters.find((f) => f.isActive === true) || null
   const activeFooter = activeFooterRow ? { code: activeFooterRow.code, data: {} } : null
   const allFootersById = {}
@@ -644,14 +647,22 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   return zip
 }
 
-async function loadNavigations() {
+function loadNavigations() {
   try {
-    return await prisma.navigation.findMany({
-      orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
-      select: { id: true, name: true, type: true, code: true, isActive: true }
-    })
+    return listNavigations()
+      .sort((a, b) => (a.type === b.type ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.type.localeCompare(b.type)))
+      .map(({ id, name, type, code, isActive }) => ({ id, name, type, code, isActive }))
   } catch (e) {
-    console.warn('Failed to load navigations from database:', e.message)
+    console.warn('Failed to load navigations from files:', e.message)
+    return []
+  }
+}
+
+function loadFooters() {
+  try {
+    return listFooters().sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
+  } catch (e) {
+    console.warn('Failed to load footers from files:', e.message)
     return []
   }
 }
@@ -765,13 +776,17 @@ export default async function handler(req, res) {
       return res.status(200).send(merged)
     }
 
-    // Fetch all data in parallel (templates live as files, not DB rows — read synchronously)
+    // Fetch all data in parallel (templates/navigations/footers/maintenance pages
+    // live as files, not DB rows — read synchronously)
     const templates = listTemplates()
-    const [pages, snippets, css, navigations] = await Promise.all([
+    const navigations = loadNavigations()
+    const footers = loadFooters()
+    const maintenance = getAllMaintenanceAsSettings()
+    const [pages, snippets, css, globalVariables] = await Promise.all([
       prisma.page.findMany({ orderBy: { createdAt: 'asc' } }),
       prisma.snippet.findMany({ orderBy: { createdAt: 'asc' } }),
       loadCSSFiles(),
-      loadNavigations()
+      prisma.globalVariable.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
     ])
 
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
@@ -799,13 +814,16 @@ export default async function handler(req, res) {
       exportedDate: now.toLocaleDateString('de-DE'),
       exportedTime: now.toLocaleTimeString('de-DE'),
       exportType: wantStaticSite ? 'static-site' : (wantTransferZip || wantZip ? 'project-transfer' : 'json'),
-      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'uploadFonts', 'uploadedFiles', 'cssConfig', 'fontsConfig'],
+      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'globalVariables', 'footers', 'maintenance', 'uploadFonts', 'uploadedFiles', 'cssConfig', 'fontsConfig'],
       itemCounts: {
         templates: templates.length,
         snippets: mappedSnippets.length,
         pages: pages.length,
         cssFiles: css.length,
         navigations: navigations.length,
+        globalVariables: globalVariables.length,
+        footers: footers.length,
+        maintenancePages: Object.keys(maintenance).length,
         uploadFonts: uploadFonts.length,
         uploadedFiles: uploadedFiles.length,
         cssConfig: cssConfig ? 1 : 0,
@@ -822,6 +840,9 @@ export default async function handler(req, res) {
         pages,
         css,
         navigations,
+        globalVariables,
+        footers,
+        maintenance,
         uploadFonts,
         cssConfig: cssConfig || null,
         fontsConfig: fontsConfig || null
@@ -844,6 +865,21 @@ export default async function handler(req, res) {
       for (const nav of navigations) {
         const safeName = (nav.name || nav.id || 'navigation').replace(/[^\w.-]/g, '_')
         navFolder.file(`${safeName}.json`, JSON.stringify(nav, null, 2))
+      }
+
+      // Footers as individual JSON files (mirrors the navigations folder)
+      const footerFolder = zip.folder('footers')
+      for (const f of footers) {
+        const safeName = (f.name || f.id || 'footer').replace(/[^\w.-]/g, '_')
+        footerFolder.file(`${safeName}.json`, JSON.stringify(f, null, 2))
+      }
+
+      // Maintenance pages (404/503/no-homepage/loading) as individual html/css/js files
+      const maintenanceFolder = zip.folder('maintenance')
+      for (const [key, value] of Object.entries(maintenance)) {
+        const ext = key.endsWith('_html') ? 'html' : key.endsWith('_css') ? 'css' : 'js'
+        const base = key.replace(/_(html|css|js)$/, '').replace(/[^\w.-]/g, '_')
+        maintenanceFolder.file(`${base}.${ext}`, value || '')
       }
 
       // Uploaded fonts (binary) to keep @font-face sources valid after restore
@@ -988,6 +1024,9 @@ export default async function handler(req, res) {
       pages,
       css,
       navigations,
+      globalVariables,
+      footers,
+      maintenance,
       uploadFonts,
       uploadedFiles,
       cssConfig: cssConfig || null,

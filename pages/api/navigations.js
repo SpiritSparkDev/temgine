@@ -1,6 +1,6 @@
-import { prisma } from '../../lib/prisma';
 import { requireAuth } from '../../lib/auth';
 import { logAudit } from '../../lib/audit';
+import { listNavigations, getNavigationById, getActiveNavigations, saveNavigation, deleteNavigation } from '../../lib/navigationStore';
 
 const VALID_TYPES = ['MAIN', 'PAGE'];
 
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
       // Single item (with code) — used by editor
       if (id) {
-        const nav = await prisma.navigation.findUnique({ where: { id: String(id) } });
+        const nav = getNavigationById(String(id));
         if (!nav) {
           const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
           return res.status(status).json(resp);
@@ -34,19 +34,15 @@ export default async function handler(req, res) {
 
       // Active navs — used by public rendering ([...slug].js)
       if (active === 'true') {
-        const navs = await prisma.navigation.findMany({
-          where: { isActive: true, type: { in: VALID_TYPES } },
-          select: { id: true, name: true, type: true, code: true },
-        });
+        const navs = getActiveNavigations()
+          .filter((n) => VALID_TYPES.includes(n.type))
+          .map((n) => ({ id: n.id, name: n.name, type: n.type, code: n.code }));
         return res.status(200).json(navs);
       }
 
       // Full list (with responsive marker, but without code body) — used by NavigationView
-      const navs = await prisma.navigation.findMany({
-        where: { type: { in: VALID_TYPES } },
-        orderBy: [{ type: 'asc' }, { createdAt: 'asc' }],
-        select: { id: true, name: true, type: true, isActive: true, updatedAt: true, code: true },
-      });
+      const navs = listNavigations().filter((n) => VALID_TYPES.includes(n.type));
+      navs.sort((a, b) => (a.type === b.type ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.type.localeCompare(b.type)));
 
       const list = navs.map((nav) => ({
         id: nav.id,
@@ -83,9 +79,7 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      const nav = await prisma.navigation.create({
-        data: { name: String(name), type, code: String(code), isActive: false },
-      });
+      const nav = saveNavigation({ name: String(name), type, code: String(code), isActive: false });
 
       await logAudit({ action: 'CREATE', resource: 'navigation', resourceId: nav.id, userId: authResult.user.id, details: { name: nav.name, type: nav.type } });
       return res.status(201).json(nav);
@@ -99,39 +93,22 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      try {
-        const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
-        if (!existing) {
-          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-
-        // If activating: deactivate all other navs of the same type first
-        if (isActive === true) {
-          await prisma.navigation.updateMany({
-            where: { type: existing.type, isActive: true, id: { not: String(id) } },
-            data: { isActive: false },
-          });
-        }
-
-        const updated = await prisma.navigation.update({
-          where: { id: String(id) },
-          data: {
-            ...(name !== undefined && { name: String(name) }),
-            ...(code !== undefined && { code: String(code) }),
-            ...(isActive !== undefined && { isActive: Boolean(isActive) }),
-          },
-        });
-
-        await logAudit({ action: 'UPDATE', resource: 'navigation', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
-        return res.status(200).json(updated);
-      } catch (e) {
-        if (e.code === 'P2025') {
-          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-        throw e;
+      const existing = getNavigationById(String(id));
+      if (!existing) {
+        const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+        return res.status(status).json(resp);
       }
+
+      const updated = saveNavigation({
+        id: String(id),
+        type: existing.type,
+        ...(name !== undefined && { name: String(name) }),
+        ...(code !== undefined && { code: String(code) }),
+        ...(isActive !== undefined && { isActive: Boolean(isActive) }),
+      });
+
+      await logAudit({ action: 'UPDATE', resource: 'navigation', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
+      return res.status(200).json(updated);
     }
 
     // ── DELETE ────────────────────────────────────────────────────────────────
@@ -142,23 +119,15 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      try {
-        const existing = await prisma.navigation.findUnique({ where: { id: String(id) } });
-        if (!existing) {
-          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-
-        await prisma.navigation.delete({ where: { id: String(id) } });
-        await logAudit({ action: 'DELETE', resource: 'navigation', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
-        return res.status(200).json({ ok: true });
-      } catch (e) {
-        if (e.code === 'P2025') {
-          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-        throw e;
+      const existing = getNavigationById(String(id));
+      if (!existing) {
+        const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+        return res.status(status).json(resp);
       }
+
+      deleteNavigation(String(id));
+      await logAudit({ action: 'DELETE', resource: 'navigation', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
+      return res.status(200).json({ ok: true });
     }
 
     const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
@@ -169,4 +138,3 @@ export default async function handler(req, res) {
     return res.status(status).json(resp);
   }
 }
-

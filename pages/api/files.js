@@ -3,6 +3,8 @@ import path from 'path';
 import formidable from 'formidable';
 import { prisma } from '../../lib/prisma';
 import { rateLimit } from '../../lib/rateLimit';
+import { listTemplates, saveTemplate } from '../../lib/templateStore';
+import { listNavigations, saveNavigation } from '../../lib/navigationStore';
 
 export const config = {
   api: {
@@ -398,12 +400,12 @@ async function syncContentUrlReferences(mappings = []) {
     stats.replacedUrls += totalReplaced;
   }
 
-  const templates = await prisma.template.findMany({ select: { id: true, code: true } });
+  const templates = listTemplates();
   for (const templateRecord of templates) {
     const mapped = replaceMappedUrlsInString(templateRecord.code, uniqueMappings);
     const repaired = repairUploadUrlsInString(mapped.output, urlCache);
     if (repaired.output === templateRecord.code) continue;
-    await prisma.template.update({ where: { id: templateRecord.id }, data: { code: repaired.output } });
+    saveTemplate({ ...templateRecord, code: repaired.output });
     stats.templates += 1;
     stats.replacedUrls += mapped.replaced + repaired.replaced;
   }
@@ -418,12 +420,12 @@ async function syncContentUrlReferences(mappings = []) {
     stats.replacedUrls += mapped.replaced + repaired.replaced;
   }
 
-  const navigations = await prisma.navigation.findMany({ select: { id: true, code: true } });
+  const navigations = listNavigations();
   for (const navRecord of navigations) {
     const mapped = replaceMappedUrlsInString(navRecord.code, uniqueMappings);
     const repaired = repairUploadUrlsInString(mapped.output, urlCache);
     if (repaired.output === navRecord.code) continue;
-    await prisma.navigation.update({ where: { id: navRecord.id }, data: { code: repaired.output } });
+    saveNavigation({ ...navRecord, code: repaired.output });
     stats.navigations += 1;
     stats.replacedUrls += mapped.replaced + repaired.replaced;
   }
