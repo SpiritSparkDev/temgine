@@ -45,3 +45,38 @@ describe('matchServicesInSources', () => {
     expect(matchServicesInSources([{ id: 'x.js', content: 'console.log(1)' }], [])).toEqual([]);
   });
 });
+
+describe('collectScanSources (JSON-stringified DB content)', () => {
+  afterEach(() => {
+    jest.dontMock('../lib/prisma');
+    jest.resetModules();
+  });
+
+  test('iframes inside Page.blocks / BlogPost.templateData JSON are detected', async () => {
+    jest.resetModules();
+    jest.doMock('../lib/prisma', () => ({
+      prisma: {
+        page: {
+          findMany: async () => [{
+            slug: 'home',
+            blocks: [{ html: '<iframe src="https://www.youtube.com/embed/x"></iframe>' }],
+            data: {},
+          }],
+        },
+        blogPost: {
+          findMany: async () => [{
+            slug: 'p',
+            body: '',
+            templateData: { embed: '<iframe src="https://www.google.com/maps/embed?pb=1"></iframe>' },
+          }],
+        },
+      },
+    }));
+    const scanner = require('../lib/cookieScanner');
+    const { textSources } = await scanner.collectScanSources();
+    const matches = scanner.matchServicesInSources([], textSources);
+    const byId = Object.fromEntries(matches.map((m) => [m.service.id, m.matchedIframeSources]));
+    expect(byId.youtube).toEqual(['https://www.youtube.com/embed/x']);
+    expect(byId['google-maps']).toEqual(['https://www.google.com/maps/embed?pb=1']);
+  });
+});
