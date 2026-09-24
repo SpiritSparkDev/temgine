@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions, Layers, Tag } from '../lib/muiIcons';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions, Layers, Tag, Cookie } from '../lib/muiIcons';
 import pkg from '../package.json';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
@@ -20,6 +20,7 @@ import ErrorBoundary from './ErrorBoundary';
 import NavigationView from './NavigationView';
 import FooterView from './FooterView';
 import ContactFormTemplatesView from './ContactFormTemplatesView';
+import CookieConsentView from './CookieConsentView';
 import GlobalVariablesView from './GlobalVariablesView';
 import FontManagerView from './FontManagerView';
 import BlogView from './BlogView';
@@ -98,7 +99,7 @@ export default function AdminPageClient() {
       const legacyBuilderMap = {
         templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','contactForms','globalVariables','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','contactForms','cookies','globalVariables','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -722,6 +723,7 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
               <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
               <li><button className={`menu-item ${view==='contactForms'?'active':''}`} onClick={() => handleSelectView('contactForms')}><Mail size={18} /> Kontaktformulare</button></li>
+              <li><button className={`menu-item ${view==='cookies'?'active':''}`} onClick={() => handleSelectView('cookies')}><Cookie size={18} /> Cookies</button></li>
               <li><button className={`menu-item ${view==='footer'?'active':''}`} onClick={() => handleSelectView('footer')}><Layers size={18} /> Footer</button></li>
               <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
 
@@ -859,6 +861,7 @@ export default function AdminPageClient() {
           )}
           {view === 'navigation' && <NavigationView showToast={showToast} />}
           {view === 'contactForms' && <ContactFormTemplatesView showToast={showToast} />}
+          {view === 'cookies' && <CookieConsentView showToast={showToast} />}
           {view === 'footer' && <FooterView showToast={showToast} />}
           {view === 'globalVariables' && <GlobalVariablesView showToast={showToast} />}
           {view === 'users' && (
