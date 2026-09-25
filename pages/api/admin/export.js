@@ -8,7 +8,7 @@ import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
 import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
-import { findChildPagesById } from '../../../lib/navTreeHelpers'
+import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
@@ -142,7 +142,8 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
   const anchors = Array.isArray(page?.data?.anchors) ? page.data.anchors : []
   // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
   // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
-  const childPages = findChildPagesById(nestedPages, page?.id)
+  const rawMatch = findRawPageNodeById(allPagesTree, page?.id)
+  const childPages = rawMatch ? buildNestedPages(rawMatch.node.children || [], rawMatch.parentPath) : []
   const navData = { pages: nestedPages, anchors, childPages }
   const navigations = {}
 
