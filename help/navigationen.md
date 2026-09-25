@@ -54,7 +54,7 @@ angezeigt.
 
 ---
 
-## Variablen-Glossar: was `pages`, `children`, `hasChildren` & Co. bedeuten
+## Variablen-Glossar: was `pages`, `children`, `hasChildren`, `childPages` & Co. bedeuten
 
 Der Code einer Navigation ist ein **Mustache-Template**. `{{#pages}}…{{/pages}}`
 ist kein "Aufruf einer Funktion pages", sondern eine **Schleife**: für jede
@@ -154,6 +154,74 @@ Seiten-Editor unter „Weitere Optionen") ein Bild hinterlegt hat:
 {{/pages}}
 ```
 
+### Nur die Unterseiten der aktuellen Seite: `childPages`
+
+Die typische Aufgabe einer PAGE-Nav — „zeig mir nur die Unterseiten *der
+Seite, auf der ich gerade bin*" — lässt sich mit `pages` allein nicht
+lösen: `pages` ist immer der **gesamte** Seitenbaum von oben, Mustache hat
+keine Möglichkeit, darin „die aktuelle Seite suchen und nur ab da
+weitermachen" auszudrücken. Deshalb gibt es zusätzlich `childPages` — ein
+fertig vorberechnetes Array, das serverseitig bereits nur die direkten
+Unterseiten der gerade gerenderten Seite enthält (gleiche Feldstruktur wie
+Einträge in `pages`/`children`: `slug`, `title`, `hasChildren`, `children`).
+
+```html
+<nav class="page-nav subpages" aria-label="Unterseiten">
+  <ul class="subpages-list">
+    {{#childPages}}
+      <li class="subpages-item">
+        <a href="/{{slug}}">{{title}}</a>
+      </li>
+    {{/childPages}}
+  </ul>
+  {{^childPages}}
+    <p class="subpages-empty">Keine Unterseiten vorhanden.</p>
+  {{/childPages}}
+</nav>
+```
+
+Zeile für Zeile:
+
+1. `<nav class="page-nav subpages" aria-label="Unterseiten">` — reines HTML,
+   Wrapper-Element, keine Mustache-Logik. Die Klasse `page-nav` ist Konvention
+   (kein Pflichtname), `aria-label` ist Barrierefreiheit für Screenreader.
+2. `<ul class="subpages-list">` — die Liste, die gleich mit den Unterseiten
+   gefüllt wird.
+3. `{{#childPages}}` — Schleifen-Start: „wiederhole alles bis `{{/childPages}}`
+   einmal pro Element in `childPages`". Ist das Array leer, wird der ganze
+   Block übersprungen (keine leere `<li>`).
+4. `<li class="subpages-item">` — pro Unterseite ein Listenpunkt.
+5. `<a href="/{{slug}}">{{title}}</a>` — der Link. `{{slug}}` und `{{title}}`
+   beziehen sich hier (weil wir *innerhalb* von `{{#childPages}}` sind) auf
+   die aktuelle Unterseite aus der Schleife, nicht auf die Seite, auf der die
+   Navigation gerendert wird. `slug` ist bereits der vollständige Pfad
+   (inkl. aller Elternsegmente), daher reicht `/{{slug}}` als `href`.
+6. `{{/childPages}}` — Schleifen-Ende.
+7. `</ul>` — Liste schließen.
+8. `{{^childPages}}…{{/childPages}}` — **invertierter** Bedingungsblock: das
+   `^` statt `#` dreht die Bedingung um. Dieser Block rendert nur, wenn
+   `childPages` leer ist — z. B. auf einer Seite ganz unten im Baum ohne
+   eigene Unterseiten. Ohne diesen Block würde dort einfach eine leere,
+   unsichtbare `<ul></ul>` stehenbleiben; mit `^` bekommt man stattdessen
+   einen Hinweistext.
+9. `</nav>` — Wrapper schließen.
+
+So bindest du diese Navigation ein:
+
+1. Navigationsverwaltung → Seitennavigation → **Neu**, obigen Code
+   einfügen, z. B. unter dem Namen „Unterseiten" speichern.
+2. Auf einer Seite verwenden — einer der drei Wege aus dem Abschnitt oben:
+   Seiten-Navigationsauswahl (rendert automatisch die *jeweils aktuelle*
+   Seite), Navigations-Block, oder direkt `{{{nav:unterseiten}}}` in ein
+   Template schreiben. Da `childPages` bei **jedem** Seitenaufruf neu anhand
+   der gerade angezeigten Seite berechnet wird, zeigt dieselbe Navigation
+   auf jeder Seite automatisch deren eigene Unterseiten — kein manuelles
+   Pflegen pro Seite nötig.
+
+Willst du zusätzlich noch eine Ebene tiefer anzeigen (Unterseiten der
+Unterseiten), lässt sich das wie in Beispiel 2 mit `{{#hasChildren}}` und
+`{{#children}}` innerhalb von `{{#childPages}}` verschachteln.
+
 ### In `{{#anchors}}…{{/anchors}}` (nur PAGE-Navs)
 
 | Feld | Bedeutung |
@@ -199,11 +267,18 @@ gleich auf:
 - `lib/liveSnapshot.js` (statischer Live-Modus, siehe Einstellungen → Live-Rendering)
 - `pages/api/admin/export.js` (Static-Site-Export als ZIP — **ohne** `isCurrent`/`data` in `pages`)
 
+`pages`, `anchors` und `childPages` selbst stehen in allen vier Pfaden zur
+Verfügung — nur die beiden Zusatzfelder `isCurrent`/`data` **innerhalb**
+der `pages`-Einträge fehlen auf der Startseite und im Static-Export (siehe
+Tabelle oben).
+
 Jeder Pfad baut dafür `navigations.byId` — eine Map von Navigations-ID auf
 `{ name, code, data }` — aus allen vorhandenen Navigationen auf; daraus
 berechnet `renderPage()` sowohl die benannten Platzhalter als auch die
 Auflösung von Navigations-Blöcken. Die genaue Platzhalter-Berechnung steckt
-in `lib/templateEngine.js` (`navPlaceholderSlug` / `buildNavPlaceholderKeys`).
+in `lib/templateEngine.js` (`navPlaceholderSlug` / `buildNavPlaceholderKeys`),
+`childPages` wird in `lib/navTreeHelpers.js` (`findChildPagesById`) anhand
+der Seiten-ID berechnet.
 
 ## Navigation anlegen/bearbeiten
 

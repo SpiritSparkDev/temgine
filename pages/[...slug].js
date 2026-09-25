@@ -2,6 +2,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
+import { findChildPagesById } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 
@@ -425,13 +426,17 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
                 .map(n => {
                   const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
                   const children = buildNestedPages(n.children || [], slug);
-                  return { slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: slug === currentPath, data: n.data || {} };
+                  return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: slug === currentPath, data: n.data || {} };
                 });
             const nestedPages = buildNestedPages(pages);
             const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
+            // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
+            // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
+            const childPages = findChildPagesById(nestedPages, foundPage?.id);
+            const navData = { pages: nestedPages, anchors, childPages };
             for (const nav of activeNavs) {
               const key = String(nav.type).toLowerCase();
-              navigations[key] = { code: nav.code, data: { pages: nestedPages, anchors } };
+              navigations[key] = { code: nav.code, data: navData };
             }
             navigations['auto'] = { code: buildNavHtml(pages, currentPath), data: {} };
             if (foundPage.data?.pageNav) {
@@ -439,7 +444,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
                 const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(foundPage.data.pageNav)}&_t=${Date.now()}`);
                 if (pageNavRes.ok) {
                   const pageNavData = await pageNavRes.json();
-                  if (pageNavData && pageNavData.code) navigations['page'] = { code: pageNavData.code, data: { pages: nestedPages, anchors } };
+                  if (pageNavData && pageNavData.code) navigations['page'] = { code: pageNavData.code, data: navData };
                 }
               } catch (e) {
                 console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message);
@@ -452,7 +457,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             navigations.byId = {};
             for (const nav of activeNavs) {
               if (nav?.id && nav?.code) {
-                navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } };
+                navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: navData };
               }
             }
 
@@ -465,7 +470,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
                   const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`);
                   if (res.ok) {
                     const nav = await res.json();
-                    if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } };
+                    if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: navData };
                   }
                 } catch (e) {
                   console.warn('Navigations-Block konnte nicht geladen werden:', e.message);
