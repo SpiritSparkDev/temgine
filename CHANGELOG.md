@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.4] - 2026-09-24
+
+### Changed
+- Textarea-Felder im Rich-Text-Editor (Markdown-Modus, z. B. beim Bearbeiten von Seitentexten): Feld ist jetzt immer volle Breite (`.field-item-textarea` spannte bisher nur eine von drei Grid-Spalten) und wächst automatisch mit dem Inhalt bis max. 50 Zeilen, statt fest 4 Zeilen mit manuellem Resize-Griff.
+
+---
+
 ## [0.14.3] - 2026-09-25
 
 ### Fixed

@@ -1016,6 +1016,7 @@
 }
 
 .field-item-textarea {
+  grid-column: 1 / -1;
   position: relative;
   padding-top: 20px;
   margin-bottom: 8px;

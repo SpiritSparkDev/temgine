@@ -8,7 +8,7 @@
  *   placeholder {string}
  *   toolbar     {string[]} subset of buttons to show (default: all)
  */
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useLayoutEffect } from 'react';
 import { marked } from 'marked';
 
 // Configure marked: safe defaults, no mangling
@@ -52,6 +52,14 @@ export default function RichTextEditor({
   // mode: 'source' | 'split' | 'preview'
   const [mode, setMode] = useState('source');
   const taRef = useRef(null);
+
+  // Grow the textarea with its content, capped at ~50 lines (see MAX_TEXTAREA_HEIGHT).
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }, [mdValue, mode]);
 
   const show = (key) => toolbar.includes(key);
 
@@ -234,14 +242,21 @@ const sepStyle = {
   alignSelf: 'stretch',
 };
 
+// 50 lines at the textarea's own line-height/font-size, so it scales with them.
+const MAX_TEXTAREA_HEIGHT = '80em'; // 50 * 1.6 (line-height)
+
 const textareaStyle = {
-  flex: 1,
+  // Not flex:1 - that forces flex-basis 0 in the column-flex wrapper, which fights
+  // the JS-driven auto-grow height below. Split mode overrides this back to 1.
+  flex: 'none',
   width: '100%',
   minHeight: '90px',
+  maxHeight: MAX_TEXTAREA_HEIGHT,
   padding: '8px 10px',
   border: 'none',
   outline: 'none',
-  resize: 'vertical',
+  resize: 'none',
+  overflowY: 'auto',
   background: 'var(--bg-secondary)',
   color: 'var(--text-primary)',
   fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
