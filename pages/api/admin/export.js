@@ -14,6 +14,16 @@ const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
 const STATIC_EXPORT_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico', '.avif', '.mp4', '.webm', '.pdf', '.txt', '.woff', '.woff2', '.ttf', '.otf', '.eot'])
 
+function getProjectSlug(req) {
+  const configuredUrl = process.env.NEXTAUTH_URL || ''
+  let host = ''
+  try {
+    if (configuredUrl) host = new URL(configuredUrl).hostname
+  } catch (_e) {}
+  if (!host) host = String(req.headers.host || '').split(':')[0]
+  return host.toLowerCase().replace(/[^a-z0-9.-]+/g, '-').replace(/^-+|-+$/g, '') || 'projekt'
+}
+
 function safeZipPath(input) {
   return String(input || '').replace(/\\/g, '/').replace(/^\/+/, '').split('/').filter(Boolean).map(part => part.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
 }
@@ -760,7 +770,8 @@ export default async function handler(req, res) {
     const now = new Date()
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const timeStr = `${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`
-    const baseName = `temgine-backup-${dateStr}-${timeStr}`
+    const projectSlug = getProjectSlug(req)
+    const baseName = `${projectSlug}-temgine-backup-${dateStr}-${timeStr}`
 
     // CSS-only export: merged file of all enabled CSS
     if (wantCss) {
@@ -772,7 +783,7 @@ export default async function handler(req, res) {
         .map(f => `/* ==============================\n   ${f.filename}\n   ============================== */\n\n${f.content || ''}`)
         .join('\n\n')
       res.setHeader('Content-Type', 'text/css; charset=utf-8')
-      res.setHeader('Content-Disposition', `attachment; filename="temgine-styles-${dateStr}.css"`)
+      res.setHeader('Content-Disposition', `attachment; filename="${projectSlug}-temgine-styles-${dateStr}.css"`)
       return res.status(200).send(merged)
     }
 
