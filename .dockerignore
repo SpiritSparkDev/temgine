@@ -5,3 +5,7 @@ node_modules
 npm-debug.log
 .env
 .env.local
+
+# Bind-mounted at runtime (docker-compose.yml) — baking them into the image is wasted work
+public
+data

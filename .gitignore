@@ -77,6 +77,9 @@ data/backups/
 
 # Auto-generated NEXTAUTH_SECRET (see server.js) — a real per-instance secret, never commit
 data/.nextauth_secret
+
+# Ad-hoc backups made before overwriting public/ or data/ (e.g. Docker bind-mount migration)
+*.stale-backup-*/
 development_docs
 
 *.md

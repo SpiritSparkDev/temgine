@@ -1,8 +1,9 @@
 # No explicit container_name / project name here on purpose: Compose derives both from the
-# current directory by default, so container/network/volume names (and the bind-mount paths
-# below) are automatically namespaced per checkout. To run several isolated instances on one
-# host, check out this repo into one directory per instance (or set COMPOSE_PROJECT_NAME
-# explicitly) — see development_docs/DOCKER.md.
+# current directory by default, so container/network/volume names are automatically namespaced
+# per checkout; app's ./data and ./public bind mounts (below) land inside that same checkout
+# directory for the same reason. To run several isolated instances on one host, check out this
+# repo into one directory per instance (or set COMPOSE_PROJECT_NAME explicitly) — see
+# development_docs/DOCKER.md.
 services:
   # Generates the Postgres password once on first start (or reuses the one
   # from .env.local's DATABASE_URL if set) and persists it into a volume both
@@ -66,8 +67,8 @@ services:
       PORT: 3000
     volumes:
       - db_secrets:/run/secrets:ro
-      - /srv/docker/${COMPOSE_PROJECT_NAME:-temgine}/temgine_data:/app/data
-      - /srv/docker/${COMPOSE_PROJECT_NAME:-temgine}/temgine_public:/app/public
+      - ./data:/app/data
+      - ./public:/app/public
     ports:
       - "${APP_PORT:-3000}:3000"
 

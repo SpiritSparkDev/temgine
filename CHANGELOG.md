@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.5] - 2026-09-25
+
+### Fixed
+- Docker-Deployment: `app`-Bind-Mounts (`/app/data`, `/app/public`) zeigten auf `/srv/docker/<Projekt>/...` — auf Docker Desktop für Windows (WSL2-Backend) ein Pfad *innerhalb* der VM, ohne Windows-Explorer-Zugriff. Persistenz über Container-Neustarts funktionierte, war aber vom Host aus unsichtbar. Auf relative Pfade (`./data`, `./public`) umgestellt, die direkt im Checkout landen — echte bilaterale Bind-Mounts, jetzt auch unter Windows sichtbar/bearbeitbar.
+- Beim Umzug aufgefallen: `data/navigations/`, `data/fonts-config.json` und `data/.templates-order.json` fehlten im laufenden Container (unvollständiges Datenverzeichnis, vermutlich aus einem früheren Volume-Reset) — aus dem lokalen Checkout wiederhergestellt.
+
+### Changed
+- `data/pages.json`, `templates.json`, `snippets.json` sowie alte `data/backups/*.json` aus dem Repo entfernt — Altlasten aus der Zeit vor der Postgres-Migration (`scripts/migrate-json-to-db.js`), zur Laufzeit nicht mehr gelesen.
+- `public/favicon/` aus dem Repo entfernt, um mit dem aktuellen (favicon-losen) Container-Stand übereinzustimmen.
+- `.dockerignore`: `public/` und `data/` ausgeschlossen (werden zur Laufzeit ohnehin per Bind-Mount überschrieben, mussten nicht mehr ins Image kopiert werden).
+
+---
+
 ## [0.14.4] - 2026-09-24
 
 ### Changed
