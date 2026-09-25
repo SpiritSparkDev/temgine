@@ -831,7 +831,8 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                       <tbody>
                         <tr><td><code>{'{{#hasChildren}}'}</code></td><td>Wenn Unterseiten existieren</td></tr>
                         <tr><td><code>{'{{#children}}'}</code></td><td>Unterseiten iterieren</td></tr>
-                        <tr><td><code>{'{{#pages}}'}</code></td><td>Nav-Seiten iterieren (Typ Haupt/Mobile)</td></tr>
+                        <tr><td><code>{'{{#pages}}'}</code></td><td>gesamten Seitenbaum iterieren</td></tr>
+                        <tr><td><code>{'{{#childPages}}'}</code></td><td>nur die direkten Unterseiten der aktuell gerenderten Seite</td></tr>
                         <tr><td><code>{'{{#anchors}}'}</code></td><td>Anker iterieren (Typ Seite)</td></tr>
                       </tbody>
                     </table>

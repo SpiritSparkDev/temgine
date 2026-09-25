@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage, renderTemplate, collectNavigationBlockIds } from '../lib/templateEngine'
+import { findChildPagesById } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 
@@ -230,16 +231,19 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                   .map(n => {
                     const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
                     const children = buildNestedPages(n.children || [], slug)
-                    return { slug, title: n.title, hasChildren: children.length > 0, children }
+                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
                   })
               const nestedPages = buildNestedPages(pages)
 
               const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
+              // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
+              // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
+              const childPages = findChildPagesById(nestedPages, homePage?.id)
+              const navData = { pages: nestedPages, anchors, childPages }
 
               for (const nav of activeNavs) {
                 const key = String(nav.type).toLowerCase()
-                const data = key === 'page' ? { anchors } : { pages: nestedPages }
-                navigations[key] = { code: nav.code, data }
+                navigations[key] = { code: nav.code, data: navData }
               }
 
               // If this page has a specific navigation assigned, use it as the optional page nav
@@ -249,7 +253,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                   if (pageNavRes.ok) {
                     const pageNavData = await pageNavRes.json()
                     if (pageNavData && pageNavData.code) {
-                      navigations['page'] = { code: pageNavData.code, data: { pages: nestedPages, anchors } }
+                      navigations['page'] = { code: pageNavData.code, data: navData }
                     }
                   }
                 } catch (e) {
@@ -263,7 +267,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
               navigations.byId = {}
               for (const nav of activeNavs) {
                 if (nav?.id && nav?.code) {
-                  navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } }
+                  navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: navData }
                 }
               }
 
@@ -276,7 +280,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                     const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`)
                     if (res.ok) {
                       const nav = await res.json()
-                      if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } }
+                      if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: navData }
                     }
                   } catch (e) {
                     console.warn('Navigations-Block konnte nicht geladen werden:', e.message)

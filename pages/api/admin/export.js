@@ -8,6 +8,7 @@ import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
 import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
+import { findChildPagesById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
@@ -132,25 +133,28 @@ function buildNestedPages(nodes, parentPath = '') {
     .map((n) => {
       const slug = parentPath ? `${parentPath}/${n.slug}` : String(n.slug || '')
       const children = buildNestedPages(n.children || [], slug)
-      return { slug, title: n.title, hasChildren: children.length > 0, children }
+      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
     })
 }
 
 function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavigationsById, currentPath) {
   const nestedPages = buildNestedPages(allPagesTree)
   const anchors = Array.isArray(page?.data?.anchors) ? page.data.anchors : []
+  // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
+  // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
+  const childPages = findChildPagesById(nestedPages, page?.id)
+  const navData = { pages: nestedPages, anchors, childPages }
   const navigations = {}
 
   for (const nav of activeNavigations) {
     const key = String(nav.type || '').toLowerCase()
-    const data = key === 'page' ? { anchors } : { pages: nestedPages }
-    navigations[key] = { code: nav.code, data }
+    navigations[key] = { code: nav.code, data: navData }
   }
 
   if (page?.data?.pageNav && allNavigationsById[page.data.pageNav]?.code) {
     navigations.page = {
       code: allNavigationsById[page.data.pageNav].code,
-      data: { pages: nestedPages, anchors }
+      data: navData
     }
   }
 
@@ -161,7 +165,7 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
   navigations.byId = {}
   for (const nav of Object.values(allNavigationsById)) {
     if (nav?.id && nav?.code) {
-      navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } }
+      navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: navData }
     }
   }
 
