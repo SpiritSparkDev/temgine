@@ -276,9 +276,18 @@ Jeder Pfad baut dafür `navigations.byId` — eine Map von Navigations-ID auf
 `{ name, code, data }` — aus allen vorhandenen Navigationen auf; daraus
 berechnet `renderPage()` sowohl die benannten Platzhalter als auch die
 Auflösung von Navigations-Blöcken. Die genaue Platzhalter-Berechnung steckt
-in `lib/templateEngine.js` (`navPlaceholderSlug` / `buildNavPlaceholderKeys`),
-`childPages` wird in `lib/navTreeHelpers.js` (`findChildPagesById`) anhand
-der Seiten-ID berechnet.
+in `lib/templateEngine.js` (`navPlaceholderSlug` / `buildNavPlaceholderKeys`).
+
+`childPages` wird in `lib/navTreeHelpers.js` berechnet: `pages/[...slug].js`
+sucht die aktuelle Seite über `findRawPageNodeByPath` anhand ihres
+URL-Pfads (robuster als über die interne ID, da Unterseiten nur als JSON im
+`children`-Feld ihrer Top-Level-Seite liegen und ihre ID rein clientseitig
+vergeben wird); die Startseite (`pages/index.js`, kein eigenes URL-Segment)
+sowie `lib/liveSnapshot.js`/`pages/api/admin/export.js` (dort immer schon
+per ID referenziert) nutzen `findRawPageNodeById`. Beide suchen bewusst im
+**ungefilterten** Baum, damit auch eine als Entwurf betrachtete aktuelle
+Seite noch gefunden wird — gefiltert wird erst danach, wenn ihre Kinder mit
+der lokalen `buildNestedPages(...)` in die fertige Nav-Form gebracht werden.
 
 ## Navigation anlegen/bearbeiten
 

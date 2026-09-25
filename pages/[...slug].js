@@ -2,7 +2,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
-import { findChildPagesById } from '../lib/navTreeHelpers'
+import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 
@@ -432,7 +432,13 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
             // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
             // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
-            const childPages = findChildPagesById(nestedPages, foundPage?.id);
+            // Suche über den rohen (ungefilterten) Baum nach dem Pfad, nicht nach
+            // nestedPages/id: die aktuelle Seite kann selbst ein Entwurf sein (dann
+            // fehlt sie in nestedPages) und die client-seitig vergebene id auf
+            // verschachtelten Unterseiten ist nicht so verlässlich wie der Pfad,
+            // über den die Seite ohnehin gerade gefunden wurde.
+            const rawCurrentMatch = findRawPageNodeByPath(pages, currentPath);
+            const childPages = rawCurrentMatch ? buildNestedPages(rawCurrentMatch.node.children || [], rawCurrentMatch.parentPath) : [];
             const navData = { pages: nestedPages, anchors, childPages };
             for (const nav of activeNavs) {
               const key = String(nav.type).toLowerCase();
