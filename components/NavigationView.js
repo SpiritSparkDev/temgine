@@ -554,7 +554,7 @@ export default function NavigationView({ showToast }) {
               {filteredNav.map(nav => (
                 <li
                   key={nav.id}
-                  className={`nav-template-card ${editing?.id === nav.id ? 'selected' : ''} ${nav.isActive ? 'is-active' : ''}`}
+                  className={`nav-template-card ${editing?.id === nav.id ? 'selected' : ''} ${navType === 'MAIN' && nav.isActive ? 'is-active' : ''}`}
                 >
                   <div className="nav-card-info">
                     <span className="nav-card-name">{nav.name}</span>
@@ -563,20 +563,22 @@ export default function NavigationView({ showToast }) {
                         Responsive Combo
                       </span>
                     )}
-                    {nav.isActive && (
+                    {navType === 'MAIN' && nav.isActive && (
                       <span className="nav-active-badge">
                         <Check size={11} /> Aktiv
                       </span>
                     )}
                   </div>
                   <div className="nav-card-actions">
-                    <button
-                      className={`nav-card-btn activate ${nav.isActive ? 'deactivate' : ''}`}
-                      onClick={() => handleActivate(nav)}
-                      title={nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
-                    >
-                      {nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
-                    </button>
+                    {navType === 'MAIN' && (
+                      <button
+                        className={`nav-card-btn activate ${nav.isActive ? 'deactivate' : ''}`}
+                        onClick={() => handleActivate(nav)}
+                        title={nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                      >
+                        {nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                      </button>
+                    )}
                     <button
                       className="nav-card-btn edit"
                       onClick={() => handleEdit(nav)}
@@ -715,9 +717,10 @@ export default function NavigationView({ showToast }) {
             <Compass size={40} strokeWidth={1} />
             <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
             <p className="nav-editor-empty-hint">
-              Aktive Navigationen werden via <code>{`{{{nav:main}}}`}</code>,
-              <code>{`{{{nav:page}}}`}</code> in
-              Site-Templates eingebunden.
+              Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
+              Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
+              (als Navigations-Block oder über die Seiten-Navigationsauswahl) platziert, auch mehrfach mit
+              unterschiedlichen Seitennavigationen in einem Template.
             </p>
           </div>
         )}

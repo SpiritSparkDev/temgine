@@ -79,7 +79,9 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      const nav = saveNavigation({ name: String(name), type, code: String(code), isActive: false });
+      // PAGE navs have no active/inactive concept (see navigationStore.saveNavigation);
+      // MAIN keeps the old behavior of starting inactive until explicitly activated.
+      const nav = saveNavigation({ name: String(name), type, code: String(code), isActive: type === 'PAGE' });
 
       await logAudit({ action: 'CREATE', resource: 'navigation', resourceId: nav.id, userId: authResult.user.id, details: { name: nav.name, type: nav.type } });
       return res.status(201).json(nav);
