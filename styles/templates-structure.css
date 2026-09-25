@@ -3008,3 +3008,73 @@
   font-size: .8rem;
   text-align: center;
 }
+
+.tce-nav-tab {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tce-nav-intro {
+  font-size: .75rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  padding: .5rem .625rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.tce-nav-empty {
+  font-size: .78rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.tce-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tce-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .2rem;
+  width: 100%;
+  padding: .5rem .625rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s, border-color .12s;
+}
+
+.tce-nav-item:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+  border-color: var(--accent-primary);
+}
+
+.tce-nav-item-name {
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tce-nav-item-code {
+  font-size: .7rem;
+  color: var(--text-secondary);
+  font-family: 'Fira Code', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}

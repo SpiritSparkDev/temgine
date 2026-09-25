@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layout, ChevronRight } from '../lib/muiIcons';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layout, ChevronRight, BookOpen } from '../lib/muiIcons';
+import { navPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -338,6 +339,7 @@ export default function NavigationView({ showToast }) {
   const [showPresets, setShowPresets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showDocs, setShowDocs] = useState(true);
 
   const loadNavList = useCallback(() => {
     setIsLoading(true);
@@ -528,6 +530,14 @@ export default function NavigationView({ showToast }) {
             <span>{label}</span>
           </button>
         ))}
+        <button
+          className={`nav-type-tab nav-docs-toggle ${showDocs ? 'active' : ''}`}
+          onClick={() => setShowDocs(v => !v)}
+          title={showDocs ? 'Dokumentation ausblenden' : 'Dokumentation einblenden'}
+        >
+          <BookOpen size={16} />
+          <span>Doku</span>
+        </button>
       </div>
 
       <div className="nav-body">
@@ -709,7 +719,12 @@ export default function NavigationView({ showToast }) {
             <div className="nav-placeholder-ref">
               <strong>Platzhalter:</strong>
               <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
-              <code>{`{{{nav:page}}}`}</code> Seitennavigation
+              <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
+              {navType === 'PAGE' && editName.trim() && (
+                <>
+                  {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -719,10 +734,76 @@ export default function NavigationView({ showToast }) {
             <p className="nav-editor-empty-hint">
               Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
               Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
-              (als Navigations-Block oder über die Seiten-Navigationsauswahl) platziert, auch mehrfach mit
-              unterschiedlichen Seitennavigationen in einem Template.
+              (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
+              <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
+              Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
+              im Reiter „Navigation" per Klick einfügen.
             </p>
           </div>
+        )}
+
+        {/* ── Right: Docs panel ────────────────────────────────────────────── */}
+        {showDocs && (
+          <aside className="nav-docs-panel">
+            <div className="nav-docs-header">
+              <BookOpen size={15} />
+              <span>Wie Navigationen funktionieren</span>
+              <button
+                className="nav-docs-close"
+                onClick={() => setShowDocs(false)}
+                title="Dokumentation ausblenden"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="nav-docs-body">
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Zwei Typen</div>
+                <p>
+                  <strong>Hauptnavigation (MAIN)</strong>: site-weit, genau eine ist „aktiv" und wird
+                  automatisch in jede Seite eingebunden.
+                </p>
+                <p>
+                  <strong>Seitennavigation (PAGE)</strong>: braucht keine Aktivierung. Sie wird wie ein
+                  Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
+                  können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
+                  selben Template auftauchen.
+                </p>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Drei Wege, eine PAGE-Nav einzubinden</div>
+                <ol className="nav-docs-list">
+                  <li><strong>Seiten-Navigationsauswahl</strong> — im Seitenbaum einer Seite eine
+                    Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>.</li>
+                  <li><strong>Navigations-Block</strong> — im Seiten-Editor als eigenen Block einfügen,
+                    auch mehrfach mit unterschiedlichen Navs.</li>
+                  <li><strong>Direkt im Template-Code</strong> — Platzhalter
+                    <code>{`{{{nav:<name>}}}`}</code> per Hand schreiben oder im Template-Editor im
+                    Reiter „Navigation" per Klick einfügen.</li>
+                </ol>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Platzhalter-Referenz</div>
+                <table className="nav-docs-table">
+                  <tbody>
+                    <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation</td></tr>
+                    <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard)</td></tr>
+                    <tr><td><code>{`{{{nav:<name>}}}`}</code></td><td>eine bestimmte PAGE-Nav namentlich</td></tr>
+                    <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>Mobile-Navigation</td></tr>
+                    <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum</td></tr>
+                  </tbody>
+                </table>
+                <p className="nav-docs-note">
+                  Der Name-Platzhalter wird aus dem Navigationsnamen abgeleitet (Kleinschreibung,
+                  Sonderzeichen → „-"). Ergeben zwei Namen denselben Platzhalter, hängt die zweite
+                  Navigation automatisch „-2" an.
+                </p>
+              </div>
+            </div>
+          </aside>
         )}
       </div>
     </div>

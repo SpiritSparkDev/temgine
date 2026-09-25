@@ -508,10 +508,154 @@
   color: var(--accent-primary);
 }
 
+/* ── Doku toggle in the type tab bar ──────────────────────────────────────── */
+
+.admin-scope .nav-docs-toggle {
+  margin-left: auto;
+}
+
+/* ── Right: docs panel ────────────────────────────────────────────────────── */
+
+.admin-scope .nav-docs-panel {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.admin-scope .nav-docs-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.admin-scope .nav-docs-header span {
+  flex: 1;
+}
+
+.admin-scope .nav-docs-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 0.15rem;
+  display: flex;
+  align-items: center;
+}
+
+.admin-scope .nav-docs-close:hover {
+  color: var(--text-primary);
+}
+
+.admin-scope .nav-docs-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.admin-scope .nav-docs-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.admin-scope .nav-docs-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.admin-scope .nav-docs-group p,
+.admin-scope .nav-docs-list {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.admin-scope .nav-docs-list {
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-scope .nav-docs-group strong {
+  color: var(--text-primary);
+}
+
+.admin-scope .nav-docs-group code,
+.admin-scope .nav-docs-list code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.76rem;
+  color: var(--accent-primary);
+}
+
+.admin-scope .nav-docs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.admin-scope .nav-docs-table td {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  vertical-align: top;
+}
+
+.admin-scope .nav-docs-table td:first-child {
+  white-space: nowrap;
+}
+
+.admin-scope .nav-docs-table code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.74rem;
+  color: var(--accent-primary);
+}
+
+.admin-scope .nav-docs-note {
+  font-size: 0.75rem !important;
+  color: var(--text-tertiary) !important;
+  font-style: italic;
+}
+
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
 
 .admin-scope.dark-mode .nav-list-panel {
   background: var(--bg-secondary);
+}
+
+.admin-scope.dark-mode .nav-docs-panel {
+  background: var(--bg-secondary);
+}
+
+.admin-scope.dark-mode .nav-docs-group code,
+.admin-scope.dark-mode .nav-docs-list code,
+.admin-scope.dark-mode .nav-docs-table code {
+  background: var(--bg-tertiary);
 }
 
 .admin-scope.dark-mode .nav-template-card {

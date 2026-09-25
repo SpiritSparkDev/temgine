@@ -83,3 +83,8 @@ data/.nextauth_secret
 development_docs
 
 *.md
+
+# Versionierte Nutzer-/Admin-Hilfe (im Gegensatz zu docs/ und development_docs/
+# bewusst ausgenommen — landet im Repo statt nur lokal)
+!/help/
+!/help/**
