@@ -155,6 +155,16 @@ function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavig
   }
 
   navigations.auto = { code: buildNavHtml(allPagesTree, currentPath), data: {} }
+
+  // Jede Navigation ist zusätzlich per {{{nav:<Name>}}} ansprechbar und Navigations-Blöcke
+  // (type: 'navigation') lösen ihre navigationId hierüber auf — beides fehlte im Static Export bisher.
+  navigations.byId = {}
+  for (const nav of Object.values(allNavigationsById)) {
+    if (nav?.id && nav?.code) {
+      navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } }
+    }
+  }
+
   return navigations
 }
 

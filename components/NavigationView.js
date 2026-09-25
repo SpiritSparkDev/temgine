@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layout, ChevronRight } from '../lib/muiIcons';
+import { navPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -709,7 +710,12 @@ export default function NavigationView({ showToast }) {
             <div className="nav-placeholder-ref">
               <strong>Platzhalter:</strong>
               <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
-              <code>{`{{{nav:page}}}`}</code> Seitennavigation
+              <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
+              {navType === 'PAGE' && editName.trim() && (
+                <>
+                  {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -719,8 +725,10 @@ export default function NavigationView({ showToast }) {
             <p className="nav-editor-empty-hint">
               Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
               Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
-              (als Navigations-Block oder über die Seiten-Navigationsauswahl) platziert, auch mehrfach mit
-              unterschiedlichen Seitennavigationen in einem Template.
+              (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
+              <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
+              Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
+              im Reiter „Navigation" per Klick einfügen.
             </p>
           </div>
         )}

@@ -1,9 +1,10 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Layout, Grid, Code, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical, Search } from '../lib/muiIcons';
+import { Plus, Trash2, Layout, Grid, Code, Save, BookOpen, Sparkles, X, ChevronRight, Copy, RefreshCw, AlertTriangle, ChevronUp, ChevronDown, GripVertical, Search, Compass } from '../lib/muiIcons';
 import { createButtonHandlers } from '../lib/insertHelper';
 import { FONT_AWESOME_ICONS, getIconHtml } from '../lib/fontAwesomeIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
+import { buildNavPlaceholderKeys } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -339,9 +340,19 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
   const [copiedClass, setCopiedClass] = useState(null);
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [pageNavigations, setPageNavigations] = useState([]);
+
+  const navPlaceholderKeys = useMemo(() => buildNavPlaceholderKeys(pageNavigations), [pageNavigations]);
 
   useEffect(() => {
     loadTemplates();
+    fetch('/api/navigations')
+      .then(r => r.json())
+      .then(data => {
+        const navs = Array.isArray(data) ? data : [];
+        setPageNavigations(navs.filter(n => String(n.type).toUpperCase() === 'PAGE'));
+      })
+      .catch(() => setPageNavigations([]));
   }, []);
 
   function loadTemplates() {
@@ -749,6 +760,15 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                 <Copy size={11} aria-hidden="true" />
                 Klassen
               </button>
+              <button
+                role="tab"
+                aria-selected={rightTab === 'navigation'}
+                className={`tce-props-tab${rightTab === 'navigation' ? ' active' : ''}`}
+                onClick={() => setRightTab('navigation')}
+              >
+                <Compass size={11} aria-hidden="true" />
+                Navigation
+              </button>
             </div>
 
             <div className="tce-props-body">
@@ -780,7 +800,8 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>{'{{page.slug}}'}</code></td><td>Seiten-Slug</td></tr>
                         <tr><td><code>{'{{inner}}'}</code></td><td>HTML der Kindblöcke</td></tr>
                         <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Hauptnavigation (HTML, wird zusätzlich automatisch eingefügt)</td></tr>
-                        <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation, Standard-Zuweisung (HTML)</td></tr>
+                        <tr><td><code>{'{{{nav:<name>}}}'}</code></td><td>Eine bestimmte Seitennavigation namentlich — siehe Reiter „Navigation"</td></tr>
                         <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Mobile-Navigation (HTML)</td></tr>
                         <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
                         <tr><td><code>{'{{global.<key>}}'}</code></td><td>Globale Variable (siehe „Globale Variablen")</td></tr>
@@ -970,6 +991,43 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
 
                   {!classRegistryLoading && !classRegistry && (
                     <div className="tce-class-empty">Klassen werden beim ersten Öffnen geladen.</div>
+                  )}
+                </div>
+              )}
+
+              {rightTab === 'navigation' && (
+                <div className="tce-nav-tab">
+                  <div className="tce-nav-intro">
+                    Klick fügt den Platzhalter der Seitennavigation an der Cursor-Position ein.
+                    Mehrere unterschiedliche Seitennavigationen können so im selben Template
+                    nebeneinander verwendet werden — unabhängig davon, ob sie „aktiv" sind.
+                  </div>
+                  {pageNavigations.length === 0 ? (
+                    <div className="tce-nav-empty">
+                      Noch keine Seitennavigationen vorhanden. Anlegen unter „Navigation" → „Seitennavigation".
+                    </div>
+                  ) : (
+                    <ul className="tce-nav-list">
+                      {[...pageNavigations]
+                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'de', { sensitivity: 'base' }))
+                        .map((nav) => {
+                          const key = navPlaceholderKeys[nav.id] || 'nav:navigation';
+                          const placeholder = `{{{${key}}}}`;
+                          return (
+                            <li key={nav.id}>
+                              <button
+                                type="button"
+                                className="tce-nav-item"
+                                {...createButtonHandlers(placeholder, () => setTemplateCode(c => c + placeholder))}
+                                title={`${placeholder} einfügen`}
+                              >
+                                <span className="tce-nav-item-name">{nav.name}</span>
+                                <code className="tce-nav-item-code">{placeholder}</code>
+                              </button>
+                            </li>
+                          );
+                        })}
+                    </ul>
                   )}
                 </div>
               )}

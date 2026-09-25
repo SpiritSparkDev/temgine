@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -81,6 +81,64 @@ describe('renderPage navigation blocks (type: navigation)', () => {
     const navigations = { byId: { nav1: { code: '<nav>{{global.companyName}}</nav>', data: {} } } };
     const html = renderPage(page, {}, {}, navigations, null, { companyName: 'Temgine' });
     expect(html).toContain('<nav>Temgine</nav>');
+  });
+});
+
+describe('navPlaceholderSlug', () => {
+  it('lowercases and hyphenates a navigation name', () => {
+    expect(navPlaceholderSlug('Künstler Übersicht')).toBe('k-nstler-bersicht');
+  });
+
+  it('falls back to "navigation" for an empty/missing name', () => {
+    expect(navPlaceholderSlug('')).toBe('navigation');
+    expect(navPlaceholderSlug(undefined)).toBe('navigation');
+  });
+});
+
+describe('buildNavPlaceholderKeys', () => {
+  it('produces a stable nav:<slug> key per id, sorted by name', () => {
+    const keys = buildNavPlaceholderKeys([
+      { id: 'b', name: 'Breadcrumb' },
+      { id: 'a', name: 'Anchor Sidebar' },
+    ]);
+    expect(keys).toEqual({ a: 'nav:anchor-sidebar', b: 'nav:breadcrumb' });
+  });
+
+  it('disambiguates two navigations that slugify to the same key', () => {
+    const keys = buildNavPlaceholderKeys([
+      { id: 'x', name: 'TOC!' },
+      { id: 'y', name: 'TOC?' },
+    ]);
+    expect(new Set(Object.values(keys)).size).toBe(2);
+    expect(Object.values(keys)).toEqual(['nav:toc', 'nav:toc-2']);
+  });
+
+  it('avoids colliding with the reserved main/page/mobile/auto keys', () => {
+    const keys = buildNavPlaceholderKeys([{ id: 'x', name: 'Page' }]);
+    expect(keys.x).toBe('nav:page-nav');
+  });
+});
+
+describe('renderPage named navigation placeholders ({{{nav:<name>}}})', () => {
+  const page = { title: 'Test', slug: 'test', blocks: [{ template: 'Text', props: {} }] };
+
+  it('resolves a navigation by its slugified name, independent of any block', () => {
+    const blockTemplates = { Text: '<div>{{{nav:breadcrumb}}}</div>' };
+    const navigations = { byId: { nav1: { name: 'Breadcrumb', code: '<nav id="bc">Crumbs</nav>', data: {} } } };
+    const html = renderPage(page, blockTemplates, {}, navigations);
+    expect(html).toContain('<nav id="bc">Crumbs</nav>');
+  });
+
+  it('keeps both navigations addressable when two ids share a name collision', () => {
+    const blockTemplates = { Text: '<div>{{{nav:toc}}}|{{{nav:toc-2}}}</div>' };
+    const navigations = {
+      byId: {
+        x: { name: 'TOC!', code: 'A', data: {} },
+        y: { name: 'TOC?', code: 'B', data: {} },
+      },
+    };
+    const html = renderPage(page, blockTemplates, {}, navigations);
+    expect(html).toContain('A|B');
   });
 });
 

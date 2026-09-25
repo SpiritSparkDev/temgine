@@ -446,17 +446,26 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
               }
             }
 
-            // Navigations, die als eigener Block (type: 'navigation') in dieser
-            // Seite platziert wurden, werden unabhängig von "aktiv" per ID geladen.
-            const navBlockIds = collectNavigationBlockIds(foundPage?.blocks);
+            // Jede (aktive) Navigation ist zusätzlich per {{{nav:<Name>}}} ansprechbar —
+            // navigations.byId (mit name, für die Platzhalter-Auflösung in templateEngine.js)
+            // deckt damit standardmäßig schon alle PAGE-Navs ab.
+            navigations.byId = {};
+            for (const nav of activeNavs) {
+              if (nav?.id && nav?.code) {
+                navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } };
+              }
+            }
+
+            // Navigations, die als eigener Block (type: 'navigation') in dieser Seite platziert
+            // wurden aber (z. B. eine MAIN-Nav) nicht in activeNavs enthalten sind, per ID nachladen.
+            const navBlockIds = collectNavigationBlockIds(foundPage?.blocks).filter((id) => !navigations.byId[id]);
             if (navBlockIds.length > 0) {
-              navigations.byId = {};
               await Promise.all(navBlockIds.map(async (id) => {
                 try {
                   const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`);
                   if (res.ok) {
                     const nav = await res.json();
-                    if (nav && nav.code) navigations.byId[id] = { code: nav.code, data: { pages: nestedPages, anchors } };
+                    if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: { pages: nestedPages, anchors } };
                   }
                 } catch (e) {
                   console.warn('Navigations-Block konnte nicht geladen werden:', e.message);
