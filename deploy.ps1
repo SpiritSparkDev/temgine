@@ -46,7 +46,7 @@ Write-Host "   NEXTAUTH_URL=https://your-domain.example.com"
 Write-Host "   NEXTAUTH_SECRET=<your-secret>"
 Write-Host "   GITHUB_ID=<your-github-app-id>"
 Write-Host "   GITHUB_SECRET=<your-github-app-secret>"
-Write-Host "   DEV_MODE=false"
+Write-Host "   NEXT_PUBLIC_DEV_MODE=false"
 Write-Host ""
 Write-Host "3. In Plesk UI:" -ForegroundColor White
 Write-Host "   - Open Node.js > Node App Manager"
