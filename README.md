@@ -65,7 +65,6 @@ NEXTAUTH_SECRET=<zufälliger-langer-string>
 DATABASE_URL=postgresql://USER:PASS@localhost:5432/temgine_cms
 
 # Entwicklungsmodus (deaktiviert Login lokal)
-DEV_MODE=true
 NEXT_PUBLIC_DEV_MODE=true
 ```
 
@@ -112,7 +111,7 @@ vorausgefüllt. Danach ist `/setup` dauerhaft gesperrt (sobald ein User existier
 ```bash
 npm run dev
 # → http://localhost:3000
-# → Admin: http://localhost:3000/admin  (bei DEV_MODE=true ohne Login)
+# → Admin: http://localhost:3000/admin  (bei NEXT_PUBLIC_DEV_MODE=true ohne Login)
 ```
 
 ---
@@ -137,7 +136,6 @@ npm run dev
 | `NEXTAUTH_URL` | `https://deine-domain.de` |
 | `NEXTAUTH_SECRET` | Neu generierten Zufallswert (≥ 32 Zeichen) |
 | `DATABASE_URL` | `postgresql://USER:PASS@localhost:5432/DBNAME` |
-| `DEV_MODE` | `false` |
 | `NEXT_PUBLIC_DEV_MODE` | `false` |
 | `ALTCHA_HMAC_KEY` | Neu generierten Zufallswert (z. B. `openssl rand -base64 32`) — ohne eigenen Wert wird ein unsicherer Default für den Kontaktformular-Spamschutz verwendet |
 

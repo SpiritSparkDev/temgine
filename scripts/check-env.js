@@ -4,7 +4,6 @@ const vars = [
   'NEXTAUTH_URL',
   'NEXTAUTH_SECRET',
   'NODE_ENV',
-  'DEV_MODE',
   'NEXT_PUBLIC_DEV_MODE',
 ];
 

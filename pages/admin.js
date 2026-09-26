@@ -21,11 +21,11 @@ const AdminPageClient = dynamic(() => import('../components/AdminPageClient'), {
 export async function getServerSideProps(context) {
   console.log('[admin] getServerSideProps start', {
     url: context?.resolvedUrl,
-    devMode: process.env.DEV_MODE === 'true',
+    devMode: process.env.NEXT_PUBLIC_DEV_MODE === 'true',
   });
 
-  // DEV_MODE: skip auth check entirely
-  if (process.env.DEV_MODE === 'true') {
+  // NEXT_PUBLIC_DEV_MODE: skip auth check entirely
+  if (process.env.NEXT_PUBLIC_DEV_MODE === 'true') {
     console.log('[admin] getServerSideProps dev mode bypass');
     return { props: {} };
   }
