@@ -130,13 +130,36 @@ npm run dev
 
 ### Umgebungsvariablen auf dem Server
 
+**Erforderlich:**
+
 | Variable | Produktionswert |
 |---|---|
 | `NEXTAUTH_URL` | `https://deine-domain.de` |
 | `NEXTAUTH_SECRET` | Neu generierten Zufallswert (≥ 32 Zeichen) |
 | `DATABASE_URL` | `postgresql://USER:PASS@localhost:5432/DBNAME` |
 | `DEV_MODE` | `false` |
-| `SETUP_TOKEN` | Optional — ohne ihn generiert der Server selbst einen und loggt den Setup-Link |
+| `NEXT_PUBLIC_DEV_MODE` | `false` |
+| `ALTCHA_HMAC_KEY` | Neu generierten Zufallswert (z. B. `openssl rand -base64 32`) — ohne eigenen Wert wird ein unsicherer Default für den Kontaktformular-Spamschutz verwendet |
+
+**Für das Kontaktformular / Member-E-Mails:**
+
+| Variable | Produktionswert |
+|---|---|
+| `SMTP_HOST` / `SMTP_PORT` | Zugangsdaten des Mailservers |
+| `SMTP_USER` / `SMTP_PASS` | Zugangsdaten des Mailservers |
+| `SMTP_FROM` | Absenderadresse für ausgehende Mails |
+| `SMTP_SECURE` | Optional — `true` für Port 465 (SSL), `false` für 587 (STARTTLS) |
+| `CONTACT_MAIL_TO` | Fallback-Empfänger fürs Kontaktformular, falls nicht in den Admin-Einstellungen konfiguriert |
+
+**Optional:**
+
+| Variable | Produktionswert |
+|---|---|
+| `SETUP_TOKEN` | Ohne ihn generiert der Server selbst einen und loggt den Setup-Link |
+| `GITHUB_ID` / `GITHUB_SECRET` | GitHub-OAuth-App-Zugangsdaten, falls GitHub-Login aktiviert werden soll |
+| `ROBOTS_DISALLOW` | Kommagetrennte Pfadliste für `robots.txt` (Default: `/admin,/api`) |
+| `ROBOTS_CRAWL_DELAY` | Crawl-Delay in Sekunden für `robots.txt` (Default: `1`) |
+| `ROBOTS_REQUEST_RATE` | Request-Rate für `robots.txt`, z. B. `10/1m` (Default: nicht gesetzt) |
 
 > **Wichtig:** Passwörter mit Sonderzeichen in der `DATABASE_URL` müssen URL-kodiert sein  
 > (z. B. `@` → `%40`, `#` → `%23`, `!` → `%21`).
