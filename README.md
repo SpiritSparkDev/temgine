@@ -251,7 +251,7 @@ npm test             # Jest-Tests ausführen
 npm run build        # Production Build
 npm start            # Production-Server starten (Next.js)
 npm run check-env    # Umgebungsvariablen prüfen
-npm run docker:up    # Docker-Compose-Stack starten (siehe development_docs/DOCKER.md)
+npm run docker:up    # Docker-Compose-Stack starten (siehe Abschnitt "Docker-Deployment")
 npm run docker:down  # Docker-Compose-Stack stoppen
 ```
 
