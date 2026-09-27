@@ -223,6 +223,27 @@ const PRESETS = {
   ],
   PAGE: [
     {
+      label: 'Unterseiten-Liste',
+      description: 'Zeigt alle direkten Unterseiten der aktuellen Seite (inkl. einer Unterebene)',
+      code: `<nav class="page-nav subpages" aria-label="Unterseiten">
+  <ul class="subpages-list">
+    {{#childPages}}
+    <li class="subpages-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="subpages-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="subpages-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/childPages}}
+  </ul>
+  {{^childPages}}
+  <p class="subpages-empty">Keine Unterseiten vorhanden.</p>
+  {{/childPages}}
+</nav>`,
+    },
+    {
       label: 'Anchor Sidebar',
       description: 'Seitliche Anker-Navigation für lange Seiten',
       code: `<nav class="page-nav anchor-sidebar">

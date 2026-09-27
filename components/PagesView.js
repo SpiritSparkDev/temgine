@@ -143,6 +143,25 @@ export default function PagesView({
 </html>`;
   };
 
+  const handleTransferBlockToPage = async ({ block, targetPageId, mode }) => {
+    if (!block || !targetPageId) return false;
+    try {
+      const clonedBlock = JSON.parse(JSON.stringify(block));
+      const insertIntoTree = (nodes) =>
+        nodes.map(n =>
+          n.id === targetPageId
+            ? { ...n, blocks: [...(Array.isArray(n.blocks) ? n.blocks : []), clonedBlock] }
+            : { ...n, children: insertIntoTree(n.children || []) }
+        );
+      const updated = insertIntoTree(pages);
+      const saved = await handleUpdatePages(updated);
+      return Boolean(saved);
+    } catch (e) {
+      console.error('Fehler beim Übertragen des Blocks:', e);
+      return false;
+    }
+  };
+
   return (
     <div className="admin-editor-area">
       {toast && (
@@ -200,6 +219,7 @@ export default function PagesView({
           templates={templateList}
           allPages={pages}
           userRole={userRole}
+          onTransferBlockToPage={handleTransferBlockToPage}
           onSave={async (updatedPage, options) => {
             try {
               // Ensure options is an object

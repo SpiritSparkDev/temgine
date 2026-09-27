@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns } from '../lib/muiIcons';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
@@ -13,7 +13,7 @@ import DOMCanvas from './DOMCanvas';
 import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage }) {
   const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
   const CHANNEL_TEMPLATE_LABEL_PREFIX = 'Kanal: ';
 
@@ -75,6 +75,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
   const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
+  const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
@@ -1007,6 +1008,47 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     });
   }
 
+  // Flache Liste aller Seiten (fuer den "In andere Seite kopieren/verschieben"-Dialog)
+  const transferTargetPages = useMemo(() => {
+    const flatten = (nodes, depth = 0, acc = []) => {
+      for (const n of nodes || []) {
+        if (!n) continue;
+        acc.push({ id: n.id, slug: n.slug, title: n.title || n.slug, depth });
+        if (Array.isArray(n.children) && n.children.length) {
+          flatten(n.children, depth + 1, acc);
+        }
+      }
+      return acc;
+    };
+    return flatten(allPages || []).filter(p => p.id && p.id !== page?.id);
+  }, [allPages, page?.id]);
+
+  const openBlockTransfer = (path, mode) => {
+    setBlockTransferState({ path, mode, targetPageId: '', search: '' });
+  };
+
+  async function handleConfirmBlockTransfer() {
+    if (!blockTransferState || !blockTransferState.targetPageId) return;
+    const { path, mode, targetPageId } = blockTransferState;
+    const block = getBlockAtPath(path);
+    if (!block || typeof onTransferBlockToPage !== 'function') {
+      setBlockTransferState(null);
+      return;
+    }
+    const ok = await onTransferBlockToPage({ block, targetPageId, mode });
+    if (ok) {
+      if (mode === 'move') {
+        handleDeleteBlock(path);
+        setToast({ message: 'Block wurde in die Zielseite verschoben.', type: 'success' });
+      } else {
+        setToast({ message: 'Block wurde in die Zielseite kopiert.', type: 'success' });
+      }
+    } else {
+      setToast({ message: 'Block konnte nicht übertragen werden.', type: 'error' });
+    }
+    setBlockTransferState(null);
+  }
+
   const getBlockAtPath = (path) => {
     if (!path && path !== '0') return null;
     const parts = String(path).split('.').map(p => parseInt(p, 10));
@@ -1656,6 +1698,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     aria-label="Block in Lightbox bearbeiten"
                   >
                     <LayoutGrid size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); openBlockTransfer(path, 'copy'); }}
+                    title="Block in andere Seite kopieren"
+                    aria-label="Block in andere Seite kopieren"
+                  >
+                    <Copy size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); openBlockTransfer(path, 'move'); }}
+                    title="Block in andere Seite verschieben"
+                    aria-label="Block in andere Seite verschieben"
+                  >
+                    <GitCompare size={12} />
                   </button>
                 </div>
               );
@@ -3079,6 +3139,74 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 className="file-modal-cancel-btn"
               >
                 Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Block in andere Seite kopieren/verschieben */}
+      {blockTransferState && (
+        <div className="file-modal-overlay" onClick={() => setBlockTransferState(null)}>
+          <div className="file-modal page-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="file-modal-header">
+              <h3 className="file-modal-title">
+                {blockTransferState.mode === 'move' ? 'Block in andere Seite verschieben' : 'Block in andere Seite kopieren'}
+              </h3>
+              <button
+                onClick={() => setBlockTransferState(null)}
+                className="file-modal-close-btn"
+                aria-label="Dialog schliessen"
+              >
+                ×
+              </button>
+            </div>
+
+            <input
+              type="text"
+              className="page-picker-search"
+              placeholder="Seite suchen..."
+              value={blockTransferState.search}
+              onChange={(e) => setBlockTransferState(s => ({ ...s, search: e.target.value }))}
+              autoFocus
+            />
+
+            <div className="page-picker-list">
+              {transferTargetPages
+                .filter(p => {
+                  const q = blockTransferState.search.trim().toLowerCase();
+                  if (!q) return true;
+                  return p.title.toLowerCase().includes(q) || String(p.slug || '').toLowerCase().includes(q);
+                })
+                .map(p => (
+                  <div
+                    key={p.id}
+                    className={`page-picker-item${blockTransferState.targetPageId === p.id ? ' selected' : ''}`}
+                    style={{ paddingLeft: 14 + p.depth * 16 }}
+                    onClick={() => setBlockTransferState(s => ({ ...s, targetPageId: p.id }))}
+                  >
+                    <span className="page-picker-item-title">{p.title}</span>
+                    <span className="page-picker-item-slug">/{p.slug}</span>
+                  </div>
+                ))}
+              {transferTargetPages.length === 0 && (
+                <div className="file-modal-empty">Keine anderen Seiten vorhanden</div>
+              )}
+            </div>
+
+            <div className="file-modal-footer">
+              <button
+                onClick={() => setBlockTransferState(null)}
+                className="file-modal-cancel-btn"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleConfirmBlockTransfer}
+                disabled={!blockTransferState.targetPageId}
+                className="btn-modern"
+              >
+                {blockTransferState.mode === 'move' ? 'Verschieben' : 'Kopieren'}
               </button>
             </div>
           </div>
