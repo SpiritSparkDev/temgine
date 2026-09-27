@@ -20,6 +20,14 @@ const inputStyle = {
   boxSizing: 'border-box',
 };
 
+// Grün = im empfohlenen Bereich, Amber = zu kurz/zu lang (Google schneidet
+// zu lange Titel/Beschreibungen in den Suchergebnissen ab).
+function lengthIndicatorColor(len, min, max) {
+  if (len === 0) return '#666';
+  if (len < min || len > max) return '#b45309';
+  return '#15803d';
+}
+
 /**
  * SeoPanel - SEO metadata editor for pages
  * Manages meta title, description, OG tags, robots, canonical URL,
@@ -38,6 +46,11 @@ export default function SeoPanel({
   const [ogImage, setOgImage] = useState('');
   const [canonicalUrl, setCanonicalUrl] = useState('');
   const [robots, setRobots] = useState('index, follow');
+  const [twitterTitle, setTwitterTitle] = useState('');
+  const [twitterDescription, setTwitterDescription] = useState('');
+  const [twitterImage, setTwitterImage] = useState('');
+  const [sitemapPriority, setSitemapPriority] = useState('');
+  const [sitemapChangefreq, setSitemapChangefreq] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Website-weite Standardwerte (Einstellungen > SEO) — greifen als Fallback,
@@ -65,6 +78,11 @@ export default function SeoPanel({
       setOgImage(pageData.seo.ogImage || '');
       setCanonicalUrl(pageData.seo.canonicalUrl || '');
       setRobots(pageData.seo.robots || 'index, follow');
+      setTwitterTitle(pageData.seo.twitterTitle || '');
+      setTwitterDescription(pageData.seo.twitterDescription || '');
+      setTwitterImage(pageData.seo.twitterImage || '');
+      setSitemapPriority(pageData.seo.sitemapPriority || '');
+      setSitemapChangefreq(pageData.seo.sitemapChangefreq || '');
     }
   }, [pageData.seo]);
 
@@ -105,6 +123,9 @@ export default function SeoPanel({
   const effectiveOgImage = ogImage || siteDefaults.defaultOgImage || '';
   const effectiveOgTitle = ogTitle || metaTitle || slug || 'Seitentitel';
   const effectiveOgDescription = ogDescription || effectiveDescription || 'Seitenbeschreibung';
+  const effectiveTwitterTitle = twitterTitle || effectiveOgTitle;
+  const effectiveTwitterDescription = twitterDescription || effectiveOgDescription;
+  const effectiveTwitterImage = twitterImage || effectiveOgImage;
 
   const domain = useMemo(() => (origin ? origin.replace(/^https?:\/\//, '') : 'example.com'), [origin]);
   const pageUrl = useMemo(() => `${origin || `https://${domain}`}/${slug || ''}`, [origin, domain, slug]);
@@ -196,7 +217,7 @@ export default function SeoPanel({
               maxLength="60"
               style={inputStyle}
             />
-            <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.8rem', color: lengthIndicatorColor(metaTitle.length, 30, 60), marginTop: '2px' }}>
               {metaTitle.length}/60
             </div>
           </div>
@@ -214,10 +235,10 @@ export default function SeoPanel({
               rows={2}
               style={{ ...inputStyle, resize: 'vertical' }}
             />
-            <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '2px' }}>
+            <div style={{ fontSize: '0.8rem', color: lengthIndicatorColor(metaDescription.length, 120, 160), marginTop: '2px' }}>
               {metaDescription.length}/160
               {!metaDescription && siteDefaults.defaultDescription && (
-                <span> — es wird die Website-Standardbeschreibung verwendet</span>
+                <span style={{ color: '#666' }}> — es wird die Website-Standardbeschreibung verwendet</span>
               )}
             </div>
           </div>
@@ -276,6 +297,49 @@ export default function SeoPanel({
             </div>
           </div>
 
+          {/* X (Twitter) Overrides — nur nötig, wenn sich die Karte von OG unterscheiden soll */}
+          <div style={{ borderTop: '1px solid #eee', paddingTop: '12px' }}>
+            <h5 style={{ margin: '0 0 8px 0', fontSize: '0.9rem' }}>
+              X (Twitter) — abweichende Angaben (optional)
+            </h5>
+            <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '8px' }}>
+              Bleibt leer → es werden die Open-Graph-Werte oben verwendet.
+            </div>
+
+            <div style={{ marginBottom: '8px' }}>
+              <label style={labelStyle}>Twitter Title</label>
+              <input
+                type="text"
+                value={twitterTitle}
+                onChange={(e) => handleChange('twitterTitle', e.target.value)}
+                placeholder={effectiveOgTitle}
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: '8px' }}>
+              <label style={labelStyle}>Twitter Description</label>
+              <textarea
+                value={twitterDescription}
+                onChange={(e) => handleChange('twitterDescription', e.target.value)}
+                placeholder={effectiveOgDescription}
+                rows={2}
+                style={{ ...inputStyle, resize: 'vertical' }}
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Twitter Image URL</label>
+              <input
+                type="url"
+                value={twitterImage}
+                onChange={(e) => handleChange('twitterImage', e.target.value)}
+                placeholder={effectiveOgImage || 'https://example.com/image.jpg'}
+                style={inputStyle}
+              />
+            </div>
+          </div>
+
           {/* Advanced */}
           <div style={{ borderTop: '1px solid #eee', paddingTop: '12px' }}>
             <h5 style={{ margin: '0 0 8px 0', fontSize: '0.9rem' }}>Erweitert</h5>
@@ -293,7 +357,7 @@ export default function SeoPanel({
               />
             </div>
 
-            <div>
+            <div style={{ marginBottom: '8px' }}>
               <label style={labelStyle}>
                 Robots Meta Tag
               </label>
@@ -307,6 +371,41 @@ export default function SeoPanel({
                 <option value="noindex, follow">No Index, Follow</option>
                 <option value="noindex, nofollow">No Index, No Follow</option>
               </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Sitemap-Priorität</label>
+                <select
+                  value={sitemapPriority}
+                  onChange={(e) => handleChange('sitemapPriority', e.target.value)}
+                  style={{ ...inputStyle, padding: '6px' }}
+                >
+                  <option value="">Automatisch</option>
+                  <option value="1.0">1.0 (höchste)</option>
+                  <option value="0.8">0.8</option>
+                  <option value="0.6">0.6</option>
+                  <option value="0.4">0.4</option>
+                  <option value="0.2">0.2 (niedrigste)</option>
+                </select>
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Änderungsfrequenz</label>
+                <select
+                  value={sitemapChangefreq}
+                  onChange={(e) => handleChange('sitemapChangefreq', e.target.value)}
+                  style={{ ...inputStyle, padding: '6px' }}
+                >
+                  <option value="">Automatisch (weekly)</option>
+                  <option value="always">Always</option>
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                  <option value="never">Never</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -368,18 +467,18 @@ export default function SeoPanel({
               </div>
               <div style={{ border: '1px solid #cfd9de', borderRadius: '16px', overflow: 'hidden', maxWidth: '400px', fontFamily: 'Helvetica, Arial, sans-serif' }}>
                 <div style={{ width: '100%', aspectRatio: '1.91 / 1', background: '#e9ebee', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  {effectiveOgImage ? (
-                    <img src={effectiveOgImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {effectiveTwitterImage ? (
+                    <img src={effectiveTwitterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <span style={{ color: '#90949c', fontSize: '0.8rem' }}>Kein Vorschaubild</span>
                   )}
                 </div>
                 <div style={{ padding: '10px 12px' }}>
                   <div style={{ fontSize: '0.95rem', fontWeight: 600, color: '#0f1419', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {effectiveOgTitle}
+                    {effectiveTwitterTitle}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: '#536471', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', marginBottom: '2px' }}>
-                    {effectiveOgDescription}
+                    {effectiveTwitterDescription}
                   </div>
                   <div style={{ fontSize: '0.8rem', color: '#536471' }}>
                     🔗 {domain}

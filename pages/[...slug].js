@@ -5,6 +5,7 @@ import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } f
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -21,7 +22,7 @@ const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   return `${value}${assets}`
 }
 
-export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
+export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '', seoMeta = null }) {
   const router = useRouter()
   const { query } = router
   const { data: session, status: sessionStatus } = useSession()
@@ -655,14 +656,27 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   // React would reset innerHTML and wipe the hydrated DOM.
   const gatedHtml = useMemo(() => stripBlockedIframeSrcs(html, getConsent()), [html])
 
-  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
-  if (accessDenied) return (
-    <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Kein Zugriff</h1>
-      <p style={{ color: '#6b7280' }}>Du hast keine Berechtigung, diese Seite zu sehen.</p>
-    </div>
+  if (loading) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+    </>
   )
-  if (!page) return <div style={{ padding: 20 }}>Seite nicht gefunden</div>
+  if (accessDenied) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Kein Zugriff</h1>
+        <p style={{ color: '#6b7280' }}>Du hast keine Berechtigung, diese Seite zu sehen.</p>
+      </div>
+    </>
+  )
+  if (!page) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div style={{ padding: 20 }}>Seite nicht gefunden</div>
+    </>
+  )
 
   const wrapperProps = { id: 'page-html-output' };
   if (page?.data?.wrapperId) wrapperProps.id = page.data.wrapperId;
@@ -670,6 +684,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
   return (
     <div>
+      <SeoHead meta={seoMeta} />
       <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
       {showDebug && (
         <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
@@ -693,6 +708,31 @@ export async function getServerSideProps(context) {
     }
   }
 
+  let seoMeta = null
+  try {
+    const { resolveSeoMetaForRoute, findBlogPostForRoute, buildBlogPostMeta } = await import('../lib/seo')
+    const { meta, found, settings, baseUrl } = await resolveSeoMetaForRoute(context.req, path, slug)
+    seoMeta = meta
+    let resolvedFound = found
+
+    if (!found && slug.length === 2) {
+      // Route matcht keine Page — evtl. ein Blog-Beitrag (/[channelSlug]/[postSlug]),
+      // die eigene Tabellen statt des Page-Baums nutzen (siehe Blog-Routing weiter unten).
+      const blogMatch = await findBlogPostForRoute(slug[0], slug[1])
+      if (blogMatch) {
+        seoMeta = buildBlogPostMeta({ post: blogMatch.post, routePath: path, baseUrl, settings })
+        resolvedFound = true
+      }
+    }
+
+    // Kein Treffer per Pfad: entweder eine (weiter clientseitig aufgelöste)
+    // benutzerdefinierte 404-Seite oder wirklich nichts vorhanden — in
+    // beiden Fällen ist "nicht gefunden" der korrekte HTTP-Status.
+    if (!resolvedFound) context.res.statusCode = 404
+  } catch (_e) {
+    seoMeta = null
+  }
+
   try {
     const { getMaintenancePage } = await import('../lib/maintenanceStore')
     const { renderTemplate } = await import('../lib/templateEngine')
@@ -707,6 +747,7 @@ export async function getServerSideProps(context) {
         initialLoadingScreenHtml: renderTemplate(html || defaultLoadingHtml, { global: globalVars }),
         initialLoadingScreenCss: css || '',
         initialLoadingScreenJs: js || '',
+        seoMeta,
       },
     }
   } catch (_e) {
@@ -715,6 +756,7 @@ export async function getServerSideProps(context) {
         initialLoadingScreenHtml: defaultLoadingHtml,
         initialLoadingScreenCss: '',
         initialLoadingScreenJs: '',
+        seoMeta,
       },
     }
   }
