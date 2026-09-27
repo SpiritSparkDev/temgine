@@ -784,25 +784,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setPageData(deepMerge(pageData, updates));
   }
 
-  function handleDeleteBlock(index) {
-    // support both numeric index (top-level) and path strings like '2.1.0'
+  // Pure helper (no state read/write) so callers can compute the post-removal
+  // block list synchronously, without waiting for a setBlocks() re-render.
+  const removeBlockAtPath = (sourceBlocks, index) => {
     if (typeof index === 'string') {
       const parts = index.split('.').map(p => parseInt(p, 10));
-      const copy = JSON.parse(JSON.stringify(blocks || []));
+      const copy = JSON.parse(JSON.stringify(sourceBlocks || []));
       if (parts.length === 1) {
         copy.splice(parts[0], 1);
-        setBlocks(copy);
-        return;
+        return copy;
       }
       let cur = copy;
       for (let i = 0; i < parts.length - 1; i++) {
         cur = cur[parts[i]].children = cur[parts[i]].children || [];
       }
       cur.splice(parts[parts.length - 1], 1);
-      setBlocks(copy);
-      return;
+      return copy;
     }
-    setBlocks(blocks.filter((_, i) => i !== index));
+    return (sourceBlocks || []).filter((_, i) => i !== index);
+  };
+
+  function handleDeleteBlock(index) {
+    setBlocks(removeBlockAtPath(blocks, index));
   }
 
   // Helper: navigate nested copy to the sibling array of a given path
@@ -1035,10 +1038,29 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setBlockTransferState(null);
       return;
     }
-    const ok = await onTransferBlockToPage({ block, targetPageId, mode });
+    // sourcePageId/sourcePath let the parent apply the target addition and
+    // (for a move) the source removal in one atomic save — avoiding a second,
+    // separate save of this page that could race with the first and revert it
+    // with a stale snapshot of whatever this page was still holding.
+    const ok = await onTransferBlockToPage({ block, targetPageId, mode, sourcePageId: page?.id, sourcePath: path });
     if (ok) {
       if (mode === 'move') {
-        handleDeleteBlock(path);
+        // The removal is already persisted server-side (see above); this just
+        // reflects it in the local editor state so the block disappears here too.
+        const newBlocks = removeBlockAtPath(blocks, path);
+        setBlocks(newBlocks);
+        initialSnapshotRef.current = buildSnapshot({
+          title,
+          slug,
+          blocks: newBlocks,
+          pageData,
+          redirectType,
+          redirectUrl,
+          isHomepage,
+        });
+        setIsDirty(false);
+        setAutosaveStatus('gespeichert');
+        onDirtyChange?.(false);
         setToast({ message: 'Block wurde in die Zielseite verschoben.', type: 'success' });
       } else {
         setToast({ message: 'Block wurde in die Zielseite kopiert.', type: 'success' });

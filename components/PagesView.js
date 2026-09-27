@@ -143,17 +143,48 @@ export default function PagesView({
 </html>`;
   };
 
-  const handleTransferBlockToPage = async ({ block, targetPageId, mode }) => {
+  const handleTransferBlockToPage = async ({ block, targetPageId, mode, sourcePageId, sourcePath }) => {
     if (!block || !targetPageId) return false;
     try {
       const clonedBlock = JSON.parse(JSON.stringify(block));
-      const insertIntoTree = (nodes) =>
-        nodes.map(n =>
-          n.id === targetPageId
-            ? { ...n, blocks: [...(Array.isArray(n.blocks) ? n.blocks : []), clonedBlock] }
-            : { ...n, children: insertIntoTree(n.children || []) }
-        );
-      const updated = insertIntoTree(pages);
+
+      // Removes the block at a dotted child-index path (e.g. "2.1.0") from a
+      // page's own blocks array, mirroring PageEditor's handleDeleteBlock.
+      const removeAtPath = (sourceBlocks, path) => {
+        const parts = String(path).split('.').map(p => parseInt(p, 10));
+        const copy = JSON.parse(JSON.stringify(sourceBlocks || []));
+        if (parts.length === 1) {
+          copy.splice(parts[0], 1);
+          return copy;
+        }
+        let cur = copy;
+        for (let i = 0; i < parts.length - 1; i++) {
+          cur = cur[parts[i]].children = cur[parts[i]].children || [];
+        }
+        cur.splice(parts[parts.length - 1], 1);
+        return copy;
+      };
+
+      // Applies the target-page addition and (for a move) the source-page
+      // removal in a single pass over the current tree, so both land in one
+      // save — no separate follow-up save that could race with this one and
+      // overwrite it with a stale snapshot of the page it was still holding.
+      const applyTransfer = (nodes) =>
+        nodes.map(n => {
+          let next = n;
+          if (n.id === targetPageId) {
+            next = { ...next, blocks: [...(Array.isArray(next.blocks) ? next.blocks : []), clonedBlock] };
+          }
+          if (mode === 'move' && sourcePageId && n.id === sourcePageId) {
+            next = { ...next, blocks: removeAtPath(next.blocks, sourcePath) };
+          }
+          if (Array.isArray(n.children) && n.children.length) {
+            next = { ...next, children: applyTransfer(n.children) };
+          }
+          return next;
+        });
+
+      const updated = applyTransfer(pages);
       const saved = await handleUpdatePages(updated);
       return Boolean(saved);
     } catch (e) {
@@ -226,10 +257,15 @@ export default function PagesView({
               const opts = options || {};
               const isSilent = opts.silent === true;
               
-              const updatePageInTree = (nodes) => 
-                nodes.map(n => 
-                  n.id === updatedPage.id 
-                    ? { ...n, ...updatedPage }
+              const updatePageInTree = (nodes) =>
+                nodes.map(n =>
+                  n.id === updatedPage.id
+                    // PageEditor only ever edits this one page's own fields — it
+                    // doesn't manage the page tree, so its (possibly stale)
+                    // updatedPage.children must never overwrite the live tree's
+                    // children (e.g. a block another editor action just moved
+                    // into a nested child page).
+                    ? { ...n, ...updatedPage, children: n.children }
                     : { ...n, children: updatePageInTree(n.children || []) }
                 );
               const updated = updatePageInTree(pages);
