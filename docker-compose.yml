@@ -4,13 +4,15 @@
 # directory for the same reason. To run several isolated instances on one host, check out this
 # repo into one directory per instance (or set COMPOSE_PROJECT_NAME explicitly).
 #
-# All ${...} values below, plus everything the app itself needs at runtime
-# (SMTP, ALTCHA_HMAC_KEY, GITHUB_ID, ...), come from a file named exactly
-# ".env" in this same directory — Compose auto-loads that name for ${...}
-# substitution, and env_file: below loads it a second time to inject its
-# whole content into the app container. See README ("Docker: benötigte
-# Umgebungsvariablen") for what belongs in it; the file itself holds real
-# secrets and is gitignored, never committed.
+# Every value the app needs is listed explicitly under app.environment below
+# as ${...} — deliberately no env_file: here. env_file: needs an actual file
+# on disk at a fixed path, which breaks under tools that manage the .env
+# content themselves without writing that file where Compose expects it
+# (e.g. Portainer's "load variables from .env" stack feature, or Plesk's
+# Docker Stack Editor) — ${...} substitution is what those tools actually
+# support. Supply the values via a real ".env" file for plain `docker compose
+# up`, or via your tool's own environment-variables UI. See README ("Docker:
+# benötigte Umgebungsvariablen") for what's needed; never commit real secrets.
 services:
   postgres:
     image: postgres:15-alpine
@@ -33,16 +35,30 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    env_file:
-      - path: .env
-        required: true
     environment:
       # Postgres is always reachable under its service name on Compose's
       # internal network — unrelated to APP_PORT (that's only the host-side
       # port for reaching the app itself from outside).
       DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
       NEXTAUTH_URL: ${PUBLIC_URL:?PUBLIC_URL fehlt in .env}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET fehlt in .env}
+      ALTCHA_HMAC_KEY: ${ALTCHA_HMAC_KEY:?ALTCHA_HMAC_KEY fehlt in .env}
       PORT: 3000
+      # Optional — leer bleibt einfach ungesetzt, kein Fehlschlag
+      GITHUB_ID: ${GITHUB_ID:-}
+      GITHUB_SECRET: ${GITHUB_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      CONTACT_MAIL_TO: ${CONTACT_MAIL_TO:-}
+      NEXT_PUBLIC_DEV_MODE: ${NEXT_PUBLIC_DEV_MODE:-}
+      NEXT_PUBLIC_DEBUG_RENDER: ${NEXT_PUBLIC_DEBUG_RENDER:-}
+      ROBOTS_DISALLOW: ${ROBOTS_DISALLOW:-}
+      ROBOTS_CRAWL_DELAY: ${ROBOTS_CRAWL_DELAY:-}
+      ROBOTS_REQUEST_RATE: ${ROBOTS_REQUEST_RATE:-}
     volumes:
       - ./data:/app/data
       - ./public:/app/public

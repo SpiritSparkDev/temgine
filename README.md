@@ -210,6 +210,14 @@ Docker Compose liest dafür eine Datei namens exakt `.env` im Projektroot
 für `npm run dev` / Plesk-Node-Hosting. `.env` enthält echte Zugangsdaten und
 ist in `.gitignore`, wird also nie committed.
 
+Bei Deployment-Tools mit eigener Stack-Verwaltung (Portainer, Plesk Docker
+Stack Editor, ...) tragt die Werte stattdessen in deren eigener
+"Environment variables"-UI ein (Portainer z. B. per "Load variables from
+.env file") — `docker-compose.yml` referenziert jede Variable einzeln über
+`${...}`, ganz ohne separate `env_file:`-Direktive, damit das unabhängig
+davon funktioniert, ob das Tool eine physische `.env` ins Stack-Verzeichnis
+schreibt oder nicht.
+
 ```bash
 # Einmalig anlegen (Werte s. Tabelle unten), dann:
 docker compose up -d --build   # baut Image, startet App + Postgres
