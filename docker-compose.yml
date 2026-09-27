@@ -2,49 +2,27 @@
 # current directory by default, so container/network/volume names are automatically namespaced
 # per checkout; app's ./data and ./public bind mounts (below) land inside that same checkout
 # directory for the same reason. To run several isolated instances on one host, check out this
-# repo into one directory per instance (or set COMPOSE_PROJECT_NAME explicitly) — see
-# development_docs/DOCKER.md.
+# repo into one directory per instance (or set COMPOSE_PROJECT_NAME explicitly).
+#
+# All ${...} values below, plus everything the app itself needs at runtime
+# (SMTP, ALTCHA_HMAC_KEY, GITHUB_ID, ...), come from a file named exactly
+# ".env" in this same directory — Compose auto-loads that name for ${...}
+# substitution, and env_file: below loads it a second time to inject its
+# whole content into the app container. See README ("Docker: benötigte
+# Umgebungsvariablen") for what belongs in it; the file itself holds real
+# secrets and is gitignored, never committed.
 services:
-  # Generates the Postgres password once on first start (or reuses the one
-  # from .env.local's DATABASE_URL if set) and persists it into a volume both
-  # postgres and app read from. Needed because Postgres must have the
-  # password *before* it initializes — it can't generate its own.
-  db-init:
-    image: alpine:3
-    env_file:
-      - path: .env.local
-        required: false
-    command: >
-      sh -c '
-        set -e
-        mkdir -p /secrets
-        [ -f /secrets/db_password ] && exit 0
-        if [ -n "$$DATABASE_URL" ]; then
-          PASS=$$(echo "$$DATABASE_URL" | sed -E "s#.*://[^:]*:([^@]*)@.*#\1#")
-        else
-          PASS=$$(head -c 48 /dev/urandom | base64 | tr -dc "a-zA-Z0-9" | head -c 32)
-        fi
-        printf "%s" "$$PASS" > /secrets/db_password
-        chmod 600 /secrets/db_password
-      '
-    volumes:
-      - db_secrets:/secrets
-
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
-    depends_on:
-      db-init:
-        condition: service_completed_successfully
     environment:
-      POSTGRES_USER: ${DATABASE_USER:-temgine}
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
-      POSTGRES_DB: ${DATABASE_NAME:-temgine}
+      POSTGRES_USER: ${DATABASE_USER:?DATABASE_USER fehlt in .env}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD fehlt in .env}
+      POSTGRES_DB: ${DATABASE_NAME:?DATABASE_NAME fehlt in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - db_secrets:/run/secrets:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-temgine}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
       interval: 2s
       timeout: 3s
       retries: 10
@@ -56,28 +34,23 @@ services:
       postgres:
         condition: service_healthy
     env_file:
-      - path: .env.local
-        required: false
+      - path: .env
+        required: true
     environment:
-      DATABASE_HOST: postgres
-      DATABASE_USER: ${DATABASE_USER:-temgine}
-      DATABASE_NAME: ${DATABASE_NAME:-temgine}
-      DATABASE_PASSWORD_FILE: /run/secrets/db_password
-      NEXTAUTH_URL: ${PUBLIC_URL:-http://localhost:${APP_PORT:-3000}}
+      # Postgres is always reachable under its service name on Compose's
+      # internal network — unrelated to APP_PORT (that's only the host-side
+      # port for reaching the app itself from outside).
+      DATABASE_URL: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+      NEXTAUTH_URL: ${PUBLIC_URL:?PUBLIC_URL fehlt in .env}
       PORT: 3000
     volumes:
-      - db_secrets:/run/secrets:ro
       - ./data:/app/data
       - ./public:/app/public
-    # APP_PORT unset (e.g. pasted straight into Plesk's Docker Stack Editor,
-    # without the npm run docker:up wrapper that picks + persists one itself):
-    # Docker publishes container port 3000 to the first free host port it
-    # finds in 3000-3999, so a busy 3000 doesn't block the whole stack.
+    # Fixed, single host port on purpose (no range fallback): a reverse proxy
+    # in front (Plesk, nginx, ...) needs a known, stable port to forward to.
     ports:
-      - "${APP_PORT:-3000-3999}:3000"
+      - "${APP_PORT:?APP_PORT fehlt in .env}:3000"
 
 volumes:
   postgres_data:
-    driver: local
-  db_secrets:
     driver: local
