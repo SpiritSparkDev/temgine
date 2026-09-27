@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import MatomoPanel from './MatomoPanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
+
+const labelStyle = { display: 'block', marginBottom: '0.4rem', fontWeight: 600 };
+const inputStyleSettings = {
+  width: '100%',
+  padding: '0.6rem 0.75rem',
+  border: '1px solid var(--border-color)',
+  borderRadius: '4px',
+  boxSizing: 'border-box',
+};
 
 export default function SettingsView({ showToast }) {
   // --- General tab state ---
@@ -17,6 +27,23 @@ export default function SettingsView({ showToast }) {
   const [liveRenderLastDurationMs, setLiveRenderLastDurationMs] = useState('');
   const [liveRenderLastRoutes, setLiveRenderLastRoutes] = useState('');
   const [liveRenderLastError, setLiveRenderLastError] = useState('');
+
+  // --- SEO / Link-Vorschau defaults ---
+  const [seoSiteName, setSeoSiteName] = useState('');
+  const [seoDefaultDescription, setSeoDefaultDescription] = useState('');
+  const [seoDefaultOgImage, setSeoDefaultOgImage] = useState('');
+  const [seoTwitterHandle, setSeoTwitterHandle] = useState('');
+  const [isSavingSeoDefaults, setIsSavingSeoDefaults] = useState(false);
+
+  // --- SEO / Suchmaschinen & Struktur ---
+  const [seoTitleTemplate, setSeoTitleTemplate] = useState('');
+  const [seoOrganizationName, setSeoOrganizationName] = useState('');
+  const [seoOrganizationLogo, setSeoOrganizationLogo] = useState('');
+  const [seoGoogleVerification, setSeoGoogleVerification] = useState('');
+  const [seoBingVerification, setSeoBingVerification] = useState('');
+  const [seoIndexingEnabled, setSeoIndexingEnabled] = useState(true);
+  const [seoRobotsExtraDisallow, setSeoRobotsExtraDisallow] = useState('');
+  const [isSavingSeoAdvanced, setIsSavingSeoAdvanced] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(AUTOSAVE_KEY);
@@ -42,9 +69,79 @@ export default function SettingsView({ showToast }) {
         if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
         if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
         if (data.liveRenderLastError)       setLiveRenderLastError(data.liveRenderLastError);
+        if (data.seo_site_name !== undefined)           setSeoSiteName(data.seo_site_name);
+        if (data.seo_default_description !== undefined) setSeoDefaultDescription(data.seo_default_description);
+        if (data.seo_default_og_image !== undefined)    setSeoDefaultOgImage(data.seo_default_og_image);
+        if (data.seo_twitter_handle !== undefined)      setSeoTwitterHandle(data.seo_twitter_handle);
+        if (data.seo_title_template !== undefined)             setSeoTitleTemplate(data.seo_title_template);
+        if (data.seo_organization_name !== undefined)          setSeoOrganizationName(data.seo_organization_name);
+        if (data.seo_organization_logo !== undefined)          setSeoOrganizationLogo(data.seo_organization_logo);
+        if (data.seo_google_site_verification !== undefined)   setSeoGoogleVerification(data.seo_google_site_verification);
+        if (data.seo_bing_site_verification !== undefined)     setSeoBingVerification(data.seo_bing_site_verification);
+        if (data.seo_indexing_enabled !== undefined)            setSeoIndexingEnabled(data.seo_indexing_enabled !== 'false');
+        if (data.seo_robots_txt_extra_disallow !== undefined)   setSeoRobotsExtraDisallow(data.seo_robots_txt_extra_disallow);
       })
       .catch(() => {});
   }, []);
+
+  const handleSaveSeoAdvanced = async () => {
+    setIsSavingSeoAdvanced(true);
+    try {
+      const entries = [
+        ['seo_title_template', seoTitleTemplate],
+        ['seo_organization_name', seoOrganizationName],
+        ['seo_organization_logo', seoOrganizationLogo],
+        ['seo_google_site_verification', seoGoogleVerification],
+        ['seo_bing_site_verification', seoBingVerification],
+        ['seo_indexing_enabled', String(seoIndexingEnabled)],
+        ['seo_robots_txt_extra_disallow', seoRobotsExtraDisallow],
+      ];
+      for (const [key, value] of entries) {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: String(value || '') }),
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || 'Fehler beim Speichern');
+        }
+      }
+      showToast('SEO-Struktureinstellungen gespeichert', 'success');
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingSeoAdvanced(false);
+    }
+  };
+
+  const handleSaveSeoDefaults = async () => {
+    setIsSavingSeoDefaults(true);
+    try {
+      const entries = [
+        ['seo_site_name', seoSiteName],
+        ['seo_default_description', seoDefaultDescription],
+        ['seo_default_og_image', seoDefaultOgImage],
+        ['seo_twitter_handle', seoTwitterHandle],
+      ];
+      for (const [key, value] of entries) {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: String(value || '') }),
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || 'Fehler beim Speichern');
+        }
+      }
+      showToast('SEO-Standardwerte gespeichert', 'success');
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingSeoDefaults(false);
+    }
+  };
 
   const reloadLiveRenderSettings = async () => {
     try {
@@ -306,6 +403,209 @@ export default function SettingsView({ showToast }) {
                 Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
               </small>
             </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>SEO — Standardwerte für die Link-Vorschau</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Greift für jede Seite, die im SEO-Panel kein eigenes Meta-Bild/-Beschreibung hinterlegt hat —
+                etwa die Startseite, 404-Seite oder vergessene Einzelseiten. So sieht jeder geteilte Link
+                plausibel aus, auch ohne seitenspezifische Pflege.
+              </p>
+
+              <div style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Website-Name
+                  </label>
+                  <input
+                    type="text"
+                    value={seoSiteName}
+                    onChange={(e) => setSeoSiteName(e.target.value)}
+                    placeholder="z. B. Meine Firma GmbH"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Standard Meta-Beschreibung
+                  </label>
+                  <textarea
+                    value={seoDefaultDescription}
+                    onChange={(e) => setSeoDefaultDescription(e.target.value)}
+                    placeholder="Kurzbeschreibung, die verwendet wird, wenn eine Seite keine eigene hat"
+                    rows={2}
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Standard-Vorschaubild (Open Graph)
+                  </label>
+                  <input
+                    type="url"
+                    value={seoDefaultOgImage}
+                    onChange={(e) => setSeoDefaultOgImage(e.target.value)}
+                    placeholder="https://example.com/vorschaubild.jpg"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                  <small style={{ color: 'var(--text-tertiary)' }}>
+                    Empfohlen: 1200×630px (Seitenverhältnis 1.91:1) — so wird es auf Facebook, LinkedIn &amp; Co. nicht zugeschnitten.
+                  </small>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    X (Twitter) Handle
+                  </label>
+                  <input
+                    type="text"
+                    value={seoTwitterHandle}
+                    onChange={(e) => setSeoTwitterHandle(e.target.value)}
+                    placeholder="@firmenname"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <button
+                    onClick={handleSaveSeoDefaults}
+                    disabled={isSavingSeoDefaults}
+                    style={{
+                      padding: '0.6rem 1.5rem',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: isSavingSeoDefaults ? 'not-allowed' : 'pointer',
+                      opacity: isSavingSeoDefaults ? 0.6 : 1,
+                    }}
+                  >
+                    {isSavingSeoDefaults ? 'Speichern…' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>SEO — Suchmaschinen &amp; Struktur</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Wirkt sich auf <strong>alle</strong> Seiten aus: Titel-Vorlage, strukturierte Daten
+                (Organization-Schema für Google) und die Sichtbarkeit für Suchmaschinen insgesamt.
+              </p>
+
+              <div style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}>
+                <div>
+                  <label style={labelStyle}>Titel-Vorlage</label>
+                  <input
+                    type="text"
+                    value={seoTitleTemplate}
+                    onChange={(e) => setSeoTitleTemplate(e.target.value)}
+                    placeholder="%s – Meine Firma GmbH"
+                    style={inputStyleSettings}
+                  />
+                  <small style={{ color: 'var(--text-tertiary)' }}>
+                    <code>%s</code> wird durch den jeweiligen Seitentitel ersetzt. Leer lassen für
+                    „Seitentitel – Website-Name".
+                  </small>
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Organisationsname (für strukturierte Daten)</label>
+                  <input
+                    type="text"
+                    value={seoOrganizationName}
+                    onChange={(e) => setSeoOrganizationName(e.target.value)}
+                    placeholder="z. B. Meine Firma GmbH"
+                    style={inputStyleSettings}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Organisations-Logo (URL)</label>
+                  <input
+                    type="url"
+                    value={seoOrganizationLogo}
+                    onChange={(e) => setSeoOrganizationLogo(e.target.value)}
+                    placeholder="https://example.com/logo.png"
+                    style={inputStyleSettings}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Google Search Console — Verifizierungscode</label>
+                  <input
+                    type="text"
+                    value={seoGoogleVerification}
+                    onChange={(e) => setSeoGoogleVerification(e.target.value)}
+                    placeholder="Inhalt des content-Attributs, ohne <meta>-Tag"
+                    style={inputStyleSettings}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Bing Webmaster Tools — Verifizierungscode</label>
+                  <input
+                    type="text"
+                    value={seoBingVerification}
+                    onChange={(e) => setSeoBingVerification(e.target.value)}
+                    placeholder="Inhalt des content-Attributs, ohne <meta>-Tag"
+                    style={inputStyleSettings}
+                  />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Zusätzliche robots.txt Disallow-Pfade</label>
+                  <textarea
+                    value={seoRobotsExtraDisallow}
+                    onChange={(e) => setSeoRobotsExtraDisallow(e.target.value)}
+                    placeholder={'/intern\n/entwuerfe'}
+                    rows={3}
+                    style={{ ...inputStyleSettings, resize: 'vertical' }}
+                  />
+                  <small style={{ color: 'var(--text-tertiary)' }}>
+                    Ein Pfad pro Zeile, ergänzt die Standard-Sperrliste (/admin, /api).
+                  </small>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px', background: seoIndexingEnabled ? 'transparent' : 'rgba(220, 38, 38, 0.08)' }}>
+                  <Toggle
+                    checked={!seoIndexingEnabled}
+                    onChange={(checked) => setSeoIndexingEnabled(!checked)}
+                    label="Indexierung durch Suchmaschinen global deaktivieren"
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>Indexierung global deaktivieren</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      Für Staging/Test-Umgebungen: erzwingt <code>noindex, nofollow</code> auf allen Seiten
+                      und <code>Disallow: /</code> in der robots.txt — unabhängig von den Einstellungen
+                      einzelner Seiten.
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    onClick={handleSaveSeoAdvanced}
+                    disabled={isSavingSeoAdvanced}
+                    style={{
+                      padding: '0.6rem 1.5rem',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: isSavingSeoAdvanced ? 'not-allowed' : 'pointer',
+                      opacity: isSavingSeoAdvanced ? 0.6 : 1,
+                    }}
+                  >
+                    {isSavingSeoAdvanced ? 'Speichern…' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <MatomoPanel showToast={showToast} />
 
             <section style={{ marginTop: '2.5rem' }}>
               <h3 style={{ marginBottom: '0.5rem' }}>Staging / Live-Auslieferung</h3>

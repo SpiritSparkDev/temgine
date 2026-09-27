@@ -4,6 +4,7 @@ import { renderPage, renderTemplate, collectNavigationBlockIds } from '../lib/te
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -20,7 +21,7 @@ const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   return `${value}${assets}`
 }
 
-export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
+export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '', seoMeta = null }) {
   const router = useRouter()
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
@@ -421,16 +422,36 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
   // React would reset innerHTML and wipe the hydrated DOM.
   const gatedHtml = useMemo(() => stripBlockedIframeSrcs(html, getConsent()), [html])
 
-  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+  if (loading) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+    </>
+  )
 
   const wrapperProps = { id: 'page-html-output' };
   if (homePage?.data?.wrapperId) wrapperProps.id = homePage.data.wrapperId;
   if (homePage?.data?.wrapperClass) wrapperProps.className = homePage.data.wrapperClass;
 
-  return <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
+  return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
+    </>
+  )
 }
 
-export async function getServerSideProps() {
+export async function getServerSideProps(context) {
+  let seoMeta = null
+  try {
+    const { resolveSeoMetaForRoute } = await import('../lib/seo')
+    const { meta, found } = await resolveSeoMetaForRoute(context.req, '/', [])
+    seoMeta = meta
+    if (!found) context.res.statusCode = 404
+  } catch (_e) {
+    seoMeta = null
+  }
+
   try {
     const { getMaintenancePage } = await import('../lib/maintenanceStore')
     const { renderTemplate } = await import('../lib/templateEngine')
@@ -445,6 +466,7 @@ export async function getServerSideProps() {
         initialLoadingScreenHtml: renderTemplate(html || defaultLoadingHtml, { global: globalVars }),
         initialLoadingScreenCss: css || '',
         initialLoadingScreenJs: js || '',
+        seoMeta,
       },
     }
   } catch (_e) {
@@ -453,6 +475,7 @@ export async function getServerSideProps() {
         initialLoadingScreenHtml: defaultLoadingHtml,
         initialLoadingScreenCss: '',
         initialLoadingScreenJs: '',
+        seoMeta,
       },
     }
   }

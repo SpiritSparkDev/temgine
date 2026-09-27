@@ -74,6 +74,36 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
     }
   };
 
+  // Matomo ist bewusst eine eigene, unabhängig vom generischen Custom-JS-
+  // Manager schaltbare Integration (siehe components/MatomoPanel.js) — ein
+  // einziger Settings-Schalter statt Code im JS-Manager suchen/entfernen.
+  const loadMatomoTracking = async () => {
+    try {
+      if (document.getElementById('temgine-matomo-script')) return;
+      const res = await fetch('/api/settings');
+      if (!res.ok) return;
+      const settings = await res.json();
+      if (settings.matomo_enabled !== 'true') return;
+      if (!isAllowed('statistics', getConsent())) return;
+
+      const { buildMatomoSnippet } = await import('../lib/matomo');
+      const snippet = buildMatomoSnippet({
+        matomoUrl: settings.matomo_url,
+        siteId: settings.matomo_site_id,
+        trackWithoutCookies: settings.matomo_track_without_cookies === 'true',
+        respectDnt: settings.matomo_respect_dnt === 'true',
+      });
+      if (!snippet) return;
+
+      const script = document.createElement('script');
+      script.id = 'temgine-matomo-script';
+      script.textContent = snippet;
+      document.head.appendChild(script);
+    } catch (error) {
+      console.error('Fehler beim Laden von Matomo:', error);
+    }
+  };
+
   const loadFonts = () => {
     const existing = document.getElementById('temgine-font-face');
     if (existing) existing.remove();
@@ -124,12 +154,13 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       loadCookieConsent();
       loadExternalCSS();
       loadExternalJS();
+      loadMatomoTracking();
       loadFonts();
     }
   }, [router && router.pathname, Component]);
 
   useEffect(() => {
-    const handler = () => { loadExternalJS(); };
+    const handler = () => { loadExternalJS(); loadMatomoTracking(); };
     window.addEventListener('temgine:consent-changed', handler);
     return () => window.removeEventListener('temgine:consent-changed', handler);
   }, []);
@@ -145,10 +176,11 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png" />
         <link rel="manifest" href="/favicon/site.webmanifest" />
         <meta name="theme-color" content="#ffffff" />
-        {/* Site logo (served from public/assets/) - social preview */}
-        <meta property="og:image" content="/assets/light.png" />
-        <meta name="twitter:image" content="/assets/light.png" />
         <meta name="msapplication-TileImage" content="/assets/light.png" />
+        {/* Seiten-spezifische Title/Description/OG/Twitter/JSON-LD-Tags kommen
+            aus SeoHead (siehe pages/index.js, pages/[...slug].js) — Fallback
+            ist das Standard-Vorschaubild aus den SEO-Einstellungen, nicht mehr
+            fest hier verdrahtet. */}
       </Head>
       <Component {...pageProps} />
     </SessionProvider>
