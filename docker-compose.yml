@@ -69,8 +69,12 @@ services:
       - db_secrets:/run/secrets:ro
       - ./data:/app/data
       - ./public:/app/public
+    # APP_PORT unset (e.g. pasted straight into Plesk's Docker Stack Editor,
+    # without the npm run docker:up wrapper that picks + persists one itself):
+    # Docker publishes container port 3000 to the first free host port it
+    # finds in 3000-3999, so a busy 3000 doesn't block the whole stack.
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "${APP_PORT:-3000-3999}:3000"
 
 volumes:
   postgres_data:

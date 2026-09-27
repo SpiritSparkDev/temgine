@@ -211,6 +211,12 @@ npm run docker:up    # baut Image, legt .env.local an falls nötig, startet auf 
 npm run docker:down  # stoppt die Container
 ```
 
+Der Host-Port ist in `docker-compose.yml` als Bereich `3000-3999` hinterlegt —
+Docker bindet automatisch den ersten freien Port darin, falls 3000 schon
+belegt ist. Das greift auch, wenn `docker compose up` ohne `npm run docker:up`
+läuft (z. B. direkt oder über Plesks Docker-Stack-Editor). Mit `APP_PORT` in
+`.env.local` lässt sich weiterhin ein fester Port erzwingen.
+
 Details, Umgebungsvariablen und Troubleshooting: siehe [development_docs/DOCKER.md](./development_docs/DOCKER.md).
 
 ---
