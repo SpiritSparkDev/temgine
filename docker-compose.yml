@@ -35,6 +35,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Optional fallback: if a real .env file exists on disk (plain `docker
+    # compose up`), its keys get merged in too — a safety net for anything
+    # not (yet) listed explicitly below. `environment:` always wins over
+    # env_file: for the same key. required: false so tools that manage env
+    # vars themselves without writing a physical .env (Portainer, Plesk's
+    # Docker Stack Editor) don't fail when the file simply isn't there.
+    env_file:
+      - path: .env
+        required: false
     environment:
       # Postgres is always reachable under its service name on Compose's
       # internal network — unrelated to APP_PORT (that's only the host-side
