@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import MatomoPanel from './MatomoPanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 
@@ -603,6 +604,8 @@ export default function SettingsView({ showToast }) {
                 </div>
               </div>
             </section>
+
+            <MatomoPanel showToast={showToast} />
 
             <section style={{ marginTop: '2.5rem' }}>
               <h3 style={{ marginBottom: '0.5rem' }}>Staging / Live-Auslieferung</h3>
