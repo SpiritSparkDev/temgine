@@ -18,6 +18,13 @@ export default function SettingsView({ showToast }) {
   const [liveRenderLastRoutes, setLiveRenderLastRoutes] = useState('');
   const [liveRenderLastError, setLiveRenderLastError] = useState('');
 
+  // --- SEO / Link-Vorschau defaults ---
+  const [seoSiteName, setSeoSiteName] = useState('');
+  const [seoDefaultDescription, setSeoDefaultDescription] = useState('');
+  const [seoDefaultOgImage, setSeoDefaultOgImage] = useState('');
+  const [seoTwitterHandle, setSeoTwitterHandle] = useState('');
+  const [isSavingSeoDefaults, setIsSavingSeoDefaults] = useState(false);
+
   useEffect(() => {
     const stored = localStorage.getItem(AUTOSAVE_KEY);
     if (stored !== null) setAutosaveEnabled(stored !== 'false');
@@ -42,9 +49,41 @@ export default function SettingsView({ showToast }) {
         if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
         if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
         if (data.liveRenderLastError)       setLiveRenderLastError(data.liveRenderLastError);
+        if (data.seo_site_name !== undefined)           setSeoSiteName(data.seo_site_name);
+        if (data.seo_default_description !== undefined) setSeoDefaultDescription(data.seo_default_description);
+        if (data.seo_default_og_image !== undefined)    setSeoDefaultOgImage(data.seo_default_og_image);
+        if (data.seo_twitter_handle !== undefined)      setSeoTwitterHandle(data.seo_twitter_handle);
       })
       .catch(() => {});
   }, []);
+
+  const handleSaveSeoDefaults = async () => {
+    setIsSavingSeoDefaults(true);
+    try {
+      const entries = [
+        ['seo_site_name', seoSiteName],
+        ['seo_default_description', seoDefaultDescription],
+        ['seo_default_og_image', seoDefaultOgImage],
+        ['seo_twitter_handle', seoTwitterHandle],
+      ];
+      for (const [key, value] of entries) {
+        const res = await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value: String(value || '') }),
+        });
+        if (!res.ok) {
+          const d = await res.json();
+          throw new Error(d.error || 'Fehler beim Speichern');
+        }
+      }
+      showToast('SEO-Standardwerte gespeichert', 'success');
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingSeoDefaults(false);
+    }
+  };
 
   const reloadLiveRenderSettings = async () => {
     try {
@@ -305,6 +344,90 @@ export default function SettingsView({ showToast }) {
               <small style={{ color: '#6b7280' }}>
                 Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
               </small>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>SEO — Standardwerte für die Link-Vorschau</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Greift für jede Seite, die im SEO-Panel kein eigenes Meta-Bild/-Beschreibung hinterlegt hat —
+                etwa die Startseite, 404-Seite oder vergessene Einzelseiten. So sieht jeder geteilte Link
+                plausibel aus, auch ohne seitenspezifische Pflege.
+              </p>
+
+              <div style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Website-Name
+                  </label>
+                  <input
+                    type="text"
+                    value={seoSiteName}
+                    onChange={(e) => setSeoSiteName(e.target.value)}
+                    placeholder="z. B. Meine Firma GmbH"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Standard Meta-Beschreibung
+                  </label>
+                  <textarea
+                    value={seoDefaultDescription}
+                    onChange={(e) => setSeoDefaultDescription(e.target.value)}
+                    placeholder="Kurzbeschreibung, die verwendet wird, wenn eine Seite keine eigene hat"
+                    rows={2}
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box', resize: 'vertical' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    Standard-Vorschaubild (Open Graph)
+                  </label>
+                  <input
+                    type="url"
+                    value={seoDefaultOgImage}
+                    onChange={(e) => setSeoDefaultOgImage(e.target.value)}
+                    placeholder="https://example.com/vorschaubild.jpg"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                  <small style={{ color: 'var(--text-tertiary)' }}>
+                    Empfohlen: 1200×630px (Seitenverhältnis 1.91:1) — so wird es auf Facebook, LinkedIn &amp; Co. nicht zugeschnitten.
+                  </small>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
+                    X (Twitter) Handle
+                  </label>
+                  <input
+                    type="text"
+                    value={seoTwitterHandle}
+                    onChange={(e) => setSeoTwitterHandle(e.target.value)}
+                    placeholder="@firmenname"
+                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div>
+                  <button
+                    onClick={handleSaveSeoDefaults}
+                    disabled={isSavingSeoDefaults}
+                    style={{
+                      padding: '0.6rem 1.5rem',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: isSavingSeoDefaults ? 'not-allowed' : 'pointer',
+                      opacity: isSavingSeoDefaults ? 0.6 : 1,
+                    }}
+                  >
+                    {isSavingSeoDefaults ? 'Speichern…' : 'Speichern'}
+                  </button>
+                </div>
+              </div>
             </section>
 
             <section style={{ marginTop: '2.5rem' }}>
