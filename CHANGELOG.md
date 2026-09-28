@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.7] - 2026-09-28
+
+### Added
+- Seiten-Editor (Einstellungen): Neuer Bereich „Freie Sprungmarken" (`page.data.customAnchors`) neben der Anker-Navigation — für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen, sondern z. B. aus einem eigenen Template-Feld gerendert werden. Freie Texteingabe statt Dropdown-Auswahl, verfügbar in PAGE-Navigationen als `{{#customAnchors}}`.
+- Navigationsverwaltung: Neues Preset „Anchor Sidebar (freie Ziel-IDs)" für `{{#customAnchors}}`, als Pendant zum bestehenden „Anchor Sidebar"-Preset.
+
+### Fixed
+- Anker-Navigation (`{{#anchors}}`, 0.14.6): Das Dropdown zur Auswahl der Ziel-ID zeigte ausschließlich Blöcke mit gesetztem Anchor-ID-Feld — Seiten, deren Ziel-IDs aus eigenen Template-Feldern kommen, konnten so keine passenden Einträge anlegen und die Anker-Liste blieb in Prod trotz Update leer. `anchors` bleibt bewusst auf das Anchor-ID-Feld beschränkt (keine Tippfehler möglich); der neue `customAnchors`-Bereich deckt den freien Fall ab.
+
+---
+
 ## [0.14.6] - 2026-09-28
 
 ### Added
