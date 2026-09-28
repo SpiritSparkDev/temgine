@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.6] - 2026-09-28
+
+### Added
+- Seiten-Editor: Block per Dialog in eine andere Seite kopieren oder verschieben (neue Buttons je Block).
+- Seiten-Editor (Einstellungen): Editor für die Anker-Navigation (`page.data.anchors`) — Blöcke mit gesetzter Anchor-ID lassen sich per Dropdown auswählen, mit eigenem Anzeigetext versehen, sortieren und entfernen. Damit funktioniert `{{#anchors}}` in PAGE-Navigationen jetzt tatsächlich; bisher gab es dafür kein Formularfeld (siehe `help/navigationen.md`) und die Liste blieb immer leer.
+
+### Fixed
+- Block in andere Seite verschieben: Ziel-Update und Entfernen aus der Quellseite liefen als zwei getrennte Speichervorgänge, die sich überholen konnten — der zweite überschrieb dabei den gerade hinzugefügten Block auf der Zielseite mit einem veralteten Snapshot. Beide Änderungen laufen jetzt in einem atomaren Speichervorgang.
+
+---
+
 ## [0.14.5] - 2026-09-25
 
 ### Fixed
