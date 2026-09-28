@@ -1034,6 +1034,30 @@
   flex-direction: column;
 }
 
+/* Anker-Navigation (pageData.anchors) im Seiten-Inspektor */
+.anchor-list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.anchor-list-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.anchor-list-row select {
+  flex: 1 1 40%;
+  min-width: 0;
+}
+
+.anchor-list-row input {
+  flex: 1 1 60%;
+  min-width: 0;
+}
+
 .field-heading-row {
   display: flex;
   gap: 8px;

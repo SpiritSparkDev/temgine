@@ -2699,6 +2699,83 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           </div>
                         )}
                         <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Anker-Navigation</label>
+                        {(() => {
+                          const anchorBlocks = flattenBlocks(blocks).filter(({ block }) => String(block?.props?.anchorId || '').trim());
+                          const anchorList = Array.isArray(pageData.anchors) ? pageData.anchors : [];
+                          const updateAnchors = (updater) => setPageData(d => ({ ...d, anchors: updater(Array.isArray(d.anchors) ? d.anchors : []) }));
+                          return (
+                            <div className="anchor-list-editor">
+                              {anchorList.map((anchor, idx) => {
+                                const matched = anchorBlocks.find(({ block }) => block.props.anchorId === anchor.anchorId);
+                                return (
+                                  <div key={idx} className="anchor-list-row">
+                                    <select
+                                      value={anchor.anchorId || ''}
+                                      onChange={e => {
+                                        const newAnchorId = e.target.value;
+                                        updateAnchors(list => list.map((a, i) => i === idx ? { ...a, anchorId: newAnchorId } : a));
+                                      }}
+                                      className="input-field-small"
+                                      aria-label={`Ziel-Block fuer Anker ${idx + 1}`}
+                                    >
+                                      <option value="">-- Block wählen --</option>
+                                      {anchorBlocks.map(({ block, path }) => (
+                                        <option key={path} value={block.props.anchorId}>
+                                          {block.props.anchorId}{block.props?.title ? ` – ${block.props.title}` : ''}
+                                        </option>
+                                      ))}
+                                      {anchor.anchorId && !matched && (
+                                        <option value={anchor.anchorId}>{anchor.anchorId} (Block nicht gefunden)</option>
+                                      )}
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={anchor.title || ''}
+                                      onChange={e => {
+                                        const newTitle = e.target.value;
+                                        updateAnchors(list => list.map((a, i) => i === idx ? { ...a, title: newTitle } : a));
+                                      }}
+                                      placeholder="Anzeigetext"
+                                      className="input-field-small field-input-full"
+                                      aria-label={`Anzeigetext fuer Anker ${idx + 1}`}
+                                    />
+                                    <button type="button" className="block-move-btn" disabled={idx === 0}
+                                      onClick={() => updateAnchors(list => { const next = [...list]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; return next; })}
+                                      title="Nach oben verschieben" aria-label="Anker nach oben verschieben">
+                                      <ChevronUp size={12} />
+                                    </button>
+                                    <button type="button" className="block-move-btn" disabled={idx === anchorList.length - 1}
+                                      onClick={() => updateAnchors(list => { const next = [...list]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; return next; })}
+                                      title="Nach unten verschieben" aria-label="Anker nach unten verschieben">
+                                      <ChevronDown size={12} />
+                                    </button>
+                                    <button type="button" className="block-move-btn"
+                                      onClick={() => updateAnchors(list => list.filter((_, i) => i !== idx))}
+                                      title="Anker entfernen" aria-label="Anker entfernen">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                className="btn-modern-small"
+                                onClick={() => updateAnchors(list => [...list, {
+                                  anchorId: anchorBlocks.find(({ block }) => !anchorList.some(a => a.anchorId === block.props.anchorId))?.block?.props?.anchorId || '',
+                                  title: '',
+                                }])}
+                              >
+                                + Anker hinzufügen
+                              </button>
+                              {anchorBlocks.length === 0 && (
+                                <p className="blog-channel-editor__hint">Kein Block hat aktuell eine Anchor-ID gesetzt. Im Block-Header oben je Block das Feld „Anchor ID" befüllen, dann hier auswählen.</p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Verfügbar in PAGE-Navigationen als <code>{'{{#anchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>).</p>
                       </div>
                     )}
                   </div>
