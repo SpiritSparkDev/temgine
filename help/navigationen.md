@@ -241,10 +241,38 @@ Unterseiten), lässt sich das wie in Beispiel 2 mit `{{#hasChildren}}` und
 
 `anchorId` als Ziel funktioniert zusammen mit dem Feld **„Anchor-ID"**, das
 sich an jedem Block im Seiten-Editor setzen lässt (wird zur HTML-`id` des
-Blocks). Die Liste selbst — `page.data.anchors`, ein Array aus
-`{ anchorId, title }` — hat aktuell **kein eigenes Formularfeld** im
-Backend; sie muss über die Seiten-Daten gesetzt werden (bei Bedarf
-Entwickler:in ansprechen, damit ein UI-Feld dafür ergänzt wird).
+Blocks). Die Liste selbst pflegst du im Seiten-Editor unter **Einstellungen →
+Anker-Navigation**: ein Dropdown je Eintrag zeigt nur Blöcke mit gesetzter
+Anchor-ID zur Auswahl — Tippfehler in der Ziel-ID sind damit ausgeschlossen.
+Gespeichert wird das als `page.data.anchors`, ein Array aus
+`{ anchorId, title }`.
+
+### In `{{#customAnchors}}…{{/customAnchors}}` (nur PAGE-Navs)
+
+| Feld | Bedeutung |
+|---|---|
+| `anchorId` | Ziel-`id` auf der Seite (ohne `#`) |
+| `title` | Anzeigetext des Anker-Links |
+
+```html
+<nav class="page-nav anchor-sidebar">
+  <ul>
+    {{#customAnchors}}
+      <li><a href="#{{anchorId}}">{{title}}</a></li>
+    {{/customAnchors}}
+  </ul>
+</nav>
+```
+
+Gleiche Feldstruktur wie `anchors`, aber für Ziel-`id`s, die **nicht** über
+das Anchor-ID-Feld eines Blocks kommen — z. B. wenn ein eigenes
+Block-Template selbst eine `id` aus einem anderen Feld rendert (etwa eine
+Überschrift/Kicker, die gleichzeitig als Sprungmarke dient). Im Seiten-Editor
+unter **Einstellungen → Freie Sprungmarken** gepflegt: freie Texteingabe
+ohne Abgleich gegen vorhandene Blöcke, gespeichert als
+`page.data.customAnchors`. Enthält eine Seite beide Arten von Ankern, lassen
+sich `{{#anchors}}` und `{{#customAnchors}}` in derselben Navigation
+kombinieren (zwei Listen, zwei Schleifen).
 
 ### Kurzreferenz: Bedingungen & Schleifen in Mustache
 
@@ -267,8 +295,8 @@ gleich auf:
 - `lib/liveSnapshot.js` (statischer Live-Modus, siehe Einstellungen → Live-Rendering)
 - `pages/api/admin/export.js` (Static-Site-Export als ZIP — **ohne** `isCurrent`/`data` in `pages`)
 
-`pages`, `anchors` und `childPages` selbst stehen in allen vier Pfaden zur
-Verfügung — nur die beiden Zusatzfelder `isCurrent`/`data` **innerhalb**
+`pages`, `anchors`, `customAnchors` und `childPages` selbst stehen in allen
+vier Pfaden zur Verfügung — nur die beiden Zusatzfelder `isCurrent`/`data` **innerhalb**
 der `pages`-Einträge fehlen auf der Startseite und im Static-Export (siehe
 Tabelle oben).
 

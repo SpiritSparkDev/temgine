@@ -140,11 +140,12 @@ function buildNestedPages(nodes, parentPath = '') {
 function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavigationsById, currentPath) {
   const nestedPages = buildNestedPages(allPagesTree)
   const anchors = Array.isArray(page?.data?.anchors) ? page.data.anchors : []
+  const customAnchors = Array.isArray(page?.data?.customAnchors) ? page.data.customAnchors : []
   // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
   // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
   const rawMatch = findRawPageNodeById(allPagesTree, page?.id)
   const childPages = rawMatch ? buildNestedPages(rawMatch.node.children || [], rawMatch.parentPath) : []
-  const navData = { pages: nestedPages, anchors, childPages }
+  const navData = { pages: nestedPages, anchors, customAnchors, childPages }
   const navigations = {}
 
   for (const nav of activeNavigations) {

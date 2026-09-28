@@ -2775,7 +2775,66 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             </div>
                           );
                         })()}
-                        <p className="blog-channel-editor__hint">Verfügbar in PAGE-Navigationen als <code>{'{{#anchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>).</p>
+                        <p className="blog-channel-editor__hint">Verfügbar in PAGE-Navigationen als <code>{'{{#anchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — verlinkt ausschließlich Blöcke mit gesetzter Anchor-ID.</p>
+
+                        <label className="field-label-xs" style={{marginTop:'14px'}}>Freie Sprungmarken</label>
+                        {(() => {
+                          const customList = Array.isArray(pageData.customAnchors) ? pageData.customAnchors : [];
+                          const updateCustom = (updater) => setPageData(d => ({ ...d, customAnchors: updater(Array.isArray(d.customAnchors) ? d.customAnchors : []) }));
+                          return (
+                            <div className="anchor-list-editor">
+                              {customList.map((anchor, idx) => (
+                                <div key={idx} className="anchor-list-row">
+                                  <input
+                                    type="text"
+                                    value={anchor.anchorId || ''}
+                                    onChange={e => {
+                                      const newAnchorId = e.target.value;
+                                      updateCustom(list => list.map((a, i) => i === idx ? { ...a, anchorId: newAnchorId } : a));
+                                    }}
+                                    placeholder="Ziel-ID (ohne #)"
+                                    className="input-field-small"
+                                    aria-label={`Ziel-ID fuer freie Sprungmarke ${idx + 1}`}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={anchor.title || ''}
+                                    onChange={e => {
+                                      const newTitle = e.target.value;
+                                      updateCustom(list => list.map((a, i) => i === idx ? { ...a, title: newTitle } : a));
+                                    }}
+                                    placeholder="Anzeigetext"
+                                    className="input-field-small field-input-full"
+                                    aria-label={`Anzeigetext fuer freie Sprungmarke ${idx + 1}`}
+                                  />
+                                  <button type="button" className="block-move-btn" disabled={idx === 0}
+                                    onClick={() => updateCustom(list => { const next = [...list]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; return next; })}
+                                    title="Nach oben verschieben" aria-label="Sprungmarke nach oben verschieben">
+                                    <ChevronUp size={12} />
+                                  </button>
+                                  <button type="button" className="block-move-btn" disabled={idx === customList.length - 1}
+                                    onClick={() => updateCustom(list => { const next = [...list]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; return next; })}
+                                    title="Nach unten verschieben" aria-label="Sprungmarke nach unten verschieben">
+                                    <ChevronDown size={12} />
+                                  </button>
+                                  <button type="button" className="block-move-btn"
+                                    onClick={() => updateCustom(list => list.filter((_, i) => i !== idx))}
+                                    title="Sprungmarke entfernen" aria-label="Sprungmarke entfernen">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                className="btn-modern-small"
+                                onClick={() => updateCustom(list => [...list, { anchorId: '', title: '' }])}
+                              >
+                                + Sprungmarke hinzufügen
+                              </button>
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen (z. B. eine <code>id</code>, die ein eigenes Template-Feld selbst rendert). Verfügbar in PAGE-Navigationen als <code>{'{{#customAnchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — freie Eingabe, keine Prüfung gegen vorhandene Blöcke.</p>
                       </div>
                     )}
                   </div>

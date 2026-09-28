@@ -258,6 +258,20 @@ const PRESETS = {
 </nav>`,
     },
     {
+      label: 'Anchor Sidebar (freie Ziel-IDs)',
+      description: 'Wie Anchor Sidebar, aber für Ziel-IDs ohne Anchor-ID-Feld am Block (z. B. eigene Template-Felder als id) — kombinierbar mit der normalen Anchor Sidebar auf derselben Seite',
+      code: `<nav class="page-nav anchor-sidebar">
+  <p class="page-nav-heading">Inhalt</p>
+  <ul class="anchor-list">
+    {{#customAnchors}}
+    <li class="anchor-item">
+      <a class="anchor-link" href="#{{anchorId}}">{{title}}</a>
+    </li>
+    {{/customAnchors}}
+  </ul>
+</nav>`,
+    },
+    {
       label: 'Sticky TOC',
       description: 'Sticky Inhaltsverzeichnis',
       code: `<aside class="page-nav sticky-toc">

@@ -237,13 +237,14 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
               const nestedPages = buildNestedPages(pages)
 
               const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
+              const customAnchors = Array.isArray(homePage?.data?.customAnchors) ? homePage.data.customAnchors : []
               // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
               // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
               // Suche über den rohen (ungefilterten) Baum, nicht über nestedPages: die
               // Startseite kann verschachtelt liegen und selbst ein Entwurf sein.
               const rawHomeMatch = findRawPageNodeById(pages, homePage?.id)
               const childPages = rawHomeMatch ? buildNestedPages(rawHomeMatch.node.children || [], rawHomeMatch.parentPath) : []
-              const navData = { pages: nestedPages, anchors, childPages }
+              const navData = { pages: nestedPages, anchors, customAnchors, childPages }
 
               for (const nav of activeNavs) {
                 const key = String(nav.type).toLowerCase()

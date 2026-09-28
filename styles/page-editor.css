@@ -1048,8 +1048,8 @@
   align-items: center;
 }
 
-.anchor-list-row select {
-  flex: 1 1 40%;
+.anchor-list-row > :first-child {
+  flex: 1 1 35%;
   min-width: 0;
 }
 

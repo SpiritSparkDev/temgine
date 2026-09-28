@@ -431,6 +431,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
                 });
             const nestedPages = buildNestedPages(pages);
             const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
+            const customAnchors = Array.isArray(foundPage?.data?.customAnchors) ? foundPage.data.customAnchors : [];
             // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
             // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
             // Suche über den rohen (ungefilterten) Baum nach dem Pfad, nicht nach
@@ -440,7 +441,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             // über den die Seite ohnehin gerade gefunden wurde.
             const rawCurrentMatch = findRawPageNodeByPath(pages, currentPath);
             const childPages = rawCurrentMatch ? buildNestedPages(rawCurrentMatch.node.children || [], rawCurrentMatch.parentPath) : [];
-            const navData = { pages: nestedPages, anchors, childPages };
+            const navData = { pages: nestedPages, anchors, customAnchors, childPages };
             for (const nav of activeNavs) {
               const key = String(nav.type).toLowerCase();
               navigations[key] = { code: nav.code, data: navData };
