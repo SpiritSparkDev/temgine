@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.15.0] - 2026-09-29
+
+### Added
+- Neuer Vorlagentyp „Seiten-Datenfelder" im Template Manager (eigener Tab): eine Vorlage deklariert per `{{feldname:typ}}`-Platzhaltern (gleiche Syntax/Typen wie Block-Vorlagen), welche freien Datenfelder eine Seite anbieten soll — inkl. Live-Vorschau der erkannten Felder beim Bearbeiten.
+- Seiten-Editor (Einstellungen): Neue Auswahl „Seiten-Datenfelder" — eine Seite wählt eine dieser Vorlagen, die deklarierten Felder erscheinen automatisch als passende Eingabefelder (Text, Textarea, Zahl, URL, Bild, Datum, Farbe, Liste), geschrieben nach `page.data`.
+- `{{data.X}}` als kürzerer Alias für `{{page.data.X}}` in Block-Templates — einheitlich mit der Schreibweise, die Navigations-Templates für Seiten-Datenfelder schon nutzen.
+
+### Fixed
+- `isCurrent`/`data` je Seite in `{{#pages}}` fehlten bisher auf der Startseite (`pages/index.js`) und im Static-Site-Export (`pages/api/admin/export.js`) — beide Renderpfade lieferten dort nur `pages/[...slug].js` und den Live-Snapshot vollständig. Alle vier Renderpfade liefern jetzt gleichermaßen `isCurrent`/`data`.
+- Referenz-Tab im Template Manager: `{{#customAnchors}}` fehlte in der Liste der Navigations-Variablen (0.14.7 nachgereicht).
+
+---
+
 ## [0.14.8] - 2026-09-29
 
 ### Changed
