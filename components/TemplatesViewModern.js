@@ -1157,7 +1157,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
 // it's pure field declaration, picked up by the Page Editor via
 // lib/templateParser.js's extractTypedVariables/guessInputType (same functions
 // block templates already use).
-function PageFieldTemplatesPanel({ showToast }) {
+function PageFieldTemplatesPanel({ showToast, onSaved }) {
   const [items, setItems] = useState([]);
   const [selectedName, setSelectedName] = useState(null);
   const [name, setName] = useState('');
@@ -1203,6 +1203,7 @@ function PageFieldTemplatesPanel({ showToast }) {
       .then(() => {
         showToast('Gespeichert!', 'success');
         load();
+        onSaved?.();
       })
       .catch(err => showToast('Fehler: ' + err.message, 'error'))
       .finally(() => setIsSaving(false));
@@ -1217,6 +1218,7 @@ function PageFieldTemplatesPanel({ showToast }) {
       .then(() => {
         showToast('Gelöscht', 'success');
         load();
+        onSaved?.();
         if (selectedName === t.name) {
           setIsEditing(false);
           setSelectedName(null);
