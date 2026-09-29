@@ -51,7 +51,8 @@ export default async function handler(req, res) {
         }
       }
 
-      const ttype = String(type || 'BLOCK').toUpperCase() === 'SITE' ? 'SITE' : 'BLOCK';
+      const ttypeUpper = String(type || 'BLOCK').toUpperCase();
+      const ttype = (ttypeUpper === 'SITE' || ttypeUpper === 'PAGE_FIELDS') ? ttypeUpper : 'BLOCK';
       // Preserve the existing category on a plain edit/rename — only an explicit
       // `category` in the request body may move a template in or out of a category.
       const cat = category !== undefined

@@ -1034,6 +1034,15 @@
   flex-direction: column;
 }
 
+/* Seiten-Datenfelder (pageData.X, deklariert per PAGE_FIELDS-Vorlage) */
+.page-fields-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
 /* Anker-Navigation (pageData.anchors) im Seiten-Inspektor */
 .anchor-list-editor {
   display: flex;

@@ -74,8 +74,8 @@ Jedes Element ist eine Seite aus dem Seitenbaum mit folgenden Feldern:
 | `title` | Seitentitel |
 | `hasChildren` | `true`/`false` — hat diese Seite Unterseiten? Nur zum **Verzweigen** gedacht (siehe unten), kein Text |
 | `children` | Array der Unterseiten — gleiche Feldstruktur, rekursiv verschachtelbar |
-| `isCurrent` | `true`, wenn dies die gerade angezeigte Seite ist (Hervorhebung im Menü). **Nur verfügbar** beim Rendern einzelner Unterseiten (`pages/[...slug].js`, Live-Snapshot) — auf der Startseite selbst und im Static-Site-Export aktuell **nicht** gesetzt |
-| `data` | Das freie Datenfeld der Seite (`page.data`, z. B. `navImage`). Ebenfalls nur in denselben zwei Rendering-Pfaden wie `isCurrent` verfügbar |
+| `isCurrent` | `true`, wenn dies die gerade angezeigte Seite ist (Hervorhebung im Menü) |
+| `data` | Das freie Datenfeld der Seite (`page.data`, z. B. `navImage` oder per „Seiten-Datenfelder"-Vorlage deklarierte Felder) |
 
 `pages` enthält nur veröffentlichte Seiten ohne `ignoreInNavigation`-Flag.
 
@@ -133,12 +133,9 @@ die Pfade also **nicht** selbst zusammensetzen.
 </ul>
 ```
 
-Da `isCurrent` — siehe Tabelle oben — nicht in jedem Rendering-Pfad gesetzt
-ist, kann die Hervorhebung auf der Startseite bzw. im Static-Site-Export
-fehlen. Für eine garantiert überall funktionierende Auto-Navigation mit
-aktivem Zustand gibt es stattdessen `{{{nav:auto}}}` (kein eigenes
-Mustache-Template nötig, wird serverseitig direkt aus dem Seitenbaum
-gebaut).
+Alternativ gibt es für eine automatische Navigation mit aktivem Zustand ohne
+eigenes Mustache-Template `{{{nav:auto}}}` (wird serverseitig direkt aus dem
+Seitenbaum gebaut).
 
 **Beispiel 4 — eigenes Datenfeld einer Seite verwenden (`data`):**
 
@@ -153,6 +150,14 @@ Seiten-Editor unter „Weitere Optionen") ein Bild hinterlegt hat:
   </li>
 {{/pages}}
 ```
+
+Eigene Felder über `navImage` hinaus lassen sich im Template Manager unter
+**„Seiten-Datenfelder"** deklarieren (eine Vorlage aus reinen
+`{{feldname:typ}}`-Platzhaltern, z. B. `{{autor:text}}`) und im Seiten-Editor
+unter **Einstellungen → Seiten-Datenfelder** einer Seite zuweisen — die
+deklarierten Felder erscheinen dort automatisch als Eingabefelder. Ausgabe:
+in Navigationen wie oben als `{{data.autor}}`, im Block-Template der Seite
+selbst als `{{data.autor}}` oder `{{page.data.autor}}`.
 
 ### Nur die Unterseiten der aktuellen Seite: `childPages`
 
@@ -290,15 +295,13 @@ kombinieren (zwei Listen, zwei Schleifen).
 Alle vier Rendering-Pfade lösen `{{{nav:<name>}}}` und Navigations-Blöcke
 gleich auf:
 
-- `pages/index.js` (Startseite, dynamisches Rendering — **ohne** `isCurrent`/`data` in `pages`)
+- `pages/index.js` (Startseite, dynamisches Rendering)
 - `pages/[...slug].js` (alle anderen Seiten, dynamisches Rendering)
 - `lib/liveSnapshot.js` (statischer Live-Modus, siehe Einstellungen → Live-Rendering)
-- `pages/api/admin/export.js` (Static-Site-Export als ZIP — **ohne** `isCurrent`/`data` in `pages`)
+- `pages/api/admin/export.js` (Static-Site-Export als ZIP)
 
-`pages`, `anchors`, `customAnchors` und `childPages` selbst stehen in allen
-vier Pfaden zur Verfügung — nur die beiden Zusatzfelder `isCurrent`/`data` **innerhalb**
-der `pages`-Einträge fehlen auf der Startseite und im Static-Export (siehe
-Tabelle oben).
+`pages` (inkl. `isCurrent`/`data` je Eintrag), `anchors`, `customAnchors` und
+`childPages` stehen in allen vier Pfaden gleichermaßen zur Verfügung.
 
 Jeder Pfad baut dafür `navigations.byId` — eine Map von Navigations-ID auf
 `{ name, code, data }` — aus allen vorhandenen Navigationen auf; daraus

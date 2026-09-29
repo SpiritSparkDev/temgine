@@ -128,17 +128,20 @@ function collectTemplateNames(blocks, bucket) {
   }
 }
 
-function buildNestedPages(nodes, parentPath = '') {
+// isCurrent/data let a page-level nav template exclude the page it's exported
+// for and read custom per-page fields (e.g. data.navImage) without any
+// block-specific plumbing — mirrors pages/[...slug].js and lib/liveSnapshot.js.
+function buildNestedPages(nodes, parentPath = '', currentId = null) {
   return (nodes || [])
     .map((n) => {
       const slug = parentPath ? `${parentPath}/${n.slug}` : String(n.slug || '')
-      const children = buildNestedPages(n.children || [], slug)
-      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
+      const children = buildNestedPages(n.children || [], slug, currentId)
+      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: n.id === currentId, data: n.data || {} }
     })
 }
 
 function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavigationsById, currentPath) {
-  const nestedPages = buildNestedPages(allPagesTree)
+  const nestedPages = buildNestedPages(allPagesTree, '', page?.id)
   const anchors = Array.isArray(page?.data?.anchors) ? page.data.anchors : []
   const customAnchors = Array.isArray(page?.data?.customAnchors) ? page.data.customAnchors : []
   // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur

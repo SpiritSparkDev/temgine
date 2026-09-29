@@ -232,7 +232,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                   .map(n => {
                     const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
                     const children = buildNestedPages(n.children || [], slug)
-                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
+                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: n.id === homePage?.id, data: n.data || {} }
                   })
               const nestedPages = buildNestedPages(pages)
 

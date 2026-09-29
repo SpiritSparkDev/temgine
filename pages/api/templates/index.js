@@ -77,7 +77,8 @@ export default async function handler(req, res) {
         }
       }
 
-      const ttype = String(type || 'BLOCK').toUpperCase() === 'SITE' ? 'SITE' : 'BLOCK'
+      const ttypeUpper = String(type || 'BLOCK').toUpperCase()
+      const ttype = (ttypeUpper === 'SITE' || ttypeUpper === 'PAGE_FIELDS') ? ttypeUpper : 'BLOCK'
       // POST also overwrites an existing template of the same name — preserve its
       // category unless the caller explicitly passes one, so a plain re-save from
       // the generic template editor doesn't silently move it out of its category.

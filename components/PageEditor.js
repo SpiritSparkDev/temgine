@@ -39,6 +39,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
+  // Name of the "Seiten-Datenfelder" (PAGE_FIELDS) template that declares which
+  // pageData.X fields this page offers — stored on Page.template (previously
+  // unused by the editor).
+  const [pageFieldsTemplate, setPageFieldsTemplate] = useState('');
 
   const [blocks, setBlocks] = useState([]);
   const [pageData, setPageData] = useState({});
@@ -109,6 +113,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     redirectType,
     redirectUrl,
     isHomepage,
+    pageFieldsTemplate,
   }) => JSON.stringify({
     title: title || '',
     slug: slug || '',
@@ -117,6 +122,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     redirectType: redirectType || 'none',
     redirectUrl: redirectUrl || '',
     isHomepage: Boolean(isHomepage),
+    pageFieldsTemplate: pageFieldsTemplate || '',
   });
 
   const normalizeSlotName = (value) => {
@@ -170,6 +176,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
+  const pageFieldTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'PAGE_FIELDS').map(t => t.name);
   const channelTemplateOptions = [...blogChannels]
     .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
     .map(ch => ({
@@ -203,9 +210,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
+      const initialPageFieldsTemplate = page.template || '';
 
       setTitle(page.title || '');
       setSlug(page.slug || '');
+      setPageFieldsTemplate(initialPageFieldsTemplate);
       setBlocks(migratedBlocks);
       setPageData(page.data || {});
       setRedirectType(initialRedirectType);
@@ -246,6 +255,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType: initialRedirectType,
         redirectUrl: initialRedirectUrl,
         isHomepage: initialIsHomepage,
+        pageFieldsTemplate: initialPageFieldsTemplate,
       });
       setPageStatus((page.status || 'DRAFT').toUpperCase());
       setIsDirty(false);
@@ -281,6 +291,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType,
         redirectUrl,
         isHomepage,
+        pageFieldsTemplate,
       });
     }
 
@@ -292,11 +303,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       redirectType,
       redirectUrl,
       isHomepage,
+      pageFieldsTemplate,
     });
     const dirty = currentSnapshot !== initialSnapshotRef.current;
     setIsDirty(dirty);
     onDirtyChange?.(dirty);
-  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, onDirtyChange]);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, pageFieldsTemplate, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return undefined;
@@ -1057,6 +1069,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           redirectType,
           redirectUrl,
           isHomepage,
+          pageFieldsTemplate,
         });
         setIsDirty(false);
         setAutosaveStatus('gespeichert');
@@ -1334,6 +1347,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       ...page,
       title,
       slug: normalizedSlug,
+      template: pageFieldsTemplate || null,
       blocks,
       data: normalizedPageData,
       redirectType,
@@ -1366,6 +1380,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType,
         redirectUrl,
         isHomepage,
+        pageFieldsTemplate,
       });
       setIsDirty(false);
       setAutosaveStatus('gespeichert');
@@ -2649,6 +2664,46 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           />
                           In Navigation ausblenden
                         </label>
+
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Seiten-Datenfelder</label>
+                        <select
+                          value={pageFieldsTemplate}
+                          onChange={e => setPageFieldsTemplate(e.target.value)}
+                          className="input-field-small"
+                          aria-label="Vorlage für Seiten-Datenfelder"
+                        >
+                          <option value="">-- Keine --</option>
+                          {pageFieldTemplateNames.map(tn => (
+                            <option key={tn} value={tn}>{tn}</option>
+                          ))}
+                        </select>
+                        {pageFieldsTemplate && !pageFieldTemplateNames.includes(pageFieldsTemplate) && (
+                          <p className="blog-channel-editor__hint">Vorlage „{pageFieldsTemplate}" wurde nicht gefunden (evtl. umbenannt/gelöscht) — bereits gesetzte Werte bleiben erhalten.</p>
+                        )}
+                        {pageFieldsTemplate && templateCodes[pageFieldsTemplate] && (() => {
+                          const fields = extractTypedVariables(templateCodes[pageFieldsTemplate]);
+                          if (fields.length === 0) {
+                            return <p className="blog-channel-editor__hint">Diese Vorlage deklariert noch keine Felder — z. B. <code>{'{{autor:text}}'}</code> ergänzen.</p>;
+                          }
+                          return (
+                            <div className="page-fields-editor">
+                              {fields.map(({ varName, explicitType }) => (
+                                <PageDataFieldInput
+                                  key={varName}
+                                  varName={varName}
+                                  inputType={explicitType || guessInputType(varName)}
+                                  label={formatLabel(varName)}
+                                  value={pageData[varName]}
+                                  onChange={(val) => setPageData(d => ({ ...d, [varName]: val }))}
+                                  openFileModal={openFileModal}
+                                  devTitle={devTitle}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Vorlagen dafür im Template Manager unter „Seiten-Datenfelder" anlegen. Ausgabe im Block-Template als <code>{'{{data.X}}'}</code> / <code>{'{{page.data.X}}'}</code>, in Navigationen pro Seite als <code>{'{{data.X}}'}</code> innerhalb <code>{'{{#pages}}'}</code>.</p>
+
                         {/* Access Control */}
                         <AccessGroupsPanel
                           accessGroups={accessGroups}
@@ -3370,6 +3425,97 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Renders one input for a page-level {{data.X}} field, declared by a
+// PAGE_FIELDS template and edited under Einstellungen → Seiten-Datenfelder.
+// Mirrors the per-type input rendering already used for block props, but
+// writes to pageData[varName] via the injected onChange instead of a block
+// path — page fields have no nested-path/group/repeater support (v1 scope).
+function PageDataFieldInput({ varName, inputType, label, value, onChange, openFileModal, devTitle }) {
+  if (inputType === 'textarea') {
+    return (
+      <div className="field-item field-item-textarea">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-quill-wrapper">
+          <RichTextEditor value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+        </div>
+      </div>
+    );
+  }
+
+  if (inputType === 'array') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <textarea
+          placeholder="Ein Wert pro Zeile"
+          value={Array.isArray(value) ? value.join('\n') : ''}
+          onChange={e => onChange(e.target.value.split('\n').filter(v => v.trim()))}
+          rows={2}
+          className="input-field-small field-input-full field-array-textarea"
+        />
+      </div>
+    );
+  }
+
+  if (inputType === 'image') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="text" placeholder="Bild-URL" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
+        </div>
+        {value && (
+          <div className="field-image-thumb-row">
+            <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => onChange(url))} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (inputType === 'date') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+      </div>
+    );
+  }
+
+  if (inputType === 'color') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'} onChange={e => onChange(e.target.value)} className="input-field-small" />
+          <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#rrggbb" className="input-field-small field-input-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (inputType === 'url') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="text" placeholder="URL oder Dateipfad" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
+        </div>
+      </div>
+    );
+  }
+
+  const numberOrText = inputType === 'number' ? 'number' : 'text';
+  return (
+    <div className="field-item">
+      <label className="field-label-xs">{label}</label>
+      <input type={numberOrText} value={value ?? ''} onChange={e => onChange(numberOrText === 'number' ? e.target.valueAsNumber : e.target.value)} className="input-field-small field-input-full" />
     </div>
   );
 }
