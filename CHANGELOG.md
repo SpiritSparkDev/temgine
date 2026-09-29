@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.14.8] - 2026-09-29
+
+### Changed
+- Navigationsverwaltung: Doku-Sidebar rechts komplett überarbeitet — jetzt vollständige Platzhalter-Referenz (`{{{nav:...}}}` sowie `pages`/`children`/`childPages`/`anchors`/`customAnchors`), eine Mustache-Kurzreferenz, eine Best-Practices-Liste und zwei vollständige Beispiel-Snippets, statt bisher nur der Grundlagen (zwei Typen, drei Einbindungswege, kurze Platzhalter-Tabelle).
+
+---
+
 ## [0.14.7] - 2026-09-28
 
 ### Added
