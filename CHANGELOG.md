@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.15.1] - 2026-09-29
+
+### Fixed
+- Template Manager → Seiten-Datenfelder: eine neu gespeicherte oder gelöschte Vorlage tauchte im Seiten-Editor-Dropdown erst nach vollem Reload auf — der Tab rief `onSaved()` nicht auf, sodass die App-weite Templateliste veraltet blieb (beim manuellen Testen von 0.15.0 aufgefallen).
+
+---
+
 ## [0.15.0] - 2026-09-29
 
 ### Added
