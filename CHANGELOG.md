@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.16.0] - 2026-09-30
+
+### Added
+- Neuer Platzhaltertyp `{{#folder}}…{{/folder}}` (und benannt: `{{#folder:name}}…{{/folder:name}}`) für Block-Vorlagen: erzeugt im Seiten-Editor ein Ordner-Auswahlfeld (Upload-Ordner) und iteriert beim Rendern automatisch über alle Dateien darin — inklusive aller Unterordner (rekursiv), ohne manuelles Anlegen einzelner Einträge. Pro Datei stehen `name`, `slug`, `url`, `path`, `ext`, `size`, `modified` und `isImage` zur Verfügung, z. B. für Bild-/Dokumentgalerien.
+
+---
+
 ## [0.15.2] - 2026-09-30
 
 ### Fixed
