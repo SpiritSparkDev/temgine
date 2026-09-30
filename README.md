@@ -229,6 +229,16 @@ Fehlt eine der mit `:?...` markierten Pflichtvariablen in `.env`, bricht
 stillen leeren Default mehr, der erst später (z. B. beim Admin-Anlegen) als
 kryptischer Prisma-Fehler auffällt.
 
+`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` wertet der offizielle
+Postgres-Container nur beim allerersten Init eines leeren Datenverzeichnisses
+aus. Läuft der `postgres`-Service gegen ein Volume, das schon mal mit anderen
+Werten initialisiert wurde (anderes Deploy-Tool, geänderte `.env`, ...),
+gleicht [`docker/postgres-entrypoint.sh`](docker/postgres-entrypoint.sh) Rolle
+(Passwort) und Datenbank bei **jedem** Start automatisch gegen die aktuellen
+`DATABASE_*`-Werte ab — sichtbar im `postgres`-Log als `[reconcile] ...`. Ein
+Login-Fehler wegen eines veralteten Passworts im Volume sollte damit nicht
+mehr vorkommen.
+
 ### `.env` für Docker — benötigte Variablen
 
 | Variable | Pflicht? | Bedeutung |
