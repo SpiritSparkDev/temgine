@@ -569,8 +569,8 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
   for (const font of uploadFonts) {
     const rel = safeZipPath(font.path || '')
-    if (!rel) continue
-    publicFolder.file(`uploads/${rel}`, Buffer.from(String(font.content || ''), 'base64'))
+    if (!rel || !font.absPath) continue
+    publicFolder.file(`uploads/${rel}`, fs.createReadStream(font.absPath))
   }
 
   const fontsCss = buildStaticFontsCss(uploadFonts, fontsConfig)
@@ -722,26 +722,16 @@ function scanUploadFonts(dir, relBase = '', out = []) {
   return out
 }
 
-function loadUploadFonts() {
-  const files = []
-  if (!fs.existsSync(UPLOADS_DIR)) return files
-  const found = scanUploadFonts(UPLOADS_DIR, '', [])
-  for (const file of found) {
-    try {
-      const content = fs.readFileSync(file.absPath)
-      files.push({
-        path: file.relPath,
-        encoding: 'base64',
-        content: content.toString('base64')
-      })
-    } catch (e) {
-      console.warn(`Failed to read upload font ${file.relPath}:`, e.message)
-    }
-  }
-  return files
+// Lists upload files/fonts by path only (no content read into memory) — the zip
+// builders below stream each file's bytes straight from disk into the archive
+// instead of buffering the whole uploads dir as base64 strings, which is what
+// made large (multi-GB) exports blow up memory/string-length limits.
+function listUploadFonts() {
+  if (!fs.existsSync(UPLOADS_DIR)) return []
+  return scanUploadFonts(UPLOADS_DIR, '', []).map((f) => ({ path: f.relPath, absPath: f.absPath }))
 }
 
-function loadUploadFiles() {
+function listUploadedFiles() {
   const files = []
   if (!fs.existsSync(UPLOADS_DIR)) return files
 
@@ -753,16 +743,7 @@ function loadUploadFiles() {
         walk(abs, rel)
         continue
       }
-      try {
-        const content = fs.readFileSync(abs)
-        files.push({
-          path: rel,
-          encoding: 'base64',
-          content: content.toString('base64')
-        })
-      } catch (e) {
-        console.warn(`Failed to read upload file ${rel}:`, e.message)
-      }
+      files.push({ path: rel, absPath: abs })
     }
   }
 
@@ -826,8 +807,8 @@ export default async function handler(req, res) {
 
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
     const shouldBuildStaticSite = wantStaticSite
-    const uploadFonts = (shouldBuildProjectTransfer || shouldBuildStaticSite) ? loadUploadFonts() : []
-    const uploadedFiles = shouldBuildProjectTransfer ? loadUploadFiles() : []
+    const uploadFonts = (shouldBuildProjectTransfer || shouldBuildStaticSite) ? listUploadFonts() : []
+    const uploadedFiles = shouldBuildProjectTransfer ? listUploadedFiles() : []
 
     const cssConfig = loadJsonConfig('css-config.json')
     const fontsConfig = loadJsonConfig('fonts-config.json')
@@ -878,12 +859,15 @@ export default async function handler(req, res) {
         globalVariables,
         footers,
         maintenance,
-        uploadFonts,
+        // Path only — actual bytes live under uploads-fonts/ in this zip. Restoring
+        // from a zip (readZipBackup in BackupView.js) re-derives uploadFonts from
+        // that folder rather than this manifest, so embedding base64 content here
+        // would just double the export's memory/disk footprint for no benefit.
+        uploadFonts: uploadFonts.map((f) => ({ path: f.path })),
         cssConfig: cssConfig || null,
         fontsConfig: fontsConfig || null
       }
       const json = JSON.stringify(backup, null, 2)
-      const fileSize = Buffer.byteLength(json, 'utf-8')
 
       // Full JSON backup as manifest of the transfer package
       zip.file(`manifest/${baseName}.json`, json)
@@ -917,29 +901,22 @@ export default async function handler(req, res) {
         maintenanceFolder.file(`${base}.${ext}`, value || '')
       }
 
-      // Uploaded fonts (binary) to keep @font-face sources valid after restore
+      // Uploaded fonts (binary) to keep @font-face sources valid after restore.
+      // Streamed straight from disk instead of buffered as base64 — for a large
+      // uploads dir, holding every file as a base64 string in memory is what was
+      // blowing past Node's heap/string-length limits on big exports.
       const uploadFontsFolder = zip.folder('uploads-fonts')
       for (const f of uploadFonts) {
         const safePath = String(f.path || '').replace(/\\/g, '/').replace(/^\/+/, '')
-        if (!safePath) continue
-        try {
-          const buf = Buffer.from(String(f.content || ''), 'base64')
-          uploadFontsFolder.file(safePath, buf)
-        } catch (e) {
-          console.warn(`Failed to add font ${safePath} to zip:`, e.message)
-        }
+        if (!safePath || !f.absPath) continue
+        uploadFontsFolder.file(safePath, fs.createReadStream(f.absPath))
       }
 
       const uploadFilesFolder = zip.folder('uploads')
       for (const f of uploadedFiles) {
         const safePath = safeZipPath(f.path || '')
-        if (!safePath) continue
-        try {
-          const buf = Buffer.from(String(f.content || ''), 'base64')
-          uploadFilesFolder.file(safePath, buf)
-        } catch (e) {
-          console.warn(`Failed to add upload file ${safePath} to zip:`, e.message)
-        }
+        if (!safePath || !f.absPath) continue
+        uploadFilesFolder.file(safePath, fs.createReadStream(f.absPath))
       }
 
       // CSS files individually + merged
@@ -964,15 +941,51 @@ export default async function handler(req, res) {
         uploadFontCount: uploadFonts.length,
         uploadedFileCount: uploadedFiles.length,
       })
-      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-      console.log('[admin/export] transfer zip ready', {
-        baseName,
-        bytes: zipBuffer.length,
-      })
       res.setHeader('Content-Type', 'application/zip')
       res.setHeader('Content-Disposition', `attachment; filename="${baseName}-project-transfer.zip"`)
-      res.setHeader('Content-Length', zipBuffer.length)
-      return res.status(200).send(zipBuffer)
+
+      const transferZipStream = zip.generateNodeStream({
+        streamFiles: true,
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      })
+
+      let transferStreamedBytes = 0
+      let transferLastLoggedMb = 0
+
+      transferZipStream.on('data', (chunk) => {
+        transferStreamedBytes += chunk.length
+        const mb = Math.floor(transferStreamedBytes / (1024 * 1024))
+        if (mb >= transferLastLoggedMb + 25) {
+          transferLastLoggedMb = mb
+          console.log('[admin/export] transfer zip stream progress', { baseName, streamedMB: mb })
+        }
+      })
+
+      return await new Promise((resolve, reject) => {
+        transferZipStream.on('error', (err) => {
+          console.error('[admin/export] transfer zip stream error', {
+            baseName,
+            error: err?.message || String(err),
+          })
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Transfer ZIP stream failed', details: err?.message || String(err) })
+          }
+          reject(err)
+        })
+
+        res.on('close', () => {
+          console.log('[admin/export] transfer zip stream closed', { baseName, streamedBytes: transferStreamedBytes })
+          resolve()
+        })
+
+        transferZipStream.on('end', () => {
+          console.log('[admin/export] transfer zip stream complete', { baseName, streamedBytes: transferStreamedBytes })
+          resolve()
+        })
+
+        transferZipStream.pipe(res)
+      })
     }
 
     if (wantStaticSite) {
