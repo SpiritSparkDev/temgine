@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.17.0] - 2026-09-30
+
+### Added
+- Seitenbaum (PageTreeEditor): Seiten lassen sich jetzt per Drag & Drop umsortieren (davor/danach einordnen oder als Unterseite ablegen). Ein neues "Hinzufügen"-Menü an jeder Seite bündelt Unterseite/Geschwisterseite/Duplizieren an einer Stelle.
+
+### Changed
+- Docker: Compose-Service von `app` auf `temgine` umbenannt.
+
+---
+
 ## [0.16.1] - 2026-09-30
 
 ### Fixed
