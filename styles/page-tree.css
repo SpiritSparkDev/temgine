@@ -748,6 +748,8 @@
   border-radius: 10px;
   background: var(--bg-secondary);
   box-shadow: 0 8px 24px var(--shadow);
+      background: var(--primary-color);
+    color: var(--background-color);
 }
 
 .page-add-menu button {
