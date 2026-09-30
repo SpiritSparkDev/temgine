@@ -83,9 +83,19 @@ export default function GlobalVariablesView({ showToast }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Unbekannter Fehler');
       }
+      const saved = await res.json();
       showToast(`"${form.label.trim()}" gespeichert`, 'success');
       loadList();
-      handleCancel();
+      setEditing(saved);
+      setForm({
+        key: saved.key,
+        label: saved.label,
+        type: saved.type,
+        value: saved.value,
+        fallback: saved.fallback || '',
+        isActive: saved.isActive,
+        sortOrder: saved.sortOrder,
+      });
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {

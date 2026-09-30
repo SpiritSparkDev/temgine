@@ -69,7 +69,7 @@ export default function ContentEntriesView({
         return [...prev, savedEntry];
       });
 
-      setSelectedEntry(null);
+      setSelectedEntry(savedEntry);
       setIsCreating(false);
       return true;
     } catch (error) {

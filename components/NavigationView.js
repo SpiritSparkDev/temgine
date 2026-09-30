@@ -501,9 +501,13 @@ export default function NavigationView({ showToast }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Unbekannter Fehler');
       }
+      const saved = await res.json();
       showToast(`Navigation "${editName.trim()}" gespeichert`, 'success');
       loadNavList();
-      handleCancel();
+      setEditing(saved);
+      setEditName(saved.name);
+      setEditCode(saved.code);
+      setShowPresets(false);
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {

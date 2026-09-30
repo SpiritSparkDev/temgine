@@ -139,8 +139,6 @@ export default function JSManagerViewModern({ showToast }) {
         if (data.success) {
           showToast('JS-Datei gespeichert!', 'success');
           loadJSFiles();
-          setIsEditing(false);
-          setSelectedFile(null);
         } else {
           showToast(data.error || 'Fehler beim Speichern', 'error');
         }

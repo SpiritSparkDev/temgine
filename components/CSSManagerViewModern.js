@@ -112,8 +112,6 @@ export default function CSSManagerViewModern({ showToast }) {
         if (data.success) {
           showToast('CSS-Datei gespeichert!', 'success');
           loadCSSFiles();
-          setIsEditing(false);
-          setSelectedFile(null);
         } else {
           showToast(data.error || 'Fehler beim Speichern', 'error');
         }
