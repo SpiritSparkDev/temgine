@@ -29,7 +29,7 @@ services:
       timeout: 3s
       retries: 10
 
-  app:
+  temgine:
     build: .
     restart: unless-stopped
     depends_on:
