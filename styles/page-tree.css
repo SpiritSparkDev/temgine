@@ -675,3 +675,116 @@
   color: var(--text-primary);
   cursor: pointer;
 }
+
+/* ---- DRAG & DROP ---- */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-tertiary);
+  background: transparent !important;
+}
+
+.drag-handle:hover {
+  color: var(--accent-primary);
+}
+
+.drag-handle.disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.page-card.dragging,
+.page-tree-row.dragging {
+  opacity: 0.45;
+}
+
+/* Sibling-Einfügung: Linie oberhalb/unterhalb der Karte bzw. Zeile */
+.page-card.drop-before {
+  box-shadow: 0 -3px 0 0 var(--accent-primary);
+}
+
+.page-card.drop-after {
+  box-shadow: 0 3px 0 0 var(--accent-primary);
+}
+
+/* Verschachtelung: gesamte Karte hervorheben */
+.page-card.drop-inside {
+  box-shadow: 0 0 0 2px var(--accent-primary);
+  background: var(--active-bg);
+}
+
+.page-tree-row.drop-before td {
+  box-shadow: inset 0 2px 0 0 var(--accent-primary);
+}
+
+.page-tree-row.drop-after td {
+  box-shadow: inset 0 -2px 0 0 var(--accent-primary);
+}
+
+.page-tree-row.drop-inside td {
+  background: var(--active-bg);
+}
+
+.page-tree-cell-drag {
+  width: 26px;
+  text-align: center;
+}
+
+/* ---- "Hinzufügen"-Menü ---- */
+.page-add-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+/* position/top/left kommen inline (fest an der Trigger-Position berechnet) —
+   das Menü wird per createPortal in document.body gerendert, damit es nicht
+   vom overflow:hidden der Karte abgeschnitten wird. */
+.page-add-menu {
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.page-add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page-add-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
+/* ---- Verschieben-Cluster: sekundär, dezenter als Haupt-Aktionen ---- */
+.card-btn-group-move,
+.page-tree-move-cluster {
+  display: flex;
+  gap: 2px;
+  opacity: 0.65;
+}
+
+.card-btn-group-move:hover,
+.page-tree-move-cluster:hover {
+  opacity: 1;
+}
+
+.page-tree-move-cluster {
+  display: inline-flex;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-left: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+}
