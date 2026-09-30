@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, collectFolderBlockPaths, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -81,6 +81,74 @@ describe('renderPage navigation blocks (type: navigation)', () => {
     const navigations = { byId: { nav1: { code: '<nav>{{global.companyName}}</nav>', data: {} } } };
     const html = renderPage(page, {}, {}, navigations, null, { companyName: 'Temgine' });
     expect(html).toContain('<nav>Temgine</nav>');
+  });
+});
+
+describe('collectFolderBlockPaths', () => {
+  const blockTemplates = { Gallery: '<ul>{{#folder}}<li>{{name}}</li>{{/folder}}</ul>' };
+
+  it('collects the chosen folder path from a block using a folder-block template', () => {
+    const blocks = [{ template: 'Gallery', props: { folder: 'produkte/bilder' } }];
+    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['produkte/bilder']);
+  });
+
+  it('collects folder paths from nested children', () => {
+    const blocks = [{ template: 'Text', props: {}, children: [{ template: 'Gallery', props: { folder: 'sub' } }] }];
+    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['sub']);
+  });
+
+  it('ignores blocks with no folder chosen yet (empty string)', () => {
+    const blocks = [{ template: 'Gallery', props: { folder: '' } }];
+    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual([]);
+  });
+
+  it('dedupes repeated folder paths', () => {
+    const blocks = [
+      { template: 'Gallery', props: { folder: 'bilder' } },
+      { template: 'Gallery', props: { folder: 'bilder' } },
+    ];
+    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['bilder']);
+  });
+});
+
+describe('renderPage folder blocks ({{#folder}})', () => {
+  const page = {
+    title: 'Test',
+    slug: 'test',
+    blocks: [
+      { template: 'Gallery', props: { folder: 'bilder' } },
+    ],
+  };
+  const blockTemplates = { Gallery: '<ul>{{#folder}}<li><a href="{{url}}">{{name}}</a></li>{{/folder}}</ul>' };
+
+  it('iterates over the pre-resolved items for the chosen folder path', () => {
+    const folderContents = { bilder: [{ name: 'a.jpg', url: '/uploads/bilder/a.jpg' }, { name: 'b.jpg', url: '/uploads/bilder/b.jpg' }] };
+    const html = renderPage(page, blockTemplates, {}, {}, null, {}, folderContents);
+    // {{url}} is Mustache-escaped like any other double-brace field (same convention as
+    // existing {{ctaUrl:url}}/{{image:image}} template fields) — browsers decode the
+    // resulting HTML entities in attribute values, so the link still works correctly.
+    expect(html).toContain('<a href="&#x2F;uploads&#x2F;bilder&#x2F;a.jpg">a.jpg</a>');
+    expect(html).toContain('<a href="&#x2F;uploads&#x2F;bilder&#x2F;b.jpg">b.jpg</a>');
+  });
+
+  it('renders nothing when the chosen folder path is not present in folderContents', () => {
+    const html = renderPage(page, blockTemplates, {}, {}, null, {}, {});
+    expect(html).not.toContain('<a href=');
+  });
+
+  it('renders nothing when no folder has been chosen', () => {
+    const emptyPage = { ...page, blocks: [{ template: 'Gallery', props: { folder: '' } }] };
+    const html = renderPage(emptyPage, blockTemplates, {}, {}, null, {}, { '': [{ name: 'root.jpg', url: '/uploads/root.jpg' }] });
+    expect(html).not.toContain('<a href=');
+  });
+
+  it('supports named {{#folder:name}} sections independently', () => {
+    const namedTemplates = { Gallery: '<ul>{{#folder:bilder}}<li>{{name}}</li>{{/folder:bilder}}</ul><ol>{{#folder:dokumente}}<li>{{name}}</li>{{/folder:dokumente}}</ol>' };
+    const namedPage = { ...page, blocks: [{ template: 'Gallery', props: { bilder: 'b', dokumente: 'd' } }] };
+    const folderContents = { b: [{ name: 'foto.jpg' }], d: [{ name: 'vertrag.pdf' }] };
+    const html = renderPage(namedPage, namedTemplates, {}, {}, null, {}, folderContents);
+    expect(html).toContain('<li>foto.jpg</li>');
+    expect(html).toContain('<li>vertrag.pdf</li>');
   });
 });
 

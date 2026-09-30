@@ -7,7 +7,8 @@ import { listTemplates } from '../../../lib/templateStore'
 import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
-import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
+import { renderPage, buildNavHtml, collectFolderBlockPaths } from '../../../lib/templateEngine'
+import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
 import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
@@ -623,7 +624,11 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
       const footer = resolveFooterForPage(entry.page, activeFooter, allFootersById)
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars)
+      const folderContents = {}
+      for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
+        folderContents[folderPath] = listFolderItemsRecursive(folderPath)
+      }
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents)
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)

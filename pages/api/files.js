@@ -5,6 +5,7 @@ import { prisma } from '../../lib/prisma';
 import { rateLimit } from '../../lib/rateLimit';
 import { listTemplates, saveTemplate } from '../../lib/templateStore';
 import { listNavigations, saveNavigation } from '../../lib/navigationStore';
+import { listFolderItemsRecursive } from '../../lib/uploadFolder';
 
 export const config = {
   api: {
@@ -458,6 +459,16 @@ export default async function handler(req, res) {
 
     // Folder-aware listing (when ?folder= param is provided)
     if (folder !== undefined) {
+      // Recursive listing (used to resolve {{#folder}} block-template sections) — flat file
+      // list including all subfolders, in the shape lib/uploadFolder.js produces.
+      if (req.query.recursive === '1' || req.query.deep === '1') {
+        try {
+          return res.status(200).json({ files: listFolderItemsRecursive(folder) });
+        } catch (error) {
+          return res.status(500).json({ error: 'Fehler beim Laden: ' + error.message });
+        }
+      }
+
       try {
         const { resolved: targetDir, safe: folderPath } = resolveSafeDir(folder);
         const fileList = [];

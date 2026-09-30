@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups, extractFolderBlocks } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import RichTextEditor from './RichTextEditor';
@@ -60,6 +60,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalTab, setFileModalTab] = useState('gallery');
   const [fileModalFolder, setFileModalFolder] = useState('');
   const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
+  // 'file' = bestehendes Verhalten (Bild-/Datei-Auswahl); 'folder' = {{#folder}}-Felder wählen
+  // einen ganzen Ordner statt einer einzelnen Datei.
+  const [fileModalMode, setFileModalMode] = useState('file');
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
@@ -659,6 +662,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
+  // Maps template name → folder blocks [{ sectionName }]
+  const templateFolderBlocksByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = extractFolderBlocks(code) || [];
+      } catch (e) {
+        out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
   // Entfernt HTML-Tags aus einem String
   const stripTags = (s) => {
     if (!s) return '';
@@ -673,10 +689,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
+    setFileModalMode('file');
     setFileModalTab('gallery');
     setFileModalFolder('');
     setFileModalFolderContents({ files: [], folders: [] });
     setShowFileModal(true);
+  };
+
+  // Für {{#folder}}-Felder: dieselbe Modal-Ansicht, aber es wird ein ganzer Ordner statt
+  // einer einzelnen Datei gewählt (callback erhält den Ordnerpfad relativ zu public/uploads/).
+  const openFolderModal = (callback) => {
+    setFileModalCallback(() => callback);
+    setFileModalMode('folder');
+    setFileModalTab('folders');
+    setFileModalFolder('');
+    setFileModalFolderContents({ files: [], folders: [] });
+    setShowFileModal(true);
+    loadFolderContents('');
   };
 
   const loadFolderContents = async (folder) => {
@@ -696,6 +725,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const selectFile = (fileUrl) => {
     if (fileModalCallback) {
       fileModalCallback(fileUrl);
+    }
+    setShowFileModal(false);
+    setFileModalCallback(null);
+  };
+
+  const selectFolder = () => {
+    if (fileModalCallback) {
+      fileModalCallback(fileModalFolder);
     }
     setShowFileModal(false);
     setFileModalCallback(null);
@@ -2155,6 +2192,41 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   </div>
                 );
               })}
+
+              {/* Folder fields: {{#folder}}...{{/folder}} / {{#folder:name}}...{{/folder:name}} */}
+              {(templateFolderBlocksByName[block.template] || []).map(({ sectionName }) => {
+                const folderPath = block.props[sectionName] || '';
+                return (
+                  <div key={sectionName} className="field-item">
+                    <label className="field-label-xs">{formatLabel(sectionName)}</label>
+                    <div className="field-url-row">
+                      <input
+                        type="text"
+                        readOnly
+                        placeholder="Kein Ordner gewählt"
+                        value={folderPath ? `uploads/${folderPath}` : ''}
+                        className="input-field-small field-input-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openFolderModal((chosenPath) => updateNestedBlock(path, { [sectionName]: chosenPath }))}
+                        className="btn-modern-small"
+                        title={`Ordner für ${formatLabel(sectionName)} auswählen`}
+                        aria-label={`Ordner für ${formatLabel(sectionName)} auswählen`}
+                      >📁 Ordner</button>
+                      {folderPath && (
+                        <button
+                          type="button"
+                          onClick={() => updateNestedBlock(path, { [sectionName]: '' })}
+                          className="btn-modern-small hollow"
+                          title={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
+                          aria-label={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
+                        >Leeren</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -3183,7 +3255,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         <div className="file-modal-overlay">
           <div className="file-modal">
             <div className="file-modal-header">
-              <h3 className="file-modal-title">Datei auswählen</h3>
+              <h3 className="file-modal-title">{fileModalMode === 'folder' ? 'Ordner auswählen' : 'Datei auswählen'}</h3>
               <div className="file-modal-header-actions">
                 <label className={`file-upload-label${uploading ? ' is-uploading' : ''}`}>
                   {uploading ? '⏳ Hochladen...' : '⬆️ Hochladen'}
@@ -3204,26 +3276,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="file-modal-tabs">
-              <button
-                className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
-                onClick={() => setFileModalTab('gallery')}
-              >
-                <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                Galerie
-              </button>
-              <button
-                className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
-                onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
-              >
-                <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                Ordner
-              </button>
-            </div>
+            {/* Tabs — im Ordner-Auswahlmodus gibt es nur die Ordneransicht */}
+            {fileModalMode !== 'folder' && (
+              <div className="file-modal-tabs">
+                <button
+                  className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
+                  onClick={() => setFileModalTab('gallery')}
+                >
+                  <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                  Galerie
+                </button>
+                <button
+                  className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
+                  onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
+                >
+                  <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                  Ordner
+                </button>
+              </div>
+            )}
 
             {/* Gallery Tab */}
-            {fileModalTab === 'gallery' && (
+            {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
               <div className="file-modal-grid">
                 {uploadedFiles.length === 0 ? (
                   <div className="file-modal-empty">
@@ -3310,16 +3384,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </div>
                   ))}
 
-                  {/* Dateien */}
+                  {/* Dateien — im Ordner-Auswahlmodus nur zur Orientierung, nicht auswählbar */}
                   {fileModalFolderContents.files.map(file => {
                     const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name);
                     return (
                       <div
                         key={file.url}
-                        className="file-modal-item"
-                        onClick={() => selectFile(file.url)}
+                        className={`file-modal-item${fileModalMode === 'folder' ? ' file-modal-item-inert' : ''}`}
+                        onClick={fileModalMode === 'folder' ? undefined : () => selectFile(file.url)}
                         title={file.name}
-                        aria-label={`Datei auswählen: ${file.name}`}
+                        aria-label={fileModalMode === 'folder' ? file.name : `Datei auswählen: ${file.name}`}
                       >
                         <div className="file-modal-thumb">
                           {isImage
@@ -3353,6 +3427,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               >
                 Abbrechen
               </button>
+              {fileModalMode === 'folder' && (
+                <button
+                  onClick={selectFolder}
+                  disabled={!fileModalFolder}
+                  title={devTitle(!fileModalFolder ? 'Bitte erst in einen Unterordner wechseln' : `Ordner "${fileModalFolder}" auswaehlen`)}
+                  aria-label="Diesen Ordner auswaehlen"
+                  className="btn-modern"
+                >
+                  ✓ Diesen Ordner auswählen
+                </button>
+              )}
             </div>
           </div>
         </div>

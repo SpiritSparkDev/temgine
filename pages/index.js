@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage, renderTemplate, collectNavigationBlockIds } from '../lib/templateEngine'
+import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
@@ -330,8 +330,23 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.warn('Globale Variablen konnten nicht geladen werden:', e.message)
         }
 
+        // Lade Ordner-Inhalte für {{#folder}}-Blöcke (gleiche Logik wie in [...slug].js)
+        const folderContents = {}
+        try {
+          const folderPaths = collectFolderBlockPaths(homePage.blocks, templateCodes)
+          await Promise.all(folderPaths.map(async (folderPath) => {
+            const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`)
+            if (res.ok) {
+              const data = await res.json()
+              folderContents[folderPath] = data.files || []
+            }
+          }))
+        } catch (e) {
+          console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message)
+        }
+
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)

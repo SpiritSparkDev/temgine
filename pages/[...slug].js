@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
+import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
@@ -521,7 +521,21 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars)
+      const folderContents = {};
+      try {
+        const folderPaths = collectFolderBlockPaths(foundPage.blocks, templateCodes);
+        await Promise.all(folderPaths.map(async (folderPath) => {
+          const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            folderContents[folderPath] = data.files || [];
+          }
+        }));
+      } catch (e) {
+        console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
+      }
+
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents)
       if (cancelled) return
       setHtml(html)
       setLoading(false)

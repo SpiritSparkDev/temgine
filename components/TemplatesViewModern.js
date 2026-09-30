@@ -854,12 +854,23 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                         <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped)</td></tr>
                         <tr><td><code>{'{{{'}<span>{'var}'}</span>{'}'}</code></td><td>Variable (HTML roh)</td></tr>
                         <tr><td><code>{'{{#each:name}}…{{/each:name}}'}</code></td><td>Wiederholbare Gruppe (Liste)</td></tr>
+                        <tr><td><code>{'{{#folder}}…{{/folder}}'}</code></td><td>Iteriert über alle Dateien eines im Editor gewählten Upload-Ordners (rekursiv, inkl. Unterordner)</td></tr>
+                        <tr><td><code>{'{{#folder:name}}…{{/folder:name}}'}</code></td><td>Wie <code>{'{{#folder}}'}</code>, benannt — für mehrere Ordnerfelder in einem Template</td></tr>
                         <tr><td><code>{'{{#if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name nicht leer</td></tr>
                         <tr><td><code>{'{{^if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name leer</td></tr>
                         <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Roher Mustache-Abschnitt (Sonderfälle)</td></tr>
                         <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Roher invertierter Abschnitt</td></tr>
                       </tbody>
                     </table>
+                    <p className="tce-ref-note">
+                      Innerhalb von <code>{'{{#folder}}…{{/folder}}'}</code> steht pro Datei zur
+                      Verfügung: <code>name</code> (Dateiname), <code>slug</code> (Dateiname ohne
+                      Endung, URL-sicher), <code>url</code> (öffentliche Adresse — für
+                      <code> href</code>/<code>src</code>), <code>path</code> (Pfad relativ zum
+                      gewählten Ordner), <code>ext</code>, <code>size</code> (Bytes),
+                      <code> modified</code> und <code>isImage</code> (Bool, für
+                      z. B. <code>{'{{#isImage}}<img src="{{url}}">{{/isImage}}'}</code>).
+                    </p>
                   </div>
 
                   <div className="tce-ref-group">
