@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.18.2] - 2026-09-30
+
+### Fixed
+- Verschachtelte Seiten (im `children`-JSON ihrer Top-Level-Elternseite gespeichert) konnten über das Slug-Feld im Seiten-Editor auf einen bereits vergebenen Slug umbenannt werden, ohne dass Client oder Server das prüften — anders als Top-Level-Seiten, deren Slug per DB-Constraint eindeutig sein muss. Da `findPageByPath` (`pages/[...slug].js`) beim Auflösen einer URL Segment für Segment immer das erste passende Kind nimmt, wurde der Inhalt der zweiten (und jeder weiteren) Seite mit demselben Slug dauerhaft unerreichbar, obwohl er in der Datenbank erhalten blieb — sichtbar u. a. als scheinbar doppelte Einträge in der Seiten-Liste und als "Seite nicht gefunden" beim direkten Aufruf der verdeckten URL. `POST /api/pages` lehnt Array-Saves mit doppeltem Slug (auch verschachtelt) jetzt mit 400 ab, bevor irgendetwas geschrieben wird; der Seiten-Editor meldet einen Konflikt schon vor dem Speichern.
+
+---
+
 ## [0.18.1] - 2026-09-30
 
 ### Fixed
