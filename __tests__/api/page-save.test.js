@@ -204,6 +204,32 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     }));
     expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
   });
+
+  test('400 wenn dieselbe Seiten-id mehrfach im Baum auftaucht (z. B. Kopie statt Verschieben) — kein Upsert', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        {
+          slug: 'kuenstler',
+          title: 'Künstler',
+          children: [
+            { id: 'ablauf-cuid', slug: 'ablauf', title: 'Ablauf', children: [] },
+            { slug: 'lydia', title: 'Lydia', children: [
+              { id: 'ablauf-cuid', slug: 'ablauf-2', title: 'Ablauf', children: [] },
+            ] },
+          ],
+        },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'VALIDATION_ERROR',
+      details: { duplicateIds: ['ablauf-cuid'] },
+    }));
+    expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/pages', () => {

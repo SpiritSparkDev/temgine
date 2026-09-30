@@ -627,6 +627,23 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
     const { tree: withoutSource } = removeNodeById(tree, sourceId);
     const updated = insertNodeRelative(withoutSource, targetId, indicator.position, sourceNode);
+
+    // Absicherung: die verschobene Seite darf nach der Operation nur genau
+    // einmal im Baum vorkommen. Ein Bug hier würde sie an mehreren Stellen
+    // gleichzeitig "kopieren" statt zu verschieben — lieber sichtbar
+    // abbrechen, als so einen Baum zu speichern.
+    const countIds = (nodes, id, count = 0) => {
+      for (const n of nodes || []) {
+        if (n.id === id) count++;
+        count = countIds(n.children || [], id, count);
+      }
+      return count;
+    };
+    if (countIds(updated, sourceId) !== 1) {
+      setToast({ message: 'Verschieben fehlgeschlagen (interner Fehler). Bitte Seite neu laden und erneut versuchen.', type: 'error' });
+      return;
+    }
+
     setTree(updated);
     onUpdate && onUpdate(updated);
   }

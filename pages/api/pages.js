@@ -156,6 +156,39 @@ export default async function handler(req, res) {
           return res.status(status).json(resp);
         }
 
+        // Zusätzliche Absicherung: dieselbe Seite (gleiche id) darf nicht an
+        // mehreren Stellen im Baum auftauchen. Das ist das Muster, das beim
+        // Verschieben/Verschachteln einer Seite (Drag & Drop im Editor) zu
+        // "Seite erscheint mehrfach" führen würde, falls ein Client-Bug eine
+        // Seite kopiert statt verschiebt — lieber die ganze Speicherung
+        // ablehnen, als so einen Baum persistieren.
+        const findDuplicateIds = (nodes) => {
+          const seen = new Set()
+          const dupes = new Set()
+          const walk = (list) => {
+            for (const n of list || []) {
+              if (n && n.id) {
+                const id = String(n.id)
+                if (seen.has(id)) dupes.add(id)
+                else seen.add(id)
+              }
+              if (n && Array.isArray(n.children)) walk(n.children)
+            }
+          }
+          walk(nodes)
+          return [...dupes]
+        }
+        const duplicateIds = findDuplicateIds(body)
+        if (duplicateIds.length > 0) {
+          const [status, resp] = errorResponse(
+            400,
+            `Seite(n) kommen mehrfach im Baum vor (id: ${duplicateIds.join(', ')}). Bitte Seite neu laden und den Verschiebe-/Duplizier-Vorgang erneut versuchen.`,
+            'VALIDATION_ERROR',
+            { duplicateIds }
+          );
+          return res.status(status).json(resp);
+        }
+
         // Stamp top-level sort order into data so GET can restore it
         for (let _i = 0; _i < body.length; _i++) {
           if (body[_i]) body[_i].data = { ...(body[_i].data || {}), _order: _i }
