@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.15.2] - 2026-09-30
+
+### Fixed
+- Mehrere Editoren im Adminbereich schlossen sich nach dem Speichern selbstständig statt geöffnet zu bleiben: CSS-Manager, JS-Manager, Navigations-Template-Editor, Footer-Editor, Globale Variablen, Content-Modelle und Content-Einträge im Kontaktformular-Template-Editor. Speichern lädt jetzt nur noch die Liste neu und aktualisiert den Editor-Inhalt mit dem gespeicherten Datensatz, schließt das Panel aber nicht mehr.
+
+---
+
 ## [0.15.1] - 2026-09-29
 
 ### Fixed
