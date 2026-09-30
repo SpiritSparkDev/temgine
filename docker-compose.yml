@@ -23,12 +23,36 @@ services:
       POSTGRES_DB: ${DATABASE_NAME:?DATABASE_NAME fehlt in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Gleicht Rolle/Passwort und Datenbank bei jedem Start gegen POSTGRES_*
-      # ab, auch wenn das Volume aus einem früheren Lauf mit anderen Werten
-      # stammt (POSTGRES_USER/PASSWORD/DB greifen sonst nur beim allerersten
-      # Init eines Volumes) — siehe Kommentare im Skript selbst.
-      - ./docker/postgres-entrypoint.sh:/usr/local/bin/postgres-entrypoint.sh:ro
-    command: ["bash", "/usr/local/bin/postgres-entrypoint.sh"]
+    # Gleicht Rolle/Passwort und Datenbank bei jedem Start gegen POSTGRES_*
+    # ab, auch wenn das Volume aus einem früheren Lauf mit anderen Werten
+    # stammt (POSTGRES_USER/PASSWORD/DB greifen sonst nur beim allerersten
+    # Init eines Volumes). Bewusst inline statt als eingebundene Datei: ein
+    # Bind-Mount auf eine zusätzliche Skriptdatei legt bei Deploy-Tools ohne
+    # vollständiges Git-Checkout (z. B. Portainer-Stacks im Web-Editor-Modus)
+    # dort, wo die Datei fehlt, kommentarlos ein leeres Verzeichnis an, statt
+    # zu mounten — das Skript startet dann mit "Is a directory". `$$` escaped
+    # ein literales `$`, weil Compose sonst versucht, `$VAR` selbst als eigene
+    # Interpolation aufzulösen, bevor der String den Container erreicht.
+    command:
+      - bash
+      - -c
+      - |
+        set -Eeo pipefail
+        docker-entrypoint.sh postgres &
+        PG_PID=$$!
+        until pg_isready -U "$$POSTGRES_USER" -d postgres -q; do sleep 1; done
+        psql -v ON_ERROR_STOP=1 \
+          -v pguser="$$POSTGRES_USER" \
+          -v pgpassword="$$POSTGRES_PASSWORD" \
+          -v pgdb="$$POSTGRES_DB" \
+          -U "$$POSTGRES_USER" -d postgres <<'SQL'
+          \echo [reconcile] Gleiche Rollen-Passwort und Datenbank mit aktueller Config ab...
+          ALTER USER :"pguser" WITH PASSWORD :'pgpassword';
+          SELECT 'CREATE DATABASE ' || quote_ident(:'pgdb') || ' OWNER ' || quote_ident(:'pguser')
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'pgdb')\gexec
+          \echo [reconcile] Abgeglichen.
+        SQL
+        wait "$$PG_PID"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d postgres"]
       interval: 2s
