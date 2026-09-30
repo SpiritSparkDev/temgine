@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.17.1] - 2026-09-30
+
+### Fixed
+- Docker: Healthcheck des `postgres`-Service prüfte `pg_isready -U ${DATABASE_USER}` ohne `-d`, wodurch `pg_isready` den Benutzernamen als Datenbanknamen annahm. Existierte keine gleichnamige Datenbank, spammte der Check im 2-Sekunden-Takt `FATAL: database "..." does not exist` ins Postgres-Log (reines Log-Rauschen, der Server selbst lief sauber). Healthcheck prüft jetzt explizit gegen `-d postgres`, das immer existiert.
+
+---
+
 ## [0.17.0] - 2026-09-30
 
 ### Added
