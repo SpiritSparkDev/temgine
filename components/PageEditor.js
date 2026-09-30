@@ -1380,6 +1380,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
     const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
+    // Slug muss über den gesamten Seitenbaum eindeutig sein — sonst verdeckt
+    // findPageByPath (nimmt bei der URL-Auflösung immer das erste Match pro
+    // Ebene) den Inhalt der anderen Seite(n) mit demselben Slug dauerhaft.
+    if (allPages) {
+      const findDuplicateSlug = (nodes) => {
+        for (const node of nodes || []) {
+          if (node.id !== page?.id && node.slug === normalizedSlug) return node;
+          const found = findDuplicateSlug(node.children || []);
+          if (found) return found;
+        }
+        return null;
+      };
+      const duplicate = findDuplicateSlug(allPages);
+      if (duplicate) {
+        if (!opts.silent) {
+          showToast?.(`Der Slug "${normalizedSlug}" wird bereits von "${duplicate.title}" verwendet. Seiten mit demselben Slug verdecken sich gegenseitig — bitte einen eindeutigen Slug wählen.`, 'error');
+        }
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
+      }
+    }
+
     const updatedPage = {
       ...page,
       title,
