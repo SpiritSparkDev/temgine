@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.18.3] - 2026-09-30
+
+### Added
+- `POST /api/pages` (Array-Save) lehnt jetzt auch Bäume ab, in denen dieselbe Seiten-`id` mehrfach vorkommt (z. B. eine Seite gleichzeitig an ihrem alten und neuen Platz nach einem Verschieben/Verschachteln) — zusätzlich zur bereits in 0.18.2 eingeführten Slug-Eindeutigkeitsprüfung. Der Seitenbaum-Editor prüft das serverseitige Ergebnis eines Drag&Drop-Verschiebens (`handleDropOnNode`) jetzt ebenfalls lokal ab und bricht mit einer Fehlermeldung ab, statt einen fehlerhaft verdoppelten Baum zu speichern.
+
+---
+
 ## [0.18.2] - 2026-09-30
 
 ### Fixed
