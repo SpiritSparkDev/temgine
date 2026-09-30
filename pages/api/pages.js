@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
 import { validate, rules } from '../../lib/validate'
+import { requireAuth, PERMISSIONS } from '../../lib/auth'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -98,6 +99,9 @@ export default async function handler(req, res) {
 
     // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
     if (req.method === 'POST') {
+      const auth = await requireAuth(req, res, PERMISSIONS.PAGES_EDIT)
+      if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
       const body = req.body
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
@@ -212,7 +216,7 @@ export default async function handler(req, res) {
               await prisma.page.deleteMany({ where: { slug: { in: slugsFound } } })
               // Create audit logs per deleted page
               for (const pd of pagesToDelete) {
-                try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: null, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
+                try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: auth.user.id, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
                 console.log('DEBUG /api/pages POST deleted and audited:', pd.slug)
               }
             } else {
@@ -226,7 +230,7 @@ export default async function handler(req, res) {
         console.log('DEBUG /api/pages POST upsert results:', results.map(r => ({ id: r.id, slug: r.slug, status: r.status })));
         // audit logs for upserts
         for (const up of results) {
-          try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
+          try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
         }
         return res.status(200).json(results)
       }
@@ -301,12 +305,15 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Revision create failed', e)
       }
-      try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
+      try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
       return res.status(200).json(up)
     }
 
     // DELETE: Seite per slug löschen
     if (req.method === 'DELETE') {
+      const auth = await requireAuth(req, res, PERMISSIONS.PAGES_DELETE)
+      if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
       const { slug } = req.body || {}
       if (!slug) {
         const [status, resp] = errorResponse(400, 'Slug erforderlich', 'VALIDATION_ERROR', { missing: ['slug'] });
@@ -314,7 +321,7 @@ export default async function handler(req, res) {
       }
       try {
         const deleted = await prisma.page.delete({ where: { slug: String(slug) } })
-        try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: null, details: { slug } }) } catch (e) {}
+        try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: auth.user.id, details: { slug } }) } catch (e) {}
         return res.status(200).json({ ok: true })
       } catch (e) {
         if (e.code === 'P2025') {

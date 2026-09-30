@@ -6,6 +6,7 @@ import { rateLimit } from '../../lib/rateLimit';
 import { listTemplates, saveTemplate } from '../../lib/templateStore';
 import { listNavigations, saveNavigation } from '../../lib/navigationStore';
 import { listFolderItemsRecursive } from '../../lib/uploadFolder';
+import { requireAuth, PERMISSIONS } from '../../lib/auth';
 
 export const config = {
   api: {
@@ -535,6 +536,9 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Fehler beim Laden der Dateien' });
     }
   } else if (req.method === 'POST') {
+    const auth = await requireAuth(req, res, PERMISSIONS.FILES_UPLOAD);
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
+
     // Rate-Limit für Uploads
     const { ok: rlOk, retryAfter } = uploadLimiter.check(req);
     if (!rlOk) {
@@ -643,6 +647,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Ordnerpfad konnte nicht verarbeitet werden' });
     }
   } else if (req.method === 'PATCH') {
+    const auth = await requireAuth(req, res, PERMISSIONS.FILES_DELETE);
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
+
     try {
       const body = await parseJsonBody(req);
       if (body?.action !== 'repair-filenames') {
@@ -669,6 +676,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Dateinamen konnten nicht repariert werden: ' + error.message });
     }
   } else if (req.method === 'PUT') {
+    const auth = await requireAuth(req, res, PERMISSIONS.FILES_UPLOAD);
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
+
     // Ordner erstellen
     try {
       let body = '';
@@ -702,6 +712,9 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Fehler beim Erstellen des Ordners: ' + error.message });
     }
   } else if (req.method === 'DELETE') {
+    const auth = await requireAuth(req, res, PERMISSIONS.FILES_DELETE);
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
+
     // Datei oder Ordner löschen
     try {
       // Parse JSON body manuell, da bodyParser deaktiviert ist
@@ -783,4 +796,3 @@ export default async function handler(req, res) {
     res.status(405).json({ error: 'Methode nicht erlaubt' });
   }
 }
-      const imageDir = path.join(process.cwd(), 'public', 'uploads', 'images');
