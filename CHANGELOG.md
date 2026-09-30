@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.19.0] - 2026-09-30
+
+### Added
+- Projekttransfer-Erstellung (Export) und Import/Restore im Backup-Bereich zeigen jetzt ein Popup mit Fortschrittsbalken statt nur eines Spinners im Button. Beim Erstellen wird der tatsächliche Download-Fortschritt anhand der `Content-Length` angezeigt, beim Einspielen der Upload-Fortschritt des Requests, gefolgt von einem unbestimmten "Wird verarbeitet…"-Zustand während der Server die Daten schreibt. Bei Erfolg schließt sich das Popup automatisch, bei einem Fehler bleibt es mit Fehlermeldung offen und muss manuell geschlossen werden.
+
+---
+
 ## [0.18.3] - 2026-09-30
 
 ### Added
