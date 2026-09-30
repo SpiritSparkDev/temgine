@@ -5,7 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.18.0] - 2026-09-30
+## [0.18.1] - 2026-09-30
+
+### Fixed
+- Der in 0.18.0 eingeführte Postgres-Reconcile-Mechanismus wurde als per Bind-Mount eingebundene Datei (`docker/postgres-entrypoint.sh`) ausgeliefert. Fehlt diese Datei auf dem Host beim Container-Start (z. B. bei Portainer-Stacks ohne vollständiges Git-Checkout), legt Docker dort kommentarlos ein leeres Verzeichnis an statt zu mounten — der Container scheiterte dann mit `Is a directory` und blieb dauerhaft `unhealthy`. Das Skript läuft jetzt inline als `command:` in `docker-compose.yml`, ganz ohne zusätzliche Datei, damit es unabhängig davon funktioniert, wie das jeweilige Deploy-Tool den Stack bereitstellt.
 
 ### Added
 - Docker: `postgres`-Service gleicht Rollen-Passwort und Datenbank bei jedem Container-Start automatisch gegen die aktuellen `DATABASE_*`-Werte ab (`docker/postgres-entrypoint.sh`), statt nur beim allerersten Init des Volumes. Verhindert stille Auth-Fehler ("password authentication failed") bzw. fehlende Datenbanken nach Deploy-Tool-Wechseln oder geänderten Zugangsdaten, ohne dass Daten im Volume angefasst werden.
