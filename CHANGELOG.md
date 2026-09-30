@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.18.0] - 2026-09-30
+
+### Added
+- Docker: `postgres`-Service gleicht Rollen-Passwort und Datenbank bei jedem Container-Start automatisch gegen die aktuellen `DATABASE_*`-Werte ab (`docker/postgres-entrypoint.sh`), statt nur beim allerersten Init des Volumes. Verhindert stille Auth-Fehler ("password authentication failed") bzw. fehlende Datenbanken nach Deploy-Tool-Wechseln oder geänderten Zugangsdaten, ohne dass Daten im Volume angefasst werden.
+
+### Fixed
+- Mehrere API-Routen (`/api/pages`, `/api/users`, `/api/files`) prüften Authentifizierung/Rollen nicht, obwohl `lib/auth.js` die passenden Berechtigungen dafür bereits definiert (`PAGES_EDIT`/`PAGES_DELETE`, `USERS_VIEW`/`USERS_EDIT`, `FILES_UPLOAD`/`FILES_DELETE`). Schreibende Endpunkte (Seiten anlegen/löschen, Nutzer auflisten/löschen, Dateien hoch-/herunterladen/löschen, Ordner rekursiv löschen) waren dadurch unauthentifiziert erreichbar; lesende bzw. von der öffentlichen Website genutzte Endpunkte (`GET /api/pages`, `GET /api/files`) bleiben bewusst offen.
+- `/api/database/migrate` und `/api/database/test-connection` entfernt: nahmen unauthentifiziert eine beliebige `connectionString` aus dem Request-Body entgegen und verbanden sich damit (SSRF-Risiko), `migrate` löschte zudem Daten und referenzierte ein `Template`-Modell, das im aktuellen Prisma-Schema nicht mehr existiert. Beide Endpunkte waren im Code nirgends mehr referenziert.
+
+---
+
 ## [0.17.1] - 2026-09-30
 
 ### Fixed
