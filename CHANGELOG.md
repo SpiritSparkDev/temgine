@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.16.1] - 2026-09-30
+
+### Fixed
+- Projekttransfer-Export (ZIP) brach bei großen Uploads-Ordnern (mehrere GB) ab: alle Upload-Dateien und -Fonts wurden komplett Base64-kodiert in den Arbeitsspeicher geladen und das ZIP erst als ein einziger Buffer erzeugt, bevor überhaupt Daten an den Browser gingen — das sprengte je nach Datenmenge den Node-Heap oder die V8-String-Längengrenze. Uploads/Fonts werden jetzt per Stream direkt von der Platte ins ZIP geschrieben und das ZIP wird wie der statische Website-Export gestreamt statt komplett gepuffert.
+
+---
+
 ## [0.16.0] - 2026-09-30
 
 ### Added
