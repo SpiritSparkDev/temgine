@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.25.1] - 2026-10-01
+
+### Fixed
+- `scripts/import-init.js` flachte beim Seiten-Import den kompletten Seitenbaum ab und legte dabei für JEDEN Knoten — auch verschachtelte Unterseiten — eine eigene Top-Level-`Page`-Zeile an, obwohl Unterseiten laut Datenmodell nur als eingebettetes JSON im `children`-Feld ihrer nächsten Top-Level-Seite existieren sollen. Dadurch tauchte z. B. der Beispiel-Blogpost (`id: "blog-post-1"`) sowohl verschachtelt unter "Startseite → Blog" als auch nochmal unter einer eigenen Top-Level-Seite "Blog" auf — eine doppelte id im selben Baum, die beim nächsten Speichern mit "Seite(n) kommen mehrfach im Baum vor" abgelehnt wurde. Der Import legt jetzt nur noch für die echten Top-Level-Wurzeln aus `init/pages.json` eine Zeile an; verschachtelte Kinder werden wie vorgesehen als Teil von deren `children`-Feld mitgespeichert.
+
+---
+
 ## [0.25.0] - 2026-10-01
 
 ### Added
