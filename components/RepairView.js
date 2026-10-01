@@ -136,7 +136,7 @@ export default function RepairView() {
                 unsichtbar. Vergib für alle außer einer einen neuen, eindeutigen Slug.
               </p>
               {scanResult.duplicateSlugs.map((group) => (
-                <div key={group.slug} style={cardStyle}>
+                <div key={group.occurrences.map(occKey).join('|')} style={cardStyle}>
                   <strong>Slug „{group.slug}" — {group.occurrences.length}× vorhanden</strong>
                   {group.occurrences.map((occ) => {
                     const key = occKey(occ);

@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.22.2] - 2026-10-01
+
+### Fixed
+- `/repair`-Werkzeug: Die Liste der Slug-Kollisionen rendert pro Gruppe mit `key={group.slug}` — existieren zwei getrennte Kollisionsgruppen mit demselben Slug-Text unter unterschiedlichen Elternseiten gleichzeitig, führte der doppelte React-Key dazu, dass eine der beiden Gruppen im UI nicht zuverlässig angezeigt/aktualisiert wurde. Key basiert jetzt auf den vollständigen Fundstellen der Gruppe statt nur dem Slug-Text.
+
+---
+
 ## [0.22.1] - 2026-10-01
 
 ### Fixed
