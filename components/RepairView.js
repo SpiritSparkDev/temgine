@@ -89,7 +89,11 @@ export default function RepairView() {
     applyFix({ type: 'id', topLevelId: occ.topLevelId, path: occ.path }, key);
   };
 
-  const hasProblems = scanResult && (scanResult.duplicateSlugs.length > 0 || scanResult.duplicateIds.length > 0);
+  const hasProblems = scanResult && (
+    scanResult.duplicateSlugs.length > 0 ||
+    scanResult.duplicateIds.length > 0 ||
+    scanResult.missingIds.length > 0
+  );
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem' }}>
@@ -126,6 +130,36 @@ export default function RepairView() {
               liegt der Konflikt vermutlich bei zwei gleich benannten Seiten unter unterschiedlichen Elternseiten —
               das ist technisch kein Problem (unterschiedliche URLs) und muss nicht behoben werden.
             </div>
+          )}
+
+          {scanResult.missingIds.length > 0 && (
+            <>
+              <h3>Seiten ohne eigene ID ({scanResult.missingIds.length})</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                Diese Seiten haben keine eigene id. Beim Speichern einer solchen Seite im Editor werden
+                dadurch versehentlich ALLE anderen Geschwister-Seiten ohne eigene id mit demselben Inhalt
+                überschrieben — das erzeugt frische Slug-Duplikate, selbst wenn der Baum direkt davor laut
+                diesem Scan unauffällig war. Bitte jeder Seite hier eine eigene ID vergeben.
+              </p>
+              {scanResult.missingIds.map((occ) => {
+                const key = occKey(occ);
+                return (
+                  <div key={key} style={{ ...cardStyle, ...occurrenceRowStyle, borderTop: 'none' }}>
+                    <span style={{ flex: '1 1 320px', fontSize: '0.85rem' }}>
+                      {occ.title || '(ohne Titel)'} (/{occ.slug}) — <span style={{ color: 'var(--text-secondary)' }}>{occ.breadcrumb}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-modern-small"
+                      disabled={busyKey === key}
+                      onClick={() => fixId(occ)}
+                    >
+                      {busyKey === key ? 'Speichert…' : 'ID vergeben'}
+                    </button>
+                  </div>
+                );
+              })}
+            </>
           )}
 
           {scanResult.duplicateSlugs.length > 0 && (

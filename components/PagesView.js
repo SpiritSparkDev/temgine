@@ -256,10 +256,20 @@ export default function PagesView({
               // Ensure options is an object
               const opts = options || {};
               const isSilent = opts.silent === true;
-              
+
+              // Seiten ohne eigene id (ältere/importierte Datenbestände) dürfen
+              // hier nicht per id gematcht werden: mehrere Geschwister mit
+              // id === undefined würden sonst ALLE gleichzeitig getroffen und
+              // mit updatedPage überschrieben — das erzeugt frische
+              // Slug-Duplikate, obwohl der Baum davor unauffällig war.
+              if (!updatedPage.id) {
+                showToast('Diese Seite hat keine eigene ID und kann so nicht sicher gespeichert werden. Bitte im Einstellungen-Bereich unter "Wartung & Reparatur" (/repair) erst eine ID vergeben.', 'error');
+                return false;
+              }
+
               const updatePageInTree = (nodes) =>
                 nodes.map(n =>
-                  n.id === updatedPage.id
+                  n.id && n.id === updatedPage.id
                     // PageEditor only ever edits this one page's own fields — it
                     // doesn't manage the page tree, so its (possibly stale)
                     // updatedPage.children must never overwrite the live tree's

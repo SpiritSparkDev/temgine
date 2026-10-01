@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.23.0] - 2026-10-01
+
+### Fixed
+- Gefundene Ursache für wiederkehrende „Slug(s) mehrfach vergeben"-Fehler trotz sauberer Datenbank: Verschachtelte Seiten ohne eigene `id` (ältere/importierte Datenbestände) wurden beim Speichern in `updatePageInTree` (`components/PagesView.js`) per `n.id === updatedPage.id` gematcht — bei mehreren Geschwister-Seiten mit `id === undefined` traf das ALLE gleichzeitig und überschrieb sie beim Speichern einer einzelnen von ihnen mit deren Inhalt, wodurch frische Slug-Duplikate entstanden, obwohl der Baum direkt davor unauffällig war. Das Speichern verweigert sich jetzt mit einer klaren Fehlermeldung, wenn die zu speichernde Seite keine eigene id hat, statt Geschwister-Seiten stillschweigend zu überschreiben.
+
+### Added
+- `/repair`-Werkzeug erkennt jetzt zusätzlich verschachtelte Seiten ohne eigene id (neuer Abschnitt „Seiten ohne eigene ID") und kann ihnen gezielt eine neue id vergeben — das war zuvor eine Lücke, da der Scan nur auf *doppelte* ids prüfte, Knoten mit *fehlender* id aber überging.
+
+---
+
 ## [0.22.2] - 2026-10-01
 
 ### Fixed
