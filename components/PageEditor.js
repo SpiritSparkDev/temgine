@@ -2417,8 +2417,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         {/* ── Sticky Toolbar ──────────────────────────────────────────── */}
         <div className="pe-toolbar">
           <div className="pe-toolbar-left">
-            <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
-            <span className="pe-toolbar-slug">/{slug || '—'}</span>
+            <button
+              type="button"
+              className="pe-tb-btn pe-tb-btn-back"
+              onClick={handleCancelClick}
+              title="Zurück zur Seitenübersicht (ohne zu speichern)"
+              aria-label="Zurück zur Seitenübersicht"
+            >
+              <ArrowLeft size={14} /> Zurück
+            </button>
+            <div className="pe-toolbar-titlewrap">
+              <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
+              <span className="pe-toolbar-slug">/{slug || '—'}</span>
+            </div>
           </div>
           <div className="pe-toolbar-actions">
             {domLayout.length > 0 && (

@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.20.0] - 2026-10-01
+
+### Added
+- Seiten-Editor: neuer "Zurück"-Button links in der Sticky-Toolbar, der direkt (ohne Speichern) zur Seitenübersicht zurückspringt — bei ungespeicherten Änderungen weiterhin mit Bestätigungsdialog. Nutzt die bisher ungenutzte `handleCancelClick`/`onCancel`-Funktion, die zuvor an keiner Stelle der Oberfläche verdrahtet war.
+
+---
+
 ## [0.19.0] - 2026-09-30
 
 ### Added
