@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.21.0] - 2026-10-01
+
+### Added
+- Backup-Bereich: Projekttransfer-Export lässt sich jetzt im Umfang einschränken — „Vollständig" (wie bisher), „Datenbank + Templates" (zusätzlich Navigationen, Footer, Maintenance-Seiten, CSS, aber ohne Uploads) oder „Nur Datenbank" (nur Seiten, Snippets, Globale Variablen). Der Import-Dialog zeigt den Umfang eines geladenen Backups an und weist bei der „Ersetzen"-Strategie explizit darauf hin, dass nur die im Backup enthaltenen Kategorien gelöscht/ersetzt werden.
+
+### Fixed
+- `POST /api/admin/import?strategy=replace` löschte beim Wiederherstellen bisher *alle* bestehenden Templates/Navigationen/Footer/CSS/Uploads, unabhängig davon, ob das importierte Backup diese Kategorien überhaupt enthielt — ein unvollständiges Backup (z. B. nur Datenbank) hätte mit „Ersetzen" sämtliche Templates und Uploads gelöscht, obwohl das Backup sie nie beinhaltete. Der Import prüft jetzt anhand der Export-Metadaten (`filesIncluded`), welche Kategorien tatsächlich im Backup enthalten sind, und wendet „Ersetzen" nur auf diese an — fehlende Kategorien bleiben unangetastet. Alte Backups ohne diese Metadaten verhalten sich unverändert wie bisher.
+
+---
+
 ## [0.20.0] - 2026-10-01
 
 ### Added
