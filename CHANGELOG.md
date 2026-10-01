@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.22.1] - 2026-10-01
+
+### Fixed
+- `POST /api/pages` (Array-Save) lehnte Slug-Duplikate bisher global über den GESAMTEN Seitenbaum ab, nicht nur zwischen echten Geschwister-Seiten. Da `findPageByPath` (`pages/[...slug].js`) beim Auflösen einer URL pro Segment aber immer nur innerhalb der Kinder des zuvor gefundenen Knotens sucht, sind zwei gleich benannte Seiten unter unterschiedlichen Elternseiten (z. B. `/team-a/lydia` und `/team-b/lydia`) gar keine echte URL-Kollision — die alte Prüfung blockierte solche (unbedenklichen) Fälle dennoch dauerhaft, inklusive aller bereits vor Einführung der Prüfung in 0.18.2 bestehenden Datenbestände. Die Prüfung nutzt jetzt dieselbe Geschwister-genaue Erkennung wie das in 0.22.0 eingeführte `/repair`-Werkzeug (`lib/pageTreeRepair.js`); echte Kollisionen (gleicher Slug unter derselben Elternseite) werden weiterhin abgelehnt.
+
+---
+
 ## [0.22.0] - 2026-10-01
 
 ### Added

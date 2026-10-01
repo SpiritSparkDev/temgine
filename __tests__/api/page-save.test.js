@@ -205,6 +205,32 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
   });
 
+  test('200 bei gleichem Slug unter ZWEI UNTERSCHIEDLICHEN Elternseiten — keine echte URL-Kollision', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        {
+          slug: 'team-a',
+          title: 'Team A',
+          children: [
+            { slug: 'lydia', title: 'Lydia (Team A)', children: [] },
+          ],
+        },
+        {
+          slug: 'team-b',
+          title: 'Team B',
+          children: [
+            { slug: 'lydia', title: 'Lydia (Team B)', children: [] },
+          ],
+        },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(mockPrisma.page.upsert).toHaveBeenCalledTimes(2);
+  });
+
   test('400 wenn dieselbe Seiten-id mehrfach im Baum auftaucht (z. B. Kopie statt Verschieben) — kein Upsert', async () => {
     const req = {
       method: 'POST',

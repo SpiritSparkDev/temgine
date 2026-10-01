@@ -3,6 +3,7 @@ import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
 import { validate, rules } from '../../lib/validate'
 import { requireAuth, PERMISSIONS } from '../../lib/auth'
+import { findSiblingSlugCollisions } from '../../lib/pageTreeRepair'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -122,34 +123,24 @@ export default async function handler(req, res) {
 
         const providedSlugs = collectSlugs(body)
 
-        // Slugs müssen über den gesamten Baum (inkl. verschachtelter Seiten)
-        // eindeutig sein: findPageByPath löst URLs Segment für Segment auf und
-        // nimmt dabei immer das erste Match — ein zweiter Knoten mit demselben
-        // Slug wäre über keine URL erreichbar und würde nur still verworfen
-        // wirken. Nur die Top-Level-Slugs sind zusätzlich per DB-Constraint
-        // geschützt; verschachtelte Slugs (im `children`-JSON) müssen wir hier
-        // selbst prüfen, bevor irgendetwas geschrieben wird.
-        const findDuplicateSlugs = (nodes) => {
-          const seen = new Set()
-          const dupes = new Set()
-          const walk = (list) => {
-            for (const n of list || []) {
-              if (n && n.slug) {
-                const s = String(n.slug)
-                if (seen.has(s)) dupes.add(s)
-                else seen.add(s)
-              }
-              if (n && Array.isArray(n.children)) walk(n.children)
-            }
-          }
-          walk(nodes)
-          return [...dupes]
-        }
-        const duplicateSlugs = findDuplicateSlugs(body)
-        if (duplicateSlugs.length > 0) {
+        // Slugs müssen nur innerhalb derselben Geschwister-Gruppe eindeutig sein
+        // (alle Top-Level-Seiten untereinander, oder alle Kinder eines einzelnen
+        // `children`-Arrays untereinander): findPageByPath löst URLs Segment für
+        // Segment auf und sucht dabei pro Schritt immer nur innerhalb der Kinder
+        // des zuvor gefundenen Knotens — zwei gleich benannte Seiten unter
+        // UNTERSCHIEDLICHEN Elternseiten sind also über unterschiedliche URLs
+        // erreichbar und kein Problem. Nur wenn zwei Geschwister denselben Slug
+        // tragen, wäre der zweite über keine URL erreichbar. Nur die Top-Level-
+        // Slugs sind zusätzlich per DB-Constraint geschützt; verschachtelte
+        // Slugs (im `children`-JSON) müssen wir hier selbst prüfen, bevor
+        // irgendetwas geschrieben wird. (Siehe lib/pageTreeRepair.js, das dieselbe
+        // Prüfung auch für das /repair-Werkzeug nutzt.)
+        const slugCollisions = findSiblingSlugCollisions(body)
+        if (slugCollisions.length > 0) {
+          const duplicateSlugs = slugCollisions.map(c => c.slug)
           const [status, resp] = errorResponse(
             400,
-            `Slug(s) mehrfach vergeben: ${duplicateSlugs.join(', ')}. Jeder Slug muss über den gesamten Seitenbaum eindeutig sein.`,
+            `Slug(s) mehrfach unter derselben übergeordneten Seite vergeben: ${duplicateSlugs.join(', ')}. Jeder Slug muss unter seiner Elternseite eindeutig sein.`,
             'VALIDATION_ERROR',
             { duplicateSlugs }
           );
