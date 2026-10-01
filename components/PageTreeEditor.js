@@ -23,6 +23,7 @@ import {
 } from '../lib/muiIcons';
 import Toast from './Toast';
 import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
+import { getPageRedirect } from '../lib/pageRedirect';
 
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
@@ -47,6 +48,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   const [dropIndicator, setDropIndicator] = useState(null); // { id, position: 'before'|'after'|'inside' }
   const [addMenuOpenId, setAddMenuOpenId] = useState(null);
   const [addMenuAnchor, setAddMenuAnchor] = useState(null); // { top, left } in Viewport-Koordinaten
+  const [showAddTypeMenu, setShowAddTypeMenu] = useState(false); // Dropdown am Haupt-"Seite hinzufügen"-Button
   const thumbObserverRef = useRef(null);
 
   // Schließt das "Hinzufügen"-Menü bei Klick außerhalb (Menü selbst lebt
@@ -61,6 +63,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [addMenuOpenId]);
+
+  useEffect(() => {
+    if (!showAddTypeMenu) return;
+    const handleOutside = (e) => {
+      if (e.target.closest && e.target.closest('.page-add-type-menu-wrap')) return;
+      setShowAddTypeMenu(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showAddTypeMenu]);
 
   function toggleAddMenu(e, nodeId) {
     if (addMenuOpenId === nodeId) {
@@ -145,7 +157,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     return filterNodes(tree);
   }, [searchTerm, tree]);
 
-  async function handleAdd(parentId = null) {
+  async function handleAdd(parentId = null, redirectType = null) {
     const id = Math.random().toString(36).substr(2, 9);
     const makeSlug = (text) => {
       const result = String(text || 'neue-seite')
@@ -168,7 +180,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       collect(nodes);
       return slugs;
     };
-    const title = newTitle || 'Neue Seite';
+    const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
+    const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
     let slug = makeSlug(title);
     const existingSlugs = getAllSlugs(tree);
     if (existingSlugs.has(slug)) {
@@ -176,7 +189,18 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       while (existingSlugs.has(`${slug}-${counter}`)) counter++;
       slug = `${slug}-${counter}`;
     }
-    const newPage = { id, title, slug, children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
+    const newPage = {
+      id,
+      title,
+      slug,
+      children: [],
+      blocks: [],
+      status: 'DRAFT',
+      data: {
+        ...(newNavigation ? { pageNav: newNavigation } : {}),
+        ...(isRedirect ? { redirect: { type: redirectType, url: '', target: '_self' } } : {}),
+      },
+    };
     if (!parentId) {
       const updated = [...tree, newPage];
       setTree(updated);
@@ -650,8 +674,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
   function getStatusLabel(node) {
     if (node.isHomepage) return 'Homepage';
-    if (node.redirectType === '404') return '404-Seite';
-    if (node.redirectType === '503') return '503-Seite';
+    const redirect = getPageRedirect(node);
+    if (redirect) return redirect.type === 'permanent' ? 'Permanente Weiterleitung' : 'Temporäre Weiterleitung';
     return STATUS_LABELS[node.status] || node.status || 'Entwurf';
   }
 
@@ -796,8 +820,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                       {getStatusLabel(node)}
                     </span>
                     {node.isHomepage && <span className="page-badge badge-home">🏠</span>}
-                    {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
-                    {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
                   </div>
                 </div>
 
@@ -989,8 +1011,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
               {node.title}
             </a>
             {node.isHomepage && <span className="page-badge badge-home">🏠</span>}
-            {node.redirectType === '404' && <span className="page-badge badge-404">404</span>}
-            {node.redirectType === '503' && <span className="page-badge badge-503">503</span>}
           </td>
           <td className="page-tree-cell-path">/{fullPath}</td>
           <td className="page-tree-cell-status">
@@ -1201,10 +1221,33 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
                 <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
               ))}
             </select>
-            <button className="primary" onClick={() => handleAdd()}>
-              <Plus size={16} />
-              Seite hinzufügen
-            </button>
+            <span className="page-add-menu-wrap page-add-type-menu-wrap">
+              <button className="primary" onClick={() => handleAdd()}>
+                <Plus size={16} />
+                Seite hinzufügen
+              </button>
+              <button
+                className="primary page-add-type-caret"
+                onClick={() => setShowAddTypeMenu(v => !v)}
+                title="Weitere Seitentypen"
+                aria-label="Weitere Seitentypen"
+                aria-haspopup="true"
+                aria-expanded={showAddTypeMenu}
+                style={{ padding: '0 8px', borderLeft: '1px solid rgba(255,255,255,0.3)' }}
+              >
+                <ChevronDown size={14} />
+              </button>
+              {showAddTypeMenu && (
+                <div className="page-add-menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 20 }}>
+                  <button onClick={() => { setShowAddTypeMenu(false); handleAdd(null, 'permanent'); }}>
+                    Permanente Weiterleitung
+                  </button>
+                  <button onClick={() => { setShowAddTypeMenu(false); handleAdd(null, 'temporary'); }}>
+                    Temporäre Weiterleitung
+                  </button>
+                </div>
+              )}
+            </span>
           </div>
         </div>
 

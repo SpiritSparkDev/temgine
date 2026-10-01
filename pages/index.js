@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
+import { getPageRedirect } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -179,16 +180,22 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           return
         }
 
-        // Prüfe auf externe Weiterleitung
-        if (homePage.redirectType === 'external' && homePage.redirectUrl) {
-          window.location.href = homePage.redirectUrl
-          setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        // target "_self" ist bereits serverseitig in getServerSideProps als echte
+        // HTTP-Weiterleitung abgefangen worden — dieser Fallback greift nur, wenn
+        // das nicht der Fall war (z. B. unveröffentlichte Startseite), oder für
+        // "_blank", das grundsätzlich nur clientseitig geht (siehe lib/pageRedirect.js).
+        const homeRedirect = getPageRedirect(homePage)
+        if (homeRedirect) {
+          if (homeRedirect.target === '_blank') {
+            window.open(homeRedirect.url, '_blank')
+            setHtml(`<div style="padding: 40px; text-align: center;"><p>Weiterleitung geöffnet. Falls sich kein neuer Tab geöffnet hat: <a href="${homeRedirect.url}" target="_blank" rel="noopener noreferrer">hier klicken</a>.</p></div>`)
+          } else {
+            window.location.href = homeRedirect.url
+            setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+          }
           setLoading(false)
           return
         }
-
-        // 404 und 503 werden als normale Seiten mit Blöcken gerendert
-        // Die redirectType Information wird nur für die Anzeige verwendet
 
         // Sammle alle Templates
         const templatesToLoad = new Set()
@@ -461,8 +468,15 @@ export async function getServerSideProps(context) {
   let seoMeta = null
   try {
     const { resolveSeoMetaForRoute } = await import('../lib/seo')
-    const { meta, found } = await resolveSeoMetaForRoute(context.req, '/', [])
+    const { getPageRedirect } = await import('../lib/pageRedirect')
+    const { meta, found, page } = await resolveSeoMetaForRoute(context.req, '/', [])
     seoMeta = meta
+
+    const redirect = getPageRedirect(page)
+    if (redirect && redirect.target === '_self') {
+      return { redirect: { destination: redirect.url, permanent: redirect.type === 'permanent' } }
+    }
+
     if (!found) context.res.statusCode = 404
   } catch (_e) {
     seoMeta = null

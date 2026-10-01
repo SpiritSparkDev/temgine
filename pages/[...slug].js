@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
+import { getPageRedirect } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -324,26 +325,13 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       let foundPage = findPageByPath(pages, segments)
       if (!foundPage && segments.length === 0) foundPage = pages.find(p => p.isHomepage === true)
       if (!foundPage) {
-        const find404Page = (nodes) => {
-          for (const node of nodes) {
-            if (node.redirectType === '404') return node
-            if (node.children && node.children.length > 0) {
-              const found = find404Page(node.children)
-              if (found) return found
-            }
-          }
-          return null
-        }
-        foundPage = find404Page(pages)
-        if (!foundPage) {
-          const maintenance404Html = await loadMaintenance404Html()
-          const cssLinks = await loadActiveCssLinks()
-          if (cancelled) return
-          setPage({ title: '404', data: {} })
-          setHtml(injectCssLinks(maintenance404Html, cssLinks))
-          setLoading(false)
-          return
-        }
+        const maintenance404Html = await loadMaintenance404Html()
+        const cssLinks = await loadActiveCssLinks()
+        if (cancelled) return
+        setPage({ title: '404', data: {} })
+        setHtml(injectCssLinks(maintenance404Html, cssLinks))
+        setLoading(false)
+        return
       }
 
       if (cancelled) return
@@ -374,10 +362,21 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       }
       // ────────────────────────────────────────────────────────────────────
 
-      if (foundPage.redirectType === 'external' && foundPage.redirectUrl) {
+      // target "_self" ist bereits serverseitig in getServerSideProps als echte
+      // HTTP-Weiterleitung abgefangen worden (siehe oben) — läuft dieser Code
+      // trotzdem noch (z. B. Vorschau eines Entwurfs lokal, der dort nicht
+      // geladen wird), greift hier derselbe Fallback. "_blank" kann grundsätzlich
+      // nur hier (clientseitig) behandelt werden, siehe lib/pageRedirect.js.
+      const pageRedirect = getPageRedirect(foundPage)
+      if (pageRedirect) {
         if (cancelled) return
-        window.location.href = foundPage.redirectUrl
-        setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        if (pageRedirect.target === '_blank') {
+          window.open(pageRedirect.url, '_blank')
+          setHtml(`<div style="padding: 40px; text-align: center;"><p>Weiterleitung geöffnet. Falls sich kein neuer Tab geöffnet hat: <a href="${pageRedirect.url}" target="_blank" rel="noopener noreferrer">hier klicken</a>.</p></div>`)
+        } else {
+          window.location.href = pageRedirect.url
+          setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        }
         setLoading(false)
         return
       }
@@ -726,9 +725,19 @@ export async function getServerSideProps(context) {
   let seoMeta = null
   try {
     const { resolveSeoMetaForRoute, findBlogPostForRoute, buildBlogPostMeta } = await import('../lib/seo')
-    const { meta, found, settings, baseUrl } = await resolveSeoMetaForRoute(context.req, path, slug)
+    const { getPageRedirect } = await import('../lib/pageRedirect')
+    const { meta, found, settings, baseUrl, page } = await resolveSeoMetaForRoute(context.req, path, slug)
     seoMeta = meta
     let resolvedFound = found
+
+    // Weiterleitung auf Ziel-Target "_self" ist eine echte HTTP-Weiterleitung —
+    // muss feuern, bevor überhaupt Blöcke/HTML gerendert werden (auch für
+    // Crawler/curl, die kein JS ausführen). "_blank" kann das nicht (siehe
+    // lib/pageRedirect.js) und wird stattdessen clientseitig behandelt.
+    const redirect = getPageRedirect(page)
+    if (redirect && redirect.target === '_self') {
+      return { redirect: { destination: redirect.url, permanent: redirect.type === 'permanent' } }
+    }
 
     if (!found && slug.length === 2) {
       // Route matcht keine Page — evtl. ein Blog-Beitrag (/[channelSlug]/[postSlug]),
@@ -740,9 +749,9 @@ export async function getServerSideProps(context) {
       }
     }
 
-    // Kein Treffer per Pfad: entweder eine (weiter clientseitig aufgelöste)
-    // benutzerdefinierte 404-Seite oder wirklich nichts vorhanden — in
-    // beiden Fällen ist "nicht gefunden" der korrekte HTTP-Status.
+    // Kein Treffer per Pfad: entweder eine clientseitig per Wartungsseite
+    // dargestellte 404 oder wirklich nichts vorhanden — in beiden Fällen ist
+    // "nicht gefunden" der korrekte HTTP-Status.
     if (!resolvedFound) context.res.statusCode = 404
   } catch (_e) {
     seoMeta = null

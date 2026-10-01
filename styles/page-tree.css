@@ -71,6 +71,17 @@
   border-radius: 14px;
 }
 
+/* Split-Button "Seite hinzufügen" + Dropdown-Pfeil (Weiterleitungs-Varianten) */
+.page-add-type-menu-wrap > button.primary:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.page-add-type-menu-wrap > button.page-add-type-caret {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  min-width: 0;
+}
+
 .page-grid-root {
   margin-top: 8px;
 }
@@ -343,16 +354,6 @@
 .page-tree .page-badge-purple {
   background: rgba(139, 92, 246, 0.14);
   color: #6d28d9;
-}
-
-.page-tree .badge-404 {
-  background: rgba(239, 68, 68, 0.14);
-  color: #d64545;
-}
-
-.page-tree .badge-503 {
-  background: rgba(245, 158, 11, 0.16);
-  color: #b86a00;
 }
 
 .page-tree .badge-home {

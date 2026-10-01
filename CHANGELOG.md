@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.24.0] - 2026-10-01
+
+### Added
+- Echte Seiten-Weiterleitungen: Der Weiterleitungstyp einer Seite (`data.redirect`, vorher nie persistierte Top-Level-Felder) löst beim Besuch jetzt tatsächlich eine Weiterleitung aus. Bei Target "Gleicher Tab" (`_self`, Standard) ist das eine echte HTTP-Weiterleitung (301 permanent / 302 temporär) über `getServerSideProps`, bevor überhaupt Blöcke gerendert werden — funktioniert auch für Crawler/curl ohne JavaScript. Target "Neuer Tab" (`_blank`) kann das nicht als echte HTTP-Weiterleitung umsetzen (Status bleibt 200) und öffnet das Ziel stattdessen clientseitig per `window.open`.
+- Seiten-Editor: Umstellen einer Seite auf "Permanente"/"Temporäre Weiterleitung" sperrt automatisch das Anlegen von Blöcken und zeigt stattdessen ein eigenes Feld für Ziel-URL und Target.
+- Seitenübersicht: "Seite hinzufügen" ist jetzt ein Dropdown — neben der normalen (weiterhin als Default per Klick erreichbaren) Seite lassen sich direkt "Permanente Weiterleitung" und "Temporäre Weiterleitung" als vorkonfigurierte neue Seiten anlegen.
+
+### Changed
+- Die Weiterleitungstypen "404" und "503" wurden entfernt — dafür gibt es bereits dedizierte Maintenance-Seiten (Einstellungen), eine weitere Weiterleitung darauf war redundant. Übrig bleiben: Keine / Permanent / Temporär.
+
+### Fixed
+- `sanitizeRecursive` (läuft über `page.data` beim Speichern) escaped `&` in jedem String zu `&amp;` — für Rich-Text richtig, hätte bei einer Weiterleitungs-URL mit Query-String (`?a=1&b=2`) die URL aber stillschweigend korrumpiert. `data.redirect` wird jetzt vor dieser Sanitisierung herausgehalten und separat validiert (`lib/pageRedirect.js`).
+
+---
+
 ## [0.23.0] - 2026-10-01
 
 ### Fixed

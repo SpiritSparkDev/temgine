@@ -48,8 +48,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [pageData, setPageData] = useState({});
   const [templateCodes, setTemplateCodes] = useState({});
   const [snippetLabels, setSnippetLabels] = useState({});
-  const [redirectType, setRedirectType] = useState('none');
+  const [redirectType, setRedirectType] = useState('none'); // 'none' | 'permanent' | 'temporary'
   const [redirectUrl, setRedirectUrl] = useState('');
+  const [redirectTarget, setRedirectTarget] = useState('_self'); // '_self' | '_blank'
   const [isHomepage, setIsHomepage] = useState(false);
   const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
   const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
@@ -115,6 +116,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     pageData,
     redirectType,
     redirectUrl,
+    redirectTarget,
     isHomepage,
     pageFieldsTemplate,
   }) => JSON.stringify({
@@ -124,6 +126,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     pageData: pageData || {},
     redirectType: redirectType || 'none',
     redirectUrl: redirectUrl || '',
+    redirectTarget: redirectTarget || '_self',
     isHomepage: Boolean(isHomepage),
     pageFieldsTemplate: pageFieldsTemplate || '',
   });
@@ -208,8 +211,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const migratedBlocks = migration.blocks || [];
       const initialTitle = page.title || '';
       const initialSlug = page.slug || '';
-      const initialRedirectType = page.redirectType || 'none';
-      const initialRedirectUrl = page.redirectUrl || '';
+      const initialRedirect = (page.data && page.data.redirect) || {};
+      const initialRedirectType = (initialRedirect.type === 'permanent' || initialRedirect.type === 'temporary') ? initialRedirect.type : 'none';
+      const initialRedirectUrl = initialRedirect.url || '';
+      const initialRedirectTarget = initialRedirect.target === '_blank' ? '_blank' : '_self';
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
@@ -222,6 +227,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setPageData(page.data || {});
       setRedirectType(initialRedirectType);
       setRedirectUrl(initialRedirectUrl);
+      setRedirectTarget(initialRedirectTarget);
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
@@ -257,6 +263,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData: initialPageData,
         redirectType: initialRedirectType,
         redirectUrl: initialRedirectUrl,
+        redirectTarget: initialRedirectTarget,
         isHomepage: initialIsHomepage,
         pageFieldsTemplate: initialPageFieldsTemplate,
       });
@@ -293,6 +300,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData,
         redirectType,
         redirectUrl,
+        redirectTarget,
         isHomepage,
         pageFieldsTemplate,
       });
@@ -305,13 +313,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       pageData,
       redirectType,
       redirectUrl,
+      redirectTarget,
       isHomepage,
       pageFieldsTemplate,
     });
     const dirty = currentSnapshot !== initialSnapshotRef.current;
     setIsDirty(dirty);
     onDirtyChange?.(dirty);
-  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, pageFieldsTemplate, onDirtyChange]);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage, pageFieldsTemplate, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return undefined;
@@ -1105,6 +1114,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           pageData,
           redirectType,
           redirectUrl,
+          redirectTarget,
           isHomepage,
           pageFieldsTemplate,
         });
@@ -1347,28 +1357,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       return false;
     }
 
-    // Prüfe ob bereits eine andere 404-Seite existiert
-    if (redirectType === '404' && allPages) {
-      const find404Page = (nodes) => {
-        for (const node of nodes) {
-          if (node.id !== page.id && node.redirectType === '404') return node;
-          if (node.children && node.children.length > 0) {
-            const found = find404Page(node.children);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      const existing404 = find404Page(allPages);
-      if (existing404) {
-        if (!opts.silent) {
-          showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
-        }
-        if (opts.autosave) setAutosaveStatus('fehler');
-        return false;
-      }
-    }
-
     const normalizedPageData = { ...(pageData || {}) };
     delete normalizedPageData.blockSlots;
     delete normalizedPageData.__blockSlots;
@@ -1376,6 +1364,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     // Store DOM layout if in DOM editor mode
     if (useDOMEditor && domLayout.length > 0) {
       normalizedPageData.domLayout = domLayout;
+    }
+
+    // Weiterleitung lebt in data.redirect (keine eigene DB-Spalte) statt als
+    // Top-Level-Feld — siehe lib/pageRedirect.js, das dieselbe Form liest.
+    if (redirectType === 'permanent' || redirectType === 'temporary') {
+      normalizedPageData.redirect = { type: redirectType, url: redirectUrl, target: redirectTarget };
+    } else {
+      delete normalizedPageData.redirect;
     }
 
     const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -1409,12 +1405,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       template: pageFieldsTemplate || null,
       blocks,
       data: normalizedPageData,
-      redirectType,
-      redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage,
       accessGroups,
       status: pageStatus,
     };
+    delete updatedPage.redirectType;
+    delete updatedPage.redirectUrl;
 
     try {
       if (opts.autosave) {
@@ -1438,6 +1434,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData: normalizedPageData,
         redirectType,
         redirectUrl,
+        redirectTarget,
         isHomepage,
         pageFieldsTemplate,
       });
@@ -1544,7 +1541,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage]);
+  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage]);
 
   function handleCancelClick() {
     if (isDirty) {
@@ -2505,7 +2502,57 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         </div>
 
         <div className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}>
-          {useDOMEditor ? (
+          {redirectType !== 'none' ? (
+            // Weiterleitungs-Seite: keine Blöcke, stattdessen Ziel-URL/Target konfigurieren
+            <div className="page-editor-canvas" title={devTitle('Weiterleitungs-Konfiguration')}>
+              <div className="redirect-config-panel">
+                <h3>Diese Seite ist eine Weiterleitung</h3>
+                <p className="redirect-config-hint">
+                  Besucher dieser Seite werden automatisch zur unten angegebenen URL weitergeleitet. Blöcke können
+                  für Weiterleitungs-Seiten nicht angelegt werden.
+                </p>
+
+                <label className="field-label-xs">Art der Weiterleitung</label>
+                <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
+                  <option value="permanent">Permanent (301)</option>
+                  <option value="temporary">Temporär (302)</option>
+                </select>
+
+                <label className="field-label-xs" style={{ marginTop: '14px' }}>Ziel-URL</label>
+                <input
+                  type="text"
+                  value={redirectUrl}
+                  onChange={e => setRedirectUrl(e.target.value)}
+                  placeholder="/andere-seite oder https://example.com"
+                  className="input-field-small"
+                  aria-label="Ziel-URL"
+                />
+
+                <label className="field-label-xs" style={{ marginTop: '14px' }}>Target</label>
+                <select value={redirectTarget} onChange={e => setRedirectTarget(e.target.value)} className="input-field-small" aria-label="Weiterleitungs-Target">
+                  <option value="_self">Gleicher Tab (_self)</option>
+                  <option value="_blank">Neuer Tab (_blank)</option>
+                </select>
+                {redirectTarget === '_blank' && (
+                  <p className="redirect-config-hint">
+                    Hinweis: "Neuer Tab" kann nicht als echte HTTP-Weiterleitung umgesetzt werden — diese Seite
+                    bleibt serverseitig mit Status 200 erreichbar und öffnet das Ziel per JavaScript in einem
+                    neuen Tab. Für Suchmaschinen/Crawler zählt das nicht als Weiterleitung; bei "Gleicher Tab"
+                    ist es eine echte HTTP-Weiterleitung (301/302).
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="pe-tb-btn pe-tb-btn-danger"
+                  style={{ marginTop: '18px' }}
+                  onClick={() => setRedirectType('none')}
+                >
+                  Weiterleitung aufheben
+                </button>
+              </div>
+            </div>
+          ) : useDOMEditor ? (
             // DOM Editor View
             <div className="page-editor-canvas" title={devTitle('DOM-Layout-Editor')}>
               <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
@@ -2749,13 +2796,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="seiten-url" className="input-field-small" aria-label="URL-Slug" />
                         <label className="field-label-xs">Weiterleitung</label>
                         <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
-                          <option value="none">Keine</option>
-                          <option value="404">404</option>
-                          <option value="503">503</option>
-                          <option value="external">Externe URL</option>
+                          <option value="none">Keine (normale Seite)</option>
+                          <option value="permanent">Permanente Weiterleitung</option>
+                          <option value="temporary">Temporäre Weiterleitung</option>
                         </select>
-                        {redirectType === 'external' && (
-                          <input type="url" value={redirectUrl} onChange={e => setRedirectUrl(e.target.value)} placeholder="https://example.com" className="input-field-small" aria-label="Ziel-URL" />
+                        {redirectType !== 'none' && (
+                          <p className="blog-channel-editor__hint">Ziel-URL und Target werden weiter unten im Hauptbereich eingestellt — Blöcke können für Weiterleitungs-Seiten nicht angelegt werden.</p>
                         )}
                         <label className="page-editor-outline-toggle">
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />

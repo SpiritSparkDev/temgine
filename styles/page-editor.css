@@ -2295,3 +2295,31 @@
   min-height: 500px;
 }
 
+/* ── Weiterleitungs-Konfiguration (ersetzt den Block-Editor-Canvas) ───────── */
+.redirect-config-panel {
+  max-width: 480px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.redirect-config-panel h3 {
+  margin: 0 0 8px;
+}
+.redirect-config-panel .field-label-xs {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.redirect-config-panel .input-field-small {
+  width: 100%;
+  box-sizing: border-box;
+}
+.redirect-config-hint {
+  margin: 8px 0 16px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+

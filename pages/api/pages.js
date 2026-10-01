@@ -4,6 +4,7 @@ import { sanitizeRecursive } from '../../lib/htmlSanitize'
 import { validate, rules } from '../../lib/validate'
 import { requireAuth, PERMISSIONS } from '../../lib/auth'
 import { findSiblingSlugCollisions } from '../../lib/pageTreeRepair'
+import { extractRedirectForSave } from '../../lib/pageRedirect'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -189,7 +190,13 @@ export default async function handler(req, res) {
         for (const p of body) {
           // sanitize incoming page content (blocks.props, data)
           try {
-            if (p && p.data) p.data = sanitizeRecursive(p.data)
+            if (p && p.data) {
+              // redirect.url ist keine Rich-Text-HTML, sondern eine URL — sanitizeRecursive
+              // würde deren "&" (Query-String) zu "&amp;" escapen, siehe lib/pageRedirect.js.
+              const { data: dataWithoutRedirect, redirect } = extractRedirectForSave(p.data)
+              p.data = sanitizeRecursive(dataWithoutRedirect)
+              if (redirect) p.data.redirect = redirect
+            }
             if (p && p.blocks && Array.isArray(p.blocks)) {
               p.blocks = p.blocks.map(sanitizeBlockNode)
             }
@@ -297,7 +304,11 @@ export default async function handler(req, res) {
       const p = body || {}
       // sanitize single payload
       try {
-        if (p && p.data) p.data = sanitizeRecursive(p.data)
+        if (p && p.data) {
+          const { data: dataWithoutRedirect, redirect } = extractRedirectForSave(p.data)
+          p.data = sanitizeRecursive(dataWithoutRedirect)
+          if (redirect) p.data.redirect = redirect
+        }
         if (p && p.blocks && Array.isArray(p.blocks)) {
           p.blocks = p.blocks.map(sanitizeBlockNode)
         }
