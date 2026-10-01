@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  FolderInput,
   Globe,
   Grid,
   GripVertical,
@@ -44,6 +45,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   const [iframeLoaded, setIframeLoaded] = useState({});
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [targetPicker, setTargetPicker] = useState(null); // { mode: 'move'|'copy' }
   const [draggedId, setDraggedId] = useState(null);
   const [dropIndicator, setDropIndicator] = useState(null); // { id, position: 'before'|'after'|'inside' }
   const [addMenuOpenId, setAddMenuOpenId] = useState(null);
@@ -152,6 +154,57 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       .catch(err => console.error('Footer laden fehlgeschlagen:', err));
   }, []);
 
+  // Shared tree helpers — previously duplicated inline per handler (handleAdd,
+  // handleAddSibling, handleDuplicate each had their own copy of makeSlug/
+  // getAllSlugs). Pulled out once so bulk move/copy can reuse the exact same
+  // slug-collision logic across every selected page and all of its children.
+  const slugify = (text, fallback = 'seite') => {
+    const result = String(text || fallback)
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return result || fallback;
+  };
+
+  const getAllSlugs = (nodes) => {
+    const slugs = new Set();
+    const collect = (items) => {
+      for (const n of items || []) {
+        if (n.slug) slugs.add(n.slug);
+        collect(n.children || []);
+      }
+    };
+    collect(nodes);
+    return slugs;
+  };
+
+  const findNodeById = (nodes, id) => {
+    for (const n of nodes || []) {
+      if (n.id === id) return n;
+      const found = findNodeById(n.children || [], id);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  // Returns `base` unchanged if free, otherwise `${base}-2`, `${base}-3`, ...
+  // — mutates `usedSlugs` so a caller generating several slugs in one batch
+  // (bulk duplicate, or duplicate's own recursive children) never reuses one
+  // it just picked two steps earlier.
+  const uniqueSlugFrom = (base, usedSlugs) => {
+    let slug = base;
+    if (usedSlugs.has(slug)) {
+      let counter = 2;
+      while (usedSlugs.has(`${base}-${counter}`)) counter++;
+      slug = `${base}-${counter}`;
+    }
+    usedSlugs.add(slug);
+    return slug;
+  };
+
   const filteredTree = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return tree;
@@ -172,36 +225,9 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
   async function handleAdd(parentId = null, redirectType = null) {
     const id = Math.random().toString(36).substr(2, 9);
-    const makeSlug = (text) => {
-      const result = String(text || 'neue-seite')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      return result || 'neue-seite';
-    };
-    const getAllSlugs = (nodes) => {
-      const slugs = new Set();
-      const collect = (items) => {
-        for (const n of items || []) {
-          if (n.slug) slugs.add(n.slug);
-          collect(n.children || []);
-        }
-      };
-      collect(nodes);
-      return slugs;
-    };
     const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
     const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
-    let slug = makeSlug(title);
-    const existingSlugs = getAllSlugs(tree);
-    if (existingSlugs.has(slug)) {
-      let counter = 2;
-      while (existingSlugs.has(`${slug}-${counter}`)) counter++;
-      slug = `${slug}-${counter}`;
-    }
+    const slug = uniqueSlugFrom(slugify(title, 'neue-seite'), getAllSlugs(tree));
     const newPage = {
       id,
       title,
@@ -247,35 +273,26 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   }
 
   async function handleDuplicate(nodeId) {
-    const findNode = (nodes) => {
-      for (const n of nodes) {
-        if (n.id === nodeId) return n;
-        const found = findNode(n.children || []);
-        if (found) return found;
-      }
-    };
-    const source = findNode(tree);
+    const source = findNodeById(tree, nodeId);
     if (!source) return;
 
-    const makeSlug = (text) => {
-      const result = String(text || 'seite')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      return result || 'seite';
+    // Shared across the whole cloned subtree so a page named e.g. "x-kopie"
+    // (or duplicating twice) can't produce two siblings with the same slug —
+    // each generated slug is checked against every slug used so far, Instead
+    // of just the source page's own slug in isolation.
+    const usedSlugs = getAllSlugs(tree);
+    const deepClone = (node) => {
+      const base = JSON.parse(JSON.stringify(node));
+      const slug = uniqueSlugFrom(slugify(base.slug + '-kopie'), usedSlugs);
+      return {
+        ...base,
+        id: Math.random().toString(36).substr(2, 9),
+        slug,
+        title: base.title + ' (Kopie)',
+        status: 'DRAFT',
+        children: (base.children || []).map(deepClone),
+      };
     };
-
-    const deepClone = (node) => ({
-      ...JSON.parse(JSON.stringify(node)),
-      id: Math.random().toString(36).substr(2, 9),
-      slug: makeSlug(node.slug + '-kopie'),
-      title: node.title + ' (Kopie)',
-      status: 'DRAFT',
-      children: (node.children || []).map(deepClone),
-    });
 
     const duplicate = deepClone(source);
 
@@ -299,36 +316,9 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
 
   async function handleAddSibling(nodeId, redirectType = null) {
     const id = Math.random().toString(36).substr(2, 9);
-    const makeSlug = (text) => {
-      const result = String(text || 'neue-seite')
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-+/g, '-')
-        .replace(/^-+|-+$/g, '');
-      return result || 'neue-seite';
-    };
-    const getAllSlugs = (nodes) => {
-      const slugs = new Set();
-      const collect = (items) => {
-        for (const n of items || []) {
-          if (n.slug) slugs.add(n.slug);
-          collect(n.children || []);
-        }
-      };
-      collect(nodes);
-      return slugs;
-    };
     const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
     const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
-    let slug = makeSlug(title);
-    const existingSlugs = getAllSlugs(tree);
-    if (existingSlugs.has(slug)) {
-      let counter = 2;
-      while (existingSlugs.has(`${slug}-${counter}`)) counter++;
-      slug = `${slug}-${counter}`;
-    }
+    const slug = uniqueSlugFrom(slugify(title, 'neue-seite'), getAllSlugs(tree));
     const newPage = {
       id,
       title,
@@ -745,6 +735,134 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       onUpdate && onUpdate(updated);
       setSelectedIds(new Set());
       setToast({ message: `${selectedIds.size} Seite(n) gelöscht.`, type: 'success' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkMove(targetId) {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      if (targetId && selectedIds.has(targetId)) {
+        setToast({ message: 'Ungültiges Ziel: eine ausgewählte Seite kann nicht Ziel sein.', type: 'error' });
+        return;
+      }
+
+      const orderedSelected = [];
+      const collectSelected = (nodes) => {
+        for (const n of nodes) {
+          if (selectedIds.has(n.id)) orderedSelected.push(n.id);
+          collectSelected(n.children || []);
+        }
+      };
+      collectSelected(tree);
+
+      let working = tree;
+      const movedNodes = [];
+      for (const id of orderedSelected) {
+        const { tree: next, node } = removeNodeById(working, id);
+        if (node) {
+          working = next;
+          movedNodes.push(node);
+        }
+      }
+
+      const insertInto = (nodes) => {
+        if (targetId === null) return [...nodes, ...movedNodes];
+        return nodes.map(n => n.id === targetId
+          ? { ...n, children: [...(n.children || []), ...movedNodes] }
+          : { ...n, children: insertInto(n.children || []) });
+      };
+      const updated = insertInto(working);
+
+      const countIds = (nodes, id) => {
+        let count = 0;
+        for (const n of nodes || []) {
+          if (n.id === id) count++;
+          count += countIds(n.children || [], id);
+        }
+        return count;
+      };
+      for (const id of orderedSelected) {
+        if (countIds(updated, id) !== 1) {
+          setToast({ message: 'Verschieben fehlgeschlagen (interner Fehler). Bitte Seite neu laden und erneut versuchen.', type: 'error' });
+          return;
+        }
+      }
+
+      const findChildrenOf = (nodes, id) => {
+        if (id === null) return nodes;
+        for (const n of nodes) {
+          if (n.id === id) return n.children || [];
+          const found = findChildrenOf(n.children || [], id);
+          if (found) return found;
+        }
+        return null;
+      };
+      const targetChildren = findChildrenOf(updated, targetId);
+      if (targetChildren) {
+        const seen = new Map();
+        for (const c of targetChildren) seen.set(c.slug, (seen.get(c.slug) || 0) + 1);
+        const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([slug]) => slug);
+        if (dupes.length > 0) {
+          setToast({ message: `Verschieben abgebrochen: Slug-Konflikt am Zielort (${dupes.join(', ')}). Bitte zuerst Slug der betroffenen Seite(n) ändern.`, type: 'error' });
+          return;
+        }
+      }
+
+      setTree(updated);
+      await onUpdate?.(updated);
+      setSelectedIds(new Set());
+      setTargetPicker(null);
+      setToast({ message: `${orderedSelected.length} Seite(n) verschoben.`, type: 'success' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleBulkCopy(targetId) {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const orderedSelected = [];
+      const collectSelected = (nodes) => {
+        for (const n of nodes) {
+          if (selectedIds.has(n.id)) orderedSelected.push(n);
+          collectSelected(n.children || []);
+        }
+      };
+      collectSelected(tree);
+
+      const usedSlugs = getAllSlugs(tree);
+      const deepCloneUnique = (node) => {
+        const base = JSON.parse(JSON.stringify(node));
+        const slug = uniqueSlugFrom(slugify(base.slug + '-kopie'), usedSlugs);
+        return {
+          ...base,
+          id: Math.random().toString(36).substr(2, 9),
+          slug,
+          title: base.title + ' (Kopie)',
+          status: 'DRAFT',
+          children: (base.children || []).map(deepCloneUnique),
+        };
+      };
+      const clones = orderedSelected.map(deepCloneUnique);
+
+      const insertInto = (nodes) => {
+        if (targetId === null) return [...nodes, ...clones];
+        return nodes.map(n => n.id === targetId
+          ? { ...n, children: [...(n.children || []), ...clones] }
+          : { ...n, children: insertInto(n.children || []) });
+      };
+      const updated = insertInto(tree);
+
+      setTree(updated);
+      await onUpdate?.(updated);
+      if (onRefreshPages) await onRefreshPages();
+      setSelectedIds(new Set());
+      setTargetPicker(null);
+      setToast({ message: `${clones.length} Seite(n) kopiert.`, type: 'success' });
     } finally {
       setBulkBusy(false);
     }
@@ -1194,6 +1312,16 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
         />
       )}
 
+      {targetPicker && (
+        <PageTargetPickerModal
+          mode={targetPicker.mode}
+          tree={tree}
+          selectedIds={selectedIds}
+          onCancel={() => setTargetPicker(null)}
+          onConfirm={(targetId) => targetPicker.mode === 'move' ? handleBulkMove(targetId) : handleBulkCopy(targetId)}
+        />
+      )}
+
       <div className="page-tree-shell">
         <div className="page-tree-toolbar">
           <label className="page-tree-search">
@@ -1323,6 +1451,22 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
               ))}
             </select>
             <button
+              className="bulk-btn"
+              disabled={bulkBusy}
+              onClick={() => setTargetPicker({ mode: 'move' })}
+              title="Alle ausgewählten Seiten verschieben"
+            >
+              <FolderInput size={14} /> Verschieben
+            </button>
+            <button
+              className="bulk-btn"
+              disabled={bulkBusy}
+              onClick={() => setTargetPicker({ mode: 'copy' })}
+              title="Alle ausgewählten Seiten kopieren"
+            >
+              <Copy size={14} /> Kopieren
+            </button>
+            <button
               className="bulk-btn bulk-btn-danger"
               disabled={bulkBusy}
               onClick={handleBulkDelete}
@@ -1355,5 +1499,73 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
         </div>
       </div>
     </div>
+  );
+}
+
+function PageTargetPickerModal({ mode, tree, selectedIds, onCancel, onConfirm }) {
+  const [targetId, setTargetId] = useState('__root__');
+
+  const disabledIds = useMemo(() => {
+    if (mode !== 'move') return new Set();
+    const s = new Set();
+    const markSubtree = (node) => {
+      s.add(node.id);
+      (node.children || []).forEach(markSubtree);
+    };
+    const walk = (nodes) => nodes.forEach(n => {
+      if (selectedIds.has(n.id)) markSubtree(n);
+      else walk(n.children || []);
+    });
+    walk(tree);
+    return s;
+  }, [mode, tree, selectedIds]);
+
+  const renderRows = (nodes, depth) => nodes.flatMap(n => {
+    const disabled = disabledIds.has(n.id);
+    const row = (
+      <div
+        key={n.id}
+        className={`page-picker-item${targetId === n.id ? ' selected' : ''}${disabled ? ' disabled' : ''}`}
+        style={{ paddingLeft: 14 + depth * 18 }}
+        onClick={() => { if (!disabled) setTargetId(n.id); }}
+      >
+        <span className="page-picker-item-title">{n.title}</span>
+        <span className="page-picker-item-slug">/{n.slug}</span>
+      </div>
+    );
+    return [row, ...renderRows(n.children || [], depth + 1)];
+  });
+
+  return createPortal(
+    <div className="file-modal-overlay" onClick={onCancel}>
+      <div className="file-modal page-picker-modal" onClick={e => e.stopPropagation()}>
+        <div className="file-modal-header">
+          <h3 className="file-modal-title">
+            {mode === 'move' ? `Verschieben (${selectedIds.size})` : `Kopieren (${selectedIds.size})`}
+          </h3>
+          <button className="file-modal-close-btn" onClick={onCancel}>×</button>
+        </div>
+        <div className="page-picker-list">
+          <div
+            className={`page-picker-item${targetId === '__root__' ? ' selected' : ''}`}
+            onClick={() => setTargetId('__root__')}
+          >
+            <span className="page-picker-item-title">— Oberste Ebene —</span>
+          </div>
+          {renderRows(tree, 0)}
+        </div>
+        <div className="file-modal-footer">
+          <button className="file-modal-cancel-btn" onClick={onCancel}>Abbrechen</button>
+          <button
+            className="btn-modern"
+            disabled={!targetId}
+            onClick={() => onConfirm(targetId === '__root__' ? null : targetId)}
+          >
+            {mode === 'move' ? 'Verschieben' : 'Kopieren'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

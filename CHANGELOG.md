@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.25.0] - 2026-10-01
+
+### Added
+- Seitenübersicht: Mehrere Seiten gleichzeitig verschieben oder kopieren. Über die Mehrfachauswahl (Checkboxen) lassen sich beliebig viele Seiten per Sammelaktionsleiste auf einmal an eine neue Stelle im Seitenbaum verschieben oder dorthin kopieren — inklusive aller Unterseiten. Ein Dialog zur Zielauswahl verhindert dabei ungültige Ziele (eine Seite kann nicht in sich selbst oder eine eigene Unterseite verschoben werden) und bricht bei Slug-Konflikten am Zielort kontrolliert ab, statt die Seiten zu verlieren. Kopien erhalten automatisch eindeutige Slugs (`-kopie`, bei Bedarf durchnummeriert), den Titelzusatz „(Kopie)" und den Status „Entwurf".
+
+---
+
 ## [0.24.1] - 2026-10-01
 
 ### Fixed
