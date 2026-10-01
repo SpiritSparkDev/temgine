@@ -66,6 +66,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportScope, setExportScope] = useState('full')
   const [exportingZip, setExportingZip] = useState(false)
   const [exportingCss, setExportingCss] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -123,11 +124,16 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   }
 
   // Export project transfer ZIP
+  const scopeLabels = {
+    full: 'Vollständig',
+    'db-templates': 'Datenbank + Templates',
+    db: 'Nur Datenbank',
+  }
   const handleExport = async () => {
     setExporting(true)
-    setProgressModal({ title: 'Backup wird erstellt', subtitle: 'Projekttransfer-ZIP', percent: null, status: 'running' })
+    setProgressModal({ title: 'Backup wird erstellt', subtitle: `Projekttransfer-ZIP · ${scopeLabels[exportScope]}`, percent: null, status: 'running' })
     try {
-      const { blob, headers } = await fetchWithProgress('/api/admin/export?format=transfer-zip', {
+      const { blob, headers } = await fetchWithProgress(`/api/admin/export?format=transfer-zip&scope=${exportScope}`, {
         onProgress: (percent) => setProgressModal(m => m && { ...m, percent })
       })
       const fileSize = blob.size
@@ -289,7 +295,10 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         fontsConfig: data.fontsConfig ? 1 : 0
       }
 
-      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'} - Werden importiert:\n
+      const scopeLabel = { full: 'Vollständig', 'db-templates': 'Datenbank + Templates', db: 'Nur Datenbank' }[data.metadata?.scope] || null
+      const filesIncluded = Array.isArray(data.metadata?.filesIncluded) ? data.metadata.filesIncluded : null
+
+      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'}${scopeLabel ? ` - Umfang dieses Backups: ${scopeLabel}` : ''} - Werden importiert:\n
 • ${itemCounts.templates} Templates
 • ${itemCounts.snippets} Snippets
 • ${itemCounts.pages} Seiten
@@ -301,7 +310,11 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 • CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
 • Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}
 
-${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!' : ''}`
+${restoreStrategy === 'replace' ? (
+  filesIncluded
+    ? `⚠️ WARNUNG: Bestehende Daten werden für die in diesem Backup enthaltenen Kategorien gelöscht und ersetzt (siehe Liste oben). Kategorien, die in diesem Backup fehlen (z. B. Uploads bei einem reinen Datenbank-Backup), bleiben unangetastet.`
+    : `⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!`
+) : ''}`
 
       onConfirm({
         title: 'Projekttransfer importieren?',
@@ -910,8 +923,51 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         <h3><Download className="backup-section-icon" /> Projekttransfer</h3>
         <div className="backup-info">
           <Info size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Enthält Inhalte, Konfigurationen und Medien-Assets.
+          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Wähle den Umfang:
         </div>
+
+        <div className="strategy-selector">
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-full"
+              name="exportScope"
+              value="full"
+              checked={exportScope === 'full'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-full">
+              <strong>Vollständig</strong> - Datenbank, Templates, Navigationen, Footer, CSS, Uploads & Schriftarten
+            </label>
+          </div>
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-db-templates"
+              name="exportScope"
+              value="db-templates"
+              checked={exportScope === 'db-templates'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-db-templates">
+              <strong>Datenbank + Templates</strong> - zusätzlich Navigationen, Footer, Maintenance-Seiten & CSS, ohne Uploads
+            </label>
+          </div>
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-db"
+              name="exportScope"
+              value="db"
+              checked={exportScope === 'db'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-db">
+              <strong>Nur Datenbank</strong> - Seiten, Snippets & Globale Variablen, ohne Templates, Uploads & Assets
+            </label>
+          </div>
+        </div>
+
         <div className="backup-buttons">
           <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip}>
             {exporting ? (
