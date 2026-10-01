@@ -97,6 +97,19 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
         <button onClick={() => { setAddMenuOpenId(null); handleDuplicate(node.id); }}>
           <Copy size={14} /> Duplizieren
         </button>
+        <div className="page-add-menu-sep" />
+        <button onClick={() => { setAddMenuOpenId(null); handleAdd(node.id, 'permanent'); }}>
+          <Plus size={14} /> Unterseite: Permanente Weiterleitung
+        </button>
+        <button onClick={() => { setAddMenuOpenId(null); handleAdd(node.id, 'temporary'); }}>
+          <Plus size={14} /> Unterseite: Temporäre Weiterleitung
+        </button>
+        <button onClick={() => { setAddMenuOpenId(null); handleAddSibling(node.id, 'permanent'); }}>
+          <Users size={14} /> Geschwisterseite: Permanente Weiterleitung
+        </button>
+        <button onClick={() => { setAddMenuOpenId(null); handleAddSibling(node.id, 'temporary'); }}>
+          <Users size={14} /> Geschwisterseite: Temporäre Weiterleitung
+        </button>
       </div>,
       document.body
     );
@@ -284,7 +297,7 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     setToast({ message: `"${source.title}" dupliziert.`, type: 'success' });
   }
 
-  async function handleAddSibling(nodeId) {
+  async function handleAddSibling(nodeId, redirectType = null) {
     const id = Math.random().toString(36).substr(2, 9);
     const makeSlug = (text) => {
       const result = String(text || 'neue-seite')
@@ -307,7 +320,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       collect(nodes);
       return slugs;
     };
-    const title = newTitle || 'Neue Seite';
+    const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
+    const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
     let slug = makeSlug(title);
     const existingSlugs = getAllSlugs(tree);
     if (existingSlugs.has(slug)) {
@@ -315,7 +329,18 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       while (existingSlugs.has(`${slug}-${counter}`)) counter++;
       slug = `${slug}-${counter}`;
     }
-    const newPage = { id, title, slug, children: [], blocks: [], status: 'DRAFT', data: { ...(newNavigation ? { pageNav: newNavigation } : {}) } };
+    const newPage = {
+      id,
+      title,
+      slug,
+      children: [],
+      blocks: [],
+      status: 'DRAFT',
+      data: {
+        ...(newNavigation ? { pageNav: newNavigation } : {}),
+        ...(isRedirect ? { redirect: { type: redirectType, url: '', target: '_self' } } : {}),
+      },
+    };
 
     // Insert sibling directly after nodeId at the same level
     const insertAfter = (nodes) => {

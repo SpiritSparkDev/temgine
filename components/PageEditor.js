@@ -2535,10 +2535,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 </select>
                 {redirectTarget === '_blank' && (
                   <p className="redirect-config-hint">
-                    Hinweis: "Neuer Tab" kann nicht als echte HTTP-Weiterleitung umgesetzt werden — diese Seite
-                    bleibt serverseitig mit Status 200 erreichbar und öffnet das Ziel per JavaScript in einem
-                    neuen Tab. Für Suchmaschinen/Crawler zählt das nicht als Weiterleitung; bei "Gleicher Tab"
-                    ist es eine echte HTTP-Weiterleitung (301/302).
+                    Hinweis: "Neuer Tab" kann keine automatische HTTP-Weiterleitung sein (das lässt sich für
+                    einen neuen Tab nicht per HTTP-Header auslösen). Diese Seite bleibt daher mit Status 200
+                    erreichbar und zeigt einen klickbaren Link zur Ziel-URL, statt automatisch dorthin zu
+                    springen. Für eine echte, automatische HTTP-Weiterleitung (301/302) "Gleicher Tab" wählen.
                   </p>
                 )}
 

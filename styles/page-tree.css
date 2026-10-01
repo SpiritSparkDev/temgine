@@ -771,6 +771,12 @@
   background: var(--bg-tertiary);
 }
 
+.page-add-menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-color);
+}
+
 /* ---- Verschieben-Cluster: sekundär, dezenter als Haupt-Aktionen ---- */
 .card-btn-group-move,
 .page-tree-move-cluster {

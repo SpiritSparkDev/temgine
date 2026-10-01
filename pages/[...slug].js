@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
-import { getPageRedirect } from '../lib/pageRedirect'
+import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -366,13 +366,14 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       // HTTP-Weiterleitung abgefangen worden (siehe oben) — läuft dieser Code
       // trotzdem noch (z. B. Vorschau eines Entwurfs lokal, der dort nicht
       // geladen wird), greift hier derselbe Fallback. "_blank" kann grundsätzlich
-      // nur hier (clientseitig) behandelt werden, siehe lib/pageRedirect.js.
+      // nicht automatisch weiterleiten (ein neuer Tab lässt sich nicht per
+      // HTTP-Header öffnen) und rendert stattdessen einen normalen, klickbaren
+      // Link zum Ziel — siehe lib/pageRedirect.js.
       const pageRedirect = getPageRedirect(foundPage)
       if (pageRedirect) {
         if (cancelled) return
         if (pageRedirect.target === '_blank') {
-          window.open(pageRedirect.url, '_blank')
-          setHtml(`<div style="padding: 40px; text-align: center;"><p>Weiterleitung geöffnet. Falls sich kein neuer Tab geöffnet hat: <a href="${pageRedirect.url}" target="_blank" rel="noopener noreferrer">hier klicken</a>.</p></div>`)
+          setHtml(buildRedirectLinkHtml(foundPage.title, pageRedirect.url))
         } else {
           window.location.href = pageRedirect.url
           setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')

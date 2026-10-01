@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.24.1] - 2026-10-01
+
+### Fixed
+- Weiterleitungs-Target "Neuer Tab" (`_blank`) öffnete das Ziel automatisch per `window.open` und zeigte dabei eine "Weiterleitung geöffnet..."-Zwischenseite — das ließ sich nicht abstellen und wirkte wie eine fehlgeschlagene Weiterleitung. Zeigt jetzt stattdessen einen normalen, klickbaren Link (`<a href>`) zur Ziel-URL; es wird nichts mehr automatisch geöffnet. Target "Gleicher Tab" (`_self`) bleibt unverändert eine echte automatische HTTP-Weiterleitung (301/302).
+- Die Schnellerstellung für Weiterleitungs-Seiten ("Permanente"/"Temporäre Weiterleitung") gab es bisher nur im Haupt-"Seite hinzufügen"-Button der Seitenübersicht (nur Top-Level-Seiten). Verschachtelte Weiterleitungen (über "Unterseite hinzufügen"/"Geschwisterseite hinzufügen" an einer bestehenden Seite) mussten danach manuell in der Sidebar auf Weiterleitung umgestellt werden. Beide Optionen stehen jetzt auch im Hinzufügen-Menü jeder einzelnen Seite zur Verfügung.
+
+---
+
 ## [0.24.0] - 2026-10-01
 
 ### Added

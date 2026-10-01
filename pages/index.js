@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
-import { getPageRedirect } from '../lib/pageRedirect'
+import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -182,13 +182,13 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 
         // target "_self" ist bereits serverseitig in getServerSideProps als echte
         // HTTP-Weiterleitung abgefangen worden — dieser Fallback greift nur, wenn
-        // das nicht der Fall war (z. B. unveröffentlichte Startseite), oder für
-        // "_blank", das grundsätzlich nur clientseitig geht (siehe lib/pageRedirect.js).
+        // das nicht der Fall war (z. B. unveröffentlichte Startseite). "_blank"
+        // kann grundsätzlich nicht automatisch weiterleiten und rendert
+        // stattdessen einen normalen, klickbaren Link (lib/pageRedirect.js).
         const homeRedirect = getPageRedirect(homePage)
         if (homeRedirect) {
           if (homeRedirect.target === '_blank') {
-            window.open(homeRedirect.url, '_blank')
-            setHtml(`<div style="padding: 40px; text-align: center;"><p>Weiterleitung geöffnet. Falls sich kein neuer Tab geöffnet hat: <a href="${homeRedirect.url}" target="_blank" rel="noopener noreferrer">hier klicken</a>.</p></div>`)
+            setHtml(buildRedirectLinkHtml(homePage.title, homeRedirect.url))
           } else {
             window.location.href = homeRedirect.url
             setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
