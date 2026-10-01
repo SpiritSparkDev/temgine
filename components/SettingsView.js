@@ -405,6 +405,18 @@ export default function SettingsView({ showToast }) {
             </section>
 
             <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>Wartung &amp; Reparatur</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Findet und behebt Datenintegritätsprobleme im Seitenbaum (z.&nbsp;B. doppelte Slugs oder IDs),
+                die das Speichern mit einer Fehlermeldung wie „Slug(s) mehrfach vergeben" blockieren können —
+                auch dann, wenn der Editor selbst wegen genau dieses Problems nicht mehr speichern kann.
+              </p>
+              <a href="/repair" className="btn-modern" style={{ textDecoration: 'none' }}>
+                Reparatur-Werkzeug öffnen
+              </a>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
               <h3 style={{ marginBottom: '0.5rem' }}>SEO — Standardwerte für die Link-Vorschau</h3>
               <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
                 Greift für jede Seite, die im SEO-Panel kein eigenes Meta-Bild/-Beschreibung hinterlegt hat —

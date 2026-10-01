@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.22.0] - 2026-10-01
+
+### Added
+- Neues Reparatur-Werkzeug unter `/repair` (ADMIN-only, zusätzlich über Einstellungen → „Wartung & Reparatur" verlinkt): scannt den Seitenbaum gezielt auf echte Slug-Kollisionen zwischen Geschwister-Seiten und auf doppelte Seiten-ids und behebt sie einzeln direkt in der Datenbank, ohne dass dafür — anders als beim normalen Speichern über den Editor — der komplette Seitenbaum fehlerfrei sein muss. Hintergrund: Die in 0.18.2/0.18.3 eingeführte Speicher-Validierung prüft Slugs global über den gesamten Baum, blockiert dadurch aber auch bereits länger bestehende Datenbestände, bei denen keine Migration lief. Das neue Werkzeug unterscheidet außerdem zwischen echten Kollisionen (gleicher Slug unter derselben übergeordneten Seite — eine der Seiten ist dadurch unerreichbar) und harmlosen Namensgleichheiten unter unterschiedlichen Elternseiten, die keine echte URL-Kollision darstellen und nicht gemeldet werden. Alle Reparaturen werden im Audit-Log protokolliert (`REPAIR_FIX_SLUG`/`REPAIR_FIX_ID`).
+
+---
+
 ## [0.21.0] - 2026-10-01
 
 ### Added
