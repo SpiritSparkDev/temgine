@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.25.2] - 2026-10-02
+
+### Fixed
+- Der Zielauswahl-Dialog beim Sammel-Verschieben/-Kopieren mehrerer Seiten (`PageTargetPickerModal`) wurde per `createPortal` direkt in `document.body` gerendert, also außerhalb des `.admin-scope`-Wrappers, der sämtliche Theme-Variablen (`--bg-secondary`, `--text-primary`, `--border-color`, `--accent-primary` usw.) definiert. Dadurch blieben Dialogbox, Hintergrundüberlagerung, Rahmen und Textfarbe unstyled/unsichtbar — sichtbar waren nur noch der native Scrollbar der Zielliste und der mit festen Hex-Farben gestylte "Kopieren/Verschieben"-Button. Der Dialog bekommt jetzt denselben `admin-scope`(+`dark-mode`)-Wrapper wie die übrigen Portal-Dialoge in `PageEditor.js`, wodurch die Theme-Variablen wieder greifen.
+
+---
+
 ## [0.25.1] - 2026-10-01
 
 ### Fixed

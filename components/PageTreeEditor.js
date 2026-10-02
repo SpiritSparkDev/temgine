@@ -1536,33 +1536,37 @@ function PageTargetPickerModal({ mode, tree, selectedIds, onCancel, onConfirm })
     return [row, ...renderRows(n.children || [], depth + 1)];
   });
 
+  const isDarkMode = typeof document !== 'undefined' && !!document.querySelector('.admin-scope')?.classList.contains('dark-mode');
+
   return createPortal(
-    <div className="file-modal-overlay" onClick={onCancel}>
-      <div className="file-modal page-picker-modal" onClick={e => e.stopPropagation()}>
-        <div className="file-modal-header">
-          <h3 className="file-modal-title">
-            {mode === 'move' ? `Verschieben (${selectedIds.size})` : `Kopieren (${selectedIds.size})`}
-          </h3>
-          <button className="file-modal-close-btn" onClick={onCancel}>×</button>
-        </div>
-        <div className="page-picker-list">
-          <div
-            className={`page-picker-item${targetId === '__root__' ? ' selected' : ''}`}
-            onClick={() => setTargetId('__root__')}
-          >
-            <span className="page-picker-item-title">— Oberste Ebene —</span>
+    <div className={`admin-scope${isDarkMode ? ' dark-mode' : ''}`}>
+      <div className="file-modal-overlay" onClick={onCancel}>
+        <div className="file-modal page-picker-modal" onClick={e => e.stopPropagation()}>
+          <div className="file-modal-header">
+            <h3 className="file-modal-title">
+              {mode === 'move' ? `Verschieben (${selectedIds.size})` : `Kopieren (${selectedIds.size})`}
+            </h3>
+            <button className="file-modal-close-btn" onClick={onCancel}>×</button>
           </div>
-          {renderRows(tree, 0)}
-        </div>
-        <div className="file-modal-footer">
-          <button className="file-modal-cancel-btn" onClick={onCancel}>Abbrechen</button>
-          <button
-            className="btn-modern"
-            disabled={!targetId}
-            onClick={() => onConfirm(targetId === '__root__' ? null : targetId)}
-          >
-            {mode === 'move' ? 'Verschieben' : 'Kopieren'}
-          </button>
+          <div className="page-picker-list">
+            <div
+              className={`page-picker-item${targetId === '__root__' ? ' selected' : ''}`}
+              onClick={() => setTargetId('__root__')}
+            >
+              <span className="page-picker-item-title">— Oberste Ebene —</span>
+            </div>
+            {renderRows(tree, 0)}
+          </div>
+          <div className="file-modal-footer">
+            <button className="file-modal-cancel-btn" onClick={onCancel}>Abbrechen</button>
+            <button
+              className="btn-modern"
+              disabled={!targetId}
+              onClick={() => onConfirm(targetId === '__root__' ? null : targetId)}
+            >
+              {mode === 'move' ? 'Verschieben' : 'Kopieren'}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
