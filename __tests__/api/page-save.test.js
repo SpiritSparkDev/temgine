@@ -160,6 +160,102 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     const secondCall = mockPrisma.page.upsert.mock.calls[1][0];
     expect(secondCall.create.data._order).toBe(1);
   });
+
+  test('400 bei doppeltem Slug zwischen zwei Top-Level-Seiten — kein Upsert', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        { slug: 'about', title: 'Über uns A' },
+        { slug: 'about', title: 'Über uns B' },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'VALIDATION_ERROR',
+      details: { duplicateSlugs: ['about'] },
+    }));
+    expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
+  });
+
+  test('400 bei doppeltem Slug in verschachtelten Kindseiten (gleicher Slug an zwei Stellen im Baum) — kein Upsert', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        {
+          slug: 'kuenstler',
+          title: 'Künstler',
+          children: [
+            { slug: 'lydia', title: 'Lydia', children: [
+              { slug: 'tattoos', title: 'Tattoos', children: [] },
+            ] },
+            { slug: 'lydia', title: 'Lydia (Duplikat)', children: [] },
+          ],
+        },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'VALIDATION_ERROR',
+      details: { duplicateSlugs: ['lydia'] },
+    }));
+    expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
+  });
+
+  test('200 bei gleichem Slug unter ZWEI UNTERSCHIEDLICHEN Elternseiten — keine echte URL-Kollision', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        {
+          slug: 'team-a',
+          title: 'Team A',
+          children: [
+            { slug: 'lydia', title: 'Lydia (Team A)', children: [] },
+          ],
+        },
+        {
+          slug: 'team-b',
+          title: 'Team B',
+          children: [
+            { slug: 'lydia', title: 'Lydia (Team B)', children: [] },
+          ],
+        },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(mockPrisma.page.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  test('400 wenn dieselbe Seiten-id mehrfach im Baum auftaucht (z. B. Kopie statt Verschieben) — kein Upsert', async () => {
+    const req = {
+      method: 'POST',
+      body: [
+        {
+          slug: 'kuenstler',
+          title: 'Künstler',
+          children: [
+            { id: 'ablauf-cuid', slug: 'ablauf', title: 'Ablauf', children: [] },
+            { slug: 'lydia', title: 'Lydia', children: [
+              { id: 'ablauf-cuid', slug: 'ablauf-2', title: 'Ablauf', children: [] },
+            ] },
+          ],
+        },
+      ],
+    };
+    const res = makeRes();
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'VALIDATION_ERROR',
+      details: { duplicateIds: ['ablauf-cuid'] },
+    }));
+    expect(mockPrisma.page.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('GET /api/pages', () => {

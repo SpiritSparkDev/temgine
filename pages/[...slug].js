@@ -1,10 +1,12 @@
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds } from '../lib/templateEngine'
+import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
+import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -21,7 +23,7 @@ const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   return `${value}${assets}`
 }
 
-export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
+export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '', seoMeta = null }) {
   const router = useRouter()
   const { query } = router
   const { data: session, status: sessionStatus } = useSession()
@@ -323,26 +325,13 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       let foundPage = findPageByPath(pages, segments)
       if (!foundPage && segments.length === 0) foundPage = pages.find(p => p.isHomepage === true)
       if (!foundPage) {
-        const find404Page = (nodes) => {
-          for (const node of nodes) {
-            if (node.redirectType === '404') return node
-            if (node.children && node.children.length > 0) {
-              const found = find404Page(node.children)
-              if (found) return found
-            }
-          }
-          return null
-        }
-        foundPage = find404Page(pages)
-        if (!foundPage) {
-          const maintenance404Html = await loadMaintenance404Html()
-          const cssLinks = await loadActiveCssLinks()
-          if (cancelled) return
-          setPage({ title: '404', data: {} })
-          setHtml(injectCssLinks(maintenance404Html, cssLinks))
-          setLoading(false)
-          return
-        }
+        const maintenance404Html = await loadMaintenance404Html()
+        const cssLinks = await loadActiveCssLinks()
+        if (cancelled) return
+        setPage({ title: '404', data: {} })
+        setHtml(injectCssLinks(maintenance404Html, cssLinks))
+        setLoading(false)
+        return
       }
 
       if (cancelled) return
@@ -373,10 +362,22 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       }
       // ────────────────────────────────────────────────────────────────────
 
-      if (foundPage.redirectType === 'external' && foundPage.redirectUrl) {
+      // target "_self" ist bereits serverseitig in getServerSideProps als echte
+      // HTTP-Weiterleitung abgefangen worden (siehe oben) — läuft dieser Code
+      // trotzdem noch (z. B. Vorschau eines Entwurfs lokal, der dort nicht
+      // geladen wird), greift hier derselbe Fallback. "_blank" kann grundsätzlich
+      // nicht automatisch weiterleiten (ein neuer Tab lässt sich nicht per
+      // HTTP-Header öffnen) und rendert stattdessen einen normalen, klickbaren
+      // Link zum Ziel — siehe lib/pageRedirect.js.
+      const pageRedirect = getPageRedirect(foundPage)
+      if (pageRedirect) {
         if (cancelled) return
-        window.location.href = foundPage.redirectUrl
-        setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        if (pageRedirect.target === '_blank') {
+          setHtml(buildRedirectLinkHtml(foundPage.title, pageRedirect.url))
+        } else {
+          window.location.href = pageRedirect.url
+          setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        }
         setLoading(false)
         return
       }
@@ -430,6 +431,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
                 });
             const nestedPages = buildNestedPages(pages);
             const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
+            const customAnchors = Array.isArray(foundPage?.data?.customAnchors) ? foundPage.data.customAnchors : [];
             // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
             // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
             // Suche über den rohen (ungefilterten) Baum nach dem Pfad, nicht nach
@@ -439,7 +441,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             // über den die Seite ohnehin gerade gefunden wurde.
             const rawCurrentMatch = findRawPageNodeByPath(pages, currentPath);
             const childPages = rawCurrentMatch ? buildNestedPages(rawCurrentMatch.node.children || [], rawCurrentMatch.parentPath) : [];
-            const navData = { pages: nestedPages, anchors, childPages };
+            const navData = { pages: nestedPages, anchors, customAnchors, childPages };
             for (const nav of activeNavs) {
               const key = String(nav.type).toLowerCase();
               navigations[key] = { code: nav.code, data: navData };
@@ -519,7 +521,21 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars)
+      const folderContents = {};
+      try {
+        const folderPaths = collectFolderBlockPaths(foundPage.blocks, templateCodes);
+        await Promise.all(folderPaths.map(async (folderPath) => {
+          const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`);
+          if (res.ok) {
+            const data = await res.json();
+            folderContents[folderPath] = data.files || [];
+          }
+        }));
+      } catch (e) {
+        console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
+      }
+
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents)
       if (cancelled) return
       setHtml(html)
       setLoading(false)
@@ -655,14 +671,27 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   // React would reset innerHTML and wipe the hydrated DOM.
   const gatedHtml = useMemo(() => stripBlockedIframeSrcs(html, getConsent()), [html])
 
-  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
-  if (accessDenied) return (
-    <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
-      <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Kein Zugriff</h1>
-      <p style={{ color: '#6b7280' }}>Du hast keine Berechtigung, diese Seite zu sehen.</p>
-    </div>
+  if (loading) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+    </>
   )
-  if (!page) return <div style={{ padding: 20 }}>Seite nicht gefunden</div>
+  if (accessDenied) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Kein Zugriff</h1>
+        <p style={{ color: '#6b7280' }}>Du hast keine Berechtigung, diese Seite zu sehen.</p>
+      </div>
+    </>
+  )
+  if (!page) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div style={{ padding: 20 }}>Seite nicht gefunden</div>
+    </>
+  )
 
   const wrapperProps = { id: 'page-html-output' };
   if (page?.data?.wrapperId) wrapperProps.id = page.data.wrapperId;
@@ -670,6 +699,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
   return (
     <div>
+      <SeoHead meta={seoMeta} />
       <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
       {showDebug && (
         <div style={{ padding: 12, marginTop: 12, background: '#fff', border: '1px solid #ddd' }}>
@@ -693,6 +723,41 @@ export async function getServerSideProps(context) {
     }
   }
 
+  let seoMeta = null
+  try {
+    const { resolveSeoMetaForRoute, findBlogPostForRoute, buildBlogPostMeta } = await import('../lib/seo')
+    const { getPageRedirect } = await import('../lib/pageRedirect')
+    const { meta, found, settings, baseUrl, page } = await resolveSeoMetaForRoute(context.req, path, slug)
+    seoMeta = meta
+    let resolvedFound = found
+
+    // Weiterleitung auf Ziel-Target "_self" ist eine echte HTTP-Weiterleitung —
+    // muss feuern, bevor überhaupt Blöcke/HTML gerendert werden (auch für
+    // Crawler/curl, die kein JS ausführen). "_blank" kann das nicht (siehe
+    // lib/pageRedirect.js) und wird stattdessen clientseitig behandelt.
+    const redirect = getPageRedirect(page)
+    if (redirect && redirect.target === '_self') {
+      return { redirect: { destination: redirect.url, permanent: redirect.type === 'permanent' } }
+    }
+
+    if (!found && slug.length === 2) {
+      // Route matcht keine Page — evtl. ein Blog-Beitrag (/[channelSlug]/[postSlug]),
+      // die eigene Tabellen statt des Page-Baums nutzen (siehe Blog-Routing weiter unten).
+      const blogMatch = await findBlogPostForRoute(slug[0], slug[1])
+      if (blogMatch) {
+        seoMeta = buildBlogPostMeta({ post: blogMatch.post, routePath: path, baseUrl, settings })
+        resolvedFound = true
+      }
+    }
+
+    // Kein Treffer per Pfad: entweder eine clientseitig per Wartungsseite
+    // dargestellte 404 oder wirklich nichts vorhanden — in beiden Fällen ist
+    // "nicht gefunden" der korrekte HTTP-Status.
+    if (!resolvedFound) context.res.statusCode = 404
+  } catch (_e) {
+    seoMeta = null
+  }
+
   try {
     const { getMaintenancePage } = await import('../lib/maintenanceStore')
     const { renderTemplate } = await import('../lib/templateEngine')
@@ -707,6 +772,7 @@ export async function getServerSideProps(context) {
         initialLoadingScreenHtml: renderTemplate(html || defaultLoadingHtml, { global: globalVars }),
         initialLoadingScreenCss: css || '',
         initialLoadingScreenJs: js || '',
+        seoMeta,
       },
     }
   } catch (_e) {
@@ -715,6 +781,7 @@ export async function getServerSideProps(context) {
         initialLoadingScreenHtml: defaultLoadingHtml,
         initialLoadingScreenCss: '',
         initialLoadingScreenJs: '',
+        seoMeta,
       },
     }
   }

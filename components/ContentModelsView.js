@@ -50,12 +50,13 @@ export default function ContentModelsView({ showToast }) {
     try {
       const res = await fetch('/api/content-types')
       const data = await res.json()
-      if (Array.isArray(data)) setTypes(data)
-      else if (data && typeof data === 'object') setTypes([data])
-      else setTypes([])
+      const list = Array.isArray(data) ? data : (data && typeof data === 'object' ? [data] : [])
+      setTypes(list)
+      return list
     } catch (e) {
       console.error(e)
       _showToast('Fehler beim Laden der Content-Modelle', 'error')
+      return []
     } finally { setLoading(false) }
   }
 
@@ -184,9 +185,12 @@ export default function ContentModelsView({ showToast }) {
         } catch (_) {}
         throw new Error(message)
       }
+      const saved = await res.json()
       _showToast('Content Model gespeichert', 'success')
-      setIsEditing(false)
-      load()
+      const list = await load()
+      setSelectedIndex(list.findIndex((t) => t.id === saved.id))
+      setName(saved.name || '')
+      setSlug(saved.slug || '')
     } catch (e) {
       console.error('Save failed', e)
       _showToast(`Fehler beim Speichern des Modells: ${e.message || 'Unbekannter Fehler'}`, 'error')

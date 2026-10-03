@@ -83,9 +83,12 @@ export default function FooterView({ showToast }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Unbekannter Fehler');
       }
+      const saved = await res.json();
       showToast(`Footer "${editName.trim()}" gespeichert`, 'success');
       loadList();
-      handleCancel();
+      setEditing(saved);
+      setEditName(saved.name);
+      setEditCode(saved.code);
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {

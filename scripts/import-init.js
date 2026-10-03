@@ -118,16 +118,18 @@ async function run() {
       }
     }
 
-    // Pages (flatten tree and upsert by slug)
+    // Pages: only top-level tree roots become their own Page row. Nested
+    // children are stored as embedded JSON on their nearest top-level
+    // ancestor's `children` field, not as separate rows — upserting the
+    // flattened tree (root AND every descendant) used to create duplicate
+    // top-level rows for nodes that were already embedded as children,
+    // duplicating their ids (e.g. a nested blog post ending up both inside
+    // "home"'s children AND as its own top-level "blog" row's children).
     const pagesPath = path.join(root, 'pages.json');
     if (fs.existsSync(pagesPath)) {
       const pages = JSON.parse(fs.readFileSync(pagesPath, 'utf-8')) || [];
-      console.log('Importing pages (flatten):');
-      const flat = [];
-      const walk = (node) => { flat.push(node); if (Array.isArray(node.children)) node.children.forEach(child => walk(child)); };
-      pages.forEach(p => walk(p));
-      console.log('  total pages found in tree:', flat.length);
-      for (const p of flat) {
+      console.log('Importing pages (top-level roots):', pages.length);
+      for (const p of pages) {
         if (!p.slug) { console.log('  skip page (no slug):', p); continue; }
         if (!prisma.page) { console.log('  Prisma model `Page` not available — skip pages import'); break; }
         const up = await prisma.page.upsert({

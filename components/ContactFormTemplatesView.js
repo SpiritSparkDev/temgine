@@ -278,9 +278,12 @@ export default function ContactFormTemplatesView({ showToast }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Unbekannter Fehler');
       }
+      const saved = await res.json();
       showToast(`Kontaktformular "${editName.trim()}" gespeichert`, 'success');
       loadList();
-      handleCancel();
+      setEditing({ name: saved.name });
+      setEditName(saved.name);
+      setEditCode(saved.code);
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {

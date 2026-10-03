@@ -223,6 +223,27 @@ const PRESETS = {
   ],
   PAGE: [
     {
+      label: 'Unterseiten-Liste',
+      description: 'Zeigt alle direkten Unterseiten der aktuellen Seite (inkl. einer Unterebene)',
+      code: `<nav class="page-nav subpages" aria-label="Unterseiten">
+  <ul class="subpages-list">
+    {{#childPages}}
+    <li class="subpages-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="subpages-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="subpages-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/childPages}}
+  </ul>
+  {{^childPages}}
+  <p class="subpages-empty">Keine Unterseiten vorhanden.</p>
+  {{/childPages}}
+</nav>`,
+    },
+    {
       label: 'Anchor Sidebar',
       description: 'Seitliche Anker-Navigation für lange Seiten',
       code: `<nav class="page-nav anchor-sidebar">
@@ -233,6 +254,20 @@ const PRESETS = {
       <a class="anchor-link" href="#{{anchorId}}">{{title}}</a>
     </li>
     {{/anchors}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Anchor Sidebar (freie Ziel-IDs)',
+      description: 'Wie Anchor Sidebar, aber für Ziel-IDs ohne Anchor-ID-Feld am Block (z. B. eigene Template-Felder als id) — kombinierbar mit der normalen Anchor Sidebar auf derselben Seite',
+      code: `<nav class="page-nav anchor-sidebar">
+  <p class="page-nav-heading">Inhalt</p>
+  <ul class="anchor-list">
+    {{#customAnchors}}
+    <li class="anchor-item">
+      <a class="anchor-link" href="#{{anchorId}}">{{title}}</a>
+    </li>
+    {{/customAnchors}}
   </ul>
 </nav>`,
     },
@@ -466,9 +501,13 @@ export default function NavigationView({ showToast }) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Unbekannter Fehler');
       }
+      const saved = await res.json();
       showToast(`Navigation "${editName.trim()}" gespeichert`, 'success');
       loadNavList();
-      handleCancel();
+      setEditing(saved);
+      setEditName(saved.name);
+      setEditCode(saved.code);
+      setShowPresets(false);
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     } finally {
@@ -776,9 +815,11 @@ export default function NavigationView({ showToast }) {
                 <div className="nav-docs-heading">Drei Wege, eine PAGE-Nav einzubinden</div>
                 <ol className="nav-docs-list">
                   <li><strong>Seiten-Navigationsauswahl</strong> — im Seitenbaum einer Seite eine
-                    Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>.</li>
+                    Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>. Nur ein Slot pro
+                    Seite.</li>
                   <li><strong>Navigations-Block</strong> — im Seiten-Editor als eigenen Block einfügen,
-                    auch mehrfach mit unterschiedlichen Navs.</li>
+                    auch mehrfach mit unterschiedlichen Navs. Nutzen, sobald mehr als eine PAGE-Nav auf
+                    derselben Seite gebraucht wird.</li>
                   <li><strong>Direkt im Template-Code</strong> — Platzhalter
                     <code>{`{{{nav:<name>}}}`}</code> per Hand schreiben oder im Template-Editor im
                     Reiter „Navigation" per Klick einfügen.</li>
@@ -786,21 +827,130 @@ export default function NavigationView({ showToast }) {
               </div>
 
               <div className="nav-docs-group">
-                <div className="nav-docs-heading">Platzhalter-Referenz</div>
+                <div className="nav-docs-heading">Platzhalter: Nav einbinden</div>
                 <table className="nav-docs-table">
                   <tbody>
-                    <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation</td></tr>
-                    <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard)</td></tr>
+                    <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation (wird automatisch am Seitenanfang ergänzt, falls nicht referenziert)</td></tr>
+                    <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard-Slot)</td></tr>
                     <tr><td><code>{`{{{nav:<name>}}}`}</code></td><td>eine bestimmte PAGE-Nav namentlich</td></tr>
-                    <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>Mobile-Navigation</td></tr>
-                    <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum</td></tr>
+                    <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>aktive Mobile-Navigation</td></tr>
+                    <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum generiert, kein eigenes Template nötig</td></tr>
                   </tbody>
                 </table>
                 <p className="nav-docs-note">
                   Der Name-Platzhalter wird aus dem Navigationsnamen abgeleitet (Kleinschreibung,
                   Sonderzeichen → „-"). Ergeben zwei Namen denselben Platzhalter, hängt die zweite
-                  Navigation automatisch „-2" an.
+                  Navigation automatisch „-2" an — eigenen Platzhalter beim Bearbeiten einer Navigation
+                  live prüfen.
                 </p>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Variablen: <code>{`{{#pages}}`}</code> / <code>{`{{#children}}`}</code> (MAIN/MOBILE)</div>
+                <p>Schleife über den Seitenbaum. Jedes Element:</p>
+                <table className="nav-docs-table">
+                  <tbody>
+                    <tr><td><code>slug</code></td><td>vollständiger Pfad inkl. Eltern, z. B. <code>ueber-uns/team</code></td></tr>
+                    <tr><td><code>title</code></td><td>Seitentitel</td></tr>
+                    <tr><td><code>hasChildren</code></td><td>nur zum Verzweigen (<code>{`{{#hasChildren}}`}</code>), kein Text</td></tr>
+                    <tr><td><code>children</code></td><td>Unterseiten, gleiche Struktur, rekursiv</td></tr>
+                    <tr><td><code>isCurrent</code></td><td>aktive Seite hervorheben — <strong>nicht</strong> auf Startseite/Static-Export verfügbar</td></tr>
+                    <tr><td><code>data</code></td><td>freies Datenfeld der Seite (z. B. <code>data.navImage</code>) — gleiche Einschränkung wie <code>isCurrent</code></td></tr>
+                  </tbody>
+                </table>
+                <p className="nav-docs-note">
+                  Innerhalb von <code>{`{{#children}}`}</code> zeigen <code>{`{{slug}}`}</code>/<code>{`{{title}}`}</code>
+                  wieder auf die Unterseite, nicht die Elternseite.
+                </p>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Variable: <code>{`{{#childPages}}`}</code> (nur PAGE-Navs)</div>
+                <p>
+                  Direkte Unterseiten <strong>der gerade angezeigten Seite</strong> — serverseitig pro
+                  Aufruf neu berechnet, kein manuelles Pflegen pro Seite. Gleiche Feldstruktur wie
+                  <code> pages</code>/<code>children</code>.
+                </p>
+                <pre className="nav-docs-code"><code>{`{{#childPages}}
+  <a href="/{{slug}}">{{title}}</a>
+{{/childPages}}
+{{^childPages}}
+  <p>Keine Unterseiten.</p>
+{{/childPages}}`}</code></pre>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading"><code>{`{{#anchors}}`}</code> vs. <code>{`{{#customAnchors}}`}</code> (nur PAGE-Navs)</div>
+                <p>Beide: Sprungmarken auf der aktuellen Seite, Felder <code>anchorId</code> (Ziel-<code>id</code>, ohne <code>#</code>) und <code>title</code>.</p>
+                <table className="nav-docs-table">
+                  <tbody>
+                    <tr><td><code>anchors</code></td><td>Seiten-Editor → Einstellungen → „Anker-Navigation" — Dropdown, nur Blöcke mit gesetztem Anchor-ID-Feld, keine Tippfehler möglich</td></tr>
+                    <tr><td><code>customAnchors</code></td><td>„Freie Sprungmarken" — freie Texteingabe für Ziel-IDs aus eigenen Template-Feldern (z. B. eine Kicker-Überschrift, die selbst als <code>id</code> gerendert wird)</td></tr>
+                  </tbody>
+                </table>
+                <pre className="nav-docs-code"><code>{`{{#anchors}}
+  <a href="#{{anchorId}}">{{title}}</a>
+{{/anchors}}`}</code></pre>
+                <p className="nav-docs-note">Beide Listen lassen sich in einer Navigation kombinieren (zwei Schleifen).</p>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Mustache-Kurzreferenz</div>
+                <table className="nav-docs-table">
+                  <tbody>
+                    <tr><td><code>{`{{feld}}`}</code></td><td>Wert, HTML-escaped</td></tr>
+                    <tr><td><code>{`{{{feld}}}`}</code></td><td>Wert roh (kein Escaping — für HTML-Inhalte)</td></tr>
+                    <tr><td><code>{`{{#liste}}…{{/liste}}`}</code></td><td>je Element wiederholen; bei Wahrheitswert: nur rendern wenn <code>true</code></td></tr>
+                    <tr><td><code>{`{{^liste}}…{{/liste}}`}</code></td><td>Gegenteil — nur rendern wenn leer/<code>false</code></td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Best Practices</div>
+                <ul className="nav-docs-list">
+                  <li>Sprechenden Namen wählen — er wird zum Platzhalter (<code>{`{{{nav:<name>}}}`}</code>).</li>
+                  <li>Für eine simple, immer aktuelle Hauptnav <code>{`{{{nav:auto}}}`}</code> nutzen statt eigenes Template zu pflegen.</li>
+                  <li>Leerzustände mit <code>{`{{^liste}}…{{/liste}}`}</code> abfangen (z. B. „Keine Unterseiten vorhanden"), statt einer leeren, unsichtbaren Liste.</li>
+                  <li><code>aria-label</code> auf <code>{`<nav>`}</code> und <code>aria-current="page"</code> bei <code>{`{{#isCurrent}}`}</code> für Barrierefreiheit setzen.</li>
+                  <li><code>isCurrent</code>/<code>data</code> fehlen auf Startseite &amp; Static-Export — nicht als einzige Quelle für essenzielle Logik verwenden.</li>
+                  <li>Mehrere PAGE-Navs auf einer Seite: Navigations-Block statt Seiten-Navigationsauswahl (die ist nur 1× pro Seite verfügbar).</li>
+                  <li><code>anchors</code> für Blöcke mit Anchor-ID-Feld, <code>customAnchors</code> nur wenn die Ziel-<code>id</code> anderswo herkommt — vermeidet Tippfehler wo möglich.</li>
+                  <li>Für einen schnellen Start: Presets (Button oben) als Vorlage nehmen und anpassen, statt bei Null zu beginnen.</li>
+                </ul>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Beispiel: Hauptnav mit aktivem Zustand &amp; Untermenü</div>
+                <pre className="nav-docs-code"><code>{`<ul>
+  {{#pages}}
+  <li class="{{#isCurrent}}active{{/isCurrent}}">
+    <a href="/{{slug}}"{{#isCurrent}} aria-current="page"{{/isCurrent}}>
+      {{title}}
+    </a>
+    {{#hasChildren}}
+    <ul>
+      {{#children}}
+      <li><a href="/{{slug}}">{{title}}</a></li>
+      {{/children}}
+    </ul>
+    {{/hasChildren}}
+  </li>
+  {{/pages}}
+</ul>`}</code></pre>
+              </div>
+
+              <div className="nav-docs-group">
+                <div className="nav-docs-heading">Beispiel: eigenes Datenfeld (<code>data</code>)</div>
+                <pre className="nav-docs-code"><code>{`{{#pages}}
+<li>
+  {{#data.navImage}}
+  <img src="{{data.navImage}}" alt="">
+  {{/data.navImage}}
+  <a href="/{{slug}}">{{title}}</a>
+</li>
+{{/pages}}`}</code></pre>
+                <p className="nav-docs-note">Feld z. B. „Nav-Bild" im Seiten-Editor unter „Weitere Optionen".</p>
               </div>
             </div>
           </aside>

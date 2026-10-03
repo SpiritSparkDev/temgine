@@ -642,6 +642,26 @@
   font-style: italic;
 }
 
+.admin-scope .nav-docs-code {
+  margin: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.55rem 0.6rem;
+  overflow-x: auto;
+}
+
+.admin-scope .nav-docs-code code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
 /* ── Dark mode overrides ──────────────────────────────────────────────────── */
 
 .admin-scope.dark-mode .nav-list-panel {
@@ -655,6 +675,10 @@
 .admin-scope.dark-mode .nav-docs-group code,
 .admin-scope.dark-mode .nav-docs-list code,
 .admin-scope.dark-mode .nav-docs-table code {
+  background: var(--bg-tertiary);
+}
+
+.admin-scope.dark-mode .nav-docs-code {
   background: var(--bg-tertiary);
 }
 

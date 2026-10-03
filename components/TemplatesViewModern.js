@@ -5,6 +5,7 @@ import { createButtonHandlers } from '../lib/insertHelper';
 import { FONT_AWESOME_ICONS, getIconHtml } from '../lib/fontAwesomeIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 import { buildNavPlaceholderKeys } from '../lib/templateEngine';
+import { extractTypedVariables, guessInputType } from '../lib/templateParser';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -317,7 +318,36 @@ function extractVars(code) {
   return [...vars];
 }
 
-export default function TemplatesViewModern({ showToast, onSaved }) {
+export default function TemplatesViewModern(props) {
+  const [templateViewTab, setTemplateViewTab] = useState('block');
+  return (
+    <div className="tce-view-shell">
+      <div className="tce-view-tabs">
+        <button
+          type="button"
+          className={`tce-view-tab${templateViewTab === 'block' ? ' active' : ''}`}
+          onClick={() => setTemplateViewTab('block')}
+        >
+          <Layout size={14} aria-hidden="true" />
+          Block-Vorlagen
+        </button>
+        <button
+          type="button"
+          className={`tce-view-tab${templateViewTab === 'page-fields' ? ' active' : ''}`}
+          onClick={() => setTemplateViewTab('page-fields')}
+        >
+          <Grid size={14} aria-hidden="true" />
+          Seiten-Datenfelder
+        </button>
+      </div>
+      <div className="tce-view-content">
+        {templateViewTab === 'block' ? <BlockTemplatesEditor {...props} /> : <PageFieldTemplatesPanel {...props} />}
+      </div>
+    </div>
+  );
+}
+
+function BlockTemplatesEditor({ showToast, onSaved }) {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const [templates, setTemplates] = useState([]);
@@ -806,8 +836,15 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
                         <tr><td><code>{'{{global.<key>}}'}</code></td><td>Globale Variable (siehe „Globale Variablen")</td></tr>
                         <tr><td><code>{'{{page.data.<key>}}'}</code></td><td>Freies Datenfeld der aktuellen Seite</td></tr>
+                        <tr><td><code>{'{{data.<key>}}'}</code></td><td>Kurzform für <code>{'{{page.data.<key>}}'}</code> — gleiche Schreibweise wie in Navigations-Templates</td></tr>
                       </tbody>
                     </table>
+                    <p className="tce-ref-note">
+                      Eigene Felder unter <code>data.&lt;key&gt;</code> deklarierst du im Tab
+                      „Seiten-Datenfelder" oben — eine dort angelegte Vorlage weist du im
+                      Seiten-Editor unter Einstellungen einer Seite zu, dann erscheinen die
+                      Felder dort automatisch als Eingabefelder.
+                    </p>
                   </div>
 
                   <div className="tce-ref-group">
@@ -817,12 +854,23 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped)</td></tr>
                         <tr><td><code>{'{{{'}<span>{'var}'}</span>{'}'}</code></td><td>Variable (HTML roh)</td></tr>
                         <tr><td><code>{'{{#each:name}}…{{/each:name}}'}</code></td><td>Wiederholbare Gruppe (Liste)</td></tr>
+                        <tr><td><code>{'{{#folder}}…{{/folder}}'}</code></td><td>Iteriert über alle Dateien eines im Editor gewählten Upload-Ordners (rekursiv, inkl. Unterordner)</td></tr>
+                        <tr><td><code>{'{{#folder:name}}…{{/folder:name}}'}</code></td><td>Wie <code>{'{{#folder}}'}</code>, benannt — für mehrere Ordnerfelder in einem Template</td></tr>
                         <tr><td><code>{'{{#if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name nicht leer</td></tr>
                         <tr><td><code>{'{{^if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name leer</td></tr>
                         <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Roher Mustache-Abschnitt (Sonderfälle)</td></tr>
                         <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Roher invertierter Abschnitt</td></tr>
                       </tbody>
                     </table>
+                    <p className="tce-ref-note">
+                      Innerhalb von <code>{'{{#folder}}…{{/folder}}'}</code> steht pro Datei zur
+                      Verfügung: <code>name</code> (Dateiname), <code>slug</code> (Dateiname ohne
+                      Endung, URL-sicher), <code>url</code> (öffentliche Adresse — für
+                      <code> href</code>/<code>src</code>), <code>path</code> (Pfad relativ zum
+                      gewählten Ordner), <code>ext</code>, <code>size</code> (Bytes),
+                      <code> modified</code> und <code>isImage</code> (Bool, für
+                      z. B. <code>{'{{#isImage}}<img src="{{url}}">{{/isImage}}'}</code>).
+                    </p>
                   </div>
 
                   <div className="tce-ref-group">
@@ -833,7 +881,8 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
                         <tr><td><code>{'{{#children}}'}</code></td><td>Unterseiten iterieren</td></tr>
                         <tr><td><code>{'{{#pages}}'}</code></td><td>gesamten Seitenbaum iterieren</td></tr>
                         <tr><td><code>{'{{#childPages}}'}</code></td><td>nur die direkten Unterseiten der aktuell gerenderten Seite</td></tr>
-                        <tr><td><code>{'{{#anchors}}'}</code></td><td>Anker iterieren (Typ Seite)</td></tr>
+                        <tr><td><code>{'{{#anchors}}'}</code></td><td>Anker iterieren, Zielblock hat Anchor-ID-Feld (Typ Seite)</td></tr>
+                        <tr><td><code>{'{{#customAnchors}}'}</code></td><td>Anker iterieren, freie Ziel-ID ohne Anchor-ID-Feld (Typ Seite)</td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -1110,5 +1159,227 @@ export default function TemplatesViewModern({ showToast, onSaved }) {
         </div>
       )}
     </>
+  );
+}
+
+// "Seiten-Datenfelder" (PAGE_FIELDS) templates declare which {{data.X}} fields
+// a page offers, exactly the way a block template's own {{variable}} placeholders
+// already declare that block's props — but this template never renders as HTML,
+// it's pure field declaration, picked up by the Page Editor via
+// lib/templateParser.js's extractTypedVariables/guessInputType (same functions
+// block templates already use).
+function PageFieldTemplatesPanel({ showToast, onSaved }) {
+  const [items, setItems] = useState([]);
+  const [selectedName, setSelectedName] = useState(null);
+  const [name, setName] = useState('');
+  const [code, setCode] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => { load(); }, []);
+
+  function load() {
+    fetch('/api/templates?type=PAGE_FIELDS')
+      .then(r => r.json())
+      .then(data => setItems(Array.isArray(data) ? data : []))
+      .catch(() => setItems([]));
+  }
+
+  function handleNew() {
+    setSelectedName(null);
+    setName('');
+    setCode('{{autor:text}}\n{{seitenkopf:textarea}}\n{{veroeffentlichtAm:date}}');
+    setIsEditing(true);
+  }
+
+  function handleEdit(t) {
+    setSelectedName(t.name);
+    setName(t.name);
+    setCode(t.code);
+    setIsEditing(true);
+  }
+
+  function handleSave() {
+    if (!name.trim()) {
+      showToast('Bitte Namen eingeben', 'error');
+      return;
+    }
+    setIsSaving(true);
+    fetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code, type: 'PAGE_FIELDS' }),
+    })
+      .then(r => r.json())
+      .then(() => {
+        showToast('Gespeichert!', 'success');
+        load();
+        onSaved?.();
+      })
+      .catch(err => showToast('Fehler: ' + err.message, 'error'))
+      .finally(() => setIsSaving(false));
+  }
+
+  function handleDelete(t) {
+    fetch('/api/templates', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: t.name }),
+    })
+      .then(() => {
+        showToast('Gelöscht', 'success');
+        load();
+        onSaved?.();
+        if (selectedName === t.name) {
+          setIsEditing(false);
+          setSelectedName(null);
+        }
+      })
+      .catch(err => showToast('Fehler: ' + err.message, 'error'));
+  }
+
+  function handleCancel() {
+    setIsEditing(false);
+    setSelectedName(null);
+    setName('');
+    setCode('');
+  }
+
+  const detectedFields = useMemo(() => {
+    return extractTypedVariables(code).map(({ varName, explicitType }) => ({
+      varName,
+      type: explicitType || guessInputType(varName),
+    }));
+  }, [code]);
+
+  return (
+    <div className="tce-body">
+      {/* Column 1: list */}
+      <div className="tce-list-panel">
+        <div className="tce-list-header">
+          <button
+            className="tce-btn tce-btn-primary"
+            onClick={handleNew}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            <Plus size={13} aria-hidden="true" /> Neu
+          </button>
+        </div>
+        <div className="tce-list-body">
+          {items.length === 0 ? (
+            <div className="tce-list-empty">Noch keine Seiten-Datenfelder-Vorlagen.</div>
+          ) : (
+            items.map((t) => (
+              <div
+                key={t.name}
+                className={`tce-list-item${selectedName === t.name ? ' active' : ''}`}
+                onClick={() => handleEdit(t)}
+              >
+                <Grid size={13} className="tce-item-icon" aria-hidden="true" />
+                <span className="tce-item-name">{t.name}</span>
+                <button
+                  className="tce-item-delete"
+                  onClick={(e) => { e.stopPropagation(); handleDelete(t); }}
+                  aria-label={`Vorlage ${t.name} löschen`}
+                  title="Löschen"
+                >
+                  <Trash2 size={12} aria-hidden="true" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Column 2: code + detected fields */}
+      <div className="tce-code-panel">
+        {isEditing ? (
+          <>
+            <div className="tce-code-tabs">
+              <div className="tce-code-tab active">
+                <Code size={11} aria-hidden="true" />
+                <span>{name || 'unbenannt'}</span>
+              </div>
+            </div>
+            <div className="pfv-name-row">
+              <input
+                type="text"
+                className="tce-name-input"
+                placeholder="Name (z. B. Blog-Artikel-Felder)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={{ maxWidth: 'none' }}
+              />
+              <button className="tce-btn tce-btn-ghost" onClick={handleCancel}>Abbrechen</button>
+              <button className="tce-btn tce-btn-primary" onClick={handleSave} disabled={isSaving}>
+                <Save size={13} aria-hidden="true" /> {isSaving ? 'Speichern…' : 'Speichern'}
+              </button>
+            </div>
+            <div className="tce-code-body" style={{ flex: '1 1 50%' }}>
+              <CodeEditor height="100%" language="html" value={code} onChange={(v) => setCode(v || '')} options={{}} />
+            </div>
+            <div className="pfv-detected-panel">
+              <div className="pfv-detected-heading">Erkannte Felder ({detectedFields.length})</div>
+              {detectedFields.length === 0 ? (
+                <p className="pfv-detected-empty">
+                  Noch keine Platzhalter erkannt. Schreibe z. B. <code>{'{{autor:text}}'}</code>.
+                </p>
+              ) : (
+                <table className="pfv-detected-table">
+                  <tbody>
+                    {detectedFields.map((f) => (
+                      <tr key={f.varName}>
+                        <td><code>{f.varName}</code></td>
+                        <td>{f.type}</td>
+                        <td><code>{`{{data.${f.varName}}}`}</code></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="tce-statusbar">
+              <span className="tce-status-item">Feld-Deklaration</span>
+              <span className="tce-status-sep">·</span>
+              <span className="tce-status-type">PAGE_FIELDS</span>
+            </div>
+          </>
+        ) : (
+          <div className="tce-empty-state">
+            <Grid size={48} strokeWidth={1} aria-hidden="true" />
+            <h3>Seiten-Datenfelder</h3>
+            <p>
+              Deklariere mit <code>{'{{feldname:typ}}'}</code>, welche freien Datenfelder eine
+              Seite anbieten soll — wähle links eine Vorlage oder erstelle eine neue mit <strong>Neu</strong>.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Column 3: help */}
+      <aside className="pfv-help-panel">
+        <div className="pfv-help-heading"><BookOpen size={14} aria-hidden="true" /> Wie funktioniert das?</div>
+        <p>Eine Vorlage hier rendert nichts — sie deklariert nur, welche Datenfelder eine Seite anbieten soll.</p>
+        <p>Syntax je Platzhalter: <code>{'{{feldname:typ}}'}</code>. <code>typ</code> ist optional
+          (wird sonst aus dem Feldnamen geraten, wie bei Block-Vorlagen).</p>
+        <table className="pfv-help-table">
+          <tbody>
+            <tr><td><code>text</code></td><td>einzeiliger Text</td></tr>
+            <tr><td><code>textarea</code></td><td>mehrzeiliger Rich-Text</td></tr>
+            <tr><td><code>number</code></td><td>Zahl</td></tr>
+            <tr><td><code>url</code></td><td>URL / Dateipfad</td></tr>
+            <tr><td><code>image</code></td><td>Bild (mit Datei-Auswahl)</td></tr>
+            <tr><td><code>date</code></td><td>Datum</td></tr>
+            <tr><td><code>color</code></td><td>Farbe</td></tr>
+            <tr><td><code>array</code></td><td>Liste (eine Zeile je Wert)</td></tr>
+          </tbody>
+        </table>
+        <p>Eine Seite wählt im Seiten-Editor unter <strong>Einstellungen → Seiten-Datenfelder</strong>
+          eine dieser Vorlagen — die deklarierten Felder erscheinen dort automatisch als Eingabefelder.</p>
+        <p>Ausgabe: im Block-Template der Seite als <code>{'{{data.X}}'}</code> oder{' '}
+          <code>{'{{page.data.X}}'}</code>; in Navigationen pro Seite als <code>{'{{data.X}}'}</code>{' '}
+          innerhalb <code>{'{{#pages}}'}</code>.</p>
+      </aside>
+    </div>
   );
 }

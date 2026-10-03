@@ -1034,6 +1034,39 @@
   flex-direction: column;
 }
 
+/* Seiten-Datenfelder (pageData.X, deklariert per PAGE_FIELDS-Vorlage) */
+.page-fields-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+/* Anker-Navigation (pageData.anchors) im Seiten-Inspektor */
+.anchor-list-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.anchor-list-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.anchor-list-row > :first-child {
+  flex: 1 1 35%;
+  min-width: 0;
+}
+
+.anchor-list-row input {
+  flex: 1 1 60%;
+  min-width: 0;
+}
+
 .field-heading-row {
   display: flex;
   gap: 8px;
@@ -1377,6 +1410,13 @@
 }
 
 .pe-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pe-toolbar-titlewrap {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1946,6 +1986,18 @@
   box-shadow: 0 4px 8px rgb(var(--accent-primary-rgb) / 0.2);
 }
 
+/* Datei-Kacheln im Ordner-Auswahlmodus (nur Orientierung, nicht anklickbar) */
+.file-modal-item-inert {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.file-modal-item-inert:hover {
+  border-color: var(--border-color);
+  transform: none;
+  box-shadow: none;
+}
+
 .file-modal-thumb {
   width: 100%;
   height: 120px;
@@ -1986,6 +2038,7 @@
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
 }
 
 .file-modal-cancel-btn {
@@ -1996,6 +2049,75 @@
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+}
+
+/* Block-Transfer (Kopieren/Verschieben in andere Seite) */
+.page-picker-modal {
+  max-width: 480px;
+}
+
+.page-picker-modal .file-modal-footer {
+  gap: 10px;
+}
+
+.page-picker-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.page-picker-list {
+  overflow-y: auto;
+  max-height: 320px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.page-picker-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.page-picker-item:last-child {
+  border-bottom: none;
+}
+
+.page-picker-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.page-picker-item.selected {
+  background: rgb(var(--accent-primary-rgb) / 0.15);
+}
+
+.page-picker-item.disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.page-picker-item.disabled:hover {
+  background: none;
+}
+
+.page-picker-item-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.page-picker-item-slug {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 /* File modal tabs */
@@ -2180,5 +2302,33 @@
   background: #fff;
   width: 100%;
   min-height: 500px;
+}
+
+/* ── Weiterleitungs-Konfiguration (ersetzt den Block-Editor-Canvas) ───────── */
+.redirect-config-panel {
+  max-width: 480px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.redirect-config-panel h3 {
+  margin: 0 0 8px;
+}
+.redirect-config-panel .field-label-xs {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.redirect-config-panel .input-field-small {
+  width: 100%;
+  box-sizing: border-box;
+}
+.redirect-config-hint {
+  margin: 8px 0 16px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 

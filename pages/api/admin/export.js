@@ -7,7 +7,8 @@ import { listTemplates } from '../../../lib/templateStore'
 import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
-import { renderPage, buildNavHtml } from '../../../lib/templateEngine'
+import { renderPage, buildNavHtml, collectFolderBlockPaths } from '../../../lib/templateEngine'
+import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
 import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 
@@ -128,23 +129,27 @@ function collectTemplateNames(blocks, bucket) {
   }
 }
 
-function buildNestedPages(nodes, parentPath = '') {
+// isCurrent/data let a page-level nav template exclude the page it's exported
+// for and read custom per-page fields (e.g. data.navImage) without any
+// block-specific plumbing — mirrors pages/[...slug].js and lib/liveSnapshot.js.
+function buildNestedPages(nodes, parentPath = '', currentId = null) {
   return (nodes || [])
     .map((n) => {
       const slug = parentPath ? `${parentPath}/${n.slug}` : String(n.slug || '')
-      const children = buildNestedPages(n.children || [], slug)
-      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
+      const children = buildNestedPages(n.children || [], slug, currentId)
+      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: n.id === currentId, data: n.data || {} }
     })
 }
 
 function buildNavigationsForPage(page, allPagesTree, activeNavigations, allNavigationsById, currentPath) {
-  const nestedPages = buildNestedPages(allPagesTree)
+  const nestedPages = buildNestedPages(allPagesTree, '', page?.id)
   const anchors = Array.isArray(page?.data?.anchors) ? page.data.anchors : []
+  const customAnchors = Array.isArray(page?.data?.customAnchors) ? page.data.customAnchors : []
   // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
   // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
   const rawMatch = findRawPageNodeById(allPagesTree, page?.id)
   const childPages = rawMatch ? buildNestedPages(rawMatch.node.children || [], rawMatch.parentPath) : []
-  const navData = { pages: nestedPages, anchors, childPages }
+  const navData = { pages: nestedPages, anchors, customAnchors, childPages }
   const navigations = {}
 
   for (const nav of activeNavigations) {
@@ -564,8 +569,8 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
   for (const font of uploadFonts) {
     const rel = safeZipPath(font.path || '')
-    if (!rel) continue
-    publicFolder.file(`uploads/${rel}`, Buffer.from(String(font.content || ''), 'base64'))
+    if (!rel || !font.absPath) continue
+    publicFolder.file(`uploads/${rel}`, fs.createReadStream(font.absPath))
   }
 
   const fontsCss = buildStaticFontsCss(uploadFonts, fontsConfig)
@@ -619,7 +624,11 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
       const footer = resolveFooterForPage(entry.page, activeFooter, allFootersById)
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars)
+      const folderContents = {}
+      for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
+        folderContents[folderPath] = listFolderItemsRecursive(folderPath)
+      }
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents)
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)
@@ -713,26 +722,16 @@ function scanUploadFonts(dir, relBase = '', out = []) {
   return out
 }
 
-function loadUploadFonts() {
-  const files = []
-  if (!fs.existsSync(UPLOADS_DIR)) return files
-  const found = scanUploadFonts(UPLOADS_DIR, '', [])
-  for (const file of found) {
-    try {
-      const content = fs.readFileSync(file.absPath)
-      files.push({
-        path: file.relPath,
-        encoding: 'base64',
-        content: content.toString('base64')
-      })
-    } catch (e) {
-      console.warn(`Failed to read upload font ${file.relPath}:`, e.message)
-    }
-  }
-  return files
+// Lists upload files/fonts by path only (no content read into memory) — the zip
+// builders below stream each file's bytes straight from disk into the archive
+// instead of buffering the whole uploads dir as base64 strings, which is what
+// made large (multi-GB) exports blow up memory/string-length limits.
+function listUploadFonts() {
+  if (!fs.existsSync(UPLOADS_DIR)) return []
+  return scanUploadFonts(UPLOADS_DIR, '', []).map((f) => ({ path: f.relPath, absPath: f.absPath }))
 }
 
-function loadUploadFiles() {
+function listUploadedFiles() {
   const files = []
   if (!fs.existsSync(UPLOADS_DIR)) return files
 
@@ -744,16 +743,7 @@ function loadUploadFiles() {
         walk(abs, rel)
         continue
       }
-      try {
-        const content = fs.readFileSync(abs)
-        files.push({
-          path: rel,
-          encoding: 'base64',
-          content: content.toString('base64')
-        })
-      } catch (e) {
-        console.warn(`Failed to read upload file ${rel}:`, e.message)
-      }
+      files.push({ path: rel, absPath: abs })
     }
   }
 
@@ -773,12 +763,23 @@ export default async function handler(req, res) {
     const wantStaticSite = req.query.format === 'static-site'
     const wantCss = req.query.format === 'css'
 
+    // Backup scope — only meaningful for the project-transfer zip. 'full' (default)
+    // keeps today's behavior; 'db-templates' drops binary assets (uploads, upload
+    // fonts); 'db' additionally drops the file-based site config (templates,
+    // navigations, footers, maintenance pages, CSS). Always kept: pages, snippets,
+    // global variables — the actual Postgres content.
+    const rawScope = String(req.query.scope || 'full').toLowerCase()
+    const scope = ['db', 'db-templates', 'full'].includes(rawScope) ? rawScope : 'full'
+    const includeSiteConfig = scope !== 'db'
+    const includeAssets = scope === 'full'
+
     console.log('[admin/export] request', {
       format: req.query.format || 'json',
       wantZip,
       wantTransferZip,
       wantStaticSite,
       wantCss,
+      scope,
       userId: auth?.user?.id || null,
     })
 
@@ -817,8 +818,10 @@ export default async function handler(req, res) {
 
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
     const shouldBuildStaticSite = wantStaticSite
-    const uploadFonts = (shouldBuildProjectTransfer || shouldBuildStaticSite) ? loadUploadFonts() : []
-    const uploadedFiles = shouldBuildProjectTransfer ? loadUploadFiles() : []
+    // Static-site export always needs its own fonts regardless of backup scope —
+    // scope only restricts the project-transfer package.
+    const uploadFonts = ((shouldBuildProjectTransfer && includeAssets) || shouldBuildStaticSite) ? listUploadFonts() : []
+    const uploadedFiles = (shouldBuildProjectTransfer && includeAssets) ? listUploadedFiles() : []
 
     const cssConfig = loadJsonConfig('css-config.json')
     const fontsConfig = loadJsonConfig('fonts-config.json')
@@ -834,26 +837,36 @@ export default async function handler(req, res) {
       }
     })
 
+    // Drives both what actually gets zipped below AND (critically) what the
+    // import side is allowed to wipe on a "replace" restore — a category absent
+    // here must never be treated as "the backup wants this emptied out".
+    const filesIncluded = [
+      'pages', 'snippets', 'globalVariables',
+      ...(includeSiteConfig ? ['templates', 'css', 'navigations', 'footers', 'maintenance', 'cssConfig', 'fontsConfig'] : []),
+      ...(includeAssets ? ['uploadFonts', 'uploadedFiles'] : []),
+    ]
+
     const exportMetadata = {
       version: '1.2',
       exportedAt: now.toISOString(),
       exportedDate: now.toLocaleDateString('de-DE'),
       exportedTime: now.toLocaleTimeString('de-DE'),
       exportType: wantStaticSite ? 'static-site' : (wantTransferZip || wantZip ? 'project-transfer' : 'json'),
-      filesIncluded: ['templates', 'snippets', 'pages', 'css', 'navigations', 'globalVariables', 'footers', 'maintenance', 'uploadFonts', 'uploadedFiles', 'cssConfig', 'fontsConfig'],
+      scope: (wantTransferZip || wantZip) ? scope : 'full',
+      filesIncluded,
       itemCounts: {
-        templates: templates.length,
+        templates: includeSiteConfig ? templates.length : 0,
         snippets: mappedSnippets.length,
         pages: pages.length,
-        cssFiles: css.length,
-        navigations: navigations.length,
+        cssFiles: includeSiteConfig ? css.length : 0,
+        navigations: includeSiteConfig ? navigations.length : 0,
         globalVariables: globalVariables.length,
-        footers: footers.length,
-        maintenancePages: Object.keys(maintenance).length,
+        footers: includeSiteConfig ? footers.length : 0,
+        maintenancePages: includeSiteConfig ? Object.keys(maintenance).length : 0,
         uploadFonts: uploadFonts.length,
         uploadedFiles: uploadedFiles.length,
-        cssConfig: cssConfig ? 1 : 0,
-        fontsConfig: fontsConfig ? 1 : 0
+        cssConfig: (includeSiteConfig && cssConfig) ? 1 : 0,
+        fontsConfig: (includeSiteConfig && fontsConfig) ? 1 : 0
       }
     }
 
@@ -861,109 +874,150 @@ export default async function handler(req, res) {
       const zip = new JSZip()
       const backup = {
         metadata: exportMetadata,
-        templates,
+        // Every field below is scope-gated to match filesIncluded exactly — the
+        // import side treats a field's absence here as "not part of this backup",
+        // not "clear this out", so this list must stay truthful.
+        templates: includeSiteConfig ? templates : [],
         snippets: mappedSnippets,
         pages,
-        css,
-        navigations,
+        css: includeSiteConfig ? css : [],
+        navigations: includeSiteConfig ? navigations : [],
         globalVariables,
-        footers,
-        maintenance,
-        uploadFonts,
-        cssConfig: cssConfig || null,
-        fontsConfig: fontsConfig || null
+        footers: includeSiteConfig ? footers : [],
+        maintenance: includeSiteConfig ? maintenance : {},
+        // Path only — actual bytes live under uploads-fonts/ in this zip. Restoring
+        // from a zip (readZipBackup in BackupView.js) re-derives uploadFonts from
+        // that folder rather than this manifest, so embedding base64 content here
+        // would just double the export's memory/disk footprint for no benefit.
+        uploadFonts: includeAssets ? uploadFonts.map((f) => ({ path: f.path })) : [],
+        cssConfig: includeSiteConfig ? (cssConfig || null) : null,
+        fontsConfig: includeSiteConfig ? (fontsConfig || null) : null
       }
       const json = JSON.stringify(backup, null, 2)
-      const fileSize = Buffer.byteLength(json, 'utf-8')
 
       // Full JSON backup as manifest of the transfer package
       zip.file(`manifest/${baseName}.json`, json)
 
-      // Templates as individual HTML files
-      const tplFolder = zip.folder('templates')
-      for (const tpl of templates) {
-        const safeName = (tpl.name || `template-${tpl.id}`).replace(/[^\w.-]/g, '_')
-        tplFolder.file(`${safeName}.html`, tpl.code || '')
-      }
+      if (includeSiteConfig) {
+        // Templates as individual HTML files
+        const tplFolder = zip.folder('templates')
+        for (const tpl of templates) {
+          const safeName = (tpl.name || `template-${tpl.id}`).replace(/[^\w.-]/g, '_')
+          tplFolder.file(`${safeName}.html`, tpl.code || '')
+        }
 
-      // Navigations as individual HTML files
-      const navFolder = zip.folder('navigations')
-      for (const nav of navigations) {
-        const safeName = (nav.name || nav.id || 'navigation').replace(/[^\w.-]/g, '_')
-        navFolder.file(`${safeName}.json`, JSON.stringify(nav, null, 2))
-      }
+        // Navigations as individual HTML files
+        const navFolder = zip.folder('navigations')
+        for (const nav of navigations) {
+          const safeName = (nav.name || nav.id || 'navigation').replace(/[^\w.-]/g, '_')
+          navFolder.file(`${safeName}.json`, JSON.stringify(nav, null, 2))
+        }
 
-      // Footers as individual JSON files (mirrors the navigations folder)
-      const footerFolder = zip.folder('footers')
-      for (const f of footers) {
-        const safeName = (f.name || f.id || 'footer').replace(/[^\w.-]/g, '_')
-        footerFolder.file(`${safeName}.json`, JSON.stringify(f, null, 2))
-      }
+        // Footers as individual JSON files (mirrors the navigations folder)
+        const footerFolder = zip.folder('footers')
+        for (const f of footers) {
+          const safeName = (f.name || f.id || 'footer').replace(/[^\w.-]/g, '_')
+          footerFolder.file(`${safeName}.json`, JSON.stringify(f, null, 2))
+        }
 
-      // Maintenance pages (404/503/no-homepage/loading) as individual html/css/js files
-      const maintenanceFolder = zip.folder('maintenance')
-      for (const [key, value] of Object.entries(maintenance)) {
-        const ext = key.endsWith('_html') ? 'html' : key.endsWith('_css') ? 'css' : 'js'
-        const base = key.replace(/_(html|css|js)$/, '').replace(/[^\w.-]/g, '_')
-        maintenanceFolder.file(`${base}.${ext}`, value || '')
-      }
+        // Maintenance pages (404/503/no-homepage/loading) as individual html/css/js files
+        const maintenanceFolder = zip.folder('maintenance')
+        for (const [key, value] of Object.entries(maintenance)) {
+          const ext = key.endsWith('_html') ? 'html' : key.endsWith('_css') ? 'css' : 'js'
+          const base = key.replace(/_(html|css|js)$/, '').replace(/[^\w.-]/g, '_')
+          maintenanceFolder.file(`${base}.${ext}`, value || '')
+        }
 
-      // Uploaded fonts (binary) to keep @font-face sources valid after restore
-      const uploadFontsFolder = zip.folder('uploads-fonts')
-      for (const f of uploadFonts) {
-        const safePath = String(f.path || '').replace(/\\/g, '/').replace(/^\/+/, '')
-        if (!safePath) continue
-        try {
-          const buf = Buffer.from(String(f.content || ''), 'base64')
-          uploadFontsFolder.file(safePath, buf)
-        } catch (e) {
-          console.warn(`Failed to add font ${safePath} to zip:`, e.message)
+        // CSS files individually + merged
+        const cssFolder = zip.folder('css')
+        const mergedParts = []
+        for (const cssFile of css) {
+          cssFolder.file(cssFile.filename, cssFile.content || '')
+          mergedParts.push(`/* === ${cssFile.filename} === */\n${cssFile.content || ''}`)
+        }
+        if (mergedParts.length > 0) {
+          cssFolder.file('merged.css', mergedParts.join('\n\n'))
         }
       }
 
-      const uploadFilesFolder = zip.folder('uploads')
-      for (const f of uploadedFiles) {
-        const safePath = safeZipPath(f.path || '')
-        if (!safePath) continue
-        try {
-          const buf = Buffer.from(String(f.content || ''), 'base64')
-          uploadFilesFolder.file(safePath, buf)
-        } catch (e) {
-          console.warn(`Failed to add upload file ${safePath} to zip:`, e.message)
+      if (includeAssets) {
+        // Uploaded fonts (binary) to keep @font-face sources valid after restore.
+        // Streamed straight from disk instead of buffered as base64 — for a large
+        // uploads dir, holding every file as a base64 string in memory is what was
+        // blowing past Node's heap/string-length limits on big exports.
+        const uploadFontsFolder = zip.folder('uploads-fonts')
+        for (const f of uploadFonts) {
+          const safePath = String(f.path || '').replace(/\\/g, '/').replace(/^\/+/, '')
+          if (!safePath || !f.absPath) continue
+          uploadFontsFolder.file(safePath, fs.createReadStream(f.absPath))
+        }
+
+        const uploadFilesFolder = zip.folder('uploads')
+        for (const f of uploadedFiles) {
+          const safePath = safeZipPath(f.path || '')
+          if (!safePath || !f.absPath) continue
+          uploadFilesFolder.file(safePath, fs.createReadStream(f.absPath))
         }
       }
 
-      // CSS files individually + merged
-      const cssFolder = zip.folder('css')
-      const mergedParts = []
-      for (const cssFile of css) {
-        cssFolder.file(cssFile.filename, cssFile.content || '')
-        mergedParts.push(`/* === ${cssFile.filename} === */\n${cssFile.content || ''}`)
-      }
-      if (mergedParts.length > 0) {
-        cssFolder.file('merged.css', mergedParts.join('\n\n'))
-      }
-
-      zip.file('README.txt', 'Temgine project transfer package\n\nContains the data needed to move a project between Temgine instances.')
+      zip.file('README.txt', `Temgine project transfer package (scope: ${scope})\n\nContains the data needed to move a project between Temgine instances.`)
       console.log('[admin/export] building transfer zip', {
         baseName,
-        templateCount: templates.length,
+        scope,
+        templateCount: includeSiteConfig ? templates.length : 0,
         snippetCount: snippets.length,
         pageCount: pages.length,
-        cssCount: css.length,
-        navigationCount: navigations.length,
+        cssCount: includeSiteConfig ? css.length : 0,
+        navigationCount: includeSiteConfig ? navigations.length : 0,
         uploadFontCount: uploadFonts.length,
         uploadedFileCount: uploadedFiles.length,
       })
-      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-      console.log('[admin/export] transfer zip ready', {
-        baseName,
-        bytes: zipBuffer.length,
-      })
+      const scopeSuffix = scope === 'db' ? '-db-only' : scope === 'db-templates' ? '-db-templates' : ''
       res.setHeader('Content-Type', 'application/zip')
-      res.setHeader('Content-Disposition', `attachment; filename="${baseName}-project-transfer.zip"`)
-      res.setHeader('Content-Length', zipBuffer.length)
-      return res.status(200).send(zipBuffer)
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}-project-transfer${scopeSuffix}.zip"`)
+
+      const transferZipStream = zip.generateNodeStream({
+        streamFiles: true,
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+      })
+
+      let transferStreamedBytes = 0
+      let transferLastLoggedMb = 0
+
+      transferZipStream.on('data', (chunk) => {
+        transferStreamedBytes += chunk.length
+        const mb = Math.floor(transferStreamedBytes / (1024 * 1024))
+        if (mb >= transferLastLoggedMb + 25) {
+          transferLastLoggedMb = mb
+          console.log('[admin/export] transfer zip stream progress', { baseName, streamedMB: mb })
+        }
+      })
+
+      return await new Promise((resolve, reject) => {
+        transferZipStream.on('error', (err) => {
+          console.error('[admin/export] transfer zip stream error', {
+            baseName,
+            error: err?.message || String(err),
+          })
+          if (!res.headersSent) {
+            res.status(500).json({ error: 'Transfer ZIP stream failed', details: err?.message || String(err) })
+          }
+          reject(err)
+        })
+
+        res.on('close', () => {
+          console.log('[admin/export] transfer zip stream closed', { baseName, streamedBytes: transferStreamedBytes })
+          resolve()
+        })
+
+        transferZipStream.on('end', () => {
+          console.log('[admin/export] transfer zip stream complete', { baseName, streamedBytes: transferStreamedBytes })
+          resolve()
+        })
+
+        transferZipStream.pipe(res)
+      })
     }
 
     if (wantStaticSite) {

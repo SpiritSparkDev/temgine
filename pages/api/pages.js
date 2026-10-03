@@ -2,6 +2,9 @@ import { prisma } from '../../lib/prisma'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
 import { validate, rules } from '../../lib/validate'
+import { requireAuth, PERMISSIONS } from '../../lib/auth'
+import { findSiblingSlugCollisions } from '../../lib/pageTreeRepair'
+import { extractRedirectForSave } from '../../lib/pageRedirect'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -98,6 +101,9 @@ export default async function handler(req, res) {
 
     // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
     if (req.method === 'POST') {
+      const auth = await requireAuth(req, res, PERMISSIONS.PAGES_EDIT)
+      if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
       const body = req.body
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
@@ -118,6 +124,63 @@ export default async function handler(req, res) {
 
         const providedSlugs = collectSlugs(body)
 
+        // Slugs müssen nur innerhalb derselben Geschwister-Gruppe eindeutig sein
+        // (alle Top-Level-Seiten untereinander, oder alle Kinder eines einzelnen
+        // `children`-Arrays untereinander): findPageByPath löst URLs Segment für
+        // Segment auf und sucht dabei pro Schritt immer nur innerhalb der Kinder
+        // des zuvor gefundenen Knotens — zwei gleich benannte Seiten unter
+        // UNTERSCHIEDLICHEN Elternseiten sind also über unterschiedliche URLs
+        // erreichbar und kein Problem. Nur wenn zwei Geschwister denselben Slug
+        // tragen, wäre der zweite über keine URL erreichbar. Nur die Top-Level-
+        // Slugs sind zusätzlich per DB-Constraint geschützt; verschachtelte
+        // Slugs (im `children`-JSON) müssen wir hier selbst prüfen, bevor
+        // irgendetwas geschrieben wird. (Siehe lib/pageTreeRepair.js, das dieselbe
+        // Prüfung auch für das /repair-Werkzeug nutzt.)
+        const slugCollisions = findSiblingSlugCollisions(body)
+        if (slugCollisions.length > 0) {
+          const duplicateSlugs = slugCollisions.map(c => c.slug)
+          const [status, resp] = errorResponse(
+            400,
+            `Slug(s) mehrfach unter derselben übergeordneten Seite vergeben: ${duplicateSlugs.join(', ')}. Jeder Slug muss unter seiner Elternseite eindeutig sein.`,
+            'VALIDATION_ERROR',
+            { duplicateSlugs }
+          );
+          return res.status(status).json(resp);
+        }
+
+        // Zusätzliche Absicherung: dieselbe Seite (gleiche id) darf nicht an
+        // mehreren Stellen im Baum auftauchen. Das ist das Muster, das beim
+        // Verschieben/Verschachteln einer Seite (Drag & Drop im Editor) zu
+        // "Seite erscheint mehrfach" führen würde, falls ein Client-Bug eine
+        // Seite kopiert statt verschiebt — lieber die ganze Speicherung
+        // ablehnen, als so einen Baum persistieren.
+        const findDuplicateIds = (nodes) => {
+          const seen = new Set()
+          const dupes = new Set()
+          const walk = (list) => {
+            for (const n of list || []) {
+              if (n && n.id) {
+                const id = String(n.id)
+                if (seen.has(id)) dupes.add(id)
+                else seen.add(id)
+              }
+              if (n && Array.isArray(n.children)) walk(n.children)
+            }
+          }
+          walk(nodes)
+          return [...dupes]
+        }
+        const duplicateIds = findDuplicateIds(body)
+        if (duplicateIds.length > 0) {
+          const [status, resp] = errorResponse(
+            400,
+            `Seite(n) kommen mehrfach im Baum vor (id: ${duplicateIds.join(', ')}). Bitte Seite neu laden und den Verschiebe-/Duplizier-Vorgang erneut versuchen.`,
+            'VALIDATION_ERROR',
+            { duplicateIds }
+          );
+          return res.status(status).json(resp);
+        }
+
         // Stamp top-level sort order into data so GET can restore it
         for (let _i = 0; _i < body.length; _i++) {
           if (body[_i]) body[_i].data = { ...(body[_i].data || {}), _order: _i }
@@ -127,7 +190,13 @@ export default async function handler(req, res) {
         for (const p of body) {
           // sanitize incoming page content (blocks.props, data)
           try {
-            if (p && p.data) p.data = sanitizeRecursive(p.data)
+            if (p && p.data) {
+              // redirect.url ist keine Rich-Text-HTML, sondern eine URL — sanitizeRecursive
+              // würde deren "&" (Query-String) zu "&amp;" escapen, siehe lib/pageRedirect.js.
+              const { data: dataWithoutRedirect, redirect } = extractRedirectForSave(p.data)
+              p.data = sanitizeRecursive(dataWithoutRedirect)
+              if (redirect) p.data.redirect = redirect
+            }
             if (p && p.blocks && Array.isArray(p.blocks)) {
               p.blocks = p.blocks.map(sanitizeBlockNode)
             }
@@ -212,7 +281,7 @@ export default async function handler(req, res) {
               await prisma.page.deleteMany({ where: { slug: { in: slugsFound } } })
               // Create audit logs per deleted page
               for (const pd of pagesToDelete) {
-                try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: null, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
+                try { await logAudit({ action: 'delete', resource: 'page', resourceId: pd.id, userId: auth.user.id, details: { slug: pd.slug } }) } catch (e) { console.error('Audit log failed for deleted page', pd.slug, e) }
                 console.log('DEBUG /api/pages POST deleted and audited:', pd.slug)
               }
             } else {
@@ -226,7 +295,7 @@ export default async function handler(req, res) {
         console.log('DEBUG /api/pages POST upsert results:', results.map(r => ({ id: r.id, slug: r.slug, status: r.status })));
         // audit logs for upserts
         for (const up of results) {
-          try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
+          try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
         }
         return res.status(200).json(results)
       }
@@ -235,7 +304,11 @@ export default async function handler(req, res) {
       const p = body || {}
       // sanitize single payload
       try {
-        if (p && p.data) p.data = sanitizeRecursive(p.data)
+        if (p && p.data) {
+          const { data: dataWithoutRedirect, redirect } = extractRedirectForSave(p.data)
+          p.data = sanitizeRecursive(dataWithoutRedirect)
+          if (redirect) p.data.redirect = redirect
+        }
         if (p && p.blocks && Array.isArray(p.blocks)) {
           p.blocks = p.blocks.map(sanitizeBlockNode)
         }
@@ -301,12 +374,15 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('Revision create failed', e)
       }
-      try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: null, details: { slug: up.slug } }) } catch (e) {}
+      try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
       return res.status(200).json(up)
     }
 
     // DELETE: Seite per slug löschen
     if (req.method === 'DELETE') {
+      const auth = await requireAuth(req, res, PERMISSIONS.PAGES_DELETE)
+      if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
       const { slug } = req.body || {}
       if (!slug) {
         const [status, resp] = errorResponse(400, 'Slug erforderlich', 'VALIDATION_ERROR', { missing: ['slug'] });
@@ -314,7 +390,7 @@ export default async function handler(req, res) {
       }
       try {
         const deleted = await prisma.page.delete({ where: { slug: String(slug) } })
-        try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: null, details: { slug } }) } catch (e) {}
+        try { await logAudit({ action: 'delete', resource: 'page', resourceId: deleted.id, userId: auth.user.id, details: { slug } }) } catch (e) {}
         return res.status(200).json({ ok: true })
       } catch (e) {
         if (e.code === 'P2025') {

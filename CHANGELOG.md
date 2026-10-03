@@ -5,6 +5,220 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.25.2] - 2026-10-02
+
+### Fixed
+- Der Zielauswahl-Dialog beim Sammel-Verschieben/-Kopieren mehrerer Seiten (`PageTargetPickerModal`) wurde per `createPortal` direkt in `document.body` gerendert, also außerhalb des `.admin-scope`-Wrappers, der sämtliche Theme-Variablen (`--bg-secondary`, `--text-primary`, `--border-color`, `--accent-primary` usw.) definiert. Dadurch blieben Dialogbox, Hintergrundüberlagerung, Rahmen und Textfarbe unstyled/unsichtbar — sichtbar waren nur noch der native Scrollbar der Zielliste und der mit festen Hex-Farben gestylte "Kopieren/Verschieben"-Button. Der Dialog bekommt jetzt denselben `admin-scope`(+`dark-mode`)-Wrapper wie die übrigen Portal-Dialoge in `PageEditor.js`, wodurch die Theme-Variablen wieder greifen.
+
+---
+
+## [0.25.1] - 2026-10-01
+
+### Fixed
+- `scripts/import-init.js` flachte beim Seiten-Import den kompletten Seitenbaum ab und legte dabei für JEDEN Knoten — auch verschachtelte Unterseiten — eine eigene Top-Level-`Page`-Zeile an, obwohl Unterseiten laut Datenmodell nur als eingebettetes JSON im `children`-Feld ihrer nächsten Top-Level-Seite existieren sollen. Dadurch tauchte z. B. der Beispiel-Blogpost (`id: "blog-post-1"`) sowohl verschachtelt unter "Startseite → Blog" als auch nochmal unter einer eigenen Top-Level-Seite "Blog" auf — eine doppelte id im selben Baum, die beim nächsten Speichern mit "Seite(n) kommen mehrfach im Baum vor" abgelehnt wurde. Der Import legt jetzt nur noch für die echten Top-Level-Wurzeln aus `init/pages.json` eine Zeile an; verschachtelte Kinder werden wie vorgesehen als Teil von deren `children`-Feld mitgespeichert.
+
+---
+
+## [0.25.0] - 2026-10-01
+
+### Added
+- Seitenübersicht: Mehrere Seiten gleichzeitig verschieben oder kopieren. Über die Mehrfachauswahl (Checkboxen) lassen sich beliebig viele Seiten per Sammelaktionsleiste auf einmal an eine neue Stelle im Seitenbaum verschieben oder dorthin kopieren — inklusive aller Unterseiten. Ein Dialog zur Zielauswahl verhindert dabei ungültige Ziele (eine Seite kann nicht in sich selbst oder eine eigene Unterseite verschoben werden) und bricht bei Slug-Konflikten am Zielort kontrolliert ab, statt die Seiten zu verlieren. Kopien erhalten automatisch eindeutige Slugs (`-kopie`, bei Bedarf durchnummeriert), den Titelzusatz „(Kopie)" und den Status „Entwurf".
+
+---
+
+## [0.24.1] - 2026-10-01
+
+### Fixed
+- Weiterleitungs-Target "Neuer Tab" (`_blank`) öffnete das Ziel automatisch per `window.open` und zeigte dabei eine "Weiterleitung geöffnet..."-Zwischenseite — das ließ sich nicht abstellen und wirkte wie eine fehlgeschlagene Weiterleitung. Zeigt jetzt stattdessen einen normalen, klickbaren Link (`<a href>`) zur Ziel-URL; es wird nichts mehr automatisch geöffnet. Target "Gleicher Tab" (`_self`) bleibt unverändert eine echte automatische HTTP-Weiterleitung (301/302).
+- Die Schnellerstellung für Weiterleitungs-Seiten ("Permanente"/"Temporäre Weiterleitung") gab es bisher nur im Haupt-"Seite hinzufügen"-Button der Seitenübersicht (nur Top-Level-Seiten). Verschachtelte Weiterleitungen (über "Unterseite hinzufügen"/"Geschwisterseite hinzufügen" an einer bestehenden Seite) mussten danach manuell in der Sidebar auf Weiterleitung umgestellt werden. Beide Optionen stehen jetzt auch im Hinzufügen-Menü jeder einzelnen Seite zur Verfügung.
+
+---
+
+## [0.24.0] - 2026-10-01
+
+### Added
+- Echte Seiten-Weiterleitungen: Der Weiterleitungstyp einer Seite (`data.redirect`, vorher nie persistierte Top-Level-Felder) löst beim Besuch jetzt tatsächlich eine Weiterleitung aus. Bei Target "Gleicher Tab" (`_self`, Standard) ist das eine echte HTTP-Weiterleitung (301 permanent / 302 temporär) über `getServerSideProps`, bevor überhaupt Blöcke gerendert werden — funktioniert auch für Crawler/curl ohne JavaScript. Target "Neuer Tab" (`_blank`) kann das nicht als echte HTTP-Weiterleitung umsetzen (Status bleibt 200) und öffnet das Ziel stattdessen clientseitig per `window.open`.
+- Seiten-Editor: Umstellen einer Seite auf "Permanente"/"Temporäre Weiterleitung" sperrt automatisch das Anlegen von Blöcken und zeigt stattdessen ein eigenes Feld für Ziel-URL und Target.
+- Seitenübersicht: "Seite hinzufügen" ist jetzt ein Dropdown — neben der normalen (weiterhin als Default per Klick erreichbaren) Seite lassen sich direkt "Permanente Weiterleitung" und "Temporäre Weiterleitung" als vorkonfigurierte neue Seiten anlegen.
+
+### Changed
+- Die Weiterleitungstypen "404" und "503" wurden entfernt — dafür gibt es bereits dedizierte Maintenance-Seiten (Einstellungen), eine weitere Weiterleitung darauf war redundant. Übrig bleiben: Keine / Permanent / Temporär.
+
+### Fixed
+- `sanitizeRecursive` (läuft über `page.data` beim Speichern) escaped `&` in jedem String zu `&amp;` — für Rich-Text richtig, hätte bei einer Weiterleitungs-URL mit Query-String (`?a=1&b=2`) die URL aber stillschweigend korrumpiert. `data.redirect` wird jetzt vor dieser Sanitisierung herausgehalten und separat validiert (`lib/pageRedirect.js`).
+
+---
+
+## [0.23.0] - 2026-10-01
+
+### Fixed
+- Gefundene Ursache für wiederkehrende „Slug(s) mehrfach vergeben"-Fehler trotz sauberer Datenbank: Verschachtelte Seiten ohne eigene `id` (ältere/importierte Datenbestände) wurden beim Speichern in `updatePageInTree` (`components/PagesView.js`) per `n.id === updatedPage.id` gematcht — bei mehreren Geschwister-Seiten mit `id === undefined` traf das ALLE gleichzeitig und überschrieb sie beim Speichern einer einzelnen von ihnen mit deren Inhalt, wodurch frische Slug-Duplikate entstanden, obwohl der Baum direkt davor unauffällig war. Das Speichern verweigert sich jetzt mit einer klaren Fehlermeldung, wenn die zu speichernde Seite keine eigene id hat, statt Geschwister-Seiten stillschweigend zu überschreiben.
+
+### Added
+- `/repair`-Werkzeug erkennt jetzt zusätzlich verschachtelte Seiten ohne eigene id (neuer Abschnitt „Seiten ohne eigene ID") und kann ihnen gezielt eine neue id vergeben — das war zuvor eine Lücke, da der Scan nur auf *doppelte* ids prüfte, Knoten mit *fehlender* id aber überging.
+
+---
+
+## [0.22.2] - 2026-10-01
+
+### Fixed
+- `/repair`-Werkzeug: Die Liste der Slug-Kollisionen rendert pro Gruppe mit `key={group.slug}` — existieren zwei getrennte Kollisionsgruppen mit demselben Slug-Text unter unterschiedlichen Elternseiten gleichzeitig, führte der doppelte React-Key dazu, dass eine der beiden Gruppen im UI nicht zuverlässig angezeigt/aktualisiert wurde. Key basiert jetzt auf den vollständigen Fundstellen der Gruppe statt nur dem Slug-Text.
+
+---
+
+## [0.22.1] - 2026-10-01
+
+### Fixed
+- `POST /api/pages` (Array-Save) lehnte Slug-Duplikate bisher global über den GESAMTEN Seitenbaum ab, nicht nur zwischen echten Geschwister-Seiten. Da `findPageByPath` (`pages/[...slug].js`) beim Auflösen einer URL pro Segment aber immer nur innerhalb der Kinder des zuvor gefundenen Knotens sucht, sind zwei gleich benannte Seiten unter unterschiedlichen Elternseiten (z. B. `/team-a/lydia` und `/team-b/lydia`) gar keine echte URL-Kollision — die alte Prüfung blockierte solche (unbedenklichen) Fälle dennoch dauerhaft, inklusive aller bereits vor Einführung der Prüfung in 0.18.2 bestehenden Datenbestände. Die Prüfung nutzt jetzt dieselbe Geschwister-genaue Erkennung wie das in 0.22.0 eingeführte `/repair`-Werkzeug (`lib/pageTreeRepair.js`); echte Kollisionen (gleicher Slug unter derselben Elternseite) werden weiterhin abgelehnt.
+
+---
+
+## [0.22.0] - 2026-10-01
+
+### Added
+- Neues Reparatur-Werkzeug unter `/repair` (ADMIN-only, zusätzlich über Einstellungen → „Wartung & Reparatur" verlinkt): scannt den Seitenbaum gezielt auf echte Slug-Kollisionen zwischen Geschwister-Seiten und auf doppelte Seiten-ids und behebt sie einzeln direkt in der Datenbank, ohne dass dafür — anders als beim normalen Speichern über den Editor — der komplette Seitenbaum fehlerfrei sein muss. Hintergrund: Die in 0.18.2/0.18.3 eingeführte Speicher-Validierung prüft Slugs global über den gesamten Baum, blockiert dadurch aber auch bereits länger bestehende Datenbestände, bei denen keine Migration lief. Das neue Werkzeug unterscheidet außerdem zwischen echten Kollisionen (gleicher Slug unter derselben übergeordneten Seite — eine der Seiten ist dadurch unerreichbar) und harmlosen Namensgleichheiten unter unterschiedlichen Elternseiten, die keine echte URL-Kollision darstellen und nicht gemeldet werden. Alle Reparaturen werden im Audit-Log protokolliert (`REPAIR_FIX_SLUG`/`REPAIR_FIX_ID`).
+
+---
+
+## [0.21.0] - 2026-10-01
+
+### Added
+- Backup-Bereich: Projekttransfer-Export lässt sich jetzt im Umfang einschränken — „Vollständig" (wie bisher), „Datenbank + Templates" (zusätzlich Navigationen, Footer, Maintenance-Seiten, CSS, aber ohne Uploads) oder „Nur Datenbank" (nur Seiten, Snippets, Globale Variablen). Der Import-Dialog zeigt den Umfang eines geladenen Backups an und weist bei der „Ersetzen"-Strategie explizit darauf hin, dass nur die im Backup enthaltenen Kategorien gelöscht/ersetzt werden.
+
+### Fixed
+- `POST /api/admin/import?strategy=replace` löschte beim Wiederherstellen bisher *alle* bestehenden Templates/Navigationen/Footer/CSS/Uploads, unabhängig davon, ob das importierte Backup diese Kategorien überhaupt enthielt — ein unvollständiges Backup (z. B. nur Datenbank) hätte mit „Ersetzen" sämtliche Templates und Uploads gelöscht, obwohl das Backup sie nie beinhaltete. Der Import prüft jetzt anhand der Export-Metadaten (`filesIncluded`), welche Kategorien tatsächlich im Backup enthalten sind, und wendet „Ersetzen" nur auf diese an — fehlende Kategorien bleiben unangetastet. Alte Backups ohne diese Metadaten verhalten sich unverändert wie bisher.
+
+---
+
+## [0.20.0] - 2026-10-01
+
+### Added
+- Seiten-Editor: neuer "Zurück"-Button links in der Sticky-Toolbar, der direkt (ohne Speichern) zur Seitenübersicht zurückspringt — bei ungespeicherten Änderungen weiterhin mit Bestätigungsdialog. Nutzt die bisher ungenutzte `handleCancelClick`/`onCancel`-Funktion, die zuvor an keiner Stelle der Oberfläche verdrahtet war.
+
+---
+
+## [0.19.0] - 2026-09-30
+
+### Added
+- Projekttransfer-Erstellung (Export) und Import/Restore im Backup-Bereich zeigen jetzt ein Popup mit Fortschrittsbalken statt nur eines Spinners im Button. Beim Erstellen wird der tatsächliche Download-Fortschritt anhand der `Content-Length` angezeigt, beim Einspielen der Upload-Fortschritt des Requests, gefolgt von einem unbestimmten "Wird verarbeitet…"-Zustand während der Server die Daten schreibt. Bei Erfolg schließt sich das Popup automatisch, bei einem Fehler bleibt es mit Fehlermeldung offen und muss manuell geschlossen werden.
+
+---
+
+## [0.18.3] - 2026-09-30
+
+### Added
+- `POST /api/pages` (Array-Save) lehnt jetzt auch Bäume ab, in denen dieselbe Seiten-`id` mehrfach vorkommt (z. B. eine Seite gleichzeitig an ihrem alten und neuen Platz nach einem Verschieben/Verschachteln) — zusätzlich zur bereits in 0.18.2 eingeführten Slug-Eindeutigkeitsprüfung. Der Seitenbaum-Editor prüft das serverseitige Ergebnis eines Drag&Drop-Verschiebens (`handleDropOnNode`) jetzt ebenfalls lokal ab und bricht mit einer Fehlermeldung ab, statt einen fehlerhaft verdoppelten Baum zu speichern.
+
+---
+
+## [0.18.2] - 2026-09-30
+
+### Fixed
+- Verschachtelte Seiten (im `children`-JSON ihrer Top-Level-Elternseite gespeichert) konnten über das Slug-Feld im Seiten-Editor auf einen bereits vergebenen Slug umbenannt werden, ohne dass Client oder Server das prüften — anders als Top-Level-Seiten, deren Slug per DB-Constraint eindeutig sein muss. Da `findPageByPath` (`pages/[...slug].js`) beim Auflösen einer URL Segment für Segment immer das erste passende Kind nimmt, wurde der Inhalt der zweiten (und jeder weiteren) Seite mit demselben Slug dauerhaft unerreichbar, obwohl er in der Datenbank erhalten blieb — sichtbar u. a. als scheinbar doppelte Einträge in der Seiten-Liste und als "Seite nicht gefunden" beim direkten Aufruf der verdeckten URL. `POST /api/pages` lehnt Array-Saves mit doppeltem Slug (auch verschachtelt) jetzt mit 400 ab, bevor irgendetwas geschrieben wird; der Seiten-Editor meldet einen Konflikt schon vor dem Speichern.
+
+---
+
+## [0.18.1] - 2026-09-30
+
+### Fixed
+- Der in 0.18.0 eingeführte Postgres-Reconcile-Mechanismus wurde als per Bind-Mount eingebundene Datei (`docker/postgres-entrypoint.sh`) ausgeliefert. Fehlt diese Datei auf dem Host beim Container-Start (z. B. bei Portainer-Stacks ohne vollständiges Git-Checkout), legt Docker dort kommentarlos ein leeres Verzeichnis an statt zu mounten — der Container scheiterte dann mit `Is a directory` und blieb dauerhaft `unhealthy`. Das Skript läuft jetzt inline als `command:` in `docker-compose.yml`, ganz ohne zusätzliche Datei, damit es unabhängig davon funktioniert, wie das jeweilige Deploy-Tool den Stack bereitstellt.
+
+### Added
+- Docker: `postgres`-Service gleicht Rollen-Passwort und Datenbank bei jedem Container-Start automatisch gegen die aktuellen `DATABASE_*`-Werte ab (`docker/postgres-entrypoint.sh`), statt nur beim allerersten Init des Volumes. Verhindert stille Auth-Fehler ("password authentication failed") bzw. fehlende Datenbanken nach Deploy-Tool-Wechseln oder geänderten Zugangsdaten, ohne dass Daten im Volume angefasst werden.
+
+### Fixed
+- Mehrere API-Routen (`/api/pages`, `/api/users`, `/api/files`) prüften Authentifizierung/Rollen nicht, obwohl `lib/auth.js` die passenden Berechtigungen dafür bereits definiert (`PAGES_EDIT`/`PAGES_DELETE`, `USERS_VIEW`/`USERS_EDIT`, `FILES_UPLOAD`/`FILES_DELETE`). Schreibende Endpunkte (Seiten anlegen/löschen, Nutzer auflisten/löschen, Dateien hoch-/herunterladen/löschen, Ordner rekursiv löschen) waren dadurch unauthentifiziert erreichbar; lesende bzw. von der öffentlichen Website genutzte Endpunkte (`GET /api/pages`, `GET /api/files`) bleiben bewusst offen.
+- `/api/database/migrate` und `/api/database/test-connection` entfernt: nahmen unauthentifiziert eine beliebige `connectionString` aus dem Request-Body entgegen und verbanden sich damit (SSRF-Risiko), `migrate` löschte zudem Daten und referenzierte ein `Template`-Modell, das im aktuellen Prisma-Schema nicht mehr existiert. Beide Endpunkte waren im Code nirgends mehr referenziert.
+
+---
+
+## [0.17.1] - 2026-09-30
+
+### Fixed
+- Docker: Healthcheck des `postgres`-Service prüfte `pg_isready -U ${DATABASE_USER}` ohne `-d`, wodurch `pg_isready` den Benutzernamen als Datenbanknamen annahm. Existierte keine gleichnamige Datenbank, spammte der Check im 2-Sekunden-Takt `FATAL: database "..." does not exist` ins Postgres-Log (reines Log-Rauschen, der Server selbst lief sauber). Healthcheck prüft jetzt explizit gegen `-d postgres`, das immer existiert.
+
+---
+
+## [0.17.0] - 2026-09-30
+
+### Added
+- Seitenbaum (PageTreeEditor): Seiten lassen sich jetzt per Drag & Drop umsortieren (davor/danach einordnen oder als Unterseite ablegen). Ein neues "Hinzufügen"-Menü an jeder Seite bündelt Unterseite/Geschwisterseite/Duplizieren an einer Stelle.
+
+### Changed
+- Docker: Compose-Service von `app` auf `temgine` umbenannt.
+
+---
+
+## [0.16.1] - 2026-09-30
+
+### Fixed
+- Projekttransfer-Export (ZIP) brach bei großen Uploads-Ordnern (mehrere GB) ab: alle Upload-Dateien und -Fonts wurden komplett Base64-kodiert in den Arbeitsspeicher geladen und das ZIP erst als ein einziger Buffer erzeugt, bevor überhaupt Daten an den Browser gingen — das sprengte je nach Datenmenge den Node-Heap oder die V8-String-Längengrenze. Uploads/Fonts werden jetzt per Stream direkt von der Platte ins ZIP geschrieben und das ZIP wird wie der statische Website-Export gestreamt statt komplett gepuffert.
+
+---
+
+## [0.16.0] - 2026-09-30
+
+### Added
+- Neuer Platzhaltertyp `{{#folder}}…{{/folder}}` (und benannt: `{{#folder:name}}…{{/folder:name}}`) für Block-Vorlagen: erzeugt im Seiten-Editor ein Ordner-Auswahlfeld (Upload-Ordner) und iteriert beim Rendern automatisch über alle Dateien darin — inklusive aller Unterordner (rekursiv), ohne manuelles Anlegen einzelner Einträge. Pro Datei stehen `name`, `slug`, `url`, `path`, `ext`, `size`, `modified` und `isImage` zur Verfügung, z. B. für Bild-/Dokumentgalerien.
+
+---
+
+## [0.15.2] - 2026-09-30
+
+### Fixed
+- Mehrere Editoren im Adminbereich schlossen sich nach dem Speichern selbstständig statt geöffnet zu bleiben: CSS-Manager, JS-Manager, Navigations-Template-Editor, Footer-Editor, Globale Variablen, Content-Modelle und Content-Einträge im Kontaktformular-Template-Editor. Speichern lädt jetzt nur noch die Liste neu und aktualisiert den Editor-Inhalt mit dem gespeicherten Datensatz, schließt das Panel aber nicht mehr.
+
+---
+
+## [0.15.1] - 2026-09-29
+
+### Fixed
+- Template Manager → Seiten-Datenfelder: eine neu gespeicherte oder gelöschte Vorlage tauchte im Seiten-Editor-Dropdown erst nach vollem Reload auf — der Tab rief `onSaved()` nicht auf, sodass die App-weite Templateliste veraltet blieb (beim manuellen Testen von 0.15.0 aufgefallen).
+
+---
+
+## [0.15.0] - 2026-09-29
+
+### Added
+- Neuer Vorlagentyp „Seiten-Datenfelder" im Template Manager (eigener Tab): eine Vorlage deklariert per `{{feldname:typ}}`-Platzhaltern (gleiche Syntax/Typen wie Block-Vorlagen), welche freien Datenfelder eine Seite anbieten soll — inkl. Live-Vorschau der erkannten Felder beim Bearbeiten.
+- Seiten-Editor (Einstellungen): Neue Auswahl „Seiten-Datenfelder" — eine Seite wählt eine dieser Vorlagen, die deklarierten Felder erscheinen automatisch als passende Eingabefelder (Text, Textarea, Zahl, URL, Bild, Datum, Farbe, Liste), geschrieben nach `page.data`.
+- `{{data.X}}` als kürzerer Alias für `{{page.data.X}}` in Block-Templates — einheitlich mit der Schreibweise, die Navigations-Templates für Seiten-Datenfelder schon nutzen.
+
+### Fixed
+- `isCurrent`/`data` je Seite in `{{#pages}}` fehlten bisher auf der Startseite (`pages/index.js`) und im Static-Site-Export (`pages/api/admin/export.js`) — beide Renderpfade lieferten dort nur `pages/[...slug].js` und den Live-Snapshot vollständig. Alle vier Renderpfade liefern jetzt gleichermaßen `isCurrent`/`data`.
+- Referenz-Tab im Template Manager: `{{#customAnchors}}` fehlte in der Liste der Navigations-Variablen (0.14.7 nachgereicht).
+
+---
+
+## [0.14.8] - 2026-09-29
+
+### Changed
+- Navigationsverwaltung: Doku-Sidebar rechts komplett überarbeitet — jetzt vollständige Platzhalter-Referenz (`{{{nav:...}}}` sowie `pages`/`children`/`childPages`/`anchors`/`customAnchors`), eine Mustache-Kurzreferenz, eine Best-Practices-Liste und zwei vollständige Beispiel-Snippets, statt bisher nur der Grundlagen (zwei Typen, drei Einbindungswege, kurze Platzhalter-Tabelle).
+
+---
+
+## [0.14.7] - 2026-09-28
+
+### Added
+- Seiten-Editor (Einstellungen): Neuer Bereich „Freie Sprungmarken" (`page.data.customAnchors`) neben der Anker-Navigation — für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen, sondern z. B. aus einem eigenen Template-Feld gerendert werden. Freie Texteingabe statt Dropdown-Auswahl, verfügbar in PAGE-Navigationen als `{{#customAnchors}}`.
+- Navigationsverwaltung: Neues Preset „Anchor Sidebar (freie Ziel-IDs)" für `{{#customAnchors}}`, als Pendant zum bestehenden „Anchor Sidebar"-Preset.
+
+### Fixed
+- Anker-Navigation (`{{#anchors}}`, 0.14.6): Das Dropdown zur Auswahl der Ziel-ID zeigte ausschließlich Blöcke mit gesetztem Anchor-ID-Feld — Seiten, deren Ziel-IDs aus eigenen Template-Feldern kommen, konnten so keine passenden Einträge anlegen und die Anker-Liste blieb in Prod trotz Update leer. `anchors` bleibt bewusst auf das Anchor-ID-Feld beschränkt (keine Tippfehler möglich); der neue `customAnchors`-Bereich deckt den freien Fall ab.
+
+---
+
+## [0.14.6] - 2026-09-28
+
+### Added
+- Seiten-Editor: Block per Dialog in eine andere Seite kopieren oder verschieben (neue Buttons je Block).
+- Seiten-Editor (Einstellungen): Editor für die Anker-Navigation (`page.data.anchors`) — Blöcke mit gesetzter Anchor-ID lassen sich per Dropdown auswählen, mit eigenem Anzeigetext versehen, sortieren und entfernen. Damit funktioniert `{{#anchors}}` in PAGE-Navigationen jetzt tatsächlich; bisher gab es dafür kein Formularfeld (siehe `help/navigationen.md`) und die Liste blieb immer leer.
+
+### Fixed
+- Block in andere Seite verschieben: Ziel-Update und Entfernen aus der Quellseite liefen als zwei getrennte Speichervorgänge, die sich überholen konnten — der zweite überschrieb dabei den gerade hinzugefügten Block auf der Zielseite mit einem veralteten Snapshot. Beide Änderungen laufen jetzt in einem atomaren Speichervorgang.
+
+---
+
 ## [0.14.5] - 2026-09-25
 
 ### Fixed

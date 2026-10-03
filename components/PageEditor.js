@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns } from '../lib/muiIcons';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups } from '../lib/templateParser';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups, extractFolderBlocks } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import SmartRichTextEditor from './SmartRichTextEditor';
@@ -14,7 +14,7 @@ import DOMCanvas from './DOMCanvas';
 import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage }) {
   const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
   const CHANNEL_TEMPLATE_LABEL_PREFIX = 'Kanal: ';
 
@@ -41,13 +41,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
+  // Name of the "Seiten-Datenfelder" (PAGE_FIELDS) template that declares which
+  // pageData.X fields this page offers — stored on Page.template (previously
+  // unused by the editor).
+  const [pageFieldsTemplate, setPageFieldsTemplate] = useState('');
 
   const [blocks, setBlocks] = useState([]);
   const [pageData, setPageData] = useState({});
   const [templateCodes, setTemplateCodes] = useState({});
   const [snippetLabels, setSnippetLabels] = useState({});
-  const [redirectType, setRedirectType] = useState('none');
+  const [redirectType, setRedirectType] = useState('none'); // 'none' | 'permanent' | 'temporary'
   const [redirectUrl, setRedirectUrl] = useState('');
+  const [redirectTarget, setRedirectTarget] = useState('_self'); // '_self' | '_blank'
   const [isHomepage, setIsHomepage] = useState(false);
   const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
   const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
@@ -58,6 +63,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalTab, setFileModalTab] = useState('gallery');
   const [fileModalFolder, setFileModalFolder] = useState('');
   const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
+  // 'file' = bestehendes Verhalten (Bild-/Datei-Auswahl); 'folder' = {{#folder}}-Felder wählen
+  // einen ganzen Ordner statt einer einzelnen Datei.
+  const [fileModalMode, setFileModalMode] = useState('file');
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
@@ -77,6 +85,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
   const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
+  const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
   const [splitPreview, setSplitPreview] = useState(false);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
@@ -109,7 +118,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     pageData,
     redirectType,
     redirectUrl,
+    redirectTarget,
     isHomepage,
+    pageFieldsTemplate,
   }) => JSON.stringify({
     title: title || '',
     slug: slug || '',
@@ -117,7 +128,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     pageData: pageData || {},
     redirectType: redirectType || 'none',
     redirectUrl: redirectUrl || '',
+    redirectTarget: redirectTarget || '_self',
     isHomepage: Boolean(isHomepage),
+    pageFieldsTemplate: pageFieldsTemplate || '',
   });
 
   const normalizeSlotName = (value) => {
@@ -171,6 +184,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const templateObjs = Array.isArray(templates) ? templates : [];
   const templateNames = templateObjs.map(t => t.name);
   const blockTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'BLOCK').map(t => t.name);
+  const pageFieldTemplateNames = templateObjs.filter(t => String(t.type).toUpperCase() === 'PAGE_FIELDS').map(t => t.name);
   const channelTemplateOptions = [...blogChannels]
     .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
     .map(ch => ({
@@ -199,18 +213,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const migratedBlocks = migration.blocks || [];
       const initialTitle = page.title || '';
       const initialSlug = page.slug || '';
-      const initialRedirectType = page.redirectType || 'none';
-      const initialRedirectUrl = page.redirectUrl || '';
+      const initialRedirect = (page.data && page.data.redirect) || {};
+      const initialRedirectType = (initialRedirect.type === 'permanent' || initialRedirect.type === 'temporary') ? initialRedirect.type : 'none';
+      const initialRedirectUrl = initialRedirect.url || '';
+      const initialRedirectTarget = initialRedirect.target === '_blank' ? '_blank' : '_self';
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
+      const initialPageFieldsTemplate = page.template || '';
 
       setTitle(page.title || '');
       setSlug(page.slug || '');
+      setPageFieldsTemplate(initialPageFieldsTemplate);
       setBlocks(migratedBlocks);
       setPageData(page.data || {});
       setRedirectType(initialRedirectType);
       setRedirectUrl(initialRedirectUrl);
+      setRedirectTarget(initialRedirectTarget);
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
@@ -246,7 +265,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData: initialPageData,
         redirectType: initialRedirectType,
         redirectUrl: initialRedirectUrl,
+        redirectTarget: initialRedirectTarget,
         isHomepage: initialIsHomepage,
+        pageFieldsTemplate: initialPageFieldsTemplate,
       });
       setPageStatus((page.status || 'DRAFT').toUpperCase());
       setIsDirty(false);
@@ -281,7 +302,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData,
         redirectType,
         redirectUrl,
+        redirectTarget,
         isHomepage,
+        pageFieldsTemplate,
       });
     }
 
@@ -292,12 +315,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       pageData,
       redirectType,
       redirectUrl,
+      redirectTarget,
       isHomepage,
+      pageFieldsTemplate,
     });
     const dirty = currentSnapshot !== initialSnapshotRef.current;
     setIsDirty(dirty);
     onDirtyChange?.(dirty);
-  }, [title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage, onDirtyChange]);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage, pageFieldsTemplate, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return undefined;
@@ -648,6 +673,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
+  // Maps template name → folder blocks [{ sectionName }]
+  const templateFolderBlocksByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = extractFolderBlocks(code) || [];
+      } catch (e) {
+        out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
   // Entfernt HTML-Tags aus einem String
   const stripTags = (s) => {
     if (!s) return '';
@@ -662,10 +700,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
+    setFileModalMode('file');
     setFileModalTab('gallery');
     setFileModalFolder('');
     setFileModalFolderContents({ files: [], folders: [] });
     setShowFileModal(true);
+  };
+
+  // Für {{#folder}}-Felder: dieselbe Modal-Ansicht, aber es wird ein ganzer Ordner statt
+  // einer einzelnen Datei gewählt (callback erhält den Ordnerpfad relativ zu public/uploads/).
+  const openFolderModal = (callback) => {
+    setFileModalCallback(() => callback);
+    setFileModalMode('folder');
+    setFileModalTab('folders');
+    setFileModalFolder('');
+    setFileModalFolderContents({ files: [], folders: [] });
+    setShowFileModal(true);
+    loadFolderContents('');
   };
 
   const loadFolderContents = async (folder) => {
@@ -685,6 +736,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const selectFile = (fileUrl) => {
     if (fileModalCallback) {
       fileModalCallback(fileUrl);
+    }
+    setShowFileModal(false);
+    setFileModalCallback(null);
+  };
+
+  const selectFolder = () => {
+    if (fileModalCallback) {
+      fileModalCallback(fileModalFolder);
     }
     setShowFileModal(false);
     setFileModalCallback(null);
@@ -785,25 +844,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setPageData(deepMerge(pageData, updates));
   }
 
-  function handleDeleteBlock(index) {
-    // support both numeric index (top-level) and path strings like '2.1.0'
+  // Pure helper (no state read/write) so callers can compute the post-removal
+  // block list synchronously, without waiting for a setBlocks() re-render.
+  const removeBlockAtPath = (sourceBlocks, index) => {
     if (typeof index === 'string') {
       const parts = index.split('.').map(p => parseInt(p, 10));
-      const copy = JSON.parse(JSON.stringify(blocks || []));
+      const copy = JSON.parse(JSON.stringify(sourceBlocks || []));
       if (parts.length === 1) {
         copy.splice(parts[0], 1);
-        setBlocks(copy);
-        return;
+        return copy;
       }
       let cur = copy;
       for (let i = 0; i < parts.length - 1; i++) {
         cur = cur[parts[i]].children = cur[parts[i]].children || [];
       }
       cur.splice(parts[parts.length - 1], 1);
-      setBlocks(copy);
-      return;
+      return copy;
     }
-    setBlocks(blocks.filter((_, i) => i !== index));
+    return (sourceBlocks || []).filter((_, i) => i !== index);
+  };
+
+  function handleDeleteBlock(index) {
+    setBlocks(removeBlockAtPath(blocks, index));
   }
 
   // Helper: navigate nested copy to the sibling array of a given path
@@ -1007,6 +1069,68 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       else next.add(path);
       return next;
     });
+  }
+
+  // Flache Liste aller Seiten (fuer den "In andere Seite kopieren/verschieben"-Dialog)
+  const transferTargetPages = useMemo(() => {
+    const flatten = (nodes, depth = 0, acc = []) => {
+      for (const n of nodes || []) {
+        if (!n) continue;
+        acc.push({ id: n.id, slug: n.slug, title: n.title || n.slug, depth });
+        if (Array.isArray(n.children) && n.children.length) {
+          flatten(n.children, depth + 1, acc);
+        }
+      }
+      return acc;
+    };
+    return flatten(allPages || []).filter(p => p.id && p.id !== page?.id);
+  }, [allPages, page?.id]);
+
+  const openBlockTransfer = (path, mode) => {
+    setBlockTransferState({ path, mode, targetPageId: '', search: '' });
+  };
+
+  async function handleConfirmBlockTransfer() {
+    if (!blockTransferState || !blockTransferState.targetPageId) return;
+    const { path, mode, targetPageId } = blockTransferState;
+    const block = getBlockAtPath(path);
+    if (!block || typeof onTransferBlockToPage !== 'function') {
+      setBlockTransferState(null);
+      return;
+    }
+    // sourcePageId/sourcePath let the parent apply the target addition and
+    // (for a move) the source removal in one atomic save — avoiding a second,
+    // separate save of this page that could race with the first and revert it
+    // with a stale snapshot of whatever this page was still holding.
+    const ok = await onTransferBlockToPage({ block, targetPageId, mode, sourcePageId: page?.id, sourcePath: path });
+    if (ok) {
+      if (mode === 'move') {
+        // The removal is already persisted server-side (see above); this just
+        // reflects it in the local editor state so the block disappears here too.
+        const newBlocks = removeBlockAtPath(blocks, path);
+        setBlocks(newBlocks);
+        initialSnapshotRef.current = buildSnapshot({
+          title,
+          slug,
+          blocks: newBlocks,
+          pageData,
+          redirectType,
+          redirectUrl,
+          redirectTarget,
+          isHomepage,
+          pageFieldsTemplate,
+        });
+        setIsDirty(false);
+        setAutosaveStatus('gespeichert');
+        onDirtyChange?.(false);
+        setToast({ message: 'Block wurde in die Zielseite verschoben.', type: 'success' });
+      } else {
+        setToast({ message: 'Block wurde in die Zielseite kopiert.', type: 'success' });
+      }
+    } else {
+      setToast({ message: 'Block konnte nicht übertragen werden.', type: 'error' });
+    }
+    setBlockTransferState(null);
   }
 
   const getBlockAtPath = (path) => {
@@ -1235,28 +1359,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       return false;
     }
 
-    // Prüfe ob bereits eine andere 404-Seite existiert
-    if (redirectType === '404' && allPages) {
-      const find404Page = (nodes) => {
-        for (const node of nodes) {
-          if (node.id !== page.id && node.redirectType === '404') return node;
-          if (node.children && node.children.length > 0) {
-            const found = find404Page(node.children);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-      const existing404 = find404Page(allPages);
-      if (existing404) {
-        if (!opts.silent) {
-          showToast?.(`Es existiert bereits eine 404-Seite: "${existing404.title}". Es kann nur eine 404-Seite pro Website geben.`, 'error');
-        }
-        if (opts.autosave) setAutosaveStatus('fehler');
-        return false;
-      }
-    }
-
     const normalizedPageData = { ...(pageData || {}) };
     delete normalizedPageData.blockSlots;
     delete normalizedPageData.__blockSlots;
@@ -1266,20 +1368,51 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       normalizedPageData.domLayout = domLayout;
     }
 
+    // Weiterleitung lebt in data.redirect (keine eigene DB-Spalte) statt als
+    // Top-Level-Feld — siehe lib/pageRedirect.js, das dieselbe Form liest.
+    if (redirectType === 'permanent' || redirectType === 'temporary') {
+      normalizedPageData.redirect = { type: redirectType, url: redirectUrl, target: redirectTarget };
+    } else {
+      delete normalizedPageData.redirect;
+    }
+
     const normalizedSlug = slug || title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    // Slug muss über den gesamten Seitenbaum eindeutig sein — sonst verdeckt
+    // findPageByPath (nimmt bei der URL-Auflösung immer das erste Match pro
+    // Ebene) den Inhalt der anderen Seite(n) mit demselben Slug dauerhaft.
+    if (allPages) {
+      const findDuplicateSlug = (nodes) => {
+        for (const node of nodes || []) {
+          if (node.id !== page?.id && node.slug === normalizedSlug) return node;
+          const found = findDuplicateSlug(node.children || []);
+          if (found) return found;
+        }
+        return null;
+      };
+      const duplicate = findDuplicateSlug(allPages);
+      if (duplicate) {
+        if (!opts.silent) {
+          showToast?.(`Der Slug "${normalizedSlug}" wird bereits von "${duplicate.title}" verwendet. Seiten mit demselben Slug verdecken sich gegenseitig — bitte einen eindeutigen Slug wählen.`, 'error');
+        }
+        if (opts.autosave) setAutosaveStatus('fehler');
+        return false;
+      }
+    }
 
     const updatedPage = {
       ...page,
       title,
       slug: normalizedSlug,
+      template: pageFieldsTemplate || null,
       blocks,
       data: normalizedPageData,
-      redirectType,
-      redirectUrl: redirectType !== 'none' ? redirectUrl : undefined,
       isHomepage,
       accessGroups,
       status: pageStatus,
     };
+    delete updatedPage.redirectType;
+    delete updatedPage.redirectUrl;
 
     try {
       if (opts.autosave) {
@@ -1303,7 +1436,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         pageData: normalizedPageData,
         redirectType,
         redirectUrl,
+        redirectTarget,
         isHomepage,
+        pageFieldsTemplate,
       });
       setIsDirty(false);
       setAutosaveStatus('gespeichert');
@@ -1408,7 +1543,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, isHomepage]);
+  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage]);
 
   function handleCancelClick() {
     if (isDirty) {
@@ -1658,6 +1793,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     aria-label="Block in Lightbox bearbeiten"
                   >
                     <LayoutGrid size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); openBlockTransfer(path, 'copy'); }}
+                    title="Block in andere Seite kopieren"
+                    aria-label="Block in andere Seite kopieren"
+                  >
+                    <Copy size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="block-move-btn"
+                    onClick={(e) => { e.stopPropagation(); openBlockTransfer(path, 'move'); }}
+                    title="Block in andere Seite verschieben"
+                    aria-label="Block in andere Seite verschieben"
+                  >
+                    <GitCompare size={12} />
                   </button>
                 </div>
               );
@@ -2061,6 +2214,41 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   </div>
                 );
               })}
+
+              {/* Folder fields: {{#folder}}...{{/folder}} / {{#folder:name}}...{{/folder:name}} */}
+              {(templateFolderBlocksByName[block.template] || []).map(({ sectionName }) => {
+                const folderPath = block.props[sectionName] || '';
+                return (
+                  <div key={sectionName} className="field-item">
+                    <label className="field-label-xs">{formatLabel(sectionName)}</label>
+                    <div className="field-url-row">
+                      <input
+                        type="text"
+                        readOnly
+                        placeholder="Kein Ordner gewählt"
+                        value={folderPath ? `uploads/${folderPath}` : ''}
+                        className="input-field-small field-input-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openFolderModal((chosenPath) => updateNestedBlock(path, { [sectionName]: chosenPath }))}
+                        className="btn-modern-small"
+                        title={`Ordner für ${formatLabel(sectionName)} auswählen`}
+                        aria-label={`Ordner für ${formatLabel(sectionName)} auswählen`}
+                      >📁 Ordner</button>
+                      {folderPath && (
+                        <button
+                          type="button"
+                          onClick={() => updateNestedBlock(path, { [sectionName]: '' })}
+                          className="btn-modern-small hollow"
+                          title={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
+                          aria-label={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
+                        >Leeren</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -2229,8 +2417,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         {/* ── Sticky Toolbar ──────────────────────────────────────────── */}
         <div className="pe-toolbar">
           <div className="pe-toolbar-left">
-            <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
-            <span className="pe-toolbar-slug">/{slug || '—'}</span>
+            <button
+              type="button"
+              className="pe-tb-btn pe-tb-btn-back"
+              onClick={handleCancelClick}
+              title="Zurück zur Seitenübersicht (ohne zu speichern)"
+              aria-label="Zurück zur Seitenübersicht"
+            >
+              <ArrowLeft size={14} /> Zurück
+            </button>
+            <div className="pe-toolbar-titlewrap">
+              <span className="pe-toolbar-title">{title || 'Unbenannte Seite'}</span>
+              <span className="pe-toolbar-slug">/{slug || '—'}</span>
+            </div>
           </div>
           <div className="pe-toolbar-actions">
             {domLayout.length > 0 && (
@@ -2306,7 +2505,57 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         </div>
 
         <div className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}>
-          {useDOMEditor ? (
+          {redirectType !== 'none' ? (
+            // Weiterleitungs-Seite: keine Blöcke, stattdessen Ziel-URL/Target konfigurieren
+            <div className="page-editor-canvas" title={devTitle('Weiterleitungs-Konfiguration')}>
+              <div className="redirect-config-panel">
+                <h3>Diese Seite ist eine Weiterleitung</h3>
+                <p className="redirect-config-hint">
+                  Besucher dieser Seite werden automatisch zur unten angegebenen URL weitergeleitet. Blöcke können
+                  für Weiterleitungs-Seiten nicht angelegt werden.
+                </p>
+
+                <label className="field-label-xs">Art der Weiterleitung</label>
+                <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
+                  <option value="permanent">Permanent (301)</option>
+                  <option value="temporary">Temporär (302)</option>
+                </select>
+
+                <label className="field-label-xs" style={{ marginTop: '14px' }}>Ziel-URL</label>
+                <input
+                  type="text"
+                  value={redirectUrl}
+                  onChange={e => setRedirectUrl(e.target.value)}
+                  placeholder="/andere-seite oder https://example.com"
+                  className="input-field-small"
+                  aria-label="Ziel-URL"
+                />
+
+                <label className="field-label-xs" style={{ marginTop: '14px' }}>Target</label>
+                <select value={redirectTarget} onChange={e => setRedirectTarget(e.target.value)} className="input-field-small" aria-label="Weiterleitungs-Target">
+                  <option value="_self">Gleicher Tab (_self)</option>
+                  <option value="_blank">Neuer Tab (_blank)</option>
+                </select>
+                {redirectTarget === '_blank' && (
+                  <p className="redirect-config-hint">
+                    Hinweis: "Neuer Tab" kann keine automatische HTTP-Weiterleitung sein (das lässt sich für
+                    einen neuen Tab nicht per HTTP-Header auslösen). Diese Seite bleibt daher mit Status 200
+                    erreichbar und zeigt einen klickbaren Link zur Ziel-URL, statt automatisch dorthin zu
+                    springen. Für eine echte, automatische HTTP-Weiterleitung (301/302) "Gleicher Tab" wählen.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  className="pe-tb-btn pe-tb-btn-danger"
+                  style={{ marginTop: '18px' }}
+                  onClick={() => setRedirectType('none')}
+                >
+                  Weiterleitung aufheben
+                </button>
+              </div>
+            </div>
+          ) : useDOMEditor ? (
             // DOM Editor View
             <div className="page-editor-canvas" title={devTitle('DOM-Layout-Editor')}>
               <div style={{ display: 'flex', gap: '16px', height: '100%' }}>
@@ -2550,13 +2799,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         <input type="text" value={slug} onChange={e => setSlug(e.target.value)} placeholder="seiten-url" className="input-field-small" aria-label="URL-Slug" />
                         <label className="field-label-xs">Weiterleitung</label>
                         <select value={redirectType} onChange={e => setRedirectType(e.target.value)} className="input-field-small" aria-label="Weiterleitungstyp">
-                          <option value="none">Keine</option>
-                          <option value="404">404</option>
-                          <option value="503">503</option>
-                          <option value="external">Externe URL</option>
+                          <option value="none">Keine (normale Seite)</option>
+                          <option value="permanent">Permanente Weiterleitung</option>
+                          <option value="temporary">Temporäre Weiterleitung</option>
                         </select>
-                        {redirectType === 'external' && (
-                          <input type="url" value={redirectUrl} onChange={e => setRedirectUrl(e.target.value)} placeholder="https://example.com" className="input-field-small" aria-label="Ziel-URL" />
+                        {redirectType !== 'none' && (
+                          <p className="blog-channel-editor__hint">Ziel-URL und Target werden weiter unten im Hauptbereich eingestellt — Blöcke können für Weiterleitungs-Seiten nicht angelegt werden.</p>
                         )}
                         <label className="page-editor-outline-toggle">
                           <input type="checkbox" checked={isHomepage} onChange={e => setIsHomepage(e.target.checked)} />
@@ -2570,6 +2818,46 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           />
                           In Navigation ausblenden
                         </label>
+
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Seiten-Datenfelder</label>
+                        <select
+                          value={pageFieldsTemplate}
+                          onChange={e => setPageFieldsTemplate(e.target.value)}
+                          className="input-field-small"
+                          aria-label="Vorlage für Seiten-Datenfelder"
+                        >
+                          <option value="">-- Keine --</option>
+                          {pageFieldTemplateNames.map(tn => (
+                            <option key={tn} value={tn}>{tn}</option>
+                          ))}
+                        </select>
+                        {pageFieldsTemplate && !pageFieldTemplateNames.includes(pageFieldsTemplate) && (
+                          <p className="blog-channel-editor__hint">Vorlage „{pageFieldsTemplate}" wurde nicht gefunden (evtl. umbenannt/gelöscht) — bereits gesetzte Werte bleiben erhalten.</p>
+                        )}
+                        {pageFieldsTemplate && templateCodes[pageFieldsTemplate] && (() => {
+                          const fields = extractTypedVariables(templateCodes[pageFieldsTemplate]);
+                          if (fields.length === 0) {
+                            return <p className="blog-channel-editor__hint">Diese Vorlage deklariert noch keine Felder — z. B. <code>{'{{autor:text}}'}</code> ergänzen.</p>;
+                          }
+                          return (
+                            <div className="page-fields-editor">
+                              {fields.map(({ varName, explicitType }) => (
+                                <PageDataFieldInput
+                                  key={varName}
+                                  varName={varName}
+                                  inputType={explicitType || guessInputType(varName)}
+                                  label={formatLabel(varName)}
+                                  value={pageData[varName]}
+                                  onChange={(val) => setPageData(d => ({ ...d, [varName]: val }))}
+                                  openFileModal={openFileModal}
+                                  devTitle={devTitle}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Vorlagen dafür im Template Manager unter „Seiten-Datenfelder" anlegen. Ausgabe im Block-Template als <code>{'{{data.X}}'}</code> / <code>{'{{page.data.X}}'}</code>, in Navigationen pro Seite als <code>{'{{data.X}}'}</code> innerhalb <code>{'{{#pages}}'}</code>.</p>
+
                         {/* Access Control */}
                         <AccessGroupsPanel
                           accessGroups={accessGroups}
@@ -2620,6 +2908,142 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           </div>
                         )}
                         <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+
+                        <label className="field-label-xs" style={{marginTop:'10px'}}>Anker-Navigation</label>
+                        {(() => {
+                          const anchorBlocks = flattenBlocks(blocks).filter(({ block }) => String(block?.props?.anchorId || '').trim());
+                          const anchorList = Array.isArray(pageData.anchors) ? pageData.anchors : [];
+                          const updateAnchors = (updater) => setPageData(d => ({ ...d, anchors: updater(Array.isArray(d.anchors) ? d.anchors : []) }));
+                          return (
+                            <div className="anchor-list-editor">
+                              {anchorList.map((anchor, idx) => {
+                                const matched = anchorBlocks.find(({ block }) => block.props.anchorId === anchor.anchorId);
+                                return (
+                                  <div key={idx} className="anchor-list-row">
+                                    <select
+                                      value={anchor.anchorId || ''}
+                                      onChange={e => {
+                                        const newAnchorId = e.target.value;
+                                        updateAnchors(list => list.map((a, i) => i === idx ? { ...a, anchorId: newAnchorId } : a));
+                                      }}
+                                      className="input-field-small"
+                                      aria-label={`Ziel-Block fuer Anker ${idx + 1}`}
+                                    >
+                                      <option value="">-- Block wählen --</option>
+                                      {anchorBlocks.map(({ block, path }) => (
+                                        <option key={path} value={block.props.anchorId}>
+                                          {block.props.anchorId}{block.props?.title ? ` – ${block.props.title}` : ''}
+                                        </option>
+                                      ))}
+                                      {anchor.anchorId && !matched && (
+                                        <option value={anchor.anchorId}>{anchor.anchorId} (Block nicht gefunden)</option>
+                                      )}
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={anchor.title || ''}
+                                      onChange={e => {
+                                        const newTitle = e.target.value;
+                                        updateAnchors(list => list.map((a, i) => i === idx ? { ...a, title: newTitle } : a));
+                                      }}
+                                      placeholder="Anzeigetext"
+                                      className="input-field-small field-input-full"
+                                      aria-label={`Anzeigetext fuer Anker ${idx + 1}`}
+                                    />
+                                    <button type="button" className="block-move-btn" disabled={idx === 0}
+                                      onClick={() => updateAnchors(list => { const next = [...list]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; return next; })}
+                                      title="Nach oben verschieben" aria-label="Anker nach oben verschieben">
+                                      <ChevronUp size={12} />
+                                    </button>
+                                    <button type="button" className="block-move-btn" disabled={idx === anchorList.length - 1}
+                                      onClick={() => updateAnchors(list => { const next = [...list]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; return next; })}
+                                      title="Nach unten verschieben" aria-label="Anker nach unten verschieben">
+                                      <ChevronDown size={12} />
+                                    </button>
+                                    <button type="button" className="block-move-btn"
+                                      onClick={() => updateAnchors(list => list.filter((_, i) => i !== idx))}
+                                      title="Anker entfernen" aria-label="Anker entfernen">
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                              <button
+                                type="button"
+                                className="btn-modern-small"
+                                onClick={() => updateAnchors(list => [...list, {
+                                  anchorId: anchorBlocks.find(({ block }) => !anchorList.some(a => a.anchorId === block.props.anchorId))?.block?.props?.anchorId || '',
+                                  title: '',
+                                }])}
+                              >
+                                + Anker hinzufügen
+                              </button>
+                              {anchorBlocks.length === 0 && (
+                                <p className="blog-channel-editor__hint">Kein Block hat aktuell eine Anchor-ID gesetzt. Im Block-Header oben je Block das Feld „Anchor ID" befüllen, dann hier auswählen.</p>
+                              )}
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Verfügbar in PAGE-Navigationen als <code>{'{{#anchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — verlinkt ausschließlich Blöcke mit gesetzter Anchor-ID.</p>
+
+                        <label className="field-label-xs" style={{marginTop:'14px'}}>Freie Sprungmarken</label>
+                        {(() => {
+                          const customList = Array.isArray(pageData.customAnchors) ? pageData.customAnchors : [];
+                          const updateCustom = (updater) => setPageData(d => ({ ...d, customAnchors: updater(Array.isArray(d.customAnchors) ? d.customAnchors : []) }));
+                          return (
+                            <div className="anchor-list-editor">
+                              {customList.map((anchor, idx) => (
+                                <div key={idx} className="anchor-list-row">
+                                  <input
+                                    type="text"
+                                    value={anchor.anchorId || ''}
+                                    onChange={e => {
+                                      const newAnchorId = e.target.value;
+                                      updateCustom(list => list.map((a, i) => i === idx ? { ...a, anchorId: newAnchorId } : a));
+                                    }}
+                                    placeholder="Ziel-ID (ohne #)"
+                                    className="input-field-small"
+                                    aria-label={`Ziel-ID fuer freie Sprungmarke ${idx + 1}`}
+                                  />
+                                  <input
+                                    type="text"
+                                    value={anchor.title || ''}
+                                    onChange={e => {
+                                      const newTitle = e.target.value;
+                                      updateCustom(list => list.map((a, i) => i === idx ? { ...a, title: newTitle } : a));
+                                    }}
+                                    placeholder="Anzeigetext"
+                                    className="input-field-small field-input-full"
+                                    aria-label={`Anzeigetext fuer freie Sprungmarke ${idx + 1}`}
+                                  />
+                                  <button type="button" className="block-move-btn" disabled={idx === 0}
+                                    onClick={() => updateCustom(list => { const next = [...list]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]; return next; })}
+                                    title="Nach oben verschieben" aria-label="Sprungmarke nach oben verschieben">
+                                    <ChevronUp size={12} />
+                                  </button>
+                                  <button type="button" className="block-move-btn" disabled={idx === customList.length - 1}
+                                    onClick={() => updateCustom(list => { const next = [...list]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]; return next; })}
+                                    title="Nach unten verschieben" aria-label="Sprungmarke nach unten verschieben">
+                                    <ChevronDown size={12} />
+                                  </button>
+                                  <button type="button" className="block-move-btn"
+                                    onClick={() => updateCustom(list => list.filter((_, i) => i !== idx))}
+                                    title="Sprungmarke entfernen" aria-label="Sprungmarke entfernen">
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                className="btn-modern-small"
+                                onClick={() => updateCustom(list => [...list, { anchorId: '', title: '' }])}
+                              >
+                                + Sprungmarke hinzufügen
+                              </button>
+                            </div>
+                          );
+                        })()}
+                        <p className="blog-channel-editor__hint">Für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen (z. B. eine <code>id</code>, die ein eigenes Template-Feld selbst rendert). Verfügbar in PAGE-Navigationen als <code>{'{{#customAnchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — freie Eingabe, keine Prüfung gegen vorhandene Blöcke.</p>
                       </div>
                     )}
                   </div>
@@ -2913,7 +3337,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         <div className="file-modal-overlay">
           <div className="file-modal">
             <div className="file-modal-header">
-              <h3 className="file-modal-title">Datei auswählen</h3>
+              <h3 className="file-modal-title">{fileModalMode === 'folder' ? 'Ordner auswählen' : 'Datei auswählen'}</h3>
               <div className="file-modal-header-actions">
                 <label className={`file-upload-label${uploading ? ' is-uploading' : ''}`}>
                   {uploading ? '⏳ Hochladen...' : '⬆️ Hochladen'}
@@ -2934,26 +3358,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
 
-            {/* Tabs */}
-            <div className="file-modal-tabs">
-              <button
-                className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
-                onClick={() => setFileModalTab('gallery')}
-              >
-                <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                Galerie
-              </button>
-              <button
-                className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
-                onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
-              >
-                <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                Ordner
-              </button>
-            </div>
+            {/* Tabs — im Ordner-Auswahlmodus gibt es nur die Ordneransicht */}
+            {fileModalMode !== 'folder' && (
+              <div className="file-modal-tabs">
+                <button
+                  className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
+                  onClick={() => setFileModalTab('gallery')}
+                >
+                  <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                  Galerie
+                </button>
+                <button
+                  className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
+                  onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
+                >
+                  <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
+                  Ordner
+                </button>
+              </div>
+            )}
 
             {/* Gallery Tab */}
-            {fileModalTab === 'gallery' && (
+            {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
               <div className="file-modal-grid">
                 {uploadedFiles.length === 0 ? (
                   <div className="file-modal-empty">
@@ -3040,16 +3466,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     </div>
                   ))}
 
-                  {/* Dateien */}
+                  {/* Dateien — im Ordner-Auswahlmodus nur zur Orientierung, nicht auswählbar */}
                   {fileModalFolderContents.files.map(file => {
                     const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name);
                     return (
                       <div
                         key={file.url}
-                        className="file-modal-item"
-                        onClick={() => selectFile(file.url)}
+                        className={`file-modal-item${fileModalMode === 'folder' ? ' file-modal-item-inert' : ''}`}
+                        onClick={fileModalMode === 'folder' ? undefined : () => selectFile(file.url)}
                         title={file.name}
-                        aria-label={`Datei auswählen: ${file.name}`}
+                        aria-label={fileModalMode === 'folder' ? file.name : `Datei auswählen: ${file.name}`}
                       >
                         <div className="file-modal-thumb">
                           {isImage
@@ -3083,10 +3509,180 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               >
                 Abbrechen
               </button>
+              {fileModalMode === 'folder' && (
+                <button
+                  onClick={selectFolder}
+                  disabled={!fileModalFolder}
+                  title={devTitle(!fileModalFolder ? 'Bitte erst in einen Unterordner wechseln' : `Ordner "${fileModalFolder}" auswaehlen`)}
+                  aria-label="Diesen Ordner auswaehlen"
+                  className="btn-modern"
+                >
+                  ✓ Diesen Ordner auswählen
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* Block in andere Seite kopieren/verschieben */}
+      {blockTransferState && (
+        <div className="file-modal-overlay" onClick={() => setBlockTransferState(null)}>
+          <div className="file-modal page-picker-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="file-modal-header">
+              <h3 className="file-modal-title">
+                {blockTransferState.mode === 'move' ? 'Block in andere Seite verschieben' : 'Block in andere Seite kopieren'}
+              </h3>
+              <button
+                onClick={() => setBlockTransferState(null)}
+                className="file-modal-close-btn"
+                aria-label="Dialog schliessen"
+              >
+                ×
+              </button>
+            </div>
+
+            <input
+              type="text"
+              className="page-picker-search"
+              placeholder="Seite suchen..."
+              value={blockTransferState.search}
+              onChange={(e) => setBlockTransferState(s => ({ ...s, search: e.target.value }))}
+              autoFocus
+            />
+
+            <div className="page-picker-list">
+              {transferTargetPages
+                .filter(p => {
+                  const q = blockTransferState.search.trim().toLowerCase();
+                  if (!q) return true;
+                  return p.title.toLowerCase().includes(q) || String(p.slug || '').toLowerCase().includes(q);
+                })
+                .map(p => (
+                  <div
+                    key={p.id}
+                    className={`page-picker-item${blockTransferState.targetPageId === p.id ? ' selected' : ''}`}
+                    style={{ paddingLeft: 14 + p.depth * 16 }}
+                    onClick={() => setBlockTransferState(s => ({ ...s, targetPageId: p.id }))}
+                  >
+                    <span className="page-picker-item-title">{p.title}</span>
+                    <span className="page-picker-item-slug">/{p.slug}</span>
+                  </div>
+                ))}
+              {transferTargetPages.length === 0 && (
+                <div className="file-modal-empty">Keine anderen Seiten vorhanden</div>
+              )}
+            </div>
+
+            <div className="file-modal-footer">
+              <button
+                onClick={() => setBlockTransferState(null)}
+                className="file-modal-cancel-btn"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleConfirmBlockTransfer}
+                disabled={!blockTransferState.targetPageId}
+                className="btn-modern"
+              >
+                {blockTransferState.mode === 'move' ? 'Verschieben' : 'Kopieren'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Renders one input for a page-level {{data.X}} field, declared by a
+// PAGE_FIELDS template and edited under Einstellungen → Seiten-Datenfelder.
+// Mirrors the per-type input rendering already used for block props, but
+// writes to pageData[varName] via the injected onChange instead of a block
+// path — page fields have no nested-path/group/repeater support (v1 scope).
+function PageDataFieldInput({ varName, inputType, label, value, onChange, openFileModal, devTitle }) {
+  if (inputType === 'textarea') {
+    return (
+      <div className="field-item field-item-textarea">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-quill-wrapper">
+          <RichTextEditor value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+        </div>
+      </div>
+    );
+  }
+
+  if (inputType === 'array') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <textarea
+          placeholder="Ein Wert pro Zeile"
+          value={Array.isArray(value) ? value.join('\n') : ''}
+          onChange={e => onChange(e.target.value.split('\n').filter(v => v.trim()))}
+          rows={2}
+          className="input-field-small field-input-full field-array-textarea"
+        />
+      </div>
+    );
+  }
+
+  if (inputType === 'image') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="text" placeholder="Bild-URL" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
+        </div>
+        {value && (
+          <div className="field-image-thumb-row">
+            <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => onChange(url))} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (inputType === 'date') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+      </div>
+    );
+  }
+
+  if (inputType === 'color') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'} onChange={e => onChange(e.target.value)} className="input-field-small" />
+          <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#rrggbb" className="input-field-small field-input-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (inputType === 'url') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <div className="field-url-row">
+          <input type="text" placeholder="URL oder Dateipfad" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
+        </div>
+      </div>
+    );
+  }
+
+  const numberOrText = inputType === 'number' ? 'number' : 'text';
+  return (
+    <div className="field-item">
+      <label className="field-label-xs">{label}</label>
+      <input type={numberOrText} value={value ?? ''} onChange={e => onChange(numberOrText === 'number' ? e.target.valueAsNumber : e.target.value)} className="input-field-small field-input-full" />
     </div>
   );
 }

@@ -75,18 +75,24 @@ export default async function handler(req, res) {
   });
 
   // Send verification email
+  // NEXTAUTH_URL only — never req.headers.host, which is attacker-controlled
+  // on this public, unauthenticated endpoint and would let a forged Host
+  // header put a phishing link in the mail we send to the new member.
   if (requireVerification && verifyToken) {
-    const baseUrl = process.env.NEXTAUTH_URL || `https://${req.headers.host}`;
-    const link = `${baseUrl}/api/member/verify?token=${verifyToken}`;
-    try {
-      await sendMail({
-        to: email,
-        subject: 'Dein Konto bestätigen',
-        text: `Bitte bestätige dein Konto:\n\n${link}\n\nDer Link ist 24 Stunden gültig.`,
-        html: `<p>Bitte bestätige dein Konto:</p><p><a href="${link}">${link}</a></p><p>Der Link ist 24 Stunden gültig.</p>`,
-      });
-    } catch (e) {
-      console.error('[member/register] Bestätigungs-E-Mail fehlgeschlagen:', e.message);
+    if (!process.env.NEXTAUTH_URL) {
+      console.error('[member/register] NEXTAUTH_URL ist nicht gesetzt — Bestätigungs-E-Mail wird nicht verschickt.');
+    } else {
+      const link = `${process.env.NEXTAUTH_URL}/api/member/verify?token=${verifyToken}`;
+      try {
+        await sendMail({
+          to: email,
+          subject: 'Dein Konto bestätigen',
+          text: `Bitte bestätige dein Konto:\n\n${link}\n\nDer Link ist 24 Stunden gültig.`,
+          html: `<p>Bitte bestätige dein Konto:</p><p><a href="${link}">${link}</a></p><p>Der Link ist 24 Stunden gültig.</p>`,
+        });
+      } catch (e) {
+        console.error('[member/register] Bestätigungs-E-Mail fehlgeschlagen:', e.message);
+      }
     }
   }
 

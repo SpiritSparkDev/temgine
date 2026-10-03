@@ -459,12 +459,27 @@ export default async function handler(req, res) {
     const cssConfig = backup.cssConfig || null
     const fontsConfig = backup.fontsConfig || null
 
+    // Scoped backups (see pages/api/admin/export.js) omit entire categories —
+    // e.g. a "DB only" export has templates: []. Without this, a "replace"
+    // restore from that file would read "no templates in the backup" as
+    // "delete every existing template", silently destroying data the backup
+    // never claimed to touch. `filesIncluded` is the export's own truthful
+    // list of what it actually bundled; a category missing from it is forced
+    // to "merge" (i.e. a no-op against an empty array) regardless of the
+    // strategy the user picked. Old exports/hand-built JSON without this
+    // field fall back to today's behavior (every category follows `strategy`).
+    const filesIncluded = Array.isArray(backup?.metadata?.filesIncluded) ? new Set(backup.metadata.filesIncluded) : null
+    const strategyFor = (category) => (!filesIncluded || filesIncluded.has(category)) ? strategy : 'merge'
+    const templatesStrategy = strategyFor('templates')
+
     let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
       try {
-        for (const t of listTemplates()) deleteTemplateByName(t.name)
+        if (templatesStrategy === 'replace') {
+          for (const t of listTemplates()) deleteTemplateByName(t.name)
+        }
         await prisma.snippet.deleteMany({})
         await prisma.page.deleteMany({})
       } catch (e) {
@@ -566,7 +581,7 @@ export default async function handler(req, res) {
 
     // Import CSS files
     try {
-      const cssResult = await importCSSFiles(css, strategy)
+      const cssResult = await importCSSFiles(css, strategyFor('css'))
       importStats.css = cssResult.imported
       if (cssResult.errors.length > 0) {
         importStats.errors.push(...cssResult.errors)
@@ -577,7 +592,7 @@ export default async function handler(req, res) {
 
     // Import navigations
     try {
-      const navResult = await importNavigations(navigations, strategy)
+      const navResult = await importNavigations(navigations, strategyFor('navigations'))
       importStats.navigations = navResult.imported
       if (navResult.errors.length > 0) importStats.errors.push(...navResult.errors)
 
@@ -599,7 +614,7 @@ export default async function handler(req, res) {
 
     // Import footers
     try {
-      const footerResult = await importFooters(footers, strategy)
+      const footerResult = await importFooters(footers, strategyFor('footers'))
       importStats.footers = footerResult.imported
       if (footerResult.errors.length > 0) importStats.errors.push(...footerResult.errors)
     } catch (e) {
@@ -617,7 +632,7 @@ export default async function handler(req, res) {
 
     // Restore uploaded font files so @font-face URLs keep working after restore
     try {
-      const uploadFontResult = importUploadFonts(uploadFonts, strategy)
+      const uploadFontResult = importUploadFonts(uploadFonts, strategyFor('uploadFonts'))
       importStats.uploadFonts = uploadFontResult.imported
       if (uploadFontResult.errors.length > 0) importStats.errors.push(...uploadFontResult.errors)
     } catch (e) {
@@ -625,7 +640,7 @@ export default async function handler(req, res) {
     }
 
     try {
-      const uploadFilesResult = importUploadedFiles(uploadedFiles, strategy)
+      const uploadFilesResult = importUploadedFiles(uploadedFiles, strategyFor('uploadedFiles'))
       importStats.uploadedFiles = uploadFilesResult.imported
       if (uploadFilesResult.errors.length > 0) importStats.errors.push(...uploadFilesResult.errors)
     } catch (e) {

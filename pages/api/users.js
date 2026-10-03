@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma';
+import { requireAuth, PERMISSIONS } from '../../lib/auth';
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -8,6 +9,9 @@ const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) 
 
 export default async function handler(req, res) {
   try {
+    const auth = await requireAuth(req, res, PERMISSIONS.USERS_VIEW);
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
+
     if (req.method === 'GET') {
       const users = await prisma.user.findMany({
         orderBy: { createdAt: 'desc' },

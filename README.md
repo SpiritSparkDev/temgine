@@ -65,7 +65,6 @@ NEXTAUTH_SECRET=<zufälliger-langer-string>
 DATABASE_URL=postgresql://USER:PASS@localhost:5432/temgine_cms
 
 # Entwicklungsmodus (deaktiviert Login lokal)
-DEV_MODE=true
 NEXT_PUBLIC_DEV_MODE=true
 ```
 
@@ -112,7 +111,7 @@ vorausgefüllt. Danach ist `/setup` dauerhaft gesperrt (sobald ein User existier
 ```bash
 npm run dev
 # → http://localhost:3000
-# → Admin: http://localhost:3000/admin  (bei DEV_MODE=true ohne Login)
+# → Admin: http://localhost:3000/admin  (bei NEXT_PUBLIC_DEV_MODE=true ohne Login)
 ```
 
 ---
@@ -130,13 +129,35 @@ npm run dev
 
 ### Umgebungsvariablen auf dem Server
 
+**Erforderlich:**
+
 | Variable | Produktionswert |
 |---|---|
 | `NEXTAUTH_URL` | `https://deine-domain.de` |
 | `NEXTAUTH_SECRET` | Neu generierten Zufallswert (≥ 32 Zeichen) |
 | `DATABASE_URL` | `postgresql://USER:PASS@localhost:5432/DBNAME` |
-| `DEV_MODE` | `false` |
-| `SETUP_TOKEN` | Optional — ohne ihn generiert der Server selbst einen und loggt den Setup-Link |
+| `NEXT_PUBLIC_DEV_MODE` | `false` |
+| `ALTCHA_HMAC_KEY` | Neu generierten Zufallswert (z. B. `openssl rand -base64 32`) — ohne eigenen Wert wird ein unsicherer Default für den Kontaktformular-Spamschutz verwendet |
+
+**Für das Kontaktformular / Member-E-Mails:**
+
+| Variable | Produktionswert |
+|---|---|
+| `SMTP_HOST` / `SMTP_PORT` | Zugangsdaten des Mailservers |
+| `SMTP_USER` / `SMTP_PASS` | Zugangsdaten des Mailservers |
+| `SMTP_FROM` | Absenderadresse für ausgehende Mails |
+| `SMTP_SECURE` | Optional — `true` für Port 465 (SSL), `false` für 587 (STARTTLS) |
+| `CONTACT_MAIL_TO` | Fallback-Empfänger fürs Kontaktformular, falls nicht in den Admin-Einstellungen konfiguriert |
+
+**Optional:**
+
+| Variable | Produktionswert |
+|---|---|
+| `SETUP_TOKEN` | Ohne ihn generiert der Server selbst einen und loggt den Setup-Link |
+| `GITHUB_ID` / `GITHUB_SECRET` | GitHub-OAuth-App-Zugangsdaten, falls GitHub-Login aktiviert werden soll |
+| `ROBOTS_DISALLOW` | Kommagetrennte Pfadliste für `robots.txt` (Default: `/admin,/api`) |
+| `ROBOTS_CRAWL_DELAY` | Crawl-Delay in Sekunden für `robots.txt` (Default: `1`) |
+| `ROBOTS_REQUEST_RATE` | Request-Rate für `robots.txt`, z. B. `10/1m` (Default: nicht gesetzt) |
 
 > **Wichtig:** Passwörter mit Sonderzeichen in der `DATABASE_URL` müssen URL-kodiert sein  
 > (z. B. `@` → `%40`, `#` → `%23`, `!` → `%21`).
@@ -183,14 +204,60 @@ Alternativ: `/api/health` direkt aufrufen.
 
 ## Docker-Deployment
 
-Alternative zu Plesk — App und PostgreSQL laufen komplett containerisiert:
+Alternative zu Plesk — App und PostgreSQL laufen komplett containerisiert.
+Docker Compose liest dafür eine Datei namens exakt `.env` im Projektroot
+(neben `docker-compose.yml`) — **nicht** `.env.local`, das ist ausschließlich
+für `npm run dev` / Plesk-Node-Hosting. `.env` enthält echte Zugangsdaten und
+ist in `.gitignore`, wird also nie committed.
+
+Bei Deployment-Tools mit eigener Stack-Verwaltung (Portainer, Plesk Docker
+Stack Editor, ...) tragt die Werte stattdessen in deren eigener
+"Environment variables"-UI ein (Portainer z. B. per "Load variables from
+.env file") — `docker-compose.yml` referenziert jede Variable einzeln über
+`${...}`, ganz ohne separate `env_file:`-Direktive, damit das unabhängig
+davon funktioniert, ob das Tool eine physische `.env` ins Stack-Verzeichnis
+schreibt oder nicht.
 
 ```bash
-npm run docker:up    # baut Image, legt .env.local an falls nötig, startet auf freiem Port
-npm run docker:down  # stoppt die Container
+# Einmalig anlegen (Werte s. Tabelle unten), dann:
+docker compose up -d --build   # baut Image, startet App + Postgres
+docker compose down            # stoppt die Container
 ```
 
-Details, Umgebungsvariablen und Troubleshooting: siehe [development_docs/DOCKER.md](./development_docs/DOCKER.md).
+Fehlt eine der mit `:?...` markierten Pflichtvariablen in `.env`, bricht
+`docker compose up` sofort mit einer klaren Fehlermeldung ab — es gibt keinen
+stillen leeren Default mehr, der erst später (z. B. beim Admin-Anlegen) als
+kryptischer Prisma-Fehler auffällt.
+
+`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` wertet der offizielle
+Postgres-Container nur beim allerersten Init eines leeren Datenverzeichnisses
+aus. Läuft der `postgres`-Service gegen ein Volume, das schon mal mit anderen
+Werten initialisiert wurde (anderes Deploy-Tool, geänderte `.env`, ...),
+gleicht [`docker/postgres-entrypoint.sh`](docker/postgres-entrypoint.sh) Rolle
+(Passwort) und Datenbank bei **jedem** Start automatisch gegen die aktuellen
+`DATABASE_*`-Werte ab — sichtbar im `postgres`-Log als `[reconcile] ...`. Ein
+Login-Fehler wegen eines veralteten Passworts im Volume sollte damit nicht
+mehr vorkommen.
+
+### `.env` für Docker — benötigte Variablen
+
+| Variable | Pflicht? | Bedeutung |
+|---|---|---|
+| `DATABASE_USER` | ja | Postgres-Benutzername (App und DB-Container nutzen denselben Wert) |
+| `DATABASE_PASSWORD` | ja | Postgres-Passwort — zufälligen Wert generieren, z. B. `openssl rand -base64 24` |
+| `DATABASE_NAME` | ja | Postgres-Datenbankname |
+| `APP_PORT` | ja | Host-Port, unter dem die App erreichbar ist (fest, kein Bereich — ein Reverse-Proxy davor braucht ein bekanntes Ziel) |
+| `PUBLIC_URL` | ja | Öffentliche URL der Instanz, z. B. `https://deine-domain.de` (lokal: `http://localhost:3000`) |
+| `NEXTAUTH_SECRET` | ja | Zufallswert, z. B. `openssl rand -base64 32` |
+| `ALTCHA_HMAC_KEY` | ja | Zufallswert fürs Kontaktformular, z. B. `openssl rand -base64 32` — sonst unsicherer Default |
+| `GITHUB_ID` / `GITHUB_SECRET` | optional | GitHub-OAuth-App-Zugangsdaten |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` / `SMTP_SECURE` | optional | Mailserver fürs Kontaktformular / Member-E-Mails |
+| `CONTACT_MAIL_TO` | optional | Fallback-Empfänger fürs Kontaktformular |
+| `NEXT_PUBLIC_DEV_MODE` | optional | `true` deaktiviert lokal die Authentifizierung — niemals in Produktion setzen |
+
+Intern verbindet sich die App über den Compose-Servicenamen mit Postgres
+(`postgres:5432`) — das hat nichts mit `APP_PORT` zu tun, der ist nur die
+nach außen sichtbare Seite.
 
 ---
 
@@ -202,7 +269,7 @@ npm test             # Jest-Tests ausführen
 npm run build        # Production Build
 npm start            # Production-Server starten (Next.js)
 npm run check-env    # Umgebungsvariablen prüfen
-npm run docker:up    # Docker-Compose-Stack starten (siehe development_docs/DOCKER.md)
+npm run docker:up    # Docker-Compose-Stack starten (siehe Abschnitt "Docker-Deployment")
 npm run docker:down  # Docker-Compose-Stack stoppen
 ```
 

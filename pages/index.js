@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage, renderTemplate, collectNavigationBlockIds } from '../lib/templateEngine'
+import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
+import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
 
@@ -20,7 +22,7 @@ const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   return `${value}${assets}`
 }
 
-export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '' }) {
+export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, initialLoadingScreenCss = '', initialLoadingScreenJs = '', seoMeta = null }) {
   const router = useRouter()
   const [html, setHtml] = useState('')
   const [loading, setLoading] = useState(true)
@@ -178,16 +180,22 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           return
         }
 
-        // Prüfe auf externe Weiterleitung
-        if (homePage.redirectType === 'external' && homePage.redirectUrl) {
-          window.location.href = homePage.redirectUrl
-          setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+        // target "_self" ist bereits serverseitig in getServerSideProps als echte
+        // HTTP-Weiterleitung abgefangen worden — dieser Fallback greift nur, wenn
+        // das nicht der Fall war (z. B. unveröffentlichte Startseite). "_blank"
+        // kann grundsätzlich nicht automatisch weiterleiten und rendert
+        // stattdessen einen normalen, klickbaren Link (lib/pageRedirect.js).
+        const homeRedirect = getPageRedirect(homePage)
+        if (homeRedirect) {
+          if (homeRedirect.target === '_blank') {
+            setHtml(buildRedirectLinkHtml(homePage.title, homeRedirect.url))
+          } else {
+            window.location.href = homeRedirect.url
+            setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
+          }
           setLoading(false)
           return
         }
-
-        // 404 und 503 werden als normale Seiten mit Blöcken gerendert
-        // Die redirectType Information wird nur für die Anzeige verwendet
 
         // Sammle alle Templates
         const templatesToLoad = new Set()
@@ -231,18 +239,19 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                   .map(n => {
                     const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
                     const children = buildNestedPages(n.children || [], slug)
-                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children }
+                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: n.id === homePage?.id, data: n.data || {} }
                   })
               const nestedPages = buildNestedPages(pages)
 
               const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
+              const customAnchors = Array.isArray(homePage?.data?.customAnchors) ? homePage.data.customAnchors : []
               // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
               // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
               // Suche über den rohen (ungefilterten) Baum, nicht über nestedPages: die
               // Startseite kann verschachtelt liegen und selbst ein Entwurf sein.
               const rawHomeMatch = findRawPageNodeById(pages, homePage?.id)
               const childPages = rawHomeMatch ? buildNestedPages(rawHomeMatch.node.children || [], rawHomeMatch.parentPath) : []
-              const navData = { pages: nestedPages, anchors, childPages }
+              const navData = { pages: nestedPages, anchors, customAnchors, childPages }
 
               for (const nav of activeNavs) {
                 const key = String(nav.type).toLowerCase()
@@ -328,8 +337,23 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.warn('Globale Variablen konnten nicht geladen werden:', e.message)
         }
 
+        // Lade Ordner-Inhalte für {{#folder}}-Blöcke (gleiche Logik wie in [...slug].js)
+        const folderContents = {}
+        try {
+          const folderPaths = collectFolderBlockPaths(homePage.blocks, templateCodes)
+          await Promise.all(folderPaths.map(async (folderPath) => {
+            const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`)
+            if (res.ok) {
+              const data = await res.json()
+              folderContents[folderPath] = data.files || []
+            }
+          }))
+        } catch (e) {
+          console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message)
+        }
+
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)
@@ -421,16 +445,43 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
   // React would reset innerHTML and wipe the hydrated DOM.
   const gatedHtml = useMemo(() => stripBlockedIframeSrcs(html, getConsent()), [html])
 
-  if (loading) return <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+  if (loading) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div dangerouslySetInnerHTML={{ __html: loadingScreenHtml }} />
+    </>
+  )
 
   const wrapperProps = { id: 'page-html-output' };
   if (homePage?.data?.wrapperId) wrapperProps.id = homePage.data.wrapperId;
   if (homePage?.data?.wrapperClass) wrapperProps.className = homePage.data.wrapperClass;
 
-  return <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
+  return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div {...wrapperProps} dangerouslySetInnerHTML={{ __html: gatedHtml }} />
+    </>
+  )
 }
 
-export async function getServerSideProps() {
+export async function getServerSideProps(context) {
+  let seoMeta = null
+  try {
+    const { resolveSeoMetaForRoute } = await import('../lib/seo')
+    const { getPageRedirect } = await import('../lib/pageRedirect')
+    const { meta, found, page } = await resolveSeoMetaForRoute(context.req, '/', [])
+    seoMeta = meta
+
+    const redirect = getPageRedirect(page)
+    if (redirect && redirect.target === '_self') {
+      return { redirect: { destination: redirect.url, permanent: redirect.type === 'permanent' } }
+    }
+
+    if (!found) context.res.statusCode = 404
+  } catch (_e) {
+    seoMeta = null
+  }
+
   try {
     const { getMaintenancePage } = await import('../lib/maintenanceStore')
     const { renderTemplate } = await import('../lib/templateEngine')
@@ -445,6 +496,7 @@ export async function getServerSideProps() {
         initialLoadingScreenHtml: renderTemplate(html || defaultLoadingHtml, { global: globalVars }),
         initialLoadingScreenCss: css || '',
         initialLoadingScreenJs: js || '',
+        seoMeta,
       },
     }
   } catch (_e) {
@@ -453,6 +505,7 @@ export async function getServerSideProps() {
         initialLoadingScreenHtml: defaultLoadingHtml,
         initialLoadingScreenCss: '',
         initialLoadingScreenJs: '',
+        seoMeta,
       },
     }
   }

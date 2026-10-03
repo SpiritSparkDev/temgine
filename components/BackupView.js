@@ -1,22 +1,91 @@
 import React, { useRef, useState, useEffect } from 'react'
 import JSZip from 'jszip'
-import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal } from '../lib/muiIcons'
+import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal, X } from '../lib/muiIcons'
+
+// Fetch a response while reporting download progress (0-100) via Content-Length.
+// Falls back to indeterminate (null) progress if the length is unknown.
+async function fetchWithProgress(url, { onProgress } = {}) {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(text || `Anfrage fehlgeschlagen (${res.status})`)
+    err.status = res.status
+    throw err
+  }
+
+  const total = parseInt(res.headers.get('content-length') || '0', 10)
+  if (!res.body || !total) {
+    if (onProgress) onProgress(null)
+    const blob = await res.blob()
+    return { blob, headers: res.headers }
+  }
+
+  const reader = res.body.getReader()
+  const chunks = []
+  let received = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.length
+    if (onProgress) onProgress(Math.min(99, Math.round((received / total) * 100)))
+  }
+  if (onProgress) onProgress(100)
+  return { blob: new Blob(chunks), headers: res.headers }
+}
+
+// POST a body while reporting upload progress (0-100), then switch to
+// indeterminate once the server starts processing the request.
+function xhrRequest(url, { method = 'POST', headers = {}, body, onUploadProgress, onProcessing } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open(method, url)
+    Object.entries(headers).forEach(([key, value]) => xhr.setRequestHeader(key, value))
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onUploadProgress) {
+        onUploadProgress(Math.round((e.loaded / e.total) * 100))
+      }
+    }
+    xhr.upload.onloadend = () => {
+      if (onProcessing) onProcessing()
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(xhr.responseText)
+      } else {
+        reject(Object.assign(new Error(xhr.responseText || `Anfrage fehlgeschlagen (${xhr.status})`), { status: xhr.status }))
+      }
+    }
+    xhr.onerror = () => reject(new Error('Netzwerkfehler'))
+    xhr.send(body)
+  })
+}
 
 export default function BackupView({ onToast = () => {}, onConfirm = () => {} }) {
   const importInputRef = useRef(null)
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportScope, setExportScope] = useState('full')
   const [exportingZip, setExportingZip] = useState(false)
   const [exportingCss, setExportingCss] = useState(false)
   const [importing, setImporting] = useState(false)
   const [restoreStrategy, setRestoreStrategy] = useState('merge')
   const [backupSizeLimit, setBackupSizeLimit] = useState(5) // MB
   const [showSizeSettings, setShowSizeSettings] = useState(false)
+  const [progressModal, setProgressModal] = useState(null) // { title, subtitle, percent, status: 'running'|'success'|'error' }
 
   const notify = (type, message) => {
     if (typeof onToast === 'function') onToast({ type, message })
   }
+
+  // Auto-dismiss the progress popup shortly after a successful run
+  useEffect(() => {
+    if (progressModal?.status === 'success') {
+      const t = setTimeout(() => setProgressModal(null), 1400)
+      return () => clearTimeout(t)
+    }
+  }, [progressModal?.status])
 
   // Load settings from localStorage
   useEffect(() => {
@@ -55,13 +124,18 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   }
 
   // Export project transfer ZIP
+  const scopeLabels = {
+    full: 'Vollständig',
+    'db-templates': 'Datenbank + Templates',
+    db: 'Nur Datenbank',
+  }
   const handleExport = async () => {
     setExporting(true)
+    setProgressModal({ title: 'Backup wird erstellt', subtitle: `Projekttransfer-ZIP · ${scopeLabels[exportScope]}`, percent: null, status: 'running' })
     try {
-      const res = await fetch('/api/admin/export?format=transfer-zip')
-      if (!res.ok) throw new Error('Export failed')
-
-      const blob = await res.blob()
+      const { blob, headers } = await fetchWithProgress(`/api/admin/export?format=transfer-zip&scope=${exportScope}`, {
+        onProgress: (percent) => setProgressModal(m => m && { ...m, percent })
+      })
       const fileSize = blob.size
       const sizeMB = fileSize / (1024 * 1024)
 
@@ -72,7 +146,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 
       // Get filename from Content-Disposition header if available
       let filename = 'temgine-project-transfer.zip'
-      const disposition = res.headers.get('content-disposition')
+      const disposition = headers.get('content-disposition')
       if (disposition) {
         const match = disposition.match(/filename="?([^"]+)"?/)
         if (match) filename = match[1]
@@ -80,11 +154,13 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 
       downloadBlob(blob, filename)
 
+      setProgressModal(m => m && { ...m, percent: 100, status: 'success', subtitle: `Fertig – ${sizeMB.toFixed(2)}MB` })
       notify('success', `Projekttransfer exportiert (${sizeMB.toFixed(2)}MB)`)
-      
+
       // Refresh backup list
       loadBackups()
     } catch (e) {
+      setProgressModal(m => m && { ...m, status: 'error', message: e.message })
       notify('error', `Export fehlgeschlagen: ${e.message}`)
     } finally {
       setExporting(false)
@@ -219,7 +295,10 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         fontsConfig: data.fontsConfig ? 1 : 0
       }
 
-      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'} - Werden importiert:\n
+      const scopeLabel = { full: 'Vollständig', 'db-templates': 'Datenbank + Templates', db: 'Nur Datenbank' }[data.metadata?.scope] || null
+      const filesIncluded = Array.isArray(data.metadata?.filesIncluded) ? data.metadata.filesIncluded : null
+
+      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'}${scopeLabel ? ` - Umfang dieses Backups: ${scopeLabel}` : ''} - Werden importiert:\n
 • ${itemCounts.templates} Templates
 • ${itemCounts.snippets} Snippets
 • ${itemCounts.pages} Seiten
@@ -231,31 +310,40 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 • CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
 • Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}
 
-${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!' : ''}`
+${restoreStrategy === 'replace' ? (
+  filesIncluded
+    ? `⚠️ WARNUNG: Bestehende Daten werden für die in diesem Backup enthaltenen Kategorien gelöscht und ersetzt (siehe Liste oben). Kategorien, die in diesem Backup fehlen (z. B. Uploads bei einem reinen Datenbank-Backup), bleiben unangetastet.`
+    : `⚠️ WARNUNG: Alle bestehenden Daten werden gelöscht!`
+) : ''}`
 
       onConfirm({
         title: 'Projekttransfer importieren?',
         message,
         onConfirm: async () => {
+          setProgressModal({
+            title: 'Backup wird eingespielt',
+            subtitle: restoreStrategy === 'merge' ? 'Merge-Strategie' : 'Ersetzen-Strategie',
+            percent: 0,
+            status: 'running'
+          })
           try {
-            const res = await fetch(`/api/admin/import?strategy=${restoreStrategy}`, {
+            const responseText = await xhrRequest(`/api/admin/import?strategy=${restoreStrategy}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data)
+              body: JSON.stringify(data),
+              onUploadProgress: (percent) => setProgressModal(m => m && { ...m, percent }),
+              onProcessing: () => setProgressModal(m => m && { ...m, percent: null, subtitle: 'Wird verarbeitet…' })
             })
 
-            if (!res.ok) {
-              const text = await res.text()
-              let message = text
-              try { message = JSON.parse(text).error || message } catch (e) {}
-              throw new Error(message || 'Import failed')
-            }
-
-            const result = await res.json()
+            const result = JSON.parse(responseText)
+            setProgressModal(m => m && { ...m, percent: 100, status: 'success', subtitle: 'Import abgeschlossen' })
             notify('success', `Import erfolgreich: ${result.importStats.templates} Templates, ${result.importStats.snippets} Snippets, ${result.importStats.pages} Seiten`)
             await loadBackups()
           } catch (err) {
-            notify('error', `Import fehlgeschlagen: ${err.message}`)
+            let message = err.message
+            try { message = JSON.parse(err.message).error || message } catch (e) {}
+            setProgressModal(m => m && { ...m, status: 'error', message })
+            notify('error', `Import fehlgeschlagen: ${message}`)
           }
         }
       })
@@ -682,6 +770,112 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           to { transform: rotate(360deg); }
         }
 
+        .progress-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .progress-modal {
+          background: var(--surface);
+          color: var(--ink);
+          border-radius: 14px;
+          border: 1px solid var(--line);
+          box-shadow: var(--shadow);
+          padding: 22px 24px;
+          width: 100%;
+          max-width: 420px;
+          margin: 16px;
+        }
+
+        .progress-modal-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 4px;
+        }
+
+        .progress-modal-title {
+          font-size: 16px;
+          font-weight: 700;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .progress-modal-close {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--ink-soft);
+          padding: 4px;
+          border-radius: 6px;
+          display: flex;
+        }
+
+        .progress-modal-close:hover {
+          background: var(--surface-muted);
+          color: var(--ink);
+        }
+
+        .progress-modal-subtitle {
+          font-size: 13px;
+          color: var(--ink-soft);
+          margin: 0 0 16px;
+          word-break: break-word;
+        }
+
+        .progress-bar-track {
+          width: 100%;
+          height: 10px;
+          border-radius: 999px;
+          background: var(--surface-muted);
+          border: 1px solid var(--line);
+          overflow: hidden;
+        }
+
+        .progress-bar-fill {
+          height: 100%;
+          border-radius: 999px;
+          background: var(--brand);
+          transition: width 0.25s ease;
+        }
+
+        .progress-modal.is-error .progress-bar-fill {
+          background: var(--danger);
+        }
+
+        .progress-modal.is-success .progress-bar-fill {
+          background: #2e9e5b;
+        }
+
+        .progress-bar-track.is-indeterminate .progress-bar-fill {
+          width: 40% !important;
+          animation: progress-indeterminate 1.1s ease-in-out infinite;
+        }
+
+        @keyframes progress-indeterminate {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(250%); }
+        }
+
+        .progress-modal-percent {
+          margin-top: 10px;
+          font-size: 12px;
+          color: var(--ink-soft);
+          display: flex;
+          justify-content: space-between;
+        }
+
         @media (max-width: 768px) {
           .backup-view {
             padding: 14px;
@@ -729,8 +923,51 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
         <h3><Download className="backup-section-icon" /> Projekttransfer</h3>
         <div className="backup-info">
           <Info size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Enthält Inhalte, Konfigurationen und Medien-Assets.
+          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Wähle den Umfang:
         </div>
+
+        <div className="strategy-selector">
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-full"
+              name="exportScope"
+              value="full"
+              checked={exportScope === 'full'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-full">
+              <strong>Vollständig</strong> - Datenbank, Templates, Navigationen, Footer, CSS, Uploads & Schriftarten
+            </label>
+          </div>
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-db-templates"
+              name="exportScope"
+              value="db-templates"
+              checked={exportScope === 'db-templates'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-db-templates">
+              <strong>Datenbank + Templates</strong> - zusätzlich Navigationen, Footer, Maintenance-Seiten & CSS, ohne Uploads
+            </label>
+          </div>
+          <div className="radio-option">
+            <input
+              type="radio"
+              id="scope-db"
+              name="exportScope"
+              value="db"
+              checked={exportScope === 'db'}
+              onChange={(e) => setExportScope(e.target.value)}
+            />
+            <label htmlFor="scope-db">
+              <strong>Nur Datenbank</strong> - Seiten, Snippets & Globale Variablen, ohne Templates, Uploads & Assets
+            </label>
+          </div>
+        </div>
+
         <div className="backup-buttons">
           <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip}>
             {exporting ? (
@@ -893,6 +1130,47 @@ ${restoreStrategy === 'replace' ? '⚠️ WARNUNG: Alle bestehenden Daten werden
           </div>
         )}
       </div>
+
+      {progressModal && (
+        <div className="progress-overlay" onClick={() => { if (progressModal.status !== 'running') setProgressModal(null) }}>
+          <div
+            className={`progress-modal ${progressModal.status === 'error' ? 'is-error' : ''} ${progressModal.status === 'success' ? 'is-success' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="progress-modal-header">
+              <h3 className="progress-modal-title">
+                {progressModal.status === 'error' ? (
+                  <AlertCircle size={18} />
+                ) : progressModal.status === 'success' ? (
+                  <CheckCircle size={18} />
+                ) : (
+                  <RefreshCw size={18} className="spinner" />
+                )}
+                {progressModal.title}
+              </h3>
+              {progressModal.status !== 'running' && (
+                <button className="progress-modal-close" onClick={() => setProgressModal(null)} title="Schließen">
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+            <p className="progress-modal-subtitle">
+              {progressModal.status === 'error' ? (progressModal.message || 'Fehler') : progressModal.subtitle}
+            </p>
+            <div className={`progress-bar-track ${progressModal.percent == null ? 'is-indeterminate' : ''}`}>
+              <div
+                className="progress-bar-fill"
+                style={progressModal.percent == null ? undefined : { width: `${progressModal.percent}%` }}
+              />
+            </div>
+            {progressModal.percent != null && (
+              <div className="progress-modal-percent">
+                <span>{progressModal.status === 'error' ? 'Abgebrochen' : `${progressModal.percent}%`}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

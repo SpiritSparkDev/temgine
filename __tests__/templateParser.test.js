@@ -1,4 +1,4 @@
-const { extractTemplateVariables, generateDefaultProps, extractRepeaterBlocks } = require('../lib/templateParser');
+const { extractTemplateVariables, extractTypedVariables, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks } = require('../lib/templateParser');
 
 describe('templateParser variable extraction', () => {
   test('extracts Mustache variables from template code', () => {
@@ -76,5 +76,56 @@ describe('extractRepeaterBlocks', () => {
     const vars = extractTemplateVariables(code);
     // title appears outside the each block → must be in the flat var list
     expect(vars).toContain('title');
+  });
+});
+
+describe('extractFolderBlocks', () => {
+  test('extracts a bare {{#folder}} section', () => {
+    const code = '<ul>{{#folder}}<a href="{{url}}">{{name}}</a>{{/folder}}</ul>';
+    const result = extractFolderBlocks(code);
+    expect(result).toEqual([{ sectionName: 'folder' }]);
+  });
+
+  test('extracts a named {{#folder:name}} section', () => {
+    const code = '{{#folder:gallery}}<a href="{{url}}">{{slug}}</a>{{/folder:gallery}}';
+    const result = extractFolderBlocks(code);
+    expect(result).toEqual([{ sectionName: 'gallery' }]);
+  });
+
+  test('extracts multiple named folder sections', () => {
+    const code = `
+      {{#folder:bilder}}{{url}}{{/folder:bilder}}
+      {{#folder:dokumente}}{{url}}{{/folder:dokumente}}`;
+    const result = extractFolderBlocks(code);
+    const names = result.map(r => r.sectionName);
+    expect(names).toEqual(expect.arrayContaining(['bilder', 'dokumente']));
+    expect(result).toHaveLength(2);
+  });
+
+  test('generateDefaultProps initialises folder sections as an empty string, not an array', () => {
+    const code = '{{#folder}}{{url}}{{/folder}}{{#folder:extra}}{{url}}{{/folder:extra}}';
+    const props = generateDefaultProps(code);
+    expect(props.folder).toBe('');
+    expect(props.extra).toBe('');
+  });
+
+  test('folder section inner fields are excluded from extractTemplateVariables/extractTypedVariables', () => {
+    const code = '<h1>{{title}}</h1>{{#folder}}<a href="{{url}}">{{name}}</a>{{/folder}}';
+    const vars = extractTemplateVariables(code);
+    expect(vars).toContain('title');
+    expect(vars).not.toContain('url');
+    expect(vars).not.toContain('name');
+    expect(vars).not.toContain('folder');
+
+    const typed = extractTypedVariables(code).map(v => v.varName);
+    expect(typed).toContain('title');
+    expect(typed).not.toContain('url');
+    expect(typed).not.toContain('name');
+  });
+
+  test('a var used both outside and inside a folder block is not excluded from the flat list', () => {
+    const code = '<h1>{{name}}</h1>{{#folder}}{{name}}{{/folder}}';
+    const vars = extractTemplateVariables(code);
+    expect(vars).toContain('name');
   });
 });

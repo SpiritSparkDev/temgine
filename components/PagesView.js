@@ -143,6 +143,56 @@ export default function PagesView({
 </html>`;
   };
 
+  const handleTransferBlockToPage = async ({ block, targetPageId, mode, sourcePageId, sourcePath }) => {
+    if (!block || !targetPageId) return false;
+    try {
+      const clonedBlock = JSON.parse(JSON.stringify(block));
+
+      // Removes the block at a dotted child-index path (e.g. "2.1.0") from a
+      // page's own blocks array, mirroring PageEditor's handleDeleteBlock.
+      const removeAtPath = (sourceBlocks, path) => {
+        const parts = String(path).split('.').map(p => parseInt(p, 10));
+        const copy = JSON.parse(JSON.stringify(sourceBlocks || []));
+        if (parts.length === 1) {
+          copy.splice(parts[0], 1);
+          return copy;
+        }
+        let cur = copy;
+        for (let i = 0; i < parts.length - 1; i++) {
+          cur = cur[parts[i]].children = cur[parts[i]].children || [];
+        }
+        cur.splice(parts[parts.length - 1], 1);
+        return copy;
+      };
+
+      // Applies the target-page addition and (for a move) the source-page
+      // removal in a single pass over the current tree, so both land in one
+      // save — no separate follow-up save that could race with this one and
+      // overwrite it with a stale snapshot of the page it was still holding.
+      const applyTransfer = (nodes) =>
+        nodes.map(n => {
+          let next = n;
+          if (n.id === targetPageId) {
+            next = { ...next, blocks: [...(Array.isArray(next.blocks) ? next.blocks : []), clonedBlock] };
+          }
+          if (mode === 'move' && sourcePageId && n.id === sourcePageId) {
+            next = { ...next, blocks: removeAtPath(next.blocks, sourcePath) };
+          }
+          if (Array.isArray(n.children) && n.children.length) {
+            next = { ...next, children: applyTransfer(n.children) };
+          }
+          return next;
+        });
+
+      const updated = applyTransfer(pages);
+      const saved = await handleUpdatePages(updated);
+      return Boolean(saved);
+    } catch (e) {
+      console.error('Fehler beim Übertragen des Blocks:', e);
+      return false;
+    }
+  };
+
   return (
     <div className="admin-editor-area">
       {toast && (
@@ -200,16 +250,32 @@ export default function PagesView({
           templates={templateList}
           allPages={pages}
           userRole={userRole}
+          onTransferBlockToPage={handleTransferBlockToPage}
           onSave={async (updatedPage, options) => {
             try {
               // Ensure options is an object
               const opts = options || {};
               const isSilent = opts.silent === true;
-              
-              const updatePageInTree = (nodes) => 
-                nodes.map(n => 
-                  n.id === updatedPage.id 
-                    ? { ...n, ...updatedPage }
+
+              // Seiten ohne eigene id (ältere/importierte Datenbestände) dürfen
+              // hier nicht per id gematcht werden: mehrere Geschwister mit
+              // id === undefined würden sonst ALLE gleichzeitig getroffen und
+              // mit updatedPage überschrieben — das erzeugt frische
+              // Slug-Duplikate, obwohl der Baum davor unauffällig war.
+              if (!updatedPage.id) {
+                showToast('Diese Seite hat keine eigene ID und kann so nicht sicher gespeichert werden. Bitte im Einstellungen-Bereich unter "Wartung & Reparatur" (/repair) erst eine ID vergeben.', 'error');
+                return false;
+              }
+
+              const updatePageInTree = (nodes) =>
+                nodes.map(n =>
+                  n.id && n.id === updatedPage.id
+                    // PageEditor only ever edits this one page's own fields — it
+                    // doesn't manage the page tree, so its (possibly stale)
+                    // updatedPage.children must never overwrite the live tree's
+                    // children (e.g. a block another editor action just moved
+                    // into a nested child page).
+                    ? { ...n, ...updatedPage, children: n.children }
                     : { ...n, children: updatePageInTree(n.children || []) }
                 );
               const updated = updatePageInTree(pages);
