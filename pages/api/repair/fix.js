@@ -19,7 +19,7 @@ import {
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res.status(405).json({ error: 'Methode nicht erlaubt' })
   }
 
   const auth = await requireAuth(req, res, PERMISSIONS.SETTINGS_EDIT)

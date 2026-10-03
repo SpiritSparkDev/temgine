@@ -225,6 +225,6 @@ export default async function handler(req, res) {
       res.status(500).json({ error: 'Fehler beim Löschen der Datei' });
     }
   } else {
-    res.status(405).json({ error: 'Method not allowed' });
+    res.status(405).json({ error: 'Methode nicht erlaubt' });
   }
 }

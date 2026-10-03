@@ -13,7 +13,7 @@ import { prisma } from '../../../lib/prisma'
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res.status(405).json({ error: 'Methode nicht erlaubt' })
   }
 
   // Abort if any user already exists — endpoint is single-use

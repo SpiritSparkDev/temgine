@@ -91,7 +91,7 @@ export default function ElementPropertyEditor({
         textAlign: 'center',
         color: '#999',
       }}>
-        <p>Select an element to edit its properties</p>
+        <p>Wähle ein Element aus, um seine Eigenschaften zu bearbeiten</p>
       </div>
     );
   }
@@ -106,13 +106,13 @@ export default function ElementPropertyEditor({
       overflowY: 'auto',
     }}>
       <h4 style={{ marginTop: 0, marginBottom: '16px', fontSize: '1rem' }}>
-        Element Properties
+        Element-Eigenschaften
       </h4>
 
       {/* Tag Selection */}
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
-          HTML Tag
+          HTML-Tag
         </label>
         <select
           value={tag}
@@ -129,14 +129,14 @@ export default function ElementPropertyEditor({
           {commonTags.map(t => (
             <option key={t} value={t}>&lt;{t}&gt;</option>
           ))}
-          <option value="">--- Custom ---</option>
+          <option value="">--- Benutzerdefiniert ---</option>
         </select>
         {!commonTags.includes(tag) && tag && (
           <input
             type="text"
             value={tag}
             onChange={(e) => setTag(e.target.value)}
-            placeholder="Custom tag name"
+            placeholder="Eigener Tag-Name"
             style={{
               width: '100%',
               padding: '6px',
@@ -153,12 +153,12 @@ export default function ElementPropertyEditor({
       {/* Content */}
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
-          Text Content
+          Text-Inhalt
         </label>
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          placeholder="Element text content"
+          placeholder="Text-Inhalt des Elements"
           rows={3}
           style={{
             width: '100%',
@@ -196,7 +196,7 @@ export default function ElementPropertyEditor({
       {/* Class */}
       <div style={{ marginBottom: '12px' }}>
         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>
-          Class
+          Klasse
         </label>
         <input
           type="text"
@@ -217,7 +217,7 @@ export default function ElementPropertyEditor({
       {/* Data Attributes */}
       <div style={{ marginBottom: '12px', paddingTop: '12px', borderTop: '1px solid #eee' }}>
         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '8px' }}>
-          Data Attributes
+          Data-Attribute
         </label>
         {Object.entries(dataAttributes).map(([key, value]) => (
           <div key={key} style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
@@ -288,7 +288,7 @@ export default function ElementPropertyEditor({
             color: '#667eea',
           }}
         >
-          + Add Data Attr
+          + Data-Attribut hinzufügen
         </button>
       </div>
 
@@ -313,7 +313,7 @@ export default function ElementPropertyEditor({
         }}
       >
         <Save size={16} />
-        Save Changes
+        Änderungen speichern
       </button>
     </div>
   );

@@ -106,7 +106,7 @@ export default function PagesView({
         });
         if (!r.ok) throw new Error((await r.json()).error || 'Fehler');
       }
-      showToast('Maintenance-Seiten gespeichert', 'success');
+      showToast('Wartungsseiten gespeichert', 'success');
     } catch (e) {
       showToast('Fehler beim Speichern: ' + e.message, 'error');
     } finally {
@@ -240,7 +240,7 @@ export default function PagesView({
             if (!maintenanceLoaded) loadMaintenancePages();
           }}
         >
-          Maintenance Seiten
+          Wartungsseiten
         </button>
       </div>
       
@@ -374,11 +374,11 @@ export default function PagesView({
         />
       ) : (
         <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-          <h2 style={{ marginBottom: '1.5rem' }}>Maintenance Seiten</h2>
+          <h2 style={{ marginBottom: '1.5rem' }}>Wartungsseiten</h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Für jede Maintenance-Seite können HTML, CSS und JS separat gepflegt werden.
+              Für jede Wartungsseite können HTML, CSS und JS separat gepflegt werden.
             </p>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
@@ -415,7 +415,7 @@ export default function PagesView({
                 <textarea
                   value={maintenanceContent[maintenanceTab]?.html || ''}
                   onChange={e => updateMaintenanceField(maintenanceTab, 'html', e.target.value)}
-                  placeholder="<h1>Maintenance Inhalt</h1>"
+                  placeholder="<h1>Wartungsinhalt</h1>"
                   rows={14}
                   style={{
                     width: '100%',
@@ -465,7 +465,7 @@ export default function PagesView({
                 <textarea
                   value={maintenanceContent[maintenanceTab]?.js || ''}
                   onChange={e => updateMaintenanceField(maintenanceTab, 'js', e.target.value)}
-                  placeholder="console.log('Maintenance Screen');"
+                  placeholder="console.log('Wartungsbildschirm');"
                   rows={14}
                   style={{
                     width: '100%',
@@ -491,7 +491,7 @@ export default function PagesView({
               background: 'var(--bg-secondary)',
             }}>
               <div style={{ marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Maintenance'})
+                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Wartung'})
               </div>
               <iframe
                 title={`maintenance-preview-${maintenanceTab}`}
@@ -508,7 +508,7 @@ export default function PagesView({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Maintenance-Seiten</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Wartungsseiten</div>
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -577,7 +577,7 @@ export default function PagesView({
                   opacity: isSavingMaintenance ? 0.6 : 1,
                 }}
               >
-                {isSavingMaintenance ? 'Speichern…' : 'Maintenance Seiten speichern'}
+                {isSavingMaintenance ? 'Speichern…' : 'Wartungsseiten speichern'}
               </button>
             </div>
           </div>
