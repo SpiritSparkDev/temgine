@@ -10,7 +10,7 @@ const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) 
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    const [s, r] = errorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED');
+    const [s, r] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
     return res.status(s).json(r);
   }
 

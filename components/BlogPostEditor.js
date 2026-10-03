@@ -6,7 +6,7 @@ import { resolveTemplateFields } from '../lib/templateFieldResolver';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
-  { value: 'REVIEW',    label: 'Review',                    color: '#f59e0b' },
+  { value: 'REVIEW',    label: 'In Prüfung',                color: '#f59e0b' },
   { value: 'APPROVED',  label: 'Freigegeben',               color: '#3b82f6' },
   { value: 'PUBLISHED', label: 'Veröffentlicht',            color: '#10b981' },
   { value: 'SCHEDULED', label: 'Geplant (Datum erforderlich)', color: '#8b5cf6' },

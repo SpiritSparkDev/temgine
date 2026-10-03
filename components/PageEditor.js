@@ -2595,7 +2595,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 </div>
                 {selectedElementId && (
                   <div style={{ flex: 0.3, overflowY: 'auto', borderLeft: '1px solid #ddd', padding: '16px' }}>
-                    <h4 style={{ marginBottom: '12px' }}>Element Properties</h4>
+                    <h4 style={{ marginBottom: '12px' }}>Element-Eigenschaften</h4>
                     <ElementPropertyEditor
                       element={domLayout.find(el => el.id === selectedElementId)}
                       onChange={(updates) => {

@@ -6,7 +6,7 @@ import Toast from './Toast';
 
 const STATUS_LABELS = {
   DRAFT: 'Entwurf',
-  REVIEW: 'Review',
+  REVIEW: 'In Prüfung',
   APPROVED: 'Freigegeben',
   PUBLISHED: 'Veröffentlicht',
   SCHEDULED: 'Geplant',

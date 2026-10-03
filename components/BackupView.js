@@ -179,7 +179,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
           contentType: res.headers.get('content-type'),
           body: errorText,
         })
-        throw new Error(errorText || `ZIP Export failed (${res.status})`)
+        throw new Error(errorText || `ZIP-Export fehlgeschlagen (${res.status})`)
       }
 
       let filename = 'temgine-static-site.zip'
@@ -205,7 +205,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
     setExportingCss(true)
     try {
       const res = await fetch('/api/admin/export?format=css')
-      if (!res.ok) throw new Error('CSS Export failed')
+      if (!res.ok) throw new Error('Fehlgeschlagen')
 
       let filename = 'temgine-styles.css'
       const disposition = res.headers.get('content-disposition')
@@ -368,7 +368,7 @@ ${restoreStrategy === 'replace' ? (
             body: JSON.stringify({ filename: backup.filename })
           })
 
-          if (!res.ok) throw new Error('Failed to delete backup')
+          if (!res.ok) throw new Error('Löschen fehlgeschlagen')
 
           notify('success', 'Backup gelöscht')
           loadBackups()
@@ -383,7 +383,7 @@ ${restoreStrategy === 'replace' ? (
   const handleDownloadBackup = async (backup) => {
     try {
       const res = await fetch(`/api/admin/backups?filename=${encodeURIComponent(backup.filename)}`)
-      if (!res.ok) throw new Error('Download failed')
+      if (!res.ok) throw new Error('Herunterladen fehlgeschlagen')
 
       const content = await res.text()
       const blob = new Blob([content], { type: 'application/json' })
@@ -950,7 +950,7 @@ ${restoreStrategy === 'replace' ? (
               onChange={(e) => setExportScope(e.target.value)}
             />
             <label htmlFor="scope-db-templates">
-              <strong>Datenbank + Templates</strong> - zusätzlich Navigationen, Footer, Maintenance-Seiten & CSS, ohne Uploads
+              <strong>Datenbank + Templates</strong> - zusätzlich Navigationen, Footer, Wartungsseiten & CSS, ohne Uploads
             </label>
           </div>
           <div className="radio-option">

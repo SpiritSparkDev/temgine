@@ -3,7 +3,7 @@ import { ALTCHA_HMAC_KEY } from '../../../lib/altcha';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' });
+    return res.status(405).json({ error: 'Methode nicht erlaubt', code: 'METHOD_NOT_ALLOWED' });
   }
 
   const challenge = await createChallenge({

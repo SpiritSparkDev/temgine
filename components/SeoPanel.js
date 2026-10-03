@@ -366,10 +366,10 @@ export default function SeoPanel({
                 onChange={(e) => handleChange('robots', e.target.value)}
                 style={{ ...inputStyle, padding: '6px' }}
               >
-                <option value="index, follow">Index and Follow (default)</option>
-                <option value="index, nofollow">Index, No Follow</option>
-                <option value="noindex, follow">No Index, Follow</option>
-                <option value="noindex, nofollow">No Index, No Follow</option>
+                <option value="index, follow">Index, Follow (Standard)</option>
+                <option value="index, nofollow">Index, Nofollow</option>
+                <option value="noindex, follow">Noindex, Follow</option>
+                <option value="noindex, nofollow">Noindex, Nofollow</option>
               </select>
             </div>
 
@@ -396,14 +396,14 @@ export default function SeoPanel({
                   onChange={(e) => handleChange('sitemapChangefreq', e.target.value)}
                   style={{ ...inputStyle, padding: '6px' }}
                 >
-                  <option value="">Automatisch (weekly)</option>
-                  <option value="always">Always</option>
-                  <option value="hourly">Hourly</option>
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
-                  <option value="never">Never</option>
+                  <option value="">Automatisch (wöchentlich)</option>
+                  <option value="always">Immer</option>
+                  <option value="hourly">Stündlich</option>
+                  <option value="daily">Täglich</option>
+                  <option value="weekly">Wöchentlich</option>
+                  <option value="monthly">Monatlich</option>
+                  <option value="yearly">Jährlich</option>
+                  <option value="never">Nie</option>
                 </select>
               </div>
             </div>

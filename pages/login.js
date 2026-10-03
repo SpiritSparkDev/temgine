@@ -87,7 +87,7 @@ export default function Login({ providers }) {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-icon">🔐</div>
-        <h1>Admin Login</h1>
+        <h1>Admin-Anmeldung</h1>
         <p className="auth-hint">
           Melden Sie sich an, um auf den Admin-Bereich zuzugreifen.
         </p>

@@ -109,7 +109,7 @@ function buildAutoMessage(fields) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Methode nicht erlaubt' });
   }
 
   // Rate limiting
@@ -126,10 +126,10 @@ export default async function handler(req, res) {
     try {
       const originHost = new URL(origin).host;
       if (originHost !== host) {
-        return res.status(403).json({ error: 'Forbidden' });
+        return res.status(403).json({ error: 'Zugriff verweigert' });
       }
     } catch {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({ error: 'Zugriff verweigert' });
     }
   }
 

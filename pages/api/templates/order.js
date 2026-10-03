@@ -37,5 +37,5 @@ export default function handler(req, res) {
     }
   }
 
-  res.status(405).json({ error: 'Method not allowed' });
+  res.status(405).json({ error: 'Methode nicht erlaubt' });
 }
