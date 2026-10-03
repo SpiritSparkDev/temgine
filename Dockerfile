@@ -2,7 +2,11 @@ FROM node:20-slim
 WORKDIR /app
 
 # Prisma's query engine needs libssl; Debian 12 (bookworm) doesn't ship it by default.
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# libvips-dev + build-essential + python3 + pkg-config: `sharp` normally downloads a
+# prebuilt libvips binary from GitHub Releases during `npm install`. If that download
+# fails (e.g. a transient 503 from GitHub's release CDN), npm falls back to compiling
+# sharp against libvips from source — which needs these present to succeed.
+RUN apt-get update -y && apt-get install -y openssl libvips-dev build-essential python3 pkg-config && rm -rf /var/lib/apt/lists/*
 
 # package.json + scripts/ first so `npm install` is its own cached layer —
 # rebuilds after source-only changes skip reinstalling dependencies.
