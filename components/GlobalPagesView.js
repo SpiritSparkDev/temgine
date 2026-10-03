@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layout, ChevronRight, BookOpen } from '../lib/muiIcons';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen } from '../lib/muiIcons';
 import { navPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -18,8 +18,28 @@ const DEFAULT_NAVIGATION_CSS = `/* Automatisch erstellt durch Navigation-Editor 
   .mobile_nav { display: block; }
 }`;
 
+const FOOTER_STARTER_CODE = `<footer class="site-footer">
+  <div class="footer-brand">
+    <img src="{{global.logoUrl}}" alt="{{global.companyName}}">
+    <p>{{global.companyName}}</p>
+  </div>
+  <nav aria-label="Footer-Navigation">
+    {{#each:global.footerLinks}}
+      <a href="{{url}}">{{label}}</a>
+    {{/each:global.footerLinks}}
+  </nav>
+  <p class="footer-copy">{{global.copyrightText}}</p>
+</footer>`;
+
 // ── Presets ──────────────────────────────────────────────────────────────────
 const PRESETS = {
+  FOOTER: [
+    {
+      label: 'Standard-Footer',
+      description: 'Logo, Footer-Navigation (globale Variablen) und Copyright-Zeile',
+      code: FOOTER_STARTER_CODE,
+    },
+  ],
   MAIN: [
     {
       label: 'Responsive Combo (Desktop + Mobile)',
@@ -358,15 +378,26 @@ const PRESETS = {
   ],
 };
 
-const TYPE_TABS = [
+const ROLE_TABS = [
   { id: 'MAIN', label: 'Hauptnavigation', Icon: Globe },
   { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
+  { id: 'FOOTER', label: 'Footer', Icon: Layers },
 ];
 
-export default function NavigationView({ showToast }) {
-  const [navType, setNavType] = useState('MAIN');
-  const [navList, setNavList] = useState([]);
-  const [editing, setEditing] = useState(null); // { id?, name, type, code, isNew }
+// Rollen mit genau einem exklusiv aktiven Eintrag — zeigen den
+// Aktivieren/Deaktivieren-Schalter und das "Aktiv"-Badge. PAGE-Navs sind
+// immer aktiv (als Baustein platziert, kein Aktivierungskonzept).
+const EXCLUSIVE_ACTIVE_ROLES = ['MAIN', 'FOOTER'];
+
+/**
+ * Verwaltet alle "globalen Seitenkomponenten" — Footer, Hauptnavigation und
+ * Seitennavigation — in einer Oberfläche (lib/globalPageStore.js). Ersetzt
+ * die vormals getrennten Komponenten NavigationView.js und FooterView.js.
+ */
+export default function GlobalPagesView({ showToast }) {
+  const [role, setRole] = useState('MAIN');
+  const [list, setList] = useState([]);
+  const [editing, setEditing] = useState(null); // { id?, name, role, code, isNew }
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
   const [navigationCssCode, setNavigationCssCode] = useState('');
@@ -376,14 +407,14 @@ export default function NavigationView({ showToast }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showDocs, setShowDocs] = useState(true);
 
-  const loadNavList = useCallback(() => {
+  const loadList = useCallback(() => {
     setIsLoading(true);
-    fetch('/api/navigations')
+    fetch('/api/global-pages')
       .then(r => r.json())
       .then(data => {
-        setNavList(Array.isArray(data) ? data : []);
+        setList(Array.isArray(data) ? data : []);
       })
-      .catch(() => setNavList([]))
+      .catch(() => setList([]))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -419,9 +450,9 @@ export default function NavigationView({ showToast }) {
   }, [showToast]);
 
   useEffect(() => {
-    loadNavList();
+    loadList();
     loadOrCreateNavigationCss();
-  }, [loadNavList, loadOrCreateNavigationCss]);
+  }, [loadList, loadOrCreateNavigationCss]);
 
   async function handleSaveNavigationCss() {
     setIsSavingNavigationCss(true);
@@ -443,19 +474,27 @@ export default function NavigationView({ showToast }) {
     }
   }
 
-  const filteredNav = navList.filter(n => n.type === navType);
+  const filteredList = list.filter(e => e.role === role);
+  const isExclusiveActiveRole = EXCLUSIVE_ACTIVE_ROLES.includes(role);
+  const roleLabel = ROLE_TABS.find(t => t.id === role)?.label || 'Eintrag';
+  const entityNoun = role === 'FOOTER' ? 'Footer' : 'Navigation';
 
   function handleNew() {
-    const nav = { isNew: true, type: navType };
-    setEditing(nav);
+    const entry = { isNew: true, role };
+    setEditing(entry);
     setEditName('');
-    setEditCode('');
-    setShowPresets(true);
+    if (role === 'FOOTER') {
+      setEditCode(FOOTER_STARTER_CODE);
+      setShowPresets(false);
+    } else {
+      setEditCode('');
+      setShowPresets(true);
+    }
   }
 
-  function handleEdit(navItem) {
+  function handleEdit(item) {
     setIsLoading(true);
-    fetch(`/api/navigations?id=${encodeURIComponent(navItem.id)}`)
+    fetch(`/api/global-pages?id=${encodeURIComponent(item.id)}`)
       .then(r => r.json())
       .then(data => {
         setEditing(data);
@@ -480,19 +519,18 @@ export default function NavigationView({ showToast }) {
       return;
     }
     if (!editCode.trim()) {
-      showToast('Bitte Navigations-Code eingeben', 'error');
+      showToast(`Bitte ${entityNoun}-Code eingeben`, 'error');
       return;
     }
     setIsSaving(true);
     try {
       const isNew = editing?.isNew;
-      const url = '/api/navigations';
       const method = isNew ? 'POST' : 'PUT';
       const body = isNew
-        ? { name: editName.trim(), type: navType, code: editCode }
+        ? { name: editName.trim(), role, code: editCode }
         : { id: editing.id, name: editName.trim(), code: editCode };
 
-      const res = await fetch(url, {
+      const res = await fetch('/api/global-pages', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -502,8 +540,8 @@ export default function NavigationView({ showToast }) {
         throw new Error(err.error || 'Unbekannter Fehler');
       }
       const saved = await res.json();
-      showToast(`Navigation "${editName.trim()}" gespeichert`, 'success');
-      loadNavList();
+      showToast(`${entityNoun} "${editName.trim()}" gespeichert`, 'success');
+      loadList();
       setEditing(saved);
       setEditName(saved.name);
       setEditCode(saved.code);
@@ -515,33 +553,33 @@ export default function NavigationView({ showToast }) {
     }
   }
 
-  async function handleActivate(navItem) {
+  async function handleActivate(item) {
     try {
-      const res = await fetch('/api/navigations', {
+      const res = await fetch('/api/global-pages', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: navItem.id, isActive: !navItem.isActive }),
+        body: JSON.stringify({ id: item.id, isActive: !item.isActive }),
       });
       if (!res.ok) throw new Error('Fehler beim Aktualisieren');
-      showToast(navItem.isActive ? 'Deaktiviert' : `"${navItem.name}" aktiviert`, 'success');
-      loadNavList();
+      showToast(item.isActive ? 'Deaktiviert' : `"${item.name}" aktiviert`, 'success');
+      loadList();
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     }
   }
 
-  async function handleDelete(navItem) {
-    if (!window.confirm(`Navigation "${navItem.name}" wirklich löschen?`)) return;
+  async function handleDelete(item) {
+    if (!window.confirm(`${entityNoun} "${item.name}" wirklich löschen?`)) return;
     try {
-      const res = await fetch('/api/navigations', {
+      const res = await fetch('/api/global-pages', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: navItem.id }),
+        body: JSON.stringify({ id: item.id }),
       });
       if (!res.ok) throw new Error('Fehler beim Löschen');
-      showToast(`"${navItem.name}" gelöscht`, 'success');
-      if (editing && editing.id === navItem.id) handleCancel();
-      loadNavList();
+      showToast(`"${item.name}" gelöscht`, 'success');
+      if (editing && editing.id === item.id) handleCancel();
+      loadList();
     } catch (e) {
       showToast('Fehler: ' + e.message, 'error');
     }
@@ -553,17 +591,17 @@ export default function NavigationView({ showToast }) {
     setShowPresets(false);
   }
 
-  const currentPresets = PRESETS[navType] || [];
+  const currentPresets = PRESETS[role] || [];
 
   return (
     <div className="nav-view">
-      {/* ── Type Tabs ─────────────────────────────────────────────────────── */}
+      {/* ── Role Tabs ─────────────────────────────────────────────────────── */}
       <div className="nav-type-tabs">
-        {TYPE_TABS.map(({ id, label, Icon }) => (
+        {ROLE_TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
-            className={`nav-type-tab ${navType === id ? 'active' : ''}`}
-            onClick={() => { setNavType(id); handleCancel(); }}
+            className={`nav-type-tab ${role === id ? 'active' : ''}`}
+            onClick={() => { setRole(id); handleCancel(); }}
           >
             <Icon size={16} />
             <span>{label}</span>
@@ -580,66 +618,58 @@ export default function NavigationView({ showToast }) {
       </div>
 
       <div className="nav-body">
-        {/* ── Left: Nav list ──────────────────────────────────────────────── */}
+        {/* ── Left: list ──────────────────────────────────────────────────── */}
         <div className="nav-list-panel">
           <div className="nav-list-header">
-            <h3 className="nav-list-title">
-              {TYPE_TABS.find(t => t.id === navType)?.label}
-            </h3>
-            <button className="btn-icon-label" onClick={handleNew} title="Neue Navigation erstellen">
+            <h3 className="nav-list-title">{roleLabel}</h3>
+            <button className="btn-icon-label" onClick={handleNew} title={`Neue${role === 'FOOTER' ? 'n' : ''} ${entityNoun} erstellen`}>
               <Plus size={15} /> Neu
             </button>
           </div>
 
           {isLoading && !editing ? (
             <div className="nav-empty-hint">Lädt…</div>
-          ) : filteredNav.length === 0 ? (
+          ) : filteredList.length === 0 ? (
             <div className="nav-empty-hint">
-              Noch keine Navigationen dieses Typs.<br />
-              <button className="nav-empty-cta" onClick={handleNew}>Erste Navigation erstellen</button>
+              {role === 'FOOTER' ? 'Noch kein Footer angelegt.' : 'Noch keine Navigationen dieses Typs.'}<br />
+              <button className="nav-empty-cta" onClick={handleNew}>
+                {role === 'FOOTER' ? 'Ersten Footer erstellen' : 'Erste Navigation erstellen'}
+              </button>
             </div>
           ) : (
             <ul className="nav-template-list">
-              {filteredNav.map(nav => (
+              {filteredList.map(item => (
                 <li
-                  key={nav.id}
-                  className={`nav-template-card ${editing?.id === nav.id ? 'selected' : ''} ${navType === 'MAIN' && nav.isActive ? 'is-active' : ''}`}
+                  key={item.id}
+                  className={`nav-template-card ${editing?.id === item.id ? 'selected' : ''} ${isExclusiveActiveRole && item.isActive ? 'is-active' : ''}`}
                 >
                   <div className="nav-card-info">
-                    <span className="nav-card-name">{nav.name}</span>
-                    {nav.isResponsiveCombined && (
+                    <span className="nav-card-name">{item.name}</span>
+                    {item.isResponsiveCombined && (
                       <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
                         Responsive Combo
                       </span>
                     )}
-                    {navType === 'MAIN' && nav.isActive && (
+                    {isExclusiveActiveRole && item.isActive && (
                       <span className="nav-active-badge">
                         <Check size={11} /> Aktiv
                       </span>
                     )}
                   </div>
                   <div className="nav-card-actions">
-                    {navType === 'MAIN' && (
+                    {isExclusiveActiveRole && (
                       <button
-                        className={`nav-card-btn activate ${nav.isActive ? 'deactivate' : ''}`}
-                        onClick={() => handleActivate(nav)}
-                        title={nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                        className={`nav-card-btn activate ${item.isActive ? 'deactivate' : ''}`}
+                        onClick={() => handleActivate(item)}
+                        title={item.isActive ? 'Deaktivieren' : 'Aktivieren'}
                       >
-                        {nav.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                        {item.isActive ? 'Deaktivieren' : 'Aktivieren'}
                       </button>
                     )}
-                    <button
-                      className="nav-card-btn edit"
-                      onClick={() => handleEdit(nav)}
-                      title="Bearbeiten"
-                    >
+                    <button className="nav-card-btn edit" onClick={() => handleEdit(item)} title="Bearbeiten">
                       <Edit2 size={13} />
                     </button>
-                    <button
-                      className="nav-card-btn delete"
-                      onClick={() => handleDelete(nav)}
-                      title="Löschen"
-                    >
+                    <button className="nav-card-btn delete" onClick={() => handleDelete(item)} title="Löschen">
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -652,36 +682,24 @@ export default function NavigationView({ showToast }) {
         {/* ── Right: Editor panel ─────────────────────────────────────────── */}
         {editing ? (
           <div className="nav-editor-panel">
-            {/* Name input */}
             <div className="nav-editor-header">
               <input
                 className="nav-name-input"
                 type="text"
-                placeholder="Name dieser Navigation…"
+                placeholder={`Name diese${role === 'FOOTER' ? 's Footers' : 'r Navigation'}…`}
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
               />
               <div className="nav-editor-actions">
-                <button
-                  className="nav-card-btn"
-                  onClick={() => setShowPresets(v => !v)}
-                  title="Preset-Galerie"
-                >
-                  <Layout size={14} /> Presets
-                </button>
-                <button
-                  className="nav-card-btn"
-                  onClick={handleCancel}
-                  title="Abbrechen"
-                >
+                {currentPresets.length > 0 && (
+                  <button className="nav-card-btn" onClick={() => setShowPresets(v => !v)} title="Preset-Galerie">
+                    <Layout size={14} /> Presets
+                  </button>
+                )}
+                <button className="nav-card-btn" onClick={handleCancel} title="Abbrechen">
                   <X size={14} /> Abbrechen
                 </button>
-                <button
-                  className="nav-card-btn save"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  title="Speichern"
-                >
+                <button className="nav-card-btn save" onClick={handleSave} disabled={isSaving} title="Speichern">
                   <Check size={14} /> {isSaving ? 'Speichert…' : 'Speichern'}
                 </button>
               </div>
@@ -696,11 +714,7 @@ export default function NavigationView({ showToast }) {
                 </div>
                 <div className="nav-preset-grid">
                   {currentPresets.map(preset => (
-                    <button
-                      key={preset.label}
-                      className="nav-preset-card"
-                      onClick={() => applyPreset(preset)}
-                    >
+                    <button key={preset.label} className="nav-preset-card" onClick={() => applyPreset(preset)}>
                       <span className="preset-name">{preset.label}</span>
                       <span className="preset-desc">{preset.description}</span>
                       <span className="preset-use">
@@ -712,72 +726,96 @@ export default function NavigationView({ showToast }) {
               </div>
             )}
 
-            {/* Editor + navigation.css split */}
-            <div className="nav-editor-split">
-              <div className="nav-editor-code">
+            {role === 'FOOTER' ? (
+              <div className="nav-editor-code" style={{ height: '60vh' }}>
                 <div className="nav-panel-label">Mustache-Template</div>
                 <div className="nav-monaco-wrap">
-                  <CodeEditor
-                    value={editCode}
-                    onChange={setEditCode}
-                    language="html"
-                    height="100%"
-                  />
+                  <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
                 </div>
               </div>
-              <div className="nav-editor-preview">
-                <div className="nav-panel-label">navigation.css</div>
-                <div className="nav-monaco-wrap">
-                  <CodeEditor
-                    value={navigationCssCode}
-                    onChange={value => setNavigationCssCode(value || '')}
-                    language="css"
-                    height="100%"
-                  />
+            ) : (
+              <div className="nav-editor-split">
+                <div className="nav-editor-code">
+                  <div className="nav-panel-label">Mustache-Template</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button
-                    className="nav-card-btn save"
-                    onClick={handleSaveNavigationCss}
-                    disabled={isSavingNavigationCss}
-                    title="navigation.css speichern"
-                  >
-                    <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
-                  </button>
-                </div>
-                <div className="nav-preview-hint">
-                  Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
-                </div>
-                <div className="nav-preview-hint">
-                  Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
+                <div className="nav-editor-preview">
+                  <div className="nav-panel-label">navigation.css</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor
+                      value={navigationCssCode}
+                      onChange={value => setNavigationCssCode(value || '')}
+                      language="css"
+                      height="100%"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button
+                      className="nav-card-btn save"
+                      onClick={handleSaveNavigationCss}
+                      disabled={isSavingNavigationCss}
+                      title="navigation.css speichern"
+                    >
+                      <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
+                    </button>
+                  </div>
+                  <div className="nav-preview-hint">
+                    Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
+                  </div>
+                  <div className="nav-preview-hint">
+                    Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Placeholder reference */}
             <div className="nav-placeholder-ref">
-              <strong>Platzhalter:</strong>
-              <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
-              <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
-              {navType === 'PAGE' && editName.trim() && (
+              {role === 'FOOTER' ? (
                 <>
-                  {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  der Footer wird am Ende des Seiten-Layouts eingefügt, wenn er aktiv ist.
+                </>
+              ) : (
+                <>
+                  <strong>Platzhalter:</strong>
+                  <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
+                  <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
+                  {role === 'PAGE' && editName.trim() && (
+                    <>
+                      {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                    </>
+                  )}
                 </>
               )}
             </div>
           </div>
         ) : (
           <div className="nav-editor-panel nav-editor-empty">
-            <Compass size={40} strokeWidth={1} />
-            <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
-            <p className="nav-editor-empty-hint">
-              Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
-              Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
-              (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
-              <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
-              Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
-              im Reiter „Navigation" per Klick einfügen.
-            </p>
+            {role === 'FOOTER' ? (
+              <>
+                <Layers size={40} strokeWidth={1} />
+                <p>Footer aus der Liste wählen oder einen neuen erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Nur ein aktiver Footer wird gerendert, am Ende des Seiteninhalts.
+                </p>
+              </>
+            ) : (
+              <>
+                <Compass size={40} strokeWidth={1} />
+                <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
+                  Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
+                  (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
+                  <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
+                  Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
+                  im Reiter „Navigation" per Klick einfügen.
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -786,143 +824,153 @@ export default function NavigationView({ showToast }) {
           <aside className="nav-docs-panel">
             <div className="nav-docs-header">
               <BookOpen size={15} />
-              <span>Wie Navigationen funktionieren</span>
-              <button
-                className="nav-docs-close"
-                onClick={() => setShowDocs(false)}
-                title="Dokumentation ausblenden"
-              >
+              <span>{role === 'FOOTER' ? 'Wie der Footer funktioniert' : 'Wie Navigationen funktionieren'}</span>
+              <button className="nav-docs-close" onClick={() => setShowDocs(false)} title="Dokumentation ausblenden">
                 <X size={14} />
               </button>
             </div>
 
             <div className="nav-docs-body">
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Zwei Typen</div>
-                <p>
-                  <strong>Hauptnavigation (MAIN)</strong>: site-weit, genau eine ist „aktiv" und wird
-                  automatisch in jede Seite eingebunden.
-                </p>
-                <p>
-                  <strong>Seitennavigation (PAGE)</strong>: braucht keine Aktivierung. Sie wird wie ein
-                  Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
-                  können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
-                  selben Template auftauchen.
-                </p>
-              </div>
+              {role === 'FOOTER' ? (
+                <div className="nav-docs-group">
+                  <div className="nav-docs-heading">Genau ein aktiver Footer</div>
+                  <p>
+                    Es kann beliebig viele Footer-Vorlagen geben, aber nur der als „aktiv" markierte wird
+                    tatsächlich gerendert — am Ende des Seiteninhalts, auf jeder Seite.
+                  </p>
+                  <p>
+                    Im Code stehen globale Variablen über <code>{`{{global.<key>}}`}</code> zur Verfügung
+                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen".
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Zwei Typen</div>
+                    <p>
+                      <strong>Hauptnavigation (MAIN)</strong>: site-weit, genau eine ist „aktiv" und wird
+                      automatisch in jede Seite eingebunden.
+                    </p>
+                    <p>
+                      <strong>Seitennavigation (PAGE)</strong>: braucht keine Aktivierung. Sie wird wie ein
+                      Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
+                      können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
+                      selben Template auftauchen.
+                    </p>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Drei Wege, eine PAGE-Nav einzubinden</div>
-                <ol className="nav-docs-list">
-                  <li><strong>Seiten-Navigationsauswahl</strong> — im Seitenbaum einer Seite eine
-                    Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>. Nur ein Slot pro
-                    Seite.</li>
-                  <li><strong>Navigations-Block</strong> — im Seiten-Editor als eigenen Block einfügen,
-                    auch mehrfach mit unterschiedlichen Navs. Nutzen, sobald mehr als eine PAGE-Nav auf
-                    derselben Seite gebraucht wird.</li>
-                  <li><strong>Direkt im Template-Code</strong> — Platzhalter
-                    <code>{`{{{nav:<name>}}}`}</code> per Hand schreiben oder im Template-Editor im
-                    Reiter „Navigation" per Klick einfügen.</li>
-                </ol>
-              </div>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Drei Wege, eine PAGE-Nav einzubinden</div>
+                    <ol className="nav-docs-list">
+                      <li><strong>Seiten-Navigationsauswahl</strong> — im Seitenbaum einer Seite eine
+                        Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>. Nur ein Slot pro
+                        Seite.</li>
+                      <li><strong>Navigations-Block</strong> — im Seiten-Editor als eigenen Block einfügen,
+                        auch mehrfach mit unterschiedlichen Navs. Nutzen, sobald mehr als eine PAGE-Nav auf
+                        derselben Seite gebraucht wird.</li>
+                      <li><strong>Direkt im Template-Code</strong> — Platzhalter
+                        <code>{`{{{nav:<name>}}}`}</code> per Hand schreiben oder im Template-Editor im
+                        Reiter „Navigation" per Klick einfügen.</li>
+                    </ol>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Platzhalter: Nav einbinden</div>
-                <table className="nav-docs-table">
-                  <tbody>
-                    <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation (wird automatisch am Seitenanfang ergänzt, falls nicht referenziert)</td></tr>
-                    <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard-Slot)</td></tr>
-                    <tr><td><code>{`{{{nav:<name>}}}`}</code></td><td>eine bestimmte PAGE-Nav namentlich</td></tr>
-                    <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>aktive Mobile-Navigation</td></tr>
-                    <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum generiert, kein eigenes Template nötig</td></tr>
-                  </tbody>
-                </table>
-                <p className="nav-docs-note">
-                  Der Name-Platzhalter wird aus dem Navigationsnamen abgeleitet (Kleinschreibung,
-                  Sonderzeichen → „-"). Ergeben zwei Namen denselben Platzhalter, hängt die zweite
-                  Navigation automatisch „-2" an — eigenen Platzhalter beim Bearbeiten einer Navigation
-                  live prüfen.
-                </p>
-              </div>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Platzhalter: Nav einbinden</div>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation (wird automatisch am Seitenanfang ergänzt, falls nicht referenziert)</td></tr>
+                        <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard-Slot)</td></tr>
+                        <tr><td><code>{`{{{nav:<name>}}}`}</code></td><td>eine bestimmte PAGE-Nav namentlich</td></tr>
+                        <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>aktive Mobile-Navigation</td></tr>
+                        <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum generiert, kein eigenes Template nötig</td></tr>
+                      </tbody>
+                    </table>
+                    <p className="nav-docs-note">
+                      Der Name-Platzhalter wird aus dem Navigationsnamen abgeleitet (Kleinschreibung,
+                      Sonderzeichen → „-"). Ergeben zwei Namen denselben Platzhalter, hängt die zweite
+                      Navigation automatisch „-2" an — eigenen Platzhalter beim Bearbeiten einer Navigation
+                      live prüfen.
+                    </p>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Variablen: <code>{`{{#pages}}`}</code> / <code>{`{{#children}}`}</code> (MAIN/MOBILE)</div>
-                <p>Schleife über den Seitenbaum. Jedes Element:</p>
-                <table className="nav-docs-table">
-                  <tbody>
-                    <tr><td><code>slug</code></td><td>vollständiger Pfad inkl. Eltern, z. B. <code>ueber-uns/team</code></td></tr>
-                    <tr><td><code>title</code></td><td>Seitentitel</td></tr>
-                    <tr><td><code>hasChildren</code></td><td>nur zum Verzweigen (<code>{`{{#hasChildren}}`}</code>), kein Text</td></tr>
-                    <tr><td><code>children</code></td><td>Unterseiten, gleiche Struktur, rekursiv</td></tr>
-                    <tr><td><code>isCurrent</code></td><td>aktive Seite hervorheben — <strong>nicht</strong> auf Startseite/Static-Export verfügbar</td></tr>
-                    <tr><td><code>data</code></td><td>freies Datenfeld der Seite (z. B. <code>data.navImage</code>) — gleiche Einschränkung wie <code>isCurrent</code></td></tr>
-                  </tbody>
-                </table>
-                <p className="nav-docs-note">
-                  Innerhalb von <code>{`{{#children}}`}</code> zeigen <code>{`{{slug}}`}</code>/<code>{`{{title}}`}</code>
-                  wieder auf die Unterseite, nicht die Elternseite.
-                </p>
-              </div>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variablen: <code>{`{{#pages}}`}</code> / <code>{`{{#children}}`}</code> (MAIN/MOBILE)</div>
+                    <p>Schleife über den Seitenbaum. Jedes Element:</p>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>slug</code></td><td>vollständiger Pfad inkl. Eltern, z. B. <code>ueber-uns/team</code></td></tr>
+                        <tr><td><code>title</code></td><td>Seitentitel</td></tr>
+                        <tr><td><code>hasChildren</code></td><td>nur zum Verzweigen (<code>{`{{#hasChildren}}`}</code>), kein Text</td></tr>
+                        <tr><td><code>children</code></td><td>Unterseiten, gleiche Struktur, rekursiv</td></tr>
+                        <tr><td><code>isCurrent</code></td><td>aktive Seite hervorheben — <strong>nicht</strong> auf Startseite/Static-Export verfügbar</td></tr>
+                        <tr><td><code>data</code></td><td>freies Datenfeld der Seite (z. B. <code>data.navImage</code>) — gleiche Einschränkung wie <code>isCurrent</code></td></tr>
+                      </tbody>
+                    </table>
+                    <p className="nav-docs-note">
+                      Innerhalb von <code>{`{{#children}}`}</code> zeigen <code>{`{{slug}}`}</code>/<code>{`{{title}}`}</code>
+                      wieder auf die Unterseite, nicht die Elternseite.
+                    </p>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Variable: <code>{`{{#childPages}}`}</code> (nur PAGE-Navs)</div>
-                <p>
-                  Direkte Unterseiten <strong>der gerade angezeigten Seite</strong> — serverseitig pro
-                  Aufruf neu berechnet, kein manuelles Pflegen pro Seite. Gleiche Feldstruktur wie
-                  <code> pages</code>/<code>children</code>.
-                </p>
-                <pre className="nav-docs-code"><code>{`{{#childPages}}
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variable: <code>{`{{#childPages}}`}</code> (nur PAGE-Navs)</div>
+                    <p>
+                      Direkte Unterseiten <strong>der gerade angezeigten Seite</strong> — serverseitig pro
+                      Aufruf neu berechnet, kein manuelles Pflegen pro Seite. Gleiche Feldstruktur wie
+                      <code> pages</code>/<code>children</code>.
+                    </p>
+                    <pre className="nav-docs-code"><code>{`{{#childPages}}
   <a href="/{{slug}}">{{title}}</a>
 {{/childPages}}
 {{^childPages}}
   <p>Keine Unterseiten.</p>
 {{/childPages}}`}</code></pre>
-              </div>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading"><code>{`{{#anchors}}`}</code> vs. <code>{`{{#customAnchors}}`}</code> (nur PAGE-Navs)</div>
-                <p>Beide: Sprungmarken auf der aktuellen Seite, Felder <code>anchorId</code> (Ziel-<code>id</code>, ohne <code>#</code>) und <code>title</code>.</p>
-                <table className="nav-docs-table">
-                  <tbody>
-                    <tr><td><code>anchors</code></td><td>Seiten-Editor → Einstellungen → „Anker-Navigation" — Dropdown, nur Blöcke mit gesetztem Anchor-ID-Feld, keine Tippfehler möglich</td></tr>
-                    <tr><td><code>customAnchors</code></td><td>„Freie Sprungmarken" — freie Texteingabe für Ziel-IDs aus eigenen Template-Feldern (z. B. eine Kicker-Überschrift, die selbst als <code>id</code> gerendert wird)</td></tr>
-                  </tbody>
-                </table>
-                <pre className="nav-docs-code"><code>{`{{#anchors}}
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading"><code>{`{{#anchors}}`}</code> vs. <code>{`{{#customAnchors}}`}</code> (nur PAGE-Navs)</div>
+                    <p>Beide: Sprungmarken auf der aktuellen Seite, Felder <code>anchorId</code> (Ziel-<code>id</code>, ohne <code>#</code>) und <code>title</code>.</p>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>anchors</code></td><td>Seiten-Editor → Einstellungen → „Anker-Navigation" — Dropdown, nur Blöcke mit gesetztem Anchor-ID-Feld, keine Tippfehler möglich</td></tr>
+                        <tr><td><code>customAnchors</code></td><td>„Freie Sprungmarken" — freie Texteingabe für Ziel-IDs aus eigenen Template-Feldern (z. B. eine Kicker-Überschrift, die selbst als <code>id</code> gerendert wird)</td></tr>
+                      </tbody>
+                    </table>
+                    <pre className="nav-docs-code"><code>{`{{#anchors}}
   <a href="#{{anchorId}}">{{title}}</a>
 {{/anchors}}`}</code></pre>
-                <p className="nav-docs-note">Beide Listen lassen sich in einer Navigation kombinieren (zwei Schleifen).</p>
-              </div>
+                    <p className="nav-docs-note">Beide Listen lassen sich in einer Navigation kombinieren (zwei Schleifen).</p>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Mustache-Kurzreferenz</div>
-                <table className="nav-docs-table">
-                  <tbody>
-                    <tr><td><code>{`{{feld}}`}</code></td><td>Wert, HTML-escaped</td></tr>
-                    <tr><td><code>{`{{{feld}}}`}</code></td><td>Wert roh (kein Escaping — für HTML-Inhalte)</td></tr>
-                    <tr><td><code>{`{{#liste}}…{{/liste}}`}</code></td><td>je Element wiederholen; bei Wahrheitswert: nur rendern wenn <code>true</code></td></tr>
-                    <tr><td><code>{`{{^liste}}…{{/liste}}`}</code></td><td>Gegenteil — nur rendern wenn leer/<code>false</code></td></tr>
-                  </tbody>
-                </table>
-              </div>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Mustache-Kurzreferenz</div>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>{`{{feld}}`}</code></td><td>Wert, HTML-escaped</td></tr>
+                        <tr><td><code>{`{{{feld}}}`}</code></td><td>Wert roh (kein Escaping — für HTML-Inhalte)</td></tr>
+                        <tr><td><code>{`{{#liste}}…{{/liste}}`}</code></td><td>je Element wiederholen; bei Wahrheitswert: nur rendern wenn <code>true</code></td></tr>
+                        <tr><td><code>{`{{^liste}}…{{/liste}}`}</code></td><td>Gegenteil — nur rendern wenn leer/<code>false</code></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Best Practices</div>
-                <ul className="nav-docs-list">
-                  <li>Sprechenden Namen wählen — er wird zum Platzhalter (<code>{`{{{nav:<name>}}}`}</code>).</li>
-                  <li>Für eine simple, immer aktuelle Hauptnav <code>{`{{{nav:auto}}}`}</code> nutzen statt eigenes Template zu pflegen.</li>
-                  <li>Leerzustände mit <code>{`{{^liste}}…{{/liste}}`}</code> abfangen (z. B. „Keine Unterseiten vorhanden"), statt einer leeren, unsichtbaren Liste.</li>
-                  <li><code>aria-label</code> auf <code>{`<nav>`}</code> und <code>aria-current="page"</code> bei <code>{`{{#isCurrent}}`}</code> für Barrierefreiheit setzen.</li>
-                  <li><code>isCurrent</code>/<code>data</code> fehlen auf Startseite &amp; Static-Export — nicht als einzige Quelle für essenzielle Logik verwenden.</li>
-                  <li>Mehrere PAGE-Navs auf einer Seite: Navigations-Block statt Seiten-Navigationsauswahl (die ist nur 1× pro Seite verfügbar).</li>
-                  <li><code>anchors</code> für Blöcke mit Anchor-ID-Feld, <code>customAnchors</code> nur wenn die Ziel-<code>id</code> anderswo herkommt — vermeidet Tippfehler wo möglich.</li>
-                  <li>Für einen schnellen Start: Presets (Button oben) als Vorlage nehmen und anpassen, statt bei Null zu beginnen.</li>
-                </ul>
-              </div>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Best Practices</div>
+                    <ul className="nav-docs-list">
+                      <li>Sprechenden Namen wählen — er wird zum Platzhalter (<code>{`{{{nav:<name>}}}`}</code>).</li>
+                      <li>Für eine simple, immer aktuelle Hauptnav <code>{`{{{nav:auto}}}`}</code> nutzen statt eigenes Template zu pflegen.</li>
+                      <li>Leerzustände mit <code>{`{{^liste}}…{{/liste}}`}</code> abfangen (z. B. „Keine Unterseiten vorhanden"), statt einer leeren, unsichtbaren Liste.</li>
+                      <li><code>aria-label</code> auf <code>{`<nav>`}</code> und <code>aria-current="page"</code> bei <code>{`{{#isCurrent}}`}</code> für Barrierefreiheit setzen.</li>
+                      <li><code>isCurrent</code>/<code>data</code> fehlen auf Startseite &amp; Static-Export — nicht als einzige Quelle für essenzielle Logik verwenden.</li>
+                      <li>Mehrere PAGE-Navs auf einer Seite: Navigations-Block statt Seiten-Navigationsauswahl (die ist nur 1× pro Seite verfügbar).</li>
+                      <li><code>anchors</code> für Blöcke mit Anchor-ID-Feld, <code>customAnchors</code> nur wenn die Ziel-<code>id</code> anderswo herkommt — vermeidet Tippfehler wo möglich.</li>
+                      <li>Für einen schnellen Start: Presets (Button oben) als Vorlage nehmen und anpassen, statt bei Null zu beginnen.</li>
+                    </ul>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Beispiel: Hauptnav mit aktivem Zustand &amp; Untermenü</div>
-                <pre className="nav-docs-code"><code>{`<ul>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Beispiel: Hauptnav mit aktivem Zustand &amp; Untermenü</div>
+                    <pre className="nav-docs-code"><code>{`<ul>
   {{#pages}}
   <li class="{{#isCurrent}}active{{/isCurrent}}">
     <a href="/{{slug}}"{{#isCurrent}} aria-current="page"{{/isCurrent}}>
@@ -938,11 +986,11 @@ export default function NavigationView({ showToast }) {
   </li>
   {{/pages}}
 </ul>`}</code></pre>
-              </div>
+                  </div>
 
-              <div className="nav-docs-group">
-                <div className="nav-docs-heading">Beispiel: eigenes Datenfeld (<code>data</code>)</div>
-                <pre className="nav-docs-code"><code>{`{{#pages}}
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Beispiel: eigenes Datenfeld (<code>data</code>)</div>
+                    <pre className="nav-docs-code"><code>{`{{#pages}}
 <li>
   {{#data.navImage}}
   <img src="{{data.navImage}}" alt="">
@@ -950,8 +998,10 @@ export default function NavigationView({ showToast }) {
   <a href="/{{slug}}">{{title}}</a>
 </li>
 {{/pages}}`}</code></pre>
-                <p className="nav-docs-note">Feld z. B. „Nav-Bild" im Seiten-Editor unter „Weitere Optionen".</p>
-              </div>
+                    <p className="nav-docs-note">Feld z. B. „Nav-Bild" im Seiten-Editor unter „Weitere Optionen".</p>
+                  </div>
+                </>
+              )}
             </div>
           </aside>
         )}
