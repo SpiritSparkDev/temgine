@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.26.0] - 2026-10-03
+
+### Added
+- Footer und Navigation sind jetzt zu "globalen Seitenkomponenten" vereinheitlicht (`lib/globalPageStore.js`, `components/GlobalPagesView.js`): statt zweier getrennter, aber strukturell fast identischer Stores gibt es jetzt einen gemeinsamen Store mit Rollen (`FOOTER`, `MAIN`, `PAGE`, `MOBILE`). `lib/navigationStore.js` und `lib/footerStore.js` bleiben als dünne Kompatibilitäts-Shims bestehen, bestehende Daten werden beim Lesen automatisch mit eingemischt und wandern beim nächsten Speichern an den neuen Ort (`npm run migrate-footer-navigation-to-global` für eine einmalige, vollständige Migration).
+- Rich-Text-Felder (Seiten-Blöcke, Blogbeiträge, Content-Einträge) können jetzt wahlweise mit einem WYSIWYG-Editor (TipTap) statt dem bisherigen Markdown-Editor bearbeitet werden. Die Umschaltung erfolgt global unter Einstellungen → "Rich-Text-Editor"; das Speicherformat bleibt in beiden Fällen Markdown, sodass zwischen den beiden Editoren jederzeit verlustfrei gewechselt werden kann.
+- Seitenübersicht: Die Tabellenansicht ist jetzt die Standardansicht für neue Browser-Sitzungen (vorher Kartenansicht). Eine bereits gewählte Ansicht bleibt wie bisher pro Sitzung gespeichert.
+
+### Changed
+- Durchgängige Übersetzung verbliebener englischer UI-Begriffe ins Deutsche (Buttons, Tooltips, Platzhaltertexte, Fehlermeldungen in Toasts), u. a. in `ElementPropertyEditor.js`, `DOMCanvas.js`, `SeoPanel.js`, `PagesView.js`, `BackupView.js`, `ContentModelsView.js` und mehreren API-Fehlermeldungen (`pages/api/**`). Fachspezifische Begriffe (SEO-Jargon wie Meta Title/OG Title/Canonical URL, etablierte technische Bezeichnungen, Produkt- und Markennamen) bleiben bewusst unübersetzt.
+- Der Status "Review" (Blogbeiträge) heißt jetzt einheitlich "In Prüfung", passend zur bereits an anderer Stelle (`lib/workflow.js`) verwendeten Bezeichnung.
+
+### Fixed
+- `ContentEntryEditor.js` enthielt nach der eigentlichen Komponente mehrere hundert Zeilen toten, nicht mehr erreichbaren Codes aus einem älteren Entwurf (ungültige Referenzen auf nicht existierende Variablen). Das verhinderte zuverlässiges Kompilieren der Datei; der tote Code wurde entfernt.
+
+---
+
 ## [0.25.2] - 2026-10-02
 
 ### Fixed
