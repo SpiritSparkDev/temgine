@@ -4,7 +4,8 @@ import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, C
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups, extractFolderBlocks } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
-import RichTextEditor from './RichTextEditor';
+import SmartRichTextEditor from './SmartRichTextEditor';
+import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import RevisionHistoryPanel from './RevisionHistoryPanel';
 import SeoPanel from './SeoPanel';
@@ -36,6 +37,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
+  const richTextEditorMode = useRichTextEditorMode();
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -1975,7 +1977,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item field-item-textarea">
                         <label className="field-label-xs">{label}</label>
                         <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                          <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                          <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                         </div>
                       </div>
                     );
@@ -2039,7 +2041,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     <div key={varName} className="field-item field-item-textarea">
                       <label className="field-label-xs">{label}</label>
                       <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                        <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                        <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                       </div>
                     </div>
                   )
@@ -2125,7 +2127,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                     <div className="field-quill-wrapper">
-                                      <RichTextEditor
+                                      <SmartRichTextEditor
+                                        mode={richTextEditorMode}
                                         value={sfVal}
                                         onChange={val => {
                                           const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
@@ -2327,7 +2330,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
               <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
-                <RichTextEditor value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                <SmartRichTextEditor mode={richTextEditorMode} value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
               </div>
             </>
           )}

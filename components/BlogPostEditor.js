@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal, Plus, ChevronUp, ChevronDown } from '../lib/muiIcons';
-import RichTextEditor from './RichTextEditor';
+import SmartRichTextEditor from './SmartRichTextEditor';
+import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
 
 const STATUS_OPTIONS = [
@@ -18,6 +19,7 @@ const slugify = (v) =>
     .replace(/-+/g, '-');
 
 export default function BlogPostEditor({ post, channelSlug, channelName, onSave, onBack, readingTemplateCode }) {
+  const richTextEditorMode = useRichTextEditorMode();
   const [title, setTitle]           = useState(post?.title ?? '');
   const [slug, setSlug]             = useState(post?.slug ?? '');
   const [excerpt, setExcerpt]       = useState(post?.excerpt ?? '');
@@ -213,7 +215,8 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                     <Tag size={12} /> Inhalt
                   </div>
                   <div className="blog-editor-card__body" style={{ padding: '12px 14px' }}>
-                    <RichTextEditor
+                    <SmartRichTextEditor
+                      mode={richTextEditorMode}
                       value={body}
                       onChange={setBody}
                       toolbar={['bold', 'italic', 'strike', 'h1', 'h2', 'h3', 'ol', 'ul', 'blockquote', 'code', 'link', 'image', 'clear']}

@@ -10,32 +10,10 @@
  */
 import React, { useState, useRef, useMemo, useLayoutEffect } from 'react';
 import { marked } from 'marked';
+import { htmlToMd } from '../lib/richTextNormalize';
 
 // Configure marked: safe defaults, no mangling
 marked.setOptions({ breaks: true, gfm: true });
-
-// Normalize incoming value: if it contains HTML (from old TipTap content),
-// convert it to approximate markdown so the textarea shows clean syntax.
-function htmlToMd(html) {
-  if (!html || typeof html !== 'string') return html || '';
-  if (!/<[a-z]/i.test(html)) return html; // already plain text / markdown
-  return html
-    .replace(/<strong>([\/\s\S]*?)<\/strong>/gi, '**$1**')
-    .replace(/<b>([\/\s\S]*?)<\/b>/gi, '**$1**')
-    .replace(/<em>([\/\s\S]*?)<\/em>/gi, '*$1*')
-    .replace(/<i>([\/\s\S]*?)<\/i>/gi, '*$1*')
-    .replace(/<del>([\/\s\S]*?)<\/del>/gi, '~~$1~~')
-    .replace(/<s>([\/\s\S]*?)<\/s>/gi, '~~$1~~')
-    .replace(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '[$2]($1)')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<p>/gi, '')
-    .replace(/<li>([\/\s\S]*?)<\/li>/gi, '- $1\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 const ALL_TOOLBAR = ['bold', 'italic', 'strike', 'ol', 'ul', 'blockquote', 'code', 'link', 'clear', 'preview'];
 
