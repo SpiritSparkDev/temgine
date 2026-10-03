@@ -30,7 +30,9 @@ export default async function handler(req, res) {
         return res.status(200).json(footer || null);
       }
 
-      // Full list (without code body) — used by FooterView
+      // Full list (without code body) — legacy endpoint, kept for backward
+      // compatibility (see lib/footerStore.js); the admin UI now uses
+      // /api/global-pages (components/GlobalPagesView.js)
       const footers = listFooters()
         .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))
         .map((f) => ({ id: f.id, name: f.name, isActive: f.isActive, updatedAt: f.updatedAt }));

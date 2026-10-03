@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
 import PageTreeEditor from './PageTreeEditor';
 import PageEditor from './PageEditor';
+import GlobalPagesView from './GlobalPagesView';
 import Toast from './Toast';
+
+const pagesTabButtonStyle = (active) => ({
+  padding: '0.5rem 1.25rem',
+  border: 'none',
+  borderBottom: active ? '2px solid var(--accent-primary)' : '2px solid transparent',
+  background: 'transparent',
+  cursor: 'pointer',
+  fontWeight: 600,
+  fontSize: '0.9rem',
+  color: active ? 'var(--accent-primary)' : 'var(--text-secondary)',
+  marginBottom: '-2px',
+  transition: 'color 0.15s, border-color 0.15s',
+});
 
 export default function PagesView({ 
   pages, 
@@ -15,7 +29,7 @@ export default function PagesView({
   onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
-  const [pagesTab, setPagesTab] = useState('pages'); // 'pages' or 'maintenance'
+  const [pagesTab, setPagesTab] = useState('pages'); // 'pages', 'global' or 'maintenance'
   const [maintenanceTab, setMaintenanceTab] = useState('404');
   const [maintenanceContent, setMaintenanceContent] = useState({
     '404': { html: '', css: '', js: '' },
@@ -205,36 +219,20 @@ export default function PagesView({
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', paddingLeft: '1rem', marginBottom: '1rem' }}>
-        <button 
-          style={{
-            padding: '0.5rem 1.25rem',
-            border: 'none',
-            borderBottom: pagesTab === 'pages' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: pagesTab === 'pages' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-            marginBottom: '-2px',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'pages')}
           onClick={() => setPagesTab('pages')}
         >
           Seiten
         </button>
-        <button 
-          style={{
-            padding: '0.5rem 1.25rem',
-            border: 'none',
-            borderBottom: pagesTab === 'maintenance' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: pagesTab === 'maintenance' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-            marginBottom: '-2px',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'global')}
+          onClick={() => setPagesTab('global')}
+        >
+          Globale Seiten
+        </button>
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'maintenance')}
           onClick={() => {
             setPagesTab('maintenance');
             if (!maintenanceLoaded) loadMaintenancePages();
@@ -243,7 +241,9 @@ export default function PagesView({
           Maintenance Seiten
         </button>
       </div>
-      
+
+      {pagesTab === 'global' && <GlobalPagesView showToast={showToast} />}
+
       {pagesTab === 'pages' && editingPage ? (
         <PageEditor 
           page={editingPage} 
@@ -372,7 +372,7 @@ export default function PagesView({
           userRole={userRole}
           onRefreshPages={onRefreshPages}
         />
-      ) : (
+      ) : pagesTab === 'maintenance' ? (
         <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
           <h2 style={{ marginBottom: '1.5rem' }}>Maintenance Seiten</h2>
 
@@ -582,7 +582,7 @@ export default function PagesView({
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
