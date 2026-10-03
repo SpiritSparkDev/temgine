@@ -12,6 +12,7 @@ import '../styles/editor-common.css'
 import '../styles/file-manager.css'
 import '../styles/users.css'
 import '../styles/navigation-view.css'
+import '../styles/wysiwyg-editor.css'
 import '../styles/blog-view.css'
 import '../styles/cookie-consent-view.css'
 import { SessionProvider } from 'next-auth/react';

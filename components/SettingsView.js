@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 
@@ -9,6 +10,8 @@ export default function SettingsView({ showToast }) {
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
   const [isSavingFolderDragDrop, setIsSavingFolderDragDrop] = useState(false);
+  const [richTextEditorMode, setRichTextEditorMode] = useState('markdown');
+  const [isSavingRichTextMode, setIsSavingRichTextMode] = useState(false);
   const [liveRenderMode, setLiveRenderMode] = useState('dynamic');
   const [isSavingLiveMode, setIsSavingLiveMode] = useState(false);
   const [isRenderingLive, setIsRenderingLive] = useState(false);
@@ -36,6 +39,7 @@ export default function SettingsView({ showToast }) {
         if (!data) return;
         if (data.revisionRetentionDays !== undefined) setRevisionRetentionDays(data.revisionRetentionDays);
         if (data.folderDragDropEnabled  !== undefined) setFolderDragDropEnabled(data.folderDragDropEnabled === 'true');
+        if (data[RICH_TEXT_EDITOR_MODE_KEY] === 'wysiwyg') setRichTextEditorMode('wysiwyg');
         if (data.liveRenderMode)            setLiveRenderMode(data.liveRenderMode);
         if (data.liveRenderLastStatus)      setLiveRenderStatus(data.liveRenderLastStatus);
         if (data.liveRenderLastAt)          setLiveRenderLastAt(data.liveRenderLastAt);
@@ -81,6 +85,27 @@ export default function SettingsView({ showToast }) {
       showToast(e.message || 'Fehler beim Speichern', 'error');
     } finally {
       setIsSavingLiveMode(false);
+    }
+  };
+
+  const handleSaveRichTextMode = async (nextMode) => {
+    setIsSavingRichTextMode(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: RICH_TEXT_EDITOR_MODE_KEY, value: nextMode }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Fehler beim Speichern');
+      }
+      setRichTextEditorMode(nextMode);
+      showToast(`Rich-Text-Editor gespeichert: ${nextMode === 'wysiwyg' ? 'WYSIWYG' : 'Markdown'}`, 'success');
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+    } finally {
+      setIsSavingRichTextMode(false);
     }
   };
 
@@ -305,6 +330,34 @@ export default function SettingsView({ showToast }) {
               <small style={{ color: '#6b7280' }}>
                 Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
               </small>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>Rich-Text-Editor</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge).
+                Gespeichert wird in beiden Modi derselbe Markdown-Text — ein Wechsel verändert keine
+                bestehenden Inhalte.
+              </p>
+
+              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <label style={{ fontWeight: 600 }}>Editor</label>
+                <select
+                  value={richTextEditorMode}
+                  onChange={(e) => handleSaveRichTextMode(e.target.value)}
+                  disabled={isSavingRichTextMode}
+                  style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    color: 'var(--text-primary)'
+                  }}
+                >
+                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
+                  <option value="wysiwyg">WYSIWYG (TipTap)</option>
+                </select>
+              </div>
             </section>
 
             <section style={{ marginTop: '2.5rem' }}>
