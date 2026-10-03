@@ -1,8 +1,11 @@
 import { requireAuth } from '../../lib/auth';
 import { logAudit } from '../../lib/audit';
-import { listNavigations, getNavigationById, getActiveNavigations, saveNavigation, deleteNavigation } from '../../lib/navigationStore';
+import { GLOBAL_PAGE_ROLES, listGlobalPages, getGlobalPageById, getActiveGlobalPages, saveGlobalPage, deleteGlobalPage } from '../../lib/globalPageStore';
 
-const VALID_TYPES = ['MAIN', 'PAGE'];
+// Rollen, die über diese API erstellt werden können — MOBILE bleibt wie
+// schon in der alten Navigation-API (pages/api/navigations.js) nicht
+// erstellbar (totes Gleis, siehe lib/globalPageStore.js).
+const CREATABLE_ROLES = ['FOOTER', 'MAIN', 'PAGE'];
 
 function isResponsiveCombinedNavCode(code) {
   const src = String(code || '');
@@ -20,39 +23,37 @@ export default async function handler(req, res) {
   try {
     // ── GET ──────────────────────────────────────────────────────────────────
     if (req.method === 'GET') {
-      const { id, active } = req.query;
+      const { id, active, role } = req.query;
 
-      // Single item (with code) — used by editor
+      // Single item (with code) — used by the editor
       if (id) {
-        const nav = getNavigationById(String(id));
-        if (!nav) {
-          const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+        const entry = getGlobalPageById(String(id));
+        if (!entry) {
+          const [status, resp] = errorResponse(404, 'Eintrag nicht gefunden', 'GLOBAL_PAGE_NOT_FOUND');
           return res.status(status).json(resp);
         }
-        return res.status(200).json(nav);
+        return res.status(200).json(entry);
       }
 
-      // Active navs — used by public rendering ([...slug].js)
+      // Active entries — optionally scoped to one role
       if (active === 'true') {
-        const navs = getActiveNavigations()
-          .filter((n) => VALID_TYPES.includes(n.type))
-          .map((n) => ({ id: n.id, name: n.name, type: n.type, code: n.code }));
-        return res.status(200).json(navs);
+        const entries = getActiveGlobalPages(role ? String(role).toUpperCase() : null)
+          .map((e) => ({ id: e.id, name: e.name, role: e.role, code: e.code }));
+        return res.status(200).json(entries);
       }
 
-      // Full list (with responsive marker, but without code body) — legacy
-      // endpoint, kept for backward compatibility (see lib/navigationStore.js);
-      // the admin UI now uses /api/global-pages (components/GlobalPagesView.js)
-      const navs = listNavigations().filter((n) => VALID_TYPES.includes(n.type));
-      navs.sort((a, b) => (a.type === b.type ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.type.localeCompare(b.type)));
+      // Full list (without code body) — used by GlobalPagesView
+      let entries = listGlobalPages();
+      if (role) entries = entries.filter((e) => e.role === String(role).toUpperCase());
+      entries.sort((a, b) => (a.role === b.role ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.role.localeCompare(b.role)));
 
-      const list = navs.map((nav) => ({
-        id: nav.id,
-        name: nav.name,
-        type: nav.type,
-        isActive: nav.isActive,
-        updatedAt: nav.updatedAt,
-        isResponsiveCombined: nav.type === 'MAIN' && isResponsiveCombinedNavCode(nav.code),
+      const list = entries.map((e) => ({
+        id: e.id,
+        name: e.name,
+        role: e.role,
+        isActive: e.isActive,
+        updatedAt: e.updatedAt,
+        isResponsiveCombined: e.role === 'MAIN' && isResponsiveCombinedNavCode(e.code),
       }));
 
       return res.status(200).json(list);
@@ -67,26 +68,28 @@ export default async function handler(req, res) {
 
     // ── POST (create) ─────────────────────────────────────────────────────────
     if (req.method === 'POST') {
-      const { name, type, code } = req.body || {};
-      if (!name || !type || !code) {
+      const { name, role, code } = req.body || {};
+      if (!name || !role || !code) {
         const missing = [];
         if (!name) missing.push('name');
-        if (!type) missing.push('type');
+        if (!role) missing.push('role');
         if (!code) missing.push('code');
-        const [status, resp] = errorResponse(400, 'name, type und code sind erforderlich', 'VALIDATION_ERROR', { missing });
+        const [status, resp] = errorResponse(400, 'name, role und code sind erforderlich', 'VALIDATION_ERROR', { missing });
         return res.status(status).json(resp);
       }
-      if (!VALID_TYPES.includes(type)) {
-        const [status, resp] = errorResponse(400, `type muss einer von ${VALID_TYPES.join(', ')} sein`, 'VALIDATION_ERROR', { invalid: ['type'], value: type, valid: VALID_TYPES });
+      const resolvedRole = String(role).toUpperCase();
+      if (!CREATABLE_ROLES.includes(resolvedRole)) {
+        const [status, resp] = errorResponse(400, `role muss einer von ${CREATABLE_ROLES.join(', ')} sein`, 'VALIDATION_ERROR', { invalid: ['role'], value: role, valid: CREATABLE_ROLES });
         return res.status(status).json(resp);
       }
 
-      // PAGE navs have no active/inactive concept (see navigationStore.saveNavigation);
-      // MAIN keeps the old behavior of starting inactive until explicitly activated.
-      const nav = saveNavigation({ name: String(name), type, code: String(code), isActive: type === 'PAGE' });
+      const roleMeta = GLOBAL_PAGE_ROLES.find((r) => r.id === resolvedRole);
+      // PAGE-Navs haben kein Aktivierungskonzept (immer "aktiv"); andere
+      // Rollen starten inaktiv, bis explizit aktiviert.
+      const entry = saveGlobalPage({ name: String(name), role: resolvedRole, code: String(code), isActive: roleMeta.alwaysActive });
 
-      await logAudit({ action: 'CREATE', resource: 'navigation', resourceId: nav.id, userId: authResult.user.id, details: { name: nav.name, type: nav.type } });
-      return res.status(201).json(nav);
+      await logAudit({ action: 'CREATE', resource: 'global_page', resourceId: entry.id, userId: authResult.user.id, details: { name: entry.name, role: entry.role } });
+      return res.status(201).json(entry);
     }
 
     // ── PUT (update) ──────────────────────────────────────────────────────────
@@ -97,21 +100,21 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      const existing = getNavigationById(String(id));
+      const existing = getGlobalPageById(String(id));
       if (!existing) {
-        const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+        const [status, resp] = errorResponse(404, 'Eintrag nicht gefunden', 'GLOBAL_PAGE_NOT_FOUND');
         return res.status(status).json(resp);
       }
 
-      const updated = saveNavigation({
+      const updated = saveGlobalPage({
         id: String(id),
-        type: existing.type,
+        role: existing.role,
         ...(name !== undefined && { name: String(name) }),
         ...(code !== undefined && { code: String(code) }),
         ...(isActive !== undefined && { isActive: Boolean(isActive) }),
       });
 
-      await logAudit({ action: 'UPDATE', resource: 'navigation', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, isActive: updated.isActive } });
+      await logAudit({ action: 'UPDATE', resource: 'global_page', resourceId: updated.id, userId: authResult.user.id, details: { name: updated.name, role: updated.role, isActive: updated.isActive } });
       return res.status(200).json(updated);
     }
 
@@ -123,21 +126,21 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
 
-      const existing = getNavigationById(String(id));
+      const existing = getGlobalPageById(String(id));
       if (!existing) {
-        const [status, resp] = errorResponse(404, 'Navigation nicht gefunden', 'NAVIGATION_NOT_FOUND');
+        const [status, resp] = errorResponse(404, 'Eintrag nicht gefunden', 'GLOBAL_PAGE_NOT_FOUND');
         return res.status(status).json(resp);
       }
 
-      deleteNavigation(String(id));
-      await logAudit({ action: 'DELETE', resource: 'navigation', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name } });
+      deleteGlobalPage(String(id));
+      await logAudit({ action: 'DELETE', resource: 'global_page', resourceId: String(id), userId: authResult.user.id, details: { name: existing.name, role: existing.role } });
       return res.status(200).json({ ok: true });
     }
 
     const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');
     return res.status(status).json(resp);
   } catch (e) {
-    console.error('[/api/navigations Error]', e.message, e.stack);
+    console.error('[/api/global-pages Error]', e.message, e.stack);
     const [status, resp] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', { message: process.env.NODE_ENV === 'production' ? undefined : e.message });
     return res.status(status).json(resp);
   }
