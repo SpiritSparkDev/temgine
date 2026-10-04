@@ -1,6 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react'
 import JSZip from 'jszip'
 import { Download, Upload, Trash2, RefreshCw, AlertCircle, CheckCircle, Info, SlidersHorizontal, X } from '../lib/muiIcons'
+import { BACKUP_CATEGORIES, BACKUP_CATEGORY_KEYS } from '../lib/backupCategories'
+
+const BACKUP_CATEGORY_GROUPS = [...new Set(BACKUP_CATEGORIES.map((c) => c.group))]
 
 // Fetch a response while reporting download progress (0-100) via Content-Length.
 // Falls back to indeterminate (null) progress if the length is unknown.
@@ -66,7 +69,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [exportScope, setExportScope] = useState('full')
+  const [exportCategories, setExportCategories] = useState(() => new Set(BACKUP_CATEGORY_KEYS))
   const [exportingZip, setExportingZip] = useState(false)
   const [exportingCss, setExportingCss] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -124,16 +127,28 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   }
 
   // Export project transfer ZIP
-  const scopeLabels = {
-    full: 'Vollständig',
-    'db-templates': 'Datenbank + Templates',
-    db: 'Nur Datenbank',
+  const toggleExportCategory = (key) => {
+    setExportCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
   }
+  const selectAllExportCategories = () => setExportCategories(new Set(BACKUP_CATEGORY_KEYS))
+  const selectNoExportCategories = () => setExportCategories(new Set())
+
   const handleExport = async () => {
+    if (exportCategories.size === 0) {
+      notify('error', 'Bitte mindestens eine Kategorie auswählen.')
+      return
+    }
     setExporting(true)
-    setProgressModal({ title: 'Backup wird erstellt', subtitle: `Projekttransfer-ZIP · ${scopeLabels[exportScope]}`, percent: null, status: 'running' })
+    const categoriesParam = Array.from(exportCategories).join(',')
+    const subtitleLabel = exportCategories.size === BACKUP_CATEGORY_KEYS.length ? 'Vollständig' : `${exportCategories.size} von ${BACKUP_CATEGORY_KEYS.length} Kategorien`
+    setProgressModal({ title: 'Backup wird erstellt', subtitle: `Projekttransfer-ZIP · ${subtitleLabel}`, percent: null, status: 'running' })
     try {
-      const { blob, headers } = await fetchWithProgress(`/api/admin/export?format=transfer-zip&scope=${exportScope}`, {
+      const { blob, headers } = await fetchWithProgress(`/api/admin/export?format=transfer-zip&categories=${encodeURIComponent(categoriesParam)}`, {
         onProgress: (percent) => setProgressModal(m => m && { ...m, percent })
       })
       const fileSize = blob.size
@@ -286,6 +301,8 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         templates: data.templates?.length || 0,
         snippets: data.snippets?.length || 0,
         pages: data.pages?.length || 0,
+        blogChannels: data.blogChannels?.length || 0,
+        blogPosts: data.blogPosts?.length || 0,
         cssFiles: data.css?.length || 0,
         navigations: data.navigations?.length || 0,
         globalVariables: data.globalVariables?.length || 0,
@@ -295,13 +312,16 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         fontsConfig: data.fontsConfig ? 1 : 0
       }
 
-      const scopeLabel = { full: 'Vollständig', 'db-templates': 'Datenbank + Templates', db: 'Nur Datenbank' }[data.metadata?.scope] || null
       const filesIncluded = Array.isArray(data.metadata?.filesIncluded) ? data.metadata.filesIncluded : null
+      const includedLabel = filesIncluded
+        ? BACKUP_CATEGORIES.filter((c) => filesIncluded.includes(c.key)).map((c) => c.label).join(', ')
+        : null
 
-      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'}${scopeLabel ? ` - Umfang dieses Backups: ${scopeLabel}` : ''} - Werden importiert:\n
+      const message = `${restoreStrategy === 'merge' ? 'Merge' : 'Ersetzen'}${includedLabel ? ` - Enthaltene Kategorien: ${includedLabel}` : ''} - Werden importiert:\n
 • ${itemCounts.templates} Templates
 • ${itemCounts.snippets} Snippets
 • ${itemCounts.pages} Seiten
+• ${itemCounts.blogChannels || 0} Blog-Channels, ${itemCounts.blogPosts || 0} Blog-Beiträge
 • ${itemCounts.cssFiles} CSS-Dateien
 • ${itemCounts.navigations} Navigationen
 • ${itemCounts.globalVariables} Globale Variablen
@@ -337,7 +357,7 @@ ${restoreStrategy === 'replace' ? (
 
             const result = JSON.parse(responseText)
             setProgressModal(m => m && { ...m, percent: 100, status: 'success', subtitle: 'Import abgeschlossen' })
-            notify('success', `Import erfolgreich: ${result.importStats.templates} Templates, ${result.importStats.snippets} Snippets, ${result.importStats.pages} Seiten`)
+            notify('success', `Import erfolgreich: ${result.importStats.templates} Templates, ${result.importStats.snippets} Snippets, ${result.importStats.pages} Seiten, ${result.importStats.blogPosts || 0} Blog-Beiträge`)
             await loadBackups()
           } catch (err) {
             let message = err.message
@@ -622,6 +642,71 @@ ${restoreStrategy === 'replace' ? (
           gap: 12px;
           margin: 15px 0;
           flex-wrap: wrap;
+        }
+
+        .category-toolbar {
+          display: flex;
+          gap: 8px;
+          margin: 10px 0;
+        }
+
+        .category-toolbar-btn {
+          padding: 5px 10px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: var(--surface-muted);
+          color: inherit;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .category-toolbar-btn:hover {
+          background: var(--brand);
+          color: #fff;
+          border-color: var(--brand);
+        }
+
+        .category-groups {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 14px;
+          margin-bottom: 12px;
+        }
+
+        .category-group {
+          background: var(--surface-muted);
+          border: 1px solid var(--line);
+          border-radius: 10px;
+          padding: 12px 14px;
+        }
+
+        .category-group-title {
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: var(--ink-soft);
+          margin-bottom: 8px;
+        }
+
+        .category-checkbox {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          cursor: pointer;
+          font-size: 13px;
+          margin-bottom: 6px;
+        }
+
+        .category-checkbox input {
+          margin-top: 2px;
+          cursor: pointer;
+        }
+
+        .category-desc {
+          color: var(--ink-soft);
+          font-weight: 400;
         }
 
         .radio-option {
@@ -923,53 +1008,37 @@ ${restoreStrategy === 'replace' ? (
         <h3><Download className="backup-section-icon" /> Projekttransfer</h3>
         <div className="backup-info">
           <Info size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Wähle den Umfang:
+          Exportiert ein übertragbares ZIP für die nächste Temgine-Instanz. Wähle aus, was enthalten sein soll:
         </div>
 
-        <div className="strategy-selector">
-          <div className="radio-option">
-            <input
-              type="radio"
-              id="scope-full"
-              name="exportScope"
-              value="full"
-              checked={exportScope === 'full'}
-              onChange={(e) => setExportScope(e.target.value)}
-            />
-            <label htmlFor="scope-full">
-              <strong>Vollständig</strong> - Datenbank, Templates, Navigationen, Footer, CSS, Uploads & Schriftarten
-            </label>
-          </div>
-          <div className="radio-option">
-            <input
-              type="radio"
-              id="scope-db-templates"
-              name="exportScope"
-              value="db-templates"
-              checked={exportScope === 'db-templates'}
-              onChange={(e) => setExportScope(e.target.value)}
-            />
-            <label htmlFor="scope-db-templates">
-              <strong>Datenbank + Templates</strong> - zusätzlich Navigationen, Footer, Wartungsseiten & CSS, ohne Uploads
-            </label>
-          </div>
-          <div className="radio-option">
-            <input
-              type="radio"
-              id="scope-db"
-              name="exportScope"
-              value="db"
-              checked={exportScope === 'db'}
-              onChange={(e) => setExportScope(e.target.value)}
-            />
-            <label htmlFor="scope-db">
-              <strong>Nur Datenbank</strong> - Seiten, Snippets & Globale Variablen, ohne Templates, Uploads & Assets
-            </label>
-          </div>
+        <div className="category-toolbar">
+          <button type="button" className="category-toolbar-btn" onClick={selectAllExportCategories}>Alle auswählen</button>
+          <button type="button" className="category-toolbar-btn" onClick={selectNoExportCategories}>Keine</button>
+        </div>
+
+        <div className="category-groups">
+          {BACKUP_CATEGORY_GROUPS.map((group) => (
+            <div key={group} className="category-group">
+              <div className="category-group-title">{group}</div>
+              {BACKUP_CATEGORIES.filter((c) => c.group === group).map((cat) => (
+                <label key={cat.key} className="category-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={exportCategories.has(cat.key)}
+                    onChange={() => toggleExportCategory(cat.key)}
+                  />
+                  <span>
+                    <strong>{cat.label}</strong>
+                    {cat.description ? <span className="category-desc"> — {cat.description}</span> : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+          ))}
         </div>
 
         <div className="backup-buttons">
-          <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip}>
+          <button className="backup-btn backup-btn-primary" onClick={handleExport} disabled={exporting || exportingZip || exportCategories.size === 0}>
             {exporting ? (
               <><RefreshCw size={16} className="spinner" /> Wird exportiert...</>
             ) : (
@@ -1052,7 +1121,7 @@ ${restoreStrategy === 'replace' ? (
         {restoreStrategy === 'replace' && (
           <div className="backup-warning">
             <AlertCircle size={16} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-top' }} />
-            <strong>WARNUNG:</strong> Die "Ersetzen"-Strategie wird alle bestehenden Templates, Snippets, Seiten, CSS-Dateien, Navigationen und Aktivierungskonfigurationen löschen!
+            <strong>WARNUNG:</strong> Die "Ersetzen"-Strategie wird alle bestehenden Templates, Snippets, Seiten, Blog-Beiträge, CSS-Dateien, Navigationen und Aktivierungskonfigurationen löschen — jeweils nur für die Kategorien, die im gewählten Backup tatsächlich enthalten sind!
           </div>
         )}
 
