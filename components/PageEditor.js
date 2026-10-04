@@ -56,6 +56,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [isHomepage, setIsHomepage] = useState(false);
   const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
   const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
+  // Passwortschutz "ohne Konto" (Alternative zu accessGroups, siehe AccessGroupsPanel).
+  // passwordProtected spiegelt nur, ob der Server aktuell einen Hash gespeichert hat —
+  // der Hash selbst wird nie an den Client geschickt. newAccessPassword/clearAccessPassword
+  // sind transiente Eingaben, die erst beim Speichern in lib/pageAccessPassword.js gehasht
+  // bzw. gelöscht werden.
+  const [passwordProtected, setPasswordProtected] = useState(false);
+  const [newAccessPassword, setNewAccessPassword] = useState('');
+  const [clearAccessPassword, setClearAccessPassword] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
@@ -222,6 +230,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
+      const initialPasswordProtected = Boolean(page.passwordProtected);
       const initialPageFieldsTemplate = page.template || '';
 
       setTitle(page.title || '');
@@ -234,6 +243,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectTarget(initialRedirectTarget);
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
+      setPasswordProtected(initialPasswordProtected);
+      setNewAccessPassword('');
+      setClearAccessPassword(false);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
       // Minimized-block state is an editor-only UI preference (not page content),
       // so it lives in localStorage per page rather than being saved to the DB.
@@ -1415,6 +1427,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     };
     delete updatedPage.redirectType;
     delete updatedPage.redirectUrl;
+    delete updatedPage.passwordProtected;
+    if (newAccessPassword) {
+      updatedPage.newAccessPassword = newAccessPassword;
+    } else if (clearAccessPassword) {
+      updatedPage.clearAccessPassword = true;
+    }
 
     try {
       if (opts.autosave) {
@@ -1442,6 +1460,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         isHomepage,
         pageFieldsTemplate,
       });
+      if (newAccessPassword) setPasswordProtected(true);
+      else if (clearAccessPassword) setPasswordProtected(false);
+      setNewAccessPassword('');
+      setClearAccessPassword(false);
       setIsDirty(false);
       setAutosaveStatus('gespeichert');
       onDirtyChange?.(false);
@@ -2915,6 +2937,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 .catch(() => {});
                             }
                           }}
+                          passwordProtected={passwordProtected}
+                          newAccessPassword={newAccessPassword}
+                          onPasswordChange={(value) => {
+                            setNewAccessPassword(value);
+                            setClearAccessPassword(false);
+                          }}
+                          onClearPassword={() => {
+                            setClearAccessPassword(true);
+                            setNewAccessPassword('');
+                            setPasswordProtected(false);
+                          }}
                         />
                       </div>
                     )}
@@ -3744,21 +3777,34 @@ function PageDataFieldInput({ varName, inputType, label, value, onChange, openFi
   );
 }
 
-function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGroups }) {
+function AccessGroupsPanel({
+  accessGroups, onChange, availableGroups, onLoadGroups,
+  passwordProtected, newAccessPassword, onPasswordChange, onClearPassword,
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
 
-  const accessMode = accessGroups.length === 0
+  const accessMode = (passwordProtected || newAccessPassword)
+    ? 'password'
+    : accessGroups.length === 0
     ? 'public'
     : accessGroups[0] === '*'
     ? 'all-members'
     : 'specific';
 
   function handleModeChange(mode) {
-    if (mode === 'public') onChange([]);
-    else if (mode === 'all-members') onChange(['*']);
-    else {
-      onLoadGroups();
+    if (mode === 'password') {
       onChange([]);
+      setShowPasswordInput(!passwordProtected);
+    } else {
+      if (passwordProtected || newAccessPassword) onClearPassword();
+      setShowPasswordInput(false);
+      if (mode === 'public') onChange([]);
+      else if (mode === 'all-members') onChange(['*']);
+      else {
+        onLoadGroups();
+        onChange([]);
+      }
     }
     setExpanded(mode === 'specific');
   }
@@ -3784,6 +3830,7 @@ function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGrou
         <option value="public">Öffentlich (alle)</option>
         <option value="all-members">Alle Mitglieder</option>
         <option value="specific">Bestimmte Gruppen</option>
+        <option value="password">Passwortgeschützt (ohne Konto)</option>
       </select>
       {accessMode === 'specific' && (
         <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
@@ -3800,6 +3847,34 @@ function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGrou
               {g.name}
             </label>
           ))}
+        </div>
+      )}
+      {accessMode === 'password' && (
+        <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
+          {passwordProtected && !showPasswordInput ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+              <span style={{ color: '#059669' }}>Passwort ist gesetzt.</span>
+              <button
+                type="button"
+                onClick={() => setShowPasswordInput(true)}
+                style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, fontSize: '0.85rem', textDecoration: 'underline' }}
+              >
+                Ändern
+              </button>
+            </div>
+          ) : (
+            <input
+              type="password"
+              className="input-field-small"
+              placeholder="Neues Passwort für diesen Bereich"
+              value={newAccessPassword}
+              onChange={e => onPasswordChange(e.target.value)}
+              autoComplete="new-password"
+            />
+          )}
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
+            Besucher*innen müssen dieses Passwort eingeben, um die Seite zu sehen — kein Mitgliedskonto nötig.
+          </p>
         </div>
       )}
     </div>

@@ -279,6 +279,100 @@ async function importFooters(footers = [], strategy = 'merge') {
   return result
 }
 
+// Importiert Blog-Channels und -Beiträge. Channels werden per slug upserted
+// (stabiler Anker für Hand-Imports ohne id); Beiträge referenzieren ihren
+// Channel innerhalb des Backups per channelId — da Channels und Beiträge aus
+// demselben Export stammen, zeigt post.channelId hier immer auf eine id, die
+// auch tatsächlich unter blogChannels auftaucht.
+async function importBlog(blogChannels = [], blogPosts = [], strategy = 'merge') {
+  const result = { importedChannels: 0, importedPosts: 0, errors: [] }
+
+  if (strategy === 'replace') {
+    try {
+      await prisma.blogPost.deleteMany({})
+      await prisma.blogChannel.deleteMany({})
+    } catch (e) {
+      result.errors.push(`Vorhandene Blog-Daten konnten nicht gelöscht werden: ${e.message}`)
+    }
+  }
+
+  const channelIdMap = new Map()
+  for (const ch of blogChannels) {
+    const slug = String(ch?.slug || '').trim()
+    if (!slug) continue
+    try {
+      const saved = await prisma.blogChannel.upsert({
+        where: { slug },
+        create: {
+          slug,
+          name: ch.name || slug,
+          description: ch.description || null,
+          templateDetailPreview: ch.templateDetailPreview || null,
+          templateSimplePreview: ch.templateSimplePreview || null,
+          templateArchiveEntry: ch.templateArchiveEntry || null,
+          templateReading: ch.templateReading || null,
+        },
+        update: {
+          name: ch.name || slug,
+          description: ch.description || null,
+          templateDetailPreview: ch.templateDetailPreview || null,
+          templateSimplePreview: ch.templateSimplePreview || null,
+          templateArchiveEntry: ch.templateArchiveEntry || null,
+          templateReading: ch.templateReading || null,
+        },
+      })
+      if (ch.id) channelIdMap.set(String(ch.id), saved.id)
+      result.importedChannels++
+    } catch (e) {
+      result.errors.push(`Blog-Channel "${slug}": ${e.message}`)
+    }
+  }
+
+  for (const post of blogPosts) {
+    const slug = String(post?.slug || '').trim()
+    if (!slug) continue
+    const channelId = channelIdMap.get(String(post?.channelId))
+    if (!channelId) {
+      result.errors.push(`Blog-Beitrag "${slug}" übersprungen: zugehöriger Channel nicht im Backup gefunden`)
+      continue
+    }
+    try {
+      await prisma.blogPost.upsert({
+        where: { channelId_slug: { channelId, slug } },
+        create: {
+          channelId,
+          slug,
+          title: post.title || slug,
+          excerpt: post.excerpt || null,
+          body: post.body || null,
+          coverImage: post.coverImage || null,
+          author: post.author || null,
+          status: post.status || 'DRAFT',
+          publishAt: post.publishAt ? new Date(post.publishAt) : null,
+          publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
+          templateData: post.templateData || null,
+        },
+        update: {
+          title: post.title || slug,
+          excerpt: post.excerpt || null,
+          body: post.body || null,
+          coverImage: post.coverImage || null,
+          author: post.author || null,
+          status: post.status || 'DRAFT',
+          publishAt: post.publishAt ? new Date(post.publishAt) : null,
+          publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
+          templateData: post.templateData || null,
+        },
+      })
+      result.importedPosts++
+    } catch (e) {
+      result.errors.push(`Blog-Beitrag "${slug}": ${e.message}`)
+    }
+  }
+
+  return result
+}
+
 async function importMaintenance(maintenance = {}) {
   const result = { imported: 0, errors: [] }
   for (const [key, value] of Object.entries(maintenance || {})) {
@@ -444,11 +538,13 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], css: body.css || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], blogChannels: body.blogChannels || [], blogPosts: body.blogPosts || [], css: body.css || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
 
     const templates = Array.isArray(backup.templates) ? backup.templates : []
     const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
     const pages = Array.isArray(backup.pages) ? backup.pages : []
+    const blogChannels = Array.isArray(backup.blogChannels) ? backup.blogChannels : []
+    const blogPosts = Array.isArray(backup.blogPosts) ? backup.blogPosts : []
     const css = Array.isArray(backup.css) ? backup.css : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
     const globalVariables = Array.isArray(backup.globalVariables) ? backup.globalVariables : []
@@ -459,20 +555,24 @@ export default async function handler(req, res) {
     const cssConfig = backup.cssConfig || null
     const fontsConfig = backup.fontsConfig || null
 
-    // Scoped backups (see pages/api/admin/export.js) omit entire categories —
-    // e.g. a "DB only" export has templates: []. Without this, a "replace"
-    // restore from that file would read "no templates in the backup" as
-    // "delete every existing template", silently destroying data the backup
-    // never claimed to touch. `filesIncluded` is the export's own truthful
-    // list of what it actually bundled; a category missing from it is forced
-    // to "merge" (i.e. a no-op against an empty array) regardless of the
-    // strategy the user picked. Old exports/hand-built JSON without this
-    // field fall back to today's behavior (every category follows `strategy`).
+    // Backups now let the admin pick exactly which categories to include (see
+    // lib/backupCategories.js) — e.g. a backup with "Seiten" unchecked has
+    // pages: []. Without this, a "replace" restore from that file would read
+    // "no pages in the backup" as "delete every existing page", silently
+    // destroying data the backup never claimed to touch. `filesIncluded` is
+    // the export's own truthful list of what it actually bundled; a category
+    // missing from it is forced to "merge" (i.e. a no-op against an empty
+    // array) regardless of the strategy the user picked. Old exports/
+    // hand-built JSON without this field fall back to today's behavior
+    // (every category follows `strategy`).
     const filesIncluded = Array.isArray(backup?.metadata?.filesIncluded) ? new Set(backup.metadata.filesIncluded) : null
     const strategyFor = (category) => (!filesIncluded || filesIncluded.has(category)) ? strategy : 'merge'
     const templatesStrategy = strategyFor('templates')
+    const pagesStrategy = strategyFor('pages')
+    const snippetsStrategy = strategyFor('snippets')
+    const blogStrategy = strategyFor('blog')
 
-    let importStats = { templates: 0, snippets: 0, pages: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
+    let importStats = { templates: 0, snippets: 0, pages: 0, blogChannels: 0, blogPosts: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
@@ -480,8 +580,12 @@ export default async function handler(req, res) {
         if (templatesStrategy === 'replace') {
           for (const t of listTemplates()) deleteTemplateByName(t.name)
         }
-        await prisma.snippet.deleteMany({})
-        await prisma.page.deleteMany({})
+        if (snippetsStrategy === 'replace') {
+          await prisma.snippet.deleteMany({})
+        }
+        if (pagesStrategy === 'replace') {
+          await prisma.page.deleteMany({})
+        }
       } catch (e) {
         console.warn('Failed to delete existing records in replace mode:', e.message)
       }
@@ -579,6 +683,16 @@ export default async function handler(req, res) {
       }
     }
 
+    // Import blog channels & posts
+    try {
+      const blogResult = await importBlog(blogChannels, blogPosts, blogStrategy)
+      importStats.blogChannels = blogResult.importedChannels
+      importStats.blogPosts = blogResult.importedPosts
+      if (blogResult.errors.length > 0) importStats.errors.push(...blogResult.errors)
+    } catch (e) {
+      importStats.errors.push(`Blog-Import fehlgeschlagen: ${e.message}`)
+    }
+
     // Import CSS files
     try {
       const cssResult = await importCSSFiles(css, strategyFor('css'))
@@ -605,7 +719,7 @@ export default async function handler(req, res) {
 
     // Import global variables
     try {
-      const globalVarResult = await importGlobalVariables(globalVariables, strategy)
+      const globalVarResult = await importGlobalVariables(globalVariables, strategyFor('globalVariables'))
       importStats.globalVariables = globalVarResult.imported
       if (globalVarResult.errors.length > 0) importStats.errors.push(...globalVarResult.errors)
     } catch (e) {
@@ -669,7 +783,7 @@ export default async function handler(req, res) {
       ok: true,
       strategy,
       importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.blogChannels} blog channels, ${importStats.blogPosts} blog posts, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
     })
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)

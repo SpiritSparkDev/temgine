@@ -57,6 +57,7 @@ model Page {
   publishAt      DateTime?
   isHomepage     Boolean              @default(false)
   accessGroups   Json                 @default("[]")
+  accessPasswordHash String?
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 }
