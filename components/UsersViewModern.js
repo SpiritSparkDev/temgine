@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, User, Edit2, Trash2 } from '../lib/muiIcons';
+import { useSession } from 'next-auth/react';
+import { Shield, User, Edit2, Trash2, Key } from '../lib/muiIcons';
 
 const ROLE_LABELS = {
   ADMIN: 'Administrator',
@@ -20,9 +21,16 @@ const ROLE_COLORS = {
 };
 
 export default function UsersViewModern({ showToast }) {
+  const { data: session } = useSession();
+  const currentEmail = session?.user?.email || '';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingUser, setEditingUser] = useState(null);
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState('');
+
+  const currentUser = users.find(u => u.email === currentEmail) || null;
 
   useEffect(() => {
     loadUsers();
@@ -64,11 +72,104 @@ export default function UsersViewModern({ showToast }) {
     }
   }
 
+  async function handleChangePassword(e) {
+    e.preventDefault();
+    setPwError('');
+
+    if (pwForm.newPassword !== pwForm.confirmPassword) {
+      setPwError('Die Passwörter stimmen nicht überein');
+      return;
+    }
+    if (pwForm.newPassword.length < 8) {
+      setPwError('Das neue Passwort muss mindestens 8 Zeichen lang sein');
+      return;
+    }
+
+    setPwSaving(true);
+    try {
+      const res = await fetch('/api/users/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: pwForm.currentPassword,
+          newPassword: pwForm.newPassword
+        })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setPwError(data.error || 'Fehler beim Ändern des Passworts');
+        return;
+      }
+
+      showToast('Passwort erfolgreich geändert', 'success');
+      setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error) {
+      setPwError('Fehler: ' + error.message);
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
   return (
     <div className="users-container">
       <div className="users-header">
         <h2><Shield size={24} /> Benutzerverwaltung</h2>
         <p className="users-subtitle">Verwalte Benutzerrollen und Berechtigungen</p>
+      </div>
+
+      <div className="password-change-section">
+        <h3><Key size={18} /> Mein Passwort ändern</h3>
+        {!loading && currentUser && !currentUser.hasPassword ? (
+          <p className="password-no-account-hint">
+            Dein Konto hat kein Passwort (Login z. B. über GitHub) — hier ist nichts zu ändern.
+          </p>
+        ) : (
+          <form className="password-change-form" onSubmit={handleChangePassword}>
+            <div className="password-field-group">
+              <label htmlFor="current-password">Aktuelles Passwort</label>
+              <input
+                id="current-password"
+                type="password"
+                className="password-input"
+                autoComplete="current-password"
+                value={pwForm.currentPassword}
+                onChange={e => setPwForm(f => ({ ...f, currentPassword: e.target.value }))}
+                required
+              />
+            </div>
+            <div className="password-field-group">
+              <label htmlFor="new-password">Neues Passwort</label>
+              <input
+                id="new-password"
+                type="password"
+                className="password-input"
+                autoComplete="new-password"
+                value={pwForm.newPassword}
+                onChange={e => setPwForm(f => ({ ...f, newPassword: e.target.value }))}
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="password-field-group">
+              <label htmlFor="confirm-password">Neues Passwort bestätigen</label>
+              <input
+                id="confirm-password"
+                type="password"
+                className="password-input"
+                autoComplete="new-password"
+                value={pwForm.confirmPassword}
+                onChange={e => setPwForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                required
+                minLength={8}
+              />
+            </div>
+            {pwError && <p className="password-error">{pwError}</p>}
+            <button type="submit" className="password-submit-btn" disabled={pwSaving}>
+              {pwSaving ? 'Speichert…' : 'Passwort ändern'}
+            </button>
+          </form>
+        )}
       </div>
 
       {loading ? (
@@ -86,7 +187,10 @@ export default function UsersViewModern({ showToast }) {
               </div>
 
               <div className="user-info">
-                <div className="user-name">{user.name || 'Unbenannt'}</div>
+                <div className="user-name">
+                  {user.name || 'Unbenannt'}
+                  {user.email === currentEmail && <span className="current-user-badge">Du</span>}
+                </div>
                 <div className="user-email">{user.email}</div>
               </div>
 
