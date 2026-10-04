@@ -17,6 +17,7 @@ describe('editor components compile cleanly', () => {
     'BlogPostEditor',
     'PageEditor',
     'GlobalPagesView',
+    'UsersViewModern',
   ])('%s', (name) => {
     expect(() => require(`../components/${name}`)).not.toThrow();
   });
