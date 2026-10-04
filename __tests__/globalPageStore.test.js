@@ -56,6 +56,16 @@ describe('globalPageStore', () => {
     expect(activeIds).toEqual(expect.arrayContaining([a.id, b.id]));
   });
 
+  test('WIDGET entries are always active and coexist freely', () => {
+    const a = saveGlobalPage({ name: `${PREFIX}widget-a`, role: 'WIDGET', code: 'a', isActive: false });
+    const b = saveGlobalPage({ name: `${PREFIX}widget-b`, role: 'WIDGET', code: 'b', isActive: false });
+
+    expect(a.isActive).toBe(true);
+    expect(b.isActive).toBe(true);
+    const activeIds = getActiveGlobalPages('WIDGET').map((e) => e.id);
+    expect(activeIds).toEqual(expect.arrayContaining([a.id, b.id]));
+  });
+
   test('different roles do not share exclusivity', () => {
     const footer = saveGlobalPage({ name: `${PREFIX}footer-z`, role: 'FOOTER', code: 'z', isActive: true });
     const main = saveGlobalPage({ name: `${PREFIX}main-z`, role: 'MAIN', code: 'z', isActive: true });

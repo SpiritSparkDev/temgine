@@ -6,6 +6,7 @@ import JSZip from 'jszip'
 import { listTemplates } from '../../../lib/templateStore'
 import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
+import { listGlobalPages } from '../../../lib/globalPageStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
 import { renderPage, buildNavHtml, collectFolderBlockPaths } from '../../../lib/templateEngine'
 import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
@@ -436,6 +437,10 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   const activeFooter = activeFooterRow ? { code: activeFooterRow.code, data: {} } : null
   const allFootersById = {}
   for (const f of allFooters) allFootersById[f.id] = f
+  const globalPages = { byId: {} }
+  for (const w of listGlobalPages().filter((e) => e.role === 'WIDGET')) {
+    globalPages.byId[w.id] = { code: w.code }
+  }
   const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
   const globalVars = buildGlobalContext(globalVariableRows)
   const publicTree = buildPublicTree(pages)
@@ -629,7 +634,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
         folderContents[folderPath] = listFolderItemsRecursive(folderPath)
       }
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents)
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents, globalPages)
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)
