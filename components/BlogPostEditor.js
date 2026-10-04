@@ -3,6 +3,7 @@ import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersH
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
+import SeoPanel from './SeoPanel';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
@@ -420,6 +421,16 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   </div>
                 </div>
               )}
+
+              {/* SEO — eigenes Bauteil wie im Seiten-Editor, verwaltet seinen
+                  Auf-/Zuklapp-Zustand selbst. Overrides liegen unter
+                  templateData.seo (genau wie page.data.seo bei Seiten) und
+                  werden von lib/seo.js::buildBlogPostMeta beim Rendern gelesen. */}
+              <SeoPanel
+                pageData={templateData}
+                onChange={setTemplateData}
+                slug={channelSlug ? `${channelSlug}/${slug}` : slug}
+              />
             </div>
 
           </div>
