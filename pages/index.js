@@ -337,6 +337,20 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.warn('Globale Variablen konnten nicht geladen werden:', e.message)
         }
 
+        // Lade Widgets (gleiche Logik wie in [...slug].js)
+        const globalPages = { byId: {} }
+        try {
+          const widgetsRes = await fetch(`/api/global-pages?active=true&role=WIDGET&_t=${Date.now()}`)
+          if (widgetsRes.ok) {
+            const widgets = await widgetsRes.json()
+            for (const w of (Array.isArray(widgets) ? widgets : [])) {
+              if (w?.id) globalPages.byId[w.id] = { code: w.code }
+            }
+          }
+        } catch (e) {
+          console.warn('Widgets konnten nicht geladen werden:', e.message)
+        }
+
         // Lade Ordner-Inhalte für {{#folder}}-Blöcke (gleiche Logik wie in [...slug].js)
         const folderContents = {}
         try {
@@ -353,7 +367,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
         }
 
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents, globalPages)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)

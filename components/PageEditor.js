@@ -35,6 +35,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return normalized.slice(NAV_TEMPLATE_VALUE_PREFIX.length).trim() || null;
   };
 
+  const WIDGET_TEMPLATE_VALUE_PREFIX = '__widget__:';
+  const WIDGET_TEMPLATE_LABEL_PREFIX = 'Widget: ';
+
+  const makeWidgetTemplateValue = (id) => `${WIDGET_TEMPLATE_VALUE_PREFIX}${id}`;
+  const parseWidgetTemplateValue = (value) => {
+    const normalized = String(value || '');
+    if (!normalized.startsWith(WIDGET_TEMPLATE_VALUE_PREFIX)) return null;
+    return normalized.slice(WIDGET_TEMPLATE_VALUE_PREFIX.length).trim() || null;
+  };
+
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const richTextEditorMode = useRichTextEditorMode();
@@ -100,6 +110,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blogChannels, setBlogChannels] = useState([]);
   const [blogTemplates, setBlogTemplates] = useState([]);
   const [pageNavigations, setPageNavigations] = useState([]);
+  const [globalWidgets, setGlobalWidgets] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -207,6 +218,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       value: makeNavTemplateValue(String(nav.id || '')),
       label: `${NAV_TEMPLATE_LABEL_PREFIX}${String(nav.name || '').trim()}`,
       id: String(nav.id || '').trim(),
+    }))
+    .filter(opt => opt.id);
+  const widgetOptions = [...globalWidgets]
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
+    .map(w => ({
+      value: makeWidgetTemplateValue(String(w.id || '')),
+      label: `${WIDGET_TEMPLATE_LABEL_PREFIX}${String(w.name || '').trim()}`,
+      id: String(w.id || '').trim(),
     }))
     .filter(opt => opt.id);
 
@@ -534,6 +553,22 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     };
     loadPageNavigations();
+  }, []);
+
+  useEffect(() => {
+    // Lade Widgets für Widget-Blöcke
+    const loadGlobalWidgets = async () => {
+      try {
+        const res = await fetch('/api/global-pages?role=WIDGET');
+        if (res.ok) {
+          const data = await res.json();
+          setGlobalWidgets(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        // Silently ignore — widgets are optional
+      }
+    };
+    loadGlobalWidgets();
   }, []);
 
   useEffect(() => {
@@ -1016,6 +1051,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const parts = String(path).split('.').map(p => parseInt(p, 10));
     const selectedChannelSlug = parseChannelTemplateValue(templateName);
     const selectedNavigationId = parseNavTemplateValue(templateName);
+    const selectedWidgetId = parseWidgetTemplateValue(templateName);
     let cur = copy;
     for (let i = 0; i < parts.length; i++) {
       const idx = parts[i];
@@ -1039,8 +1075,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           break;
         }
 
+        if (selectedWidgetId) {
+          cur[idx].type = 'global-page';
+          cur[idx].template = '';
+          cur[idx].props = { globalPageId: selectedWidgetId };
+          break;
+        }
+
         cur[idx].template = templateName || '';
-        if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation') {
+        if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation' || cur[idx].type === 'global-page') {
           cur[idx].type = 'content';
         }
 
@@ -1740,6 +1783,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 value={
                   block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '')
                   : block.type === 'navigation' ? makeNavTemplateValue(block.props?.navigationId || '')
+                  : block.type === 'global-page' ? makeWidgetTemplateValue(block.props?.globalPageId || '')
                   : (block.template || '')
                 }
                 onChange={e => { e.stopPropagation(); updateNestedBlockTemplate(path, e.target.value); }}
@@ -1758,6 +1802,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 ))}
                 {navigationOptions.length > 0 && <option disabled>──────────</option>}
                 {navigationOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                {widgetOptions.length > 0 && <option disabled>──────────</option>}
+                {widgetOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
               </select>
@@ -2344,6 +2392,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <span style={{ fontSize: 11, opacity: .6 }}>Seitennavigation: </span>
               <code style={{ fontSize: 11 }}>
                 {pageNavigations.find(n => n.id === block.props?.navigationId)?.name || block.props?.navigationId || '-'}
+              </code>
+            </div>
+          )}
+
+          {/* Widget-Block: Auswahl passiert im Template-Select oben; Inhalt wird im Widget selbst gepflegt */}
+          {block.type === 'global-page' && (
+            <div className="blog-channel-editor__preview">
+              <span style={{ fontSize: 11, opacity: .6 }}>Widget: </span>
+              <code style={{ fontSize: 11 }}>
+                {globalWidgets.find(w => w.id === block.props?.globalPageId)?.name || block.props?.globalPageId || '-'}
               </code>
             </div>
           )}
