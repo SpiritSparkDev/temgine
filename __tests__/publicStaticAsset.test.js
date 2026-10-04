@@ -23,4 +23,8 @@ describe('public static asset routing', () => {
     expect(getContentType('/extern_css/main.css')).toBe('text/css; charset=utf-8');
     expect(getContentType('/uploads/images/logo.png')).toBe('image/png');
   });
+
+  test('serves PDFs with application/pdf so browsers display them inline instead of downloading', () => {
+    expect(getContentType('/uploads/files/handout.pdf')).toBe('application/pdf');
+  });
 });
