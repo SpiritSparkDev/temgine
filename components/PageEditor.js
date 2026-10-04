@@ -68,7 +68,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalMode, setFileModalMode] = useState('file');
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
-  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
+  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-datafields', 'outline-access', 'outline-seo', 'outline-workflow']));
+  const [showAnchorsModal, setShowAnchorsModal] = useState(false);
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -2667,6 +2669,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 if (next.has(id)) next.delete(id); else next.add(id);
                 return next;
               });
+              const toggleOutline = (id) => setOutlineCollapsed(prev => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              });
+              const OutlineHead = ({ id, icon, label }) => (
+                <button
+                  type="button"
+                  className="inspector-section-head"
+                  onClick={() => toggleOutline(id)}
+                  aria-expanded={!outlineCollapsed.has(id)}
+                >
+                  <span className="inspector-section-icon">{icon}</span>
+                  <span className="inspector-section-label">{label}</span>
+                  {outlineCollapsed.has(id) ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </button>
+              );
               const selectedBlock = getBlockAtPath(selectedBlockPath);
 
               return (
@@ -2784,14 +2803,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   {/* ── Seite ─────────────────────────────── */}
                   <div className="inspector-section-divider" />
 
-                  {/* Einstellungen */}
+                  {/* Seite */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-settings') ? n.delete('outline-settings') : n.add('outline-settings'); return n; })} aria-expanded={!outlineCollapsed.has('outline-settings')}>
-                      <span className="inspector-section-icon">⚙</span>
-                      <span className="inspector-section-label">Einstellungen</span>
-                      {outlineCollapsed.has('outline-settings') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
-                    {!outlineCollapsed.has('outline-settings') && (
+                    <OutlineHead id="outline-page" icon="⚙" label="Seite" />
+                    {!outlineCollapsed.has('outline-page') && (
                       <div className="page-editor-outline-settings">
                         <label className="field-label-xs">Seitentitel</label>
                         <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Seitentitel" className="input-field-small" aria-label="Seitentitel" />
@@ -2819,7 +2834,29 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           In Navigation ausblenden
                         </label>
 
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Seiten-Datenfelder</label>
+                        <div className="inspector-more-actions">
+                          <button type="button" className="btn-modern-small" onClick={() => setShowAdvancedModal(true)}>
+                            🧩 Erweiterte Optionen…
+                            {(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
+                          </button>
+                          <button type="button" className="btn-modern-small" onClick={() => setShowAnchorsModal(true)}>
+                            ⚓ Sprungmarken verwalten…
+                            {(() => {
+                              const n = (Array.isArray(pageData.anchors) ? pageData.anchors.length : 0) + (Array.isArray(pageData.customAnchors) ? pageData.customAnchors.length : 0);
+                              return n > 0 ? <span className="inspector-more-badge">{n}</span> : null;
+                            })()}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seiten-Datenfelder */}
+                  <div className="inspector-section">
+                    <OutlineHead id="outline-datafields" icon="▤" label="Seiten-Datenfelder" />
+                    {!outlineCollapsed.has('outline-datafields') && (
+                      <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Vorlage</label>
                         <select
                           value={pageFieldsTemplate}
                           onChange={e => setPageFieldsTemplate(e.target.value)}
@@ -2857,8 +2894,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           );
                         })()}
                         <p className="blog-channel-editor__hint">Vorlagen dafür im Template Manager unter „Seiten-Datenfelder" anlegen. Ausgabe im Block-Template als <code>{'{{data.X}}'}</code> / <code>{'{{page.data.X}}'}</code>, in Navigationen pro Seite als <code>{'{{data.X}}'}</code> innerhalb <code>{'{{#pages}}'}</code>.</p>
+                      </div>
+                    )}
+                  </div>
 
-                        {/* Access Control */}
+                  {/* Zugriff */}
+                  <div className="inspector-section">
+                    <OutlineHead id="outline-access" icon="🔒" label="Zugriff" />
+                    {!outlineCollapsed.has('outline-access') && (
+                      <div className="page-editor-outline-settings">
                         <AccessGroupsPanel
                           accessGroups={accessGroups}
                           onChange={setAccessGroups}
@@ -2872,44 +2916,68 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             }
                           }}
                         />
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
-                        <input
-                          type="text"
-                          value={pageData.wrapperClass || ''}
-                          onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
-                          placeholder="z.B. page-home dark-theme"
-                          className="input-field-small"
-                          aria-label="CSS-Klasse für den Seiten-Wrapper"
-                        />
-                        <label className="field-label-xs">Wrapper-ID</label>
-                        <input
-                          type="text"
-                          value={pageData.wrapperId || ''}
-                          onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
-                          placeholder="z.B. main-page"
-                          className="input-field-small"
-                          aria-label="ID für den Seiten-Wrapper"
-                        />
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
-                        <div className="field-url-row">
+                      </div>
+                    )}
+                  </div>
+
+                  {showAdvancedModal && (
+                    <div className="file-modal-overlay" onClick={() => setShowAdvancedModal(false)}>
+                      <div className="file-modal inspector-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="file-modal-header">
+                          <h3 className="file-modal-title">Erweiterte Optionen</h3>
+                          <button onClick={() => setShowAdvancedModal(false)} className="file-modal-close-btn" aria-label="Schließen">×</button>
+                        </div>
+                        <div className="page-editor-outline-settings">
+                          <label className="field-label-xs">Wrapper-Klasse</label>
                           <input
                             type="text"
-                            value={pageData.navImage || ''}
-                            onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
-                            placeholder="Bild-URL"
-                            className="input-field-small field-input-full"
-                            aria-label="Navigations-Bild für diese Seite"
+                            value={pageData.wrapperClass || ''}
+                            onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
+                            placeholder="z.B. page-home dark-theme"
+                            className="input-field-small"
+                            aria-label="CSS-Klasse für den Seiten-Wrapper"
                           />
-                          <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
-                        </div>
-                        {pageData.navImage && (
-                          <div className="field-image-thumb-row">
-                            <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                          <label className="field-label-xs">Wrapper-ID</label>
+                          <input
+                            type="text"
+                            value={pageData.wrapperId || ''}
+                            onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
+                            placeholder="z.B. main-page"
+                            className="input-field-small"
+                            aria-label="ID für den Seiten-Wrapper"
+                          />
+                          <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
+                          <div className="field-url-row">
+                            <input
+                              type="text"
+                              value={pageData.navImage || ''}
+                              onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
+                              placeholder="Bild-URL"
+                              className="input-field-small field-input-full"
+                              aria-label="Navigations-Bild für diese Seite"
+                            />
+                            <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
                           </div>
-                        )}
-                        <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+                          {pageData.navImage && (
+                            <div className="field-image-thumb-row">
+                              <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                            </div>
+                          )}
+                          <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Anker-Navigation</label>
+                  {showAnchorsModal && (
+                    <div className="file-modal-overlay" onClick={() => setShowAnchorsModal(false)}>
+                      <div className="file-modal inspector-modal inspector-modal-wide" onClick={(e) => e.stopPropagation()}>
+                        <div className="file-modal-header">
+                          <h3 className="file-modal-title">Sprungmarken verwalten</h3>
+                          <button onClick={() => setShowAnchorsModal(false)} className="file-modal-close-btn" aria-label="Schließen">×</button>
+                        </div>
+                        <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Anker-Navigation</label>
                         {(() => {
                           const anchorBlocks = flattenBlocks(blocks).filter(({ block }) => String(block?.props?.anchorId || '').trim());
                           const anchorList = Array.isArray(pageData.anchors) ? pageData.anchors : [];
@@ -3044,17 +3112,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           );
                         })()}
                         <p className="blog-channel-editor__hint">Für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen (z. B. eine <code>id</code>, die ein eigenes Template-Feld selbst rendert). Verfügbar in PAGE-Navigationen als <code>{'{{#customAnchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — freie Eingabe, keine Prüfung gegen vorhandene Blöcke.</p>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* SEO */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-seo') ? n.delete('outline-seo') : n.add('outline-seo'); return n; })} aria-expanded={!outlineCollapsed.has('outline-seo')}>
-                      <span className="inspector-section-icon">◎</span>
-                      <span className="inspector-section-label">SEO</span>
-                      {outlineCollapsed.has('outline-seo') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-seo" icon="◎" label="SEO" />
                     {!outlineCollapsed.has('outline-seo') && (
                       <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
                         <SeoPanel pageData={pageData} slug={slug} onChange={setPageData} />
@@ -3064,11 +3129,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
                   {/* Workflow */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-workflow') ? n.delete('outline-workflow') : n.add('outline-workflow'); return n; })} aria-expanded={!outlineCollapsed.has('outline-workflow')}>
-                      <span className="inspector-section-icon">◈</span>
-                      <span className="inspector-section-label">Workflow</span>
-                      {outlineCollapsed.has('outline-workflow') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-workflow" icon="◈" label="Workflow" />
                     {!outlineCollapsed.has('outline-workflow') && (
                       <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
                         <WorkflowPanel pageId={page?.id} status={pageStatus} userRole={userRole} onTransition={(s) => setPageStatus(s.toUpperCase())} />
@@ -3078,11 +3139,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
                   {/* Strukturvorschau */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-structure') ? n.delete('outline-structure') : n.add('outline-structure'); return n; })} aria-expanded={!outlineCollapsed.has('outline-structure')}>
-                      <span className="inspector-section-icon">▦</span>
-                      <span className="inspector-section-label">Strukturvorschau</span>
-                      {outlineCollapsed.has('outline-structure') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-structure" icon="▦" label="Strukturvorschau" />
                     {!outlineCollapsed.has('outline-structure') && (
                       <div className="page-editor-outline-structure">
                         <label className="page-editor-outline-toggle" style={{ marginBottom: '8px' }}>
