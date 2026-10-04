@@ -4,6 +4,7 @@ import { logAudit } from '../../../lib/audit';
 import { canTransition } from '../../../lib/workflow';
 import { validate, rules } from '../../../lib/validate';
 import { rateLimit } from '../../../lib/rateLimit';
+import { stripPageAccessPasswords } from '../../../lib/pageAccessPassword';
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -138,7 +139,7 @@ export default async function handler(req, res) {
       });
     } catch (_e) {}
 
-    return res.status(200).json({ ok: true, page: updated });
+    return res.status(200).json({ ok: true, page: stripPageAccessPasswords(updated) });
   } catch (e) {
     console.error('[/api/pages/workflow Error]', e.message, e.stack);
     const [s, r] = errorResponse(500, 'Interner Serverfehler', 'INTERNAL_ERROR', {

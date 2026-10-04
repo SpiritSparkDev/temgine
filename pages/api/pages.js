@@ -5,6 +5,7 @@ import { validate, rules } from '../../lib/validate'
 import { requireAuth, PERMISSIONS } from '../../lib/auth'
 import { findSiblingSlugCollisions } from '../../lib/pageTreeRepair'
 import { extractRedirectForSave } from '../../lib/pageRedirect'
+import { hashPageAccessPasswords, stripPageAccessPasswords } from '../../lib/pageAccessPassword'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
@@ -77,7 +78,7 @@ export default async function handler(req, res) {
           const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
           return res.status(status).json(resp);
         }
-        return res.status(200).json(page)
+        return res.status(200).json(stripPageAccessPasswords(page))
       }
 
       const where = {}
@@ -96,7 +97,7 @@ export default async function handler(req, res) {
         const bo = (b.data && typeof b.data._order === 'number') ? b.data._order : 99999
         return ao !== bo ? ao - bo : (a.createdAt < b.createdAt ? -1 : 1)
       })
-      return res.status(200).json(pages)
+      return res.status(200).json(pages.map(stripPageAccessPasswords))
     }
 
     // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
@@ -188,6 +189,10 @@ export default async function handler(req, res) {
 
         // Only upsert top-level nodes; children are stored in the parent's `children` JSON
         for (const p of body) {
+          // newAccessPassword/clearAccessPassword (Klartext bzw. Löschflag vom
+          // Editor) in accessPasswordHash umwandeln — rekursiv, erfasst also
+          // auch verschachtelte Seiten im `children`-JSON dieses Knotens.
+          if (p) await hashPageAccessPasswords(p)
           // sanitize incoming page content (blocks.props, data)
           try {
             if (p && p.data) {
@@ -229,7 +234,8 @@ export default async function handler(req, res) {
               template: p.template || null,
               data: p.data || {},
               isHomepage: p.isHomepage || false,
-              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : []
+              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : [],
+              accessPasswordHash: p.accessPasswordHash || null
             },
             update: {
               title: p.title || undefined,
@@ -240,7 +246,8 @@ export default async function handler(req, res) {
               template: p.template || undefined,
               data: p.data || undefined,
               isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
-              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined
+              accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined,
+              accessPasswordHash: p.accessPasswordHash !== undefined ? p.accessPasswordHash : undefined
             }
           })
           results.push(up)
@@ -297,11 +304,12 @@ export default async function handler(req, res) {
         for (const up of results) {
           try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
         }
-        return res.status(200).json(results)
+        return res.status(200).json(results.map(stripPageAccessPasswords))
       }
 
       // Single page upsert
       const p = body || {}
+      if (p) await hashPageAccessPasswords(p)
       // sanitize single payload
       try {
         if (p && p.data) {
@@ -341,7 +349,8 @@ export default async function handler(req, res) {
           status: p.status || 'DRAFT',
           publishAt: p.publishAt || null,
           isHomepage: p.isHomepage || false,
-          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : []
+          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : [],
+          accessPasswordHash: p.accessPasswordHash || null
         },
         update: {
           title: p.title || undefined,
@@ -352,7 +361,8 @@ export default async function handler(req, res) {
           status: p.status || undefined,
           publishAt: p.publishAt !== undefined ? (p.publishAt || null) : undefined,
           isHomepage: p.isHomepage !== undefined ? p.isHomepage : undefined,
-          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined
+          accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : undefined,
+          accessPasswordHash: p.accessPasswordHash !== undefined ? p.accessPasswordHash : undefined
         }
       })
       // create a revision for this upsert
@@ -375,7 +385,7 @@ export default async function handler(req, res) {
         console.error('Revision create failed', e)
       }
       try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
-      return res.status(200).json(up)
+      return res.status(200).json(stripPageAccessPasswords(up))
     }
 
     // DELETE: Seite per slug löschen
