@@ -177,7 +177,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png" />
         <link rel="manifest" href="/favicon/site.webmanifest" />
         <meta name="theme-color" content="#ffffff" />
-        <meta name="msapplication-TileImage" content="/assets/light.png" />
+        <meta name="msapplication-TileImage" content="/brand/light.png" />
         {/* Seiten-spezifische Title/Description/OG/Twitter/JSON-LD-Tags kommen
             aus SeoHead (siehe pages/index.js, pages/[...slug].js) — Fallback
             ist das Standard-Vorschaubild aus den SEO-Einstellungen, nicht mehr

@@ -6,6 +6,14 @@ npm-debug.log
 .env
 .env.local
 
-# Bind-mounted at runtime (docker-compose.yml) — baking them into the image is wasted work
-public
+# Bind-mounted at runtime (docker-compose.yml) — baking them into the image is wasted work.
+# Only the genuinely dynamic/runtime parts of public/ are listed here, NOT the whole
+# directory: public/brand (and anything else static) must ship baked into the image,
+# otherwise it depends entirely on the host's ./public already being correctly seeded.
+public/uploads
+public/extern_css
+public/extern_js
+public/assets/template
+public/assets/template_blog
+public/__live
 data
