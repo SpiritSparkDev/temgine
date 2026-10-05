@@ -810,6 +810,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                     <table className="tce-ref-table">
                       <tbody>
                         <tr><td><code>:text</code></td><td>Einzeiliges Textfeld</td></tr>
+                        <tr><td><code>|Gruppe</code></td><td>Abschnitt im Editor, z. B. <code>{'{{titel:text|Inhalt}}'}</code>. Ohne Angabe: „Inhalt“, Auswahl/Farbe/Zahl/Level automatisch „Darstellung“ (eingeklappt)</td></tr>
                         <tr><td><code>:textarea</code></td><td>Richtext-Editor</td></tr>
                         <tr><td><code>:number</code></td><td>Zahlenfeld</td></tr>
                         <tr><td><code>:url</code></td><td>URL + Datei-Picker</td></tr>

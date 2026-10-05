@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.26.0] - 2026-10-05
+
+### Added
+- **Template-Auswahl als Popup** (`TemplatePickerModal`): Statt des Dropdowns im Block-Header öffnet ein Dialog mit Suche und Farblegende. Jede Karte zeigt das Template schematisch mit farbigen Feldern je Datentyp (Text, Richtext, Bild, Link, Zahl, Datum, Farbe, Auswahl, Liste, Ordner) und Repeatern.
+- **Feld-Gruppen im Template:** `{{titel:text|Inhalt}}` ordnet ein Feld einem Abschnitt im Editor zu (Parser + Render-Engine strippen die Annotation). Ohne Angabe: "Inhalt", Auswahl/Farbe/Zahl/Level/Klasse automatisch "Darstellung".
+- **"Kein Template" = freies HTML-Feld:** Blöcke ohne Template haben ein HTML-Feld (`props.html`), das unverändert ausgegeben wird. Rohes HTML bleibt nur bei Admin/Moderator erhalten, bei Editoren bleibt bereits gespeichertes HTML unverändert, neues wird bereinigt.
+- **Repeater:** "Eintrag hinzufügen" vor jedem Eintrag (fügt an dieser Position ein) und am Ende; Einträge einzeln zuklappbar mit Zusammenfassungszeile.
+- `docker-compose.dev.yml` (App + Postgres für die lokale Entwicklung, Port 3020), `DEVELOPMENT.md` und `scripts/seed-example-pages.js` (Beispiel-Seiten).
+
+### Changed
+- Block-Felder erscheinen in Template-Reihenfolge (keine Sonderbehandlung für Textareas mehr, keine aus dem HTML abgeleiteten Gruppen); zugeklappte Blöcke zeigen eine Zusammenfassung.
+
+---
+
 ## [0.25.2] - 2026-10-02
 
 ### Fixed

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFieldGroups, extractFolderBlocks } from '../lib/templateParser';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import RichTextEditor from './RichTextEditor';
 import TemplateStructurePreview from './TemplateStructurePreview';
+import TemplatePickerModal from './TemplatePickerModal';
+import dynamic from 'next/dynamic';
+
+const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 import RevisionHistoryPanel from './RevisionHistoryPanel';
 import SeoPanel from './SeoPanel';
 import WorkflowPanel from './WorkflowPanel';
@@ -82,6 +86,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [previewBlocks, setPreviewBlocks] = useState(() => new Set());
   const [blockPreviewHtmls, setBlockPreviewHtmls] = useState({});
   const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
+  const [collapsedRepeaterRows, setCollapsedRepeaterRows] = useState({}); // `${blockPath}|${section}` -> Indizes zugeklappter Einträge
+  const [templatePickerPath, setTemplatePickerPath] = useState(null);
+  const [sectionToggles, setSectionToggles] = useState({}); // `${blockPath}|${label}` -> bool (Override des Default)
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
   const [splitPreview, setSplitPreview] = useState(false);
@@ -646,15 +653,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
-  // Maps template name → field groups [{ label, vars, isGroup }]
-  const templateGroupsByName = useMemo(() => {
+  // Maps template name → { varName: 'Gruppe' } aus {{var:type|Gruppe}}
+  const templateGroupMapByName = useMemo(() => {
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      const map = {};
       try {
-        out[name] = extractFieldGroups(code) || [];
-      } catch (e) {
-        out[name] = [];
-      }
+        (extractTypedVariables(code) || []).forEach(({ varName, group }) => { if (group) map[varName] = group; });
+      } catch (e) { /* ignore */ }
+      out[name] = map;
     });
     return out;
   }, [templateCodes]);
@@ -820,7 +827,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           ? { images: [] }
           : type === 'blog-channel'
             ? { channelSlug: '', templateSlot: 'templateDetailPreview', templateName: '', postLimit: 6 }
-            : {}
+            : type === 'content'
+              ? { html: '' }
+              : {}
     };
     setBlocks([...blocks, newBlock]);
   }
@@ -1028,6 +1037,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         cur[idx].template = templateName || '';
         if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation') {
           cur[idx].type = 'content';
+        }
+
+        if (!templateName && cur[idx].type !== 'text' && cur[idx].type !== 'gallery') {
+          cur[idx].props = { html: '', ...(cur[idx].props || {}) };
         }
 
         if (templateName && templateCodes && templateCodes[templateName]) {
@@ -1619,13 +1632,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const renderBlockEditor = (block, path, depth = 0, options = {}) => {
     const inLightbox = !!options.inLightbox;
     const isTop = depth === 0 && !inLightbox;
-    const isCollapsed = collapsedBlocks.has(path);
+    const isCollapsed = !inLightbox && collapsedBlocks.has(path);
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
-    const templateGroups = block.template ? (templateGroupsByName[block.template] || []) : [];
-    const hasGroupedContainers = templateGroups.some(g => g.isGroup && g.vars.length >= 2);
     const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
     // Resolve effective input type: explicit annotation wins over guessed type
     const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
+    // Zusammenfassung für zugeklappte Blöcke: erster gefüllter Text + erstes Bild
+    const summaryVars = isCollapsed ? templateVariables : [];
+    const summaryImage = summaryVars.map(v => (resolveInputType(v) === 'image' ? block.props?.[v] : '')).find(v => typeof v === 'string' && v) || '';
+    const summaryText = summaryVars.map(v => {
+      const t = resolveInputType(v);
+      const val = block.props?.[v];
+      return (t === 'image' || t === 'url' || typeof val !== 'string') ? '' : stripTags(val).trim();
+    }).find(Boolean) || '';
 
     const containerProps = isTop ? {
       onDragOver: (e) => {
@@ -1712,32 +1731,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 title={devTitle('Feld: Anchor-ID')}
                 aria-label="Anchor-ID"
               />
-              <select
-                value={
-                  block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '')
-                  : block.type === 'navigation' ? makeNavTemplateValue(block.props?.navigationId || '')
-                  : (block.template || '')
-                }
-                onChange={e => { e.stopPropagation(); updateNestedBlockTemplate(path, e.target.value); }}
-                onClick={e => e.stopPropagation()}
-                className="block-template-select"
+              <button
+                type="button"
+                className="block-template-select block-template-btn"
+                onClick={e => { e.stopPropagation(); setTemplatePickerPath(path); }}
                 title={devTitle('Feld: Block-Template')}
-                aria-label="Block-Template"
+                aria-label="Block-Template wählen"
               >
-                <option value="">-- Template --</option>
-                {blockTemplateNames.map(tn => (
-                  <option key={tn} value={tn}>{tn}</option>
-                ))}
-                {channelTemplateOptions.length > 0 && <option disabled>──────────</option>}
-                {channelTemplateOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-                {navigationOptions.length > 0 && <option disabled>──────────</option>}
-                {navigationOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-
+                {(() => {
+                  const v = block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '')
+                    : block.type === 'navigation' ? makeNavTemplateValue(block.props?.navigationId || '')
+                    : (block.template || '');
+                  const opt = [...channelTemplateOptions, ...navigationOptions].find(o => o.value === v);
+                  return opt ? opt.label : (v || 'Kein Template (HTML)');
+                })()}
+                <ChevronDown size={12} />
+              </button>
+              {isCollapsed && (summaryImage || summaryText) && (
+                <span className="block-summary">
+                  {summaryImage && <img src={summaryImage} alt="" className="block-summary-thumb" />}
+                  {summaryText && <span className="block-summary-text">{summaryText.length > 80 ? `${summaryText.slice(0, 80)}…` : summaryText}</span>}
+                </span>
+              )}
             </div>
           </div>
           <div className="block-header-right">
@@ -1990,85 +2005,85 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   );
                 };
 
-                const groups = templateGroups;
-                const nonTextareaVars = templateVariables.filter(v => resolveInputType(v) !== 'textarea');
+                // Template-Reihenfolge, gruppiert in Abschnitte: explizit via {{x:type|Gruppe}},
+                // sonst "Inhalt" bzw. (Select/Farbe/Zahl/Level/Klasse/…) "Darstellung".
+                const groupMap = templateGroupMapByName[block.template] || {};
+                const isDisplayVar = (v) => ['select', 'color', 'number'].includes(resolveInputType(v)) || /level|class|align|layout|variant|theme/i.test(v);
+                const sections = [];
+                templateVariables.forEach(v => {
+                  const label = groupMap[v] || (isDisplayVar(v) ? 'Darstellung' : 'Inhalt');
+                  let sec = sections.find(x => x.label === label);
+                  if (!sec) { sec = { label, vars: [] }; sections.push(sec); }
+                  sec.vars.push(v);
+                });
+                const rank = (l) => (l === 'Inhalt' ? 0 : l === 'Darstellung' ? 2 : 1);
+                sections.sort((x, y) => rank(x.label) - rank(y.label)); // stabil: Template-Reihenfolge innerhalb Rang 1
 
-                // If no meaningful groups, render flat as before
-                const hasGroups = hasGroupedContainers;
-                if (!hasGroups) {
+                if (sections.length <= 1) {
+                  return <div className="block-fields-grid">{templateVariables.map(renderFieldItem)}</div>;
+                }
+                return sections.map(sec => {
+                  const key = `${path}|${sec.label}`;
+                  const open = sectionToggles[key] ?? true;
                   return (
-                    <div className="block-fields-grid">
-                      {nonTextareaVars.map(varName => renderFieldItem(varName))}
+                    <div key={sec.label} className="field-section">
+                      <button
+                        type="button"
+                        className="field-section-head"
+                        aria-expanded={open}
+                        onClick={(e) => { e.stopPropagation(); setSectionToggles(prev => ({ ...prev, [key]: !open })); }}
+                      >
+                        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        <span>{sec.label}</span>
+                        <span className="field-section-count">{sec.vars.length}</span>
+                      </button>
+                      {open && <div className="block-fields-grid">{sec.vars.map(renderFieldItem)}</div>}
                     </div>
                   );
-                }
-
-                // Render groups
-                const coveredByGroups = new Set(groups.flatMap(g => g.vars));
-                const ungroupedVars = templateVariables.filter(v => !coveredByGroups.has(v));
-
-                return (
-                  <div className="block-fields-grid">
-                    {groups.map((group) => {
-                      const groupVars = group.vars;
-                      if (groupVars.length === 0) return null;
-                      if (group.isGroup && groupVars.length >= 2) {
-                        return (
-                          <div key={`grp-${group.vars[0]}`} className="field-group">
-                            {group.label && <div className="field-group-label">{formatLabel(group.label)}</div>}
-                            <div className="field-group-inner">
-                              {groupVars.map(varName => renderFieldItem(varName))}
-                            </div>
-                          </div>
-                        );
-                      }
-                      return groupVars.map(varName => renderFieldItem(varName));
-                    })}
-                    {ungroupedVars.map(varName => renderFieldItem(varName))}
-                  </div>
-                );
+                });
               })()}
-
-              {/* Separate textarea fields (full width) - NACH dem Grid */}
-              {!hasGroupedContainers && templateVariables
-                .filter(varName => resolveInputType(varName) === 'textarea')
-                .map(varName => {
-                  const value = block.props[varName] || '';
-                  const label = snippetLabels[block.template]?.[varName] || formatLabel(varName);
-                  return (
-                    <div key={varName} className="field-item field-item-textarea">
-                      <label className="field-label-xs">{label}</label>
-                      <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                        <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
-                      </div>
-                    </div>
-                  )
-                })}
 
               {/* Repeater fields: {{#each:name}}...{{/each:name}} */}
               {(templateRepeatersByName[block.template] || []).map(({ sectionName, subFields }) => {
                 const rows = Array.isArray(block.props[sectionName]) ? block.props[sectionName] : [];
+                const rowKey = `${path}|${sectionName}`;
+                const collapsedRows = collapsedRepeaterRows[rowKey] || [];
+                const isOpen = (i) => !collapsedRows.includes(i);
+                const resetRows = () => setCollapsedRepeaterRows(prev => ({ ...prev, [rowKey]: [] }));
+                const toggleRow = (i) => setCollapsedRepeaterRows(prev => {
+                  const cur = prev[rowKey] || [];
+                  return { ...prev, [rowKey]: cur.includes(i) ? cur.filter(x => x !== i) : [...cur, i] };
+                });
+                // Fügt den neuen (leeren) Eintrag genau an Position `at` ein
+                const addRow = (at = rows.length) => {
+                  const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
+                  updateNestedBlock(path, { [sectionName]: [...rows.slice(0, at), emptyRow, ...rows.slice(at)] });
+                  setCollapsedRepeaterRows(prev => ({ ...prev, [rowKey]: (prev[rowKey] || []).map(i => (i >= at ? i + 1 : i)) }));
+                };
+                const addButton = (at) => (
+                  <button type="button" onClick={() => addRow(at)} className="btn-modern-small repeater-add-btn" title={`Eintrag hier in ${sectionName} einfügen`}>
+                    <Plus size={12} /> Eintrag hinzufügen
+                  </button>
+                );
                 return (
                   <div key={sectionName} className="field-item field-item-repeater">
                     <div className="field-repeater-header">
                       <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)}</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
-                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
-                        }}
-                        className="btn-modern-small repeater-add-btn"
-                        title={`Eintrag zu ${sectionName} hinzufügen`}
-                      >
-                        <Plus size={12} /> Eintrag hinzufügen
-                      </button>
                     </div>
                     <div className="repeater-rows">
                       {rows.map((row, rowIdx) => (
-                        <div key={rowIdx} className="repeater-row">
+                        <React.Fragment key={rowIdx}>
+                        {addButton(rowIdx)}
+                        <div className="repeater-row">
                           <div className="repeater-row-header">
-                            <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
+                            <button type="button" className="repeater-row-toggle" aria-expanded={isOpen(rowIdx)} onClick={() => toggleRow(rowIdx)}>
+                              {isOpen(rowIdx) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                              <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
+                              {!isOpen(rowIdx) && (() => {
+                                const sum = subFields.filter(sf => sf.type !== 'image' && sf.type !== 'url').map(sf => stripTags(String(row[sf.name] ?? '')).trim()).find(Boolean);
+                                return <span className="repeater-row-summary">{sum ? (sum.length > 60 ? `${sum.slice(0, 60)}…` : sum) : '(leer)'}</span>;
+                              })()}
+                            </button>
                             <div className="repeater-row-actions">
                               <button
                                 type="button"
@@ -2077,6 +2092,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   const next = [...rows];
                                   [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
                                   updateNestedBlock(path, { [sectionName]: next });
+                                  resetRows();
                                 }}
                                 className="repeater-row-move"
                                 disabled={rowIdx === 0}
@@ -2089,6 +2105,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   const next = [...rows];
                                   [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
                                   updateNestedBlock(path, { [sectionName]: next });
+                                  resetRows();
                                 }}
                                 className="repeater-row-move"
                                 disabled={rowIdx === rows.length - 1}
@@ -2100,6 +2117,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   const copy = { ...row };
                                   const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
                                   updateNestedBlock(path, { [sectionName]: next });
+                                  resetRows();
                                 }}
                                 className="repeater-row-duplicate"
                                 title={`Eintrag ${rowIdx + 1} duplizieren`}
@@ -2110,6 +2128,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 onClick={() => {
                                   const next = rows.filter((_, i) => i !== rowIdx);
                                   updateNestedBlock(path, { [sectionName]: next });
+                                  resetRows();
                                 }}
                                 className="repeater-row-delete"
                                 title={`Eintrag ${rowIdx + 1} entfernen`}
@@ -2117,7 +2136,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               >✕</button>
                             </div>
                           </div>
-                          <div className="repeater-row-fields">
+                          {isOpen(rowIdx) && <div className="repeater-row-fields">
                             {subFields.map(sf => {
                               const sfVal = row[sf.name] !== undefined ? row[sf.name] : '';
                               if (sf.type === 'textarea') {
@@ -2190,23 +2209,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 </div>
                               );
                             })}
-                          </div>
+                          </div>}
                         </div>
+                        </React.Fragment>
                       ))}
-                    </div>
-                    <div className="field-repeater-header">
-                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)} ende</label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
-                          updateNestedBlock(path, { [sectionName]: [...rows, emptyRow] });
-                        }}
-                        className="btn-modern-small repeater-add-btn"
-                        title={`Eintrag zu ${sectionName} hinzufügen`}
-                      >
-                        <Plus size={12} /> Eintrag hinzufügen
-                      </button>
+                      {addButton(rows.length)}
                     </div>
                   </div>
                 );
@@ -2320,6 +2327,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               <code style={{ fontSize: 11 }}>
                 {pageNavigations.find(n => n.id === block.props?.navigationId)?.name || block.props?.navigationId || '-'}
               </code>
+            </div>
+          )}
+
+          {/* Kein Template: freies HTML-Feld (rohes HTML nur für Admin/Moderator, siehe pages/api/pages.js) */}
+          {!block.template && !['text', 'gallery', 'blog-channel', 'navigation'].includes(block.type) && (
+            <div className="field-item field-item-textarea block-html-field">
+              <label className="field-label-xs">HTML</label>
+              {['ADMIN', 'MODERATOR'].includes(String(userRole || '').toUpperCase()) ? (
+                <CodeEditor language="html" height="220px" value={block.props?.html || ''} onChange={(val) => updateNestedBlock(path, { html: val })} />
+              ) : (
+                <>
+                  <textarea readOnly rows={6} className="input-field-small field-input-full" value={block.props?.html || ''} />
+                  <p className="blog-channel-editor__hint">Freies HTML dürfen nur Admins und Moderatoren ändern.</p>
+                </>
+              )}
             </div>
           )}
 
@@ -3176,6 +3198,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       {/* Field Expand Lightbox */}
       <span ref={adminScopeRef} style={{display:'none'}} />
+      <TemplatePickerModal
+        open={templatePickerPath !== null}
+        dark={!!adminScopeRef.current?.closest('.dark-mode')}
+        templateNames={blockTemplateNames}
+        templateCodes={templateCodes}
+        channelOptions={channelTemplateOptions}
+        navigationOptions={navigationOptions}
+        current={(() => {
+          const b = templatePickerPath !== null ? getBlockAtPath(templatePickerPath) : null;
+          if (!b) return '';
+          return b.type === 'blog-channel' ? makeChannelTemplateValue(b.props?.channelSlug || '')
+            : b.type === 'navigation' ? makeNavTemplateValue(b.props?.navigationId || '')
+            : (b.template || '');
+        })()}
+        onSelect={(value) => { updateNestedBlockTemplate(templatePickerPath, value); setTemplatePickerPath(null); }}
+        onClose={() => setTemplatePickerPath(null)}
+      />
+
       {expandedField && typeof window !== 'undefined' && createPortal(
         <div className={`admin-scope${adminScopeRef.current?.closest('.dark-mode') ? ' dark-mode' : ''} field-lightbox-portal`} onClick={() => setExpandedField(null)}>
         <div className="field-lightbox-overlay" onClick={() => setExpandedField(null)}>
