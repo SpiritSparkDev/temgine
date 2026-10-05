@@ -2404,3 +2404,6 @@
 
 .repeater-rows > .repeater-add-btn { align-self: stretch; justify-content: center; margin: 0; padding: 3px 8px; border-style: dashed; opacity: 0.75; }
 .repeater-rows > .repeater-add-btn:hover { opacity: 1; }
+
+/* Beim Springen zu einem Block nicht unter der Sticky-Toolbar landen */
+.block-item, .field-item { scroll-margin-top: 72px; }

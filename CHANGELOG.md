@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.27.0] - 2026-10-05
+
+### Added
+- **Schneller zur Bearbeitungsstelle im Editor:** Ein Klick in der Split-Vorschau auf Text, Bild oder Link springt direkt zum passenden Feld (auch in Repeater-Einträgen und in verschachtelten Blöcken); zugeklappte Blöcke und Repeater-Einträge werden dafür aufgeklappt. Die Zuordnung steckt in `lib/previewFieldMatch.js` (mit Tests).
+- Block-Header zeigen immer eine Inhaltszeile (erster gefüllter Text, erstes Bild); Toolbar-Button "Übersicht" klappt alle Blöcke zu einer Liste zusammen bzw. wieder auf.
+
+### Fixed
+- Klick in der Split- bzw. Strukturvorschau scrollte den Editor nicht zur Stelle (zu knappes "nearest"-Scrollen, Ziel unter der Sticky-Toolbar, kein Neu-Auslösen bei gleichem Block). Der Editor scrollt jetzt zum Blockanfang bzw. Feld, auch bei erneutem Klick.
+
+---
+
 ## [0.26.0] - 2026-10-05
 
 ### Added

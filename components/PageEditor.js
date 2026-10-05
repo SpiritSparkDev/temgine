@@ -7,6 +7,7 @@ import Toast from './Toast';
 import RichTextEditor from './RichTextEditor';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
+import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
 import dynamic from 'next/dynamic';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -72,6 +73,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
+  const [scrollTick, setScrollTick] = useState(0); // erzwingt Scroll/Fokus auch bei erneutem Klick auf dieselbe Stelle
   const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
@@ -386,7 +388,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const target = blockNodeRefs.current[selectedBlockPath];
     if (!target) return;
 
-    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     const focusFirstField = () => {
       const firstInput = target.querySelector('input:not([type="hidden"]), textarea, select, .ql-editor');
@@ -399,7 +401,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     };
 
     window.requestAnimationFrame(focusFirstField);
-  }, [selectedBlockPath, selectedFieldKey]);
+  }, [selectedBlockPath, selectedFieldKey, scrollTick]);
 
   useEffect(() => {
     if (!selectedFieldKey) return;
@@ -415,7 +417,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         target.focus();
       }
     });
-  }, [selectedFieldKey]);
+  }, [selectedFieldKey, scrollTick]);
 
   /** Converts camelCase / kebab-case / snake_case field names into readable labels.
    *  e.g. "linkesPanel" → "Linkes Panel", "externerLinkText" → "Externer Link Text" */
@@ -565,12 +567,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   useEffect(() => {
     const handleMessage = (e) => {
       if (e.data?.type === 'temgine-block-click') {
-        setSelectedBlockPath(String(e.data.blockPath));
+        const path = String(e.data.blockPath);
+        setSelectedBlockPath(path);
+        setScrollTick(t => t + 1);
+        setCollapsedBlocks(prev => {
+          const parts = path.split('.');
+          const chain = parts.map((_, i) => parts.slice(0, i + 1).join('.'));
+          if (!chain.some(c => prev.has(c))) return prev;
+          const n = new Set(prev); chain.forEach(c => n.delete(c)); return n;
+        });
+        const field = findFieldForPreviewClick(getBlockAtPath(path), e.data);
+        const rowRef = field.match(/^(.+)\.(\d+)\.[^.]+$/);
+        if (rowRef) {
+          setCollapsedRepeaterRows(prev => {
+            const k = `${path}|${rowRef[1]}`;
+            return prev[k] ? { ...prev, [k]: prev[k].filter(i => i !== Number(rowRef[2])) } : prev;
+          });
+        }
+        setSelectedFieldKey(field ? makeFieldKey(path, field) : '');
       }
     };
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [blocks]);
 
   // Escape key closes preview overlay
   useEffect(() => {
@@ -1230,14 +1250,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
         .join('\n');
 
-      const blockParts = (blocks || []).map((block, i) => {
+      const renderPreviewBlock = (block, path) => {
         const code = block.template ? templateCodes[block.template] : null;
         if (!code) {
-          return `<div data-temgine-block="${i}" class="temgine-block-wrap temgine-block-empty">(Block ${i + 1}: kein Template)</div>`;
+          return `<div data-temgine-block="${path}" class="temgine-block-wrap temgine-block-empty">(Block ${path.split('.').map(n => Number(n) + 1).join('.')}: kein Template)</div>`;
         }
-        const rendered = renderTemplate(code, block.props || {});
-        return `<div data-temgine-block="${i}" class="temgine-block-wrap">${rendered}</div>`;
-      }).join('\n');
+        const inner = (block.children || []).map((c, ci) => renderPreviewBlock(c, `${path}.${ci}`)).join('\n');
+        const rendered = renderTemplate(code, { ...(block.props || {}), inner });
+        // Kinder ohne {{inner}}-Platzhalter im Template hinten anhängen (wie die Seiten-Ausgabe)
+        const withChildren = inner && !/\{\{\{?\s*inner\s*\}?\}\}/.test(code) ? `${rendered}\n${inner}` : rendered;
+        return `<div data-temgine-block="${path}" class="temgine-block-wrap">${withChildren}</div>`;
+      };
+      const blockParts = (blocks || []).map((block, i) => renderPreviewBlock(block, String(i))).join('\n');
 
       const interactScript = `<script>
 (function() {
@@ -1266,7 +1290,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       currentHighlight = el;
       el.style.outline = '2px solid rgba(234,88,12,0.9)';
       var path = el.getAttribute('data-temgine-block');
-      window.parent.postMessage({ type: 'temgine-block-click', blockPath: path }, '*');
+      var t = e.target;
+      var img = t.closest ? t.closest('img') : null;
+      var link = t.closest ? t.closest('a') : null;
+      window.parent.postMessage({
+        type: 'temgine-block-click', blockPath: path,
+        text: (t.textContent || '').trim().slice(0, 300),
+        src: img ? (img.getAttribute('src') || '') : '',
+        href: link ? (link.getAttribute('href') || '') : ''
+      }, '*');
       e.stopPropagation();
     });
   });
@@ -1638,7 +1670,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     // Resolve effective input type: explicit annotation wins over guessed type
     const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
     // Zusammenfassung für zugeklappte Blöcke: erster gefüllter Text + erstes Bild
-    const summaryVars = isCollapsed ? templateVariables : [];
+    const summaryVars = templateVariables;
     const summaryImage = summaryVars.map(v => (resolveInputType(v) === 'image' ? block.props?.[v] : '')).find(v => typeof v === 'string' && v) || '';
     const summaryText = summaryVars.map(v => {
       const t = resolveInputType(v);
@@ -1747,7 +1779,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 })()}
                 <ChevronDown size={12} />
               </button>
-              {isCollapsed && (summaryImage || summaryText) && (
+              {(summaryImage || summaryText) && (
                 <span className="block-summary">
                   {summaryImage && <img src={summaryImage} alt="" className="block-summary-thumb" />}
                   {summaryText && <span className="block-summary-text">{summaryText.length > 80 ? `${summaryText.slice(0, 80)}…` : summaryText}</span>}
@@ -2143,7 +2175,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <div className="field-quill-wrapper">
+                                    <div ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)} className="field-quill-wrapper">
                                       <RichTextEditor
                                         value={sfVal}
                                         onChange={val => {
@@ -2162,6 +2194,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                     <div className="field-url-row">
                                       <input
+                                        ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
                                         type="text"
                                         placeholder={sf.name}
                                         value={sfVal}
@@ -2197,6 +2230,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 <div key={sf.name} className="repeater-subfield">
                                   <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                   <input
+                                    ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
                                     type={sf.type === 'number' ? 'number' : 'text'}
                                     placeholder={sf.name}
                                     value={sfVal}
@@ -2408,6 +2442,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (!path && path !== '0') return;
     setSelectedBlockPath(String(path));
     setSelectedFieldKey('');
+    setScrollTick(t => t + 1);
   };
 
   return (
@@ -2468,6 +2503,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               title={devTitle('Live-Vorschau ein-/ausblenden')}
             >
               <Eye size={14} /> Vorschau
+            </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={() => {
+                const allPaths = flattenedBlocks.map(({ path }) => path);
+                const anyOpen = allPaths.some(pth => !collapsedBlocks.has(pth));
+                setCollapsedBlocks(anyOpen ? new Set(allPaths) : new Set());
+              }}
+              title="Alle Blöcke zu einer Übersicht zuklappen bzw. wieder aufklappen"
+            >
+              <Minimize2 size={14} /> Übersicht
             </button>
             <button
               type="button"
