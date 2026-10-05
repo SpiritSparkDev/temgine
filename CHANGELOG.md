@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.28.2] - 2026-10-05
+
+### Security
+- `PUT /api/settings` hatte keine Anmeldeprüfung: Jeder, der die Seite erreichte, konnte Einstellungen (SEO, Wartungsseiten, Admin-Logo, Matomo, SMTP-Passwort …) ändern. Schreibzugriff ist jetzt auf eingeloggte Admins und Moderatoren beschränkt (gleiche Rollen wie Templates/CSS/JS); `GET` bleibt öffentlich, weil ausgelieferte Seiten die Einstellungen lesen.
+
+---
+
 ## [0.28.1] - 2026-10-05
 
 ### Changed
