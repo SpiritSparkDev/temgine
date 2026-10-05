@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.28.1] - 2026-10-05
+
+### Changed
+- Content-Security-Policy: `frame-src` erlaubt zusätzlich `https://www.youtube.com` und `https://www.youtube-nocookie.com`, damit eingebettete YouTube-Videos auf ausgelieferten Seiten nicht mehr von der CSP blockiert werden. (Fehler 153 in den `srcdoc`-basierten Editor-Vorschauen ist eine YouTube-Referrer-Einschränkung und davon nicht betroffen.)
+
+---
+
 ## [0.28.0] - 2026-10-05
 
 ### Added

@@ -34,7 +34,7 @@ const securityHeaders = [
       "img-src 'self' data: blob: https:",
       "media-src 'self' blob:",
       "connect-src 'self' https://cdn.jsdelivr.net",
-      "frame-src 'self'",
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com", // eingebettete YouTube-Videos
       "worker-src blob: 'self'",
       "object-src 'none'",
       "base-uri 'self'",
