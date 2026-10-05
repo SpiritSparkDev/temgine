@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.28.0] - 2026-10-05
+
+### Added
+- **Admin-Logo überschreibbar:** Einstellungen → Allgemein → Erscheinungsbild: Logo hochladen oder per URL/Pfad setzen (Setting `admin_logo_url`), Zurücksetzen auf das Temgine-Logo; die Admin-Navigationsleiste übernimmt Änderungen ohne Neuladen.
+
+### Changed
+- **Einstellungen neu gestaltet:** Vier Tabs (Allgemein, SEO, Statistik, Live & Wartung) statt einer langen Seite; Karten mit Titel, Beschreibung und einheitlichen Zeilen/Bedienelementen, Speichern pro Karte, gemerkter Tab, responsive. Alle bisherigen Einstellungen bleiben erhalten.
+
+---
+
 ## [0.27.0] - 2026-10-05
 
 ### Added
