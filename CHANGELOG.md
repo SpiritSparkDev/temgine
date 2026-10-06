@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.29.0] - 2026-10-06
+
+### Changed
+- **Ruhigere Feldmasken im Seiten-Editor:** Felder ohne eigene Box (eine Rahmenebene pro Block), Labels normal geschrieben in lesbarer Systemschrift statt orangefarbener Mini-Versalien in Monospace.
+- **Link-Feld:** Art-Auswahl "Interne Seite" (Dropdown mit allen Seiten und Pfad), "Externe URL" oder "Datei"; die Art wird aus dem Wert erkannt.
+- **Bild-Feld:** Thumbnail mit Klick zum Auswählen, Buttons "Ändern" und "Entfernen", URL-Eingabe als Alternative.
+- Begriffe: "Anchor ID" → "Sprungmarke", "Kindblöcke" → "Unterblöcke", Repeater-Buttons und -Einträge tragen den Namen des Repeaters ("Features hinzufügen", "Features 1").
+
+### Fixed
+- Feldnamen wie "Link Text"/"Link Label" wurden als URL-Feld erkannt (`guessInputType`); sie sind jetzt normale Textfelder.
+
+---
+
 ## [0.28.2] - 2026-10-05
 
 ### Security

@@ -2407,3 +2407,49 @@
 
 /* Beim Springen zu einem Block nicht unter der Sticky-Toolbar landen */
 .block-item, .field-item { scroll-margin-top: 72px; }
+
+/* ── Ruhigere Feldmasken: eine Rahmenebene pro Block, lesbare Labels ───────── */
+.block-card-body { --pe-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-family: var(--pe-sans); }
+.block-fields-grid { gap: 14px 16px; }
+.block-fields-grid .field-item,
+.field-item-textarea {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.block-fields-grid .field-item .field-label-xs,
+.field-item-textarea .field-label-xs,
+.field-section-head,
+.repeater-row-num {
+  position: static;
+  display: block;
+  margin: 0 0 5px;
+  padding: 0;
+  background: none;
+  font-family: var(--pe-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.3;
+  color: var(--text-primary);
+  white-space: normal;
+}
+.field-section-head { display: flex; font-size: 0.8rem; color: var(--text-secondary); border-bottom: 1px solid var(--border-color); padding-bottom: 4px; margin-bottom: 10px; }
+.repeater-row-num { display: inline; margin: 0; color: var(--text-secondary); font-weight: 600; }
+.field-expand-btn { top: -2px; }
+.block-card-body .input-field-small { font-family: var(--pe-sans); }
+
+/* Link-Feld (Interne Seite / Externe URL / Datei) */
+.field-link { display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap; }
+.field-link-mode { flex: 0 0 auto; width: auto; min-width: 118px; }
+.field-link > .field-input-full, .field-link > .field-url-row { flex: 1 1 200px; min-width: 0; }
+
+/* Bild-Feld (Thumbnail, Ändern, Entfernen) */
+.field-media { display: flex; gap: 10px; align-items: flex-start; }
+.field-media-thumb { flex: 0 0 72px; width: 72px; height: 72px; padding: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px dashed var(--border-color); border-radius: 6px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: 0.7rem; cursor: pointer; }
+.field-media-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.field-media-thumb:hover { border-color: var(--accent-primary); }
+.field-media-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.field-media-actions { display: flex; gap: 6px; flex-wrap: wrap; }

@@ -140,3 +140,10 @@ describe('|Gruppe annotation', () => {
     expect(extractTemplateVariables('{{title:text|Inhalt}}')).toEqual(['title']);
   });
 });
+
+describe('guessInputType: Link-Beschriftung ist Text', () => {
+  const { guessInputType } = require('../lib/templateParser');
+  test.each([['Link Text', 'text'], ['link-label', 'text'], ['Button Link', 'url'], ['url', 'url']])('%s → %s', (name, type) => {
+    expect(guessInputType(name)).toBe(type);
+  });
+});

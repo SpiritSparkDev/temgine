@@ -90,6 +90,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [collapsedBlocks, setCollapsedBlocks] = useState(() => new Set());
   const [collapsedRepeaterRows, setCollapsedRepeaterRows] = useState({}); // `${blockPath}|${section}` -> Indizes zugeklappter Einträge
   const [templatePickerPath, setTemplatePickerPath] = useState(null);
+  const [linkModes, setLinkModes] = useState({}); // `${blockPath}::${feld}` -> 'page' | 'url' | 'file'
   const [sectionToggles, setSectionToggles] = useState({}); // `${blockPath}|${label}` -> bool (Override des Default)
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
@@ -1117,6 +1118,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return flatten(allPages || []).filter(p => p.id && p.id !== page?.id);
   }, [allPages, page?.id]);
 
+  // Alle Seiten mit URL-Pfad für das Link-Feld "Interne Seite"
+  const pageLinkOptions = useMemo(() => {
+    const out = [];
+    const walk = (nodes, prefix, depth) => {
+      for (const n of nodes || []) {
+        if (!n || !n.slug) continue;
+        const p = `${prefix}/${n.slug}`;
+        out.push({ path: p, title: n.title || n.slug, depth });
+        walk(n.children, p, depth + 1);
+      }
+    };
+    walk(allPages, '', 0);
+    return out;
+  }, [allPages]);
+
   const openBlockTransfer = (path, mode) => {
     setBlockTransferState({ path, mode, targetPageId: '', search: '' });
   };
@@ -1756,12 +1772,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             <input
                 type="text"
                 className="block-anchor-input"
-                placeholder="Anchor ID"
+                placeholder="Sprungmarke"
                 value={block.props?.anchorId || ''}
                 onChange={e => { e.stopPropagation(); updateNestedBlock(path, { anchorId: e.target.value }); }}
                 onClick={e => e.stopPropagation()}
                 title={devTitle('Feld: Anchor-ID')}
-                aria-label="Anchor-ID"
+                aria-label="Sprungmarke (Anker-ID)"
               />
               <button
                 type="button"
@@ -1861,7 +1877,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               );
             })()}
             <small className="block-kindblock-count">
-              {Array.isArray(block.children) ? block.children.length : 0} Kindblöcke
+              {Array.isArray(block.children) ? block.children.length : 0} Unterblöcke
             </small>
           </div>
         </div>
@@ -1918,15 +1934,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item">
                         <label className="field-label-xs">{label}</label>
                         {expandBtn}
-                        <div className="field-url-row">
-                          <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="Bild-URL" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
-                          <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
-                        </div>
-                        {value && (
-                          <div className="field-image-thumb-row">
-                            <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} />
+                        <div className="field-media">
+                          <button type="button" className="field-media-thumb" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} title="Bild auswählen" aria-label={`Bild für ${label} auswählen`}>
+                            {value ? <img src={value} alt="" /> : <span>Kein Bild</span>}
+                          </button>
+                          <div className="field-media-body">
+                            <div className="field-media-actions">
+                              <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)}>{value ? 'Ändern' : '📁 Bild wählen'}</button>
+                              {value && <button type="button" onClick={() => updateNestedBlock(path, { [varName]: '' })} className="btn-modern-small hollow">Entfernen</button>}
+                            </div>
+                            <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="oder Bild-URL einfügen" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   }
@@ -1957,10 +1976,35 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item">
                         <label className="field-label-xs">{label}</label>
                         {expandBtn}
-                        <div className="field-url-row">
-                          <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder="URL oder Dateipfad" value={value} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full" />
-                          <button type="button" onClick={() => openFileModal((url) => updateNestedBlock(path, { [varName]: url }))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
-                        </div>
+                        {(() => {
+                          const modeKey = `${path}::${varName}`;
+                          const detected = !value ? 'url' : /^\/uploads\//.test(value) ? 'file' : pageLinkOptions.some(o => o.path === value) ? 'page' : 'url';
+                          const mode = linkModes[modeKey] || detected;
+                          const setValue = (v) => updateNestedBlock(path, { [varName]: v });
+                          return (
+                            <div className="field-link">
+                              <select value={mode} onChange={e => setLinkModes(prev => ({ ...prev, [modeKey]: e.target.value }))} className="input-field-small field-link-mode" aria-label={`Link-Art für ${label}`}>
+                                <option value="page">Interne Seite</option>
+                                <option value="url">Externe URL</option>
+                                <option value="file">Datei</option>
+                              </select>
+                              {mode === 'page' ? (
+                                <select ref={(el) => setFieldRef(path, varName, el)} value={value} onChange={e => setValue(e.target.value)} className="input-field-small field-input-full">
+                                  <option value="">– Seite wählen –</option>
+                                  {value && !pageLinkOptions.some(o => o.path === value) && <option value={value}>{value}</option>}
+                                  {pageLinkOptions.map(o => <option key={o.path} value={o.path}>{'– '.repeat(o.depth)}{o.title} ({o.path})</option>)}
+                                </select>
+                              ) : (
+                                <div className="field-url-row">
+                                  <input ref={(el) => setFieldRef(path, varName, el)} type="text" placeholder={mode === 'file' ? 'Datei auswählen …' : 'https://…'} value={value} onChange={e => setValue(e.target.value)} className="input-field-small field-input-full" />
+                                  {mode === 'file' && (
+                                    <button type="button" onClick={() => openFileModal((url) => setValue(url))} className="btn-modern-small" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei wählen</button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   }
@@ -2092,9 +2136,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   updateNestedBlock(path, { [sectionName]: [...rows.slice(0, at), emptyRow, ...rows.slice(at)] });
                   setCollapsedRepeaterRows(prev => ({ ...prev, [rowKey]: (prev[rowKey] || []).map(i => (i >= at ? i + 1 : i)) }));
                 };
+                const itemLabel = sectionName === 'each' ? 'Eintrag' : formatLabel(sectionName);
                 const addButton = (at) => (
                   <button type="button" onClick={() => addRow(at)} className="btn-modern-small repeater-add-btn" title={`Eintrag hier in ${sectionName} einfügen`}>
-                    <Plus size={12} /> Eintrag hinzufügen
+                    <Plus size={12} /> {itemLabel} hinzufügen
                   </button>
                 );
                 return (
@@ -2110,7 +2155,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           <div className="repeater-row-header">
                             <button type="button" className="repeater-row-toggle" aria-expanded={isOpen(rowIdx)} onClick={() => toggleRow(rowIdx)}>
                               {isOpen(rowIdx) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                              <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
+                              <span className="repeater-row-num">{itemLabel} {rowIdx + 1}</span>
                               {!isOpen(rowIdx) && (() => {
                                 const sum = subFields.filter(sf => sf.type !== 'image' && sf.type !== 'url').map(sf => stripTags(String(row[sf.name] ?? '')).trim()).find(Boolean);
                                 return <span className="repeater-row-summary">{sum ? (sum.length > 60 ? `${sum.slice(0, 60)}…` : sum) : '(leer)'}</span>;
