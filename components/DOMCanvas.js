@@ -73,7 +73,7 @@ export default function DOMCanvas({
                 display: 'flex',
                 alignItems: 'center',
               }}
-              title={isExpanded ? 'Collapse' : 'Expand'}
+              title={isExpanded ? 'Einklappen' : 'Ausklappen'}
             >
               {isExpanded ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
             </button>
@@ -108,7 +108,7 @@ export default function DOMCanvas({
             <button
               type="button"
               onClick={() => onAddElement?.(elementPath, { tag: 'div', id: `elem_${Date.now()}`, attrs: {}, children: [], content: '' })}
-              title="Add child element"
+              title="Kindelement hinzufügen"
               style={{
                 padding: '4px 8px',
                 fontSize: '0.8rem',
@@ -125,7 +125,7 @@ export default function DOMCanvas({
               <button
                 type="button"
                 onClick={() => onMoveElement?.('up', index, parentPath)}
-                title="Move up"
+                title="Nach oben verschieben"
                 style={{
                   padding: '4px 8px',
                   fontSize: '0.8rem',
@@ -142,7 +142,7 @@ export default function DOMCanvas({
             <button
               type="button"
               onClick={() => onDeleteElement?.(element.id)}
-              title="Delete element"
+              title="Element löschen"
               style={{
                 padding: '4px 8px',
                 fontSize: '0.8rem',
@@ -185,7 +185,7 @@ export default function DOMCanvas({
         <button
           type="button"
           onClick={() => onAddElement?.(null, { tag: 'div', id: `elem_${Date.now()}`, attrs: {}, children: [], content: '' })}
-          title="Add root-level element"
+          title="Element auf oberster Ebene hinzufügen"
           style={{
             padding: '8px 12px',
             fontSize: '0.9rem',
@@ -197,7 +197,7 @@ export default function DOMCanvas({
           }}
         >
           <Plus size={16} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-          Add Element
+          Element hinzufügen
         </button>
       </div>
 
@@ -207,7 +207,7 @@ export default function DOMCanvas({
         </div>
       ) : (
         <div style={{ textAlign: 'center', color: '#999', padding: '32px 0' }}>
-          <p>No elements yet. Add one to get started.</p>
+          <p>Noch keine Elemente. Füge eins hinzu, um zu beginnen.</p>
         </div>
       )}
     </div>

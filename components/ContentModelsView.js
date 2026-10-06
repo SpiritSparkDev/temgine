@@ -178,7 +178,7 @@ export default function ContentModelsView({ showToast }) {
       if (selectedIndex !== null && types[selectedIndex]) payload.id = types[selectedIndex].id
       const res = await fetch('/api/content-types', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!res.ok) {
-        let message = 'Save failed'
+        let message = 'Speichern fehlgeschlagen'
         try {
           const err = await res.json()
           message = err?.error || err?.message || message
@@ -201,7 +201,7 @@ export default function ContentModelsView({ showToast }) {
     if (!confirm('Modell wirklich löschen?')) return
     try {
       const res = await fetch('/api/content-types', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
-      if (!res.ok) throw new Error('Delete failed')
+      if (!res.ok) throw new Error('Löschen fehlgeschlagen')
       _showToast('Content Model gelöscht', 'success')
       load()
       setIsEditing(false)

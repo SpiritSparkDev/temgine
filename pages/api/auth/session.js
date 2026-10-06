@@ -13,7 +13,7 @@ import { authOptions } from './[...nextauth]';
 export default async function handler(req, res) {
   // NextAuth expects GET and POST on session endpoint
   if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Methode nicht erlaubt' });
   }
 
   try {
@@ -22,6 +22,6 @@ export default async function handler(req, res) {
     return res.status(200).json(session || {});
   } catch (error) {
     console.error('[api/auth/session] Error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Interner Serverfehler' });
   }
 }

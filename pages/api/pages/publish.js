@@ -1,5 +1,6 @@
 import { prisma } from '../../../lib/prisma'
 import { logAudit } from '../../../lib/audit'
+import { stripPageAccessPasswords } from '../../../lib/pageAccessPassword'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -53,13 +54,13 @@ export default async function handler(req, res) {
       const updated = await prisma.page.update({ where: { id: page.id }, data: { status: 'PUBLISHED', publishAt: publishAt || null } })
       try { await prisma.pageRevision.create({ data: { pageId: updated.id, data: { title: updated.title, slug: updated.slug, blocks: updated.blocks, children: updated.children, status: updated.status, publishAt: updated.publishAt } } }) } catch (e) {}
       try { await logAudit({ action: 'publish', resource: 'page', resourceId: updated.id, details: { slug: updated.slug } }) } catch (e) {}
-      return res.status(200).json({ ok: true, page: updated })
+      return res.status(200).json({ ok: true, page: stripPageAccessPasswords(updated) })
     }
 
     if (action === 'unpublish') {
       const updated = await prisma.page.update({ where: { id: page.id }, data: { status: 'DRAFT', publishAt: null } })
       try { await logAudit({ action: 'unpublish', resource: 'page', resourceId: updated.id, details: { slug: updated.slug } }) } catch (e) {}
-      return res.status(200).json({ ok: true, page: updated })
+      return res.status(200).json({ ok: true, page: stripPageAccessPasswords(updated) })
     }
 
     if (action === 'schedule') {
@@ -87,7 +88,7 @@ export default async function handler(req, res) {
       }
       const updated = await prisma.page.update({ where: { id: page.id }, data: { status: 'SCHEDULED', publishAt: dt } })
       try { await logAudit({ action: 'schedule', resource: 'page', resourceId: updated.id, details: { slug: updated.slug, publishAt: dt } }) } catch (e) {}
-      return res.status(200).json({ ok: true, page: updated })
+      return res.status(200).json({ ok: true, page: stripPageAccessPasswords(updated) })
     }
 
     const [status, resp] = errorResponse(400, 'Ungültige oder fehlende Action', 'VALIDATION_ERROR', { invalid: ['action'], value: action });

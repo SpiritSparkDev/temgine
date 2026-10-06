@@ -54,3 +54,37 @@ test('escapeJsonLd prevents script tag breakout', () => {
   const out = escapeJsonLd({ name: '</script><script>alert(1)</script>' });
   expect(out).not.toMatch(/<\/script>/);
 });
+
+test('blog post meta uses per-post SEO overrides from templateData.seo before falling back', () => {
+  const post = {
+    title: 'Mein Beitrag',
+    excerpt: 'Kurz',
+    coverImage: '/img/post.jpg',
+    templateData: {
+      seo: {
+        metaTitle: 'Individueller SEO-Titel',
+        metaDescription: 'Individuelle Beschreibung',
+        ogImage: '/img/custom-og.jpg',
+        robots: 'noindex, nofollow',
+      },
+    },
+  };
+  const meta = buildBlogPostMeta({ post, routePath: '/blog/mein-beitrag', baseUrl: 'https://example.com', settings: { seo_site_name: 'Firma' } });
+  expect(meta.title).toBe('Individueller SEO-Titel – Firma');
+  expect(meta.description).toBe('Individuelle Beschreibung');
+  expect(meta.og.image).toBe('https://example.com/img/custom-og.jpg');
+  expect(meta.robots).toBe('noindex, nofollow');
+});
+
+test('blog post meta falls back to excerpt/coverImage/site-default when no override is set', () => {
+  const post = { title: 'Mein Beitrag', excerpt: 'Kurz', coverImage: '/img/post.jpg', templateData: null };
+  const meta = buildBlogPostMeta({ post, routePath: '/blog/mein-beitrag', baseUrl: 'https://example.com', settings: { seo_default_og_image: '/img/default.jpg' } });
+  expect(meta.description).toBe('Kurz');
+  expect(meta.og.image).toBe('https://example.com/img/post.jpg');
+});
+
+test('blog post meta global indexing kill switch overrides per-post robots override', () => {
+  const post = { title: 'Mein Beitrag', templateData: { seo: { robots: 'index, follow' } } };
+  const meta = buildBlogPostMeta({ post, routePath: '/blog/mein-beitrag', baseUrl: 'https://example.com', settings: { seo_indexing_enabled: 'false' } });
+  expect(meta.robots).toBe('noindex, nofollow');
+});

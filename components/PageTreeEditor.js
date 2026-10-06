@@ -29,7 +29,7 @@ import { getPageRedirect } from '../lib/pageRedirect';
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
   const [tree, setTree] = useState([]);
-  const [viewMode, setViewModeState] = useState('cards'); // 'cards' or 'table'
+  const [viewMode, setViewModeState] = useState('table'); // 'cards' or 'table'
   useEffect(() => {
     const saved = sessionStorage.getItem('pageTreeViewMode');
     if (saved === 'cards' || saved === 'table') setViewModeState(saved);

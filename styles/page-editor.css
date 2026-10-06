@@ -2060,6 +2060,48 @@
   gap: 10px;
 }
 
+/* Inspector-Lightboxes (Erweiterte Optionen, Sprungmarken) — reuses .file-modal chrome */
+.inspector-modal {
+  max-width: 420px;
+}
+
+.inspector-modal-wide {
+  max-width: 640px;
+}
+
+.inspector-modal .page-editor-outline-settings {
+  overflow-y: auto;
+}
+
+.inspector-more-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.inspector-more-actions .btn-modern-small {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+}
+
+.inspector-more-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+}
+
 .page-picker-search {
   width: 100%;
   box-sizing: border-box;

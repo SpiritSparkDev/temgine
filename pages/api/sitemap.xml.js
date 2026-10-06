@@ -48,7 +48,7 @@ function collectRoutes(nodes, ancestorUpdatedAt, parentSegments, out) {
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ error: 'Methode nicht erlaubt' });
   }
 
   try {
@@ -94,7 +94,7 @@ ${sitemapItems}
     return res.send(sitemapXml);
   } catch (error) {
     console.error('Sitemap generation error:', error);
-    res.status(500).json({ error: 'Failed to generate sitemap' });
+    res.status(500).json({ error: 'Sitemap konnte nicht generiert werden' });
   }
 }
 

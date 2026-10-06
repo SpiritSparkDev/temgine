@@ -341,3 +341,10 @@ Kurzreferenz auch direkt im Backend an.
 - Template-Editor → rechter Sidebar-Reiter **„Navigation"**: alle
   Seitennavigationen zum Anklicken, fügt den passenden Platzhalter an der
   Cursor-Position ein.
+- **Globale Seiten → Tab „Widget"**: seitenbaum-unabhängiges Gegenstück zu
+  PAGE-Navs — freie, wiederverwendbare Inhaltsbausteine (Sidebars, Info-/
+  CTA-Boxen) ohne `pages`/`anchors`/`childPages`, nur `{{global.<key>}}`.
+  Wird genau wie ein Navigations-Block als eigener `type: 'global-page'`-
+  Block im Seiten-Editor platziert (siehe `collectGlobalPageBlockIds`/
+  `globalPages.byId` in `lib/templateEngine.js` — dieselben vier
+  Rendering-Pfade wie oben).

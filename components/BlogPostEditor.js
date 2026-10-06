@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal, Plus, ChevronUp, ChevronDown } from '../lib/muiIcons';
-import RichTextEditor from './RichTextEditor';
+import SmartRichTextEditor from './SmartRichTextEditor';
+import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
+import SeoPanel from './SeoPanel';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
-  { value: 'REVIEW',    label: 'Review',                    color: '#f59e0b' },
+  { value: 'REVIEW',    label: 'In Prüfung',                color: '#f59e0b' },
   { value: 'APPROVED',  label: 'Freigegeben',               color: '#3b82f6' },
   { value: 'PUBLISHED', label: 'Veröffentlicht',            color: '#10b981' },
   { value: 'SCHEDULED', label: 'Geplant (Datum erforderlich)', color: '#8b5cf6' },
@@ -18,6 +20,7 @@ const slugify = (v) =>
     .replace(/-+/g, '-');
 
 export default function BlogPostEditor({ post, channelSlug, channelName, onSave, onBack, readingTemplateCode }) {
+  const richTextEditorMode = useRichTextEditorMode();
   const [title, setTitle]           = useState(post?.title ?? '');
   const [slug, setSlug]             = useState(post?.slug ?? '');
   const [excerpt, setExcerpt]       = useState(post?.excerpt ?? '');
@@ -213,7 +216,8 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                     <Tag size={12} /> Inhalt
                   </div>
                   <div className="blog-editor-card__body" style={{ padding: '12px 14px' }}>
-                    <RichTextEditor
+                    <SmartRichTextEditor
+                      mode={richTextEditorMode}
                       value={body}
                       onChange={setBody}
                       toolbar={['bold', 'italic', 'strike', 'h1', 'h2', 'h3', 'ol', 'ul', 'blockquote', 'code', 'link', 'image', 'clear']}
@@ -417,6 +421,16 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   </div>
                 </div>
               )}
+
+              {/* SEO — eigenes Bauteil wie im Seiten-Editor, verwaltet seinen
+                  Auf-/Zuklapp-Zustand selbst. Overrides liegen unter
+                  templateData.seo (genau wie page.data.seo bei Seiten) und
+                  werden von lib/seo.js::buildBlogPostMeta beim Rendern gelesen. */}
+              <SeoPanel
+                pageData={templateData}
+                onChange={setTemplateData}
+                slug={channelSlug ? `${channelSlug}/${slug}` : slug}
+              />
             </div>
 
           </div>

@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.29.0] - 2026-10-06
+## [0.30.0] - 2026-10-06
 
 ### Changed
 - **Ruhigere Feldmasken im Seiten-Editor:** Felder ohne eigene Box (eine Rahmenebene pro Block), Labels normal geschrieben in lesbarer Systemschrift statt orangefarbener Mini-Versalien in Monospace.
@@ -18,21 +18,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.28.2] - 2026-10-05
+## [0.29.2] - 2026-10-05
 
 ### Security
 - `PUT /api/settings` hatte keine Anmeldeprüfung: Jeder, der die Seite erreichte, konnte Einstellungen (SEO, Wartungsseiten, Admin-Logo, Matomo, SMTP-Passwort …) ändern. Schreibzugriff ist jetzt auf eingeloggte Admins und Moderatoren beschränkt (gleiche Rollen wie Templates/CSS/JS); `GET` bleibt öffentlich, weil ausgelieferte Seiten die Einstellungen lesen.
 
 ---
 
-## [0.28.1] - 2026-10-05
+## [0.29.1] - 2026-10-05
 
 ### Changed
 - Content-Security-Policy: `frame-src` erlaubt zusätzlich `https://www.youtube.com` und `https://www.youtube-nocookie.com`, damit eingebettete YouTube-Videos auf ausgelieferten Seiten nicht mehr von der CSP blockiert werden. (Fehler 153 in den `srcdoc`-basierten Editor-Vorschauen ist eine YouTube-Referrer-Einschränkung und davon nicht betroffen.)
 
 ---
 
-## [0.28.0] - 2026-10-05
+## [0.29.0] - 2026-10-05
 
 ### Added
 - **Admin-Logo überschreibbar:** Einstellungen → Allgemein → Erscheinungsbild: Logo hochladen oder per URL/Pfad setzen (Setting `admin_logo_url`), Zurücksetzen auf das Temgine-Logo; die Admin-Navigationsleiste übernimmt Änderungen ohne Neuladen.
@@ -42,7 +42,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.27.0] - 2026-10-05
+## [0.28.0] - 2026-10-05
 
 ### Added
 - **Schneller zur Bearbeitungsstelle im Editor:** Ein Klick in der Split-Vorschau auf Text, Bild oder Link springt direkt zum passenden Feld (auch in Repeater-Einträgen und in verschachtelten Blöcken); zugeklappte Blöcke und Repeater-Einträge werden dafür aufgeklappt. Die Zuordnung steckt in `lib/previewFieldMatch.js` (mit Tests).
@@ -53,7 +53,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.26.0] - 2026-10-05
+## [0.27.0] - 2026-10-05
 
 ### Added
 - **Template-Auswahl als Popup** (`TemplatePickerModal`): Statt des Dropdowns im Block-Header öffnet ein Dialog mit Suche und Farblegende. Jede Karte zeigt das Template schematisch mit farbigen Feldern je Datentyp (Text, Richtext, Bild, Link, Zahl, Datum, Farbe, Auswahl, Liste, Ordner) und Repeatern.
@@ -64,6 +64,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ### Changed
 - Block-Felder erscheinen in Template-Reihenfolge (keine Sonderbehandlung für Textareas mehr, keine aus dem HTML abgeleiteten Gruppen); zugeklappte Blöcke zeigen eine Zusammenfassung.
+## [0.26.0] - 2026-10-03
+
+### Added
+- Footer und Navigation sind jetzt zu "globalen Seitenkomponenten" vereinheitlicht (`lib/globalPageStore.js`, `components/GlobalPagesView.js`): statt zweier getrennter, aber strukturell fast identischer Stores gibt es jetzt einen gemeinsamen Store mit Rollen (`FOOTER`, `MAIN`, `PAGE`, `MOBILE`). `lib/navigationStore.js` und `lib/footerStore.js` bleiben als dünne Kompatibilitäts-Shims bestehen, bestehende Daten werden beim Lesen automatisch mit eingemischt und wandern beim nächsten Speichern an den neuen Ort (`npm run migrate-footer-navigation-to-global` für eine einmalige, vollständige Migration).
+- Rich-Text-Felder (Seiten-Blöcke, Blogbeiträge, Content-Einträge) können jetzt wahlweise mit einem WYSIWYG-Editor (TipTap) statt dem bisherigen Markdown-Editor bearbeitet werden. Die Umschaltung erfolgt global unter Einstellungen → "Rich-Text-Editor"; das Speicherformat bleibt in beiden Fällen Markdown, sodass zwischen den beiden Editoren jederzeit verlustfrei gewechselt werden kann.
+- Seitenübersicht: Die Tabellenansicht ist jetzt die Standardansicht für neue Browser-Sitzungen (vorher Kartenansicht). Eine bereits gewählte Ansicht bleibt wie bisher pro Sitzung gespeichert.
+
+### Changed
+- Durchgängige Übersetzung verbliebener englischer UI-Begriffe ins Deutsche (Buttons, Tooltips, Platzhaltertexte, Fehlermeldungen in Toasts), u. a. in `ElementPropertyEditor.js`, `DOMCanvas.js`, `SeoPanel.js`, `PagesView.js`, `BackupView.js`, `ContentModelsView.js` und mehreren API-Fehlermeldungen (`pages/api/**`). Fachspezifische Begriffe (SEO-Jargon wie Meta Title/OG Title/Canonical URL, etablierte technische Bezeichnungen, Produkt- und Markennamen) bleiben bewusst unübersetzt.
+- Der Status "Review" (Blogbeiträge) heißt jetzt einheitlich "In Prüfung", passend zur bereits an anderer Stelle (`lib/workflow.js`) verwendeten Bezeichnung.
+
+### Fixed
+- `ContentEntryEditor.js` enthielt nach der eigentlichen Komponente mehrere hundert Zeilen toten, nicht mehr erreichbaren Codes aus einem älteren Entwurf (ungültige Referenzen auf nicht existierende Variablen). Das verhinderte zuverlässiges Kompilieren der Datei; der tote Code wurde entfernt.
 
 ---
 

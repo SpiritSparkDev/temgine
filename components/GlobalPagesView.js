@@ -1,0 +1,1093 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar } from '../lib/muiIcons';
+import { navPlaceholderSlug } from '../lib/templateEngine';
+
+const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
+
+const NAVIGATION_CSS_FILENAME = 'navigation.css';
+const DEFAULT_NAVIGATION_CSS = `/* Automatisch erstellt durch Navigation-Editor */
+.desktop_nav { display: block; }
+.mobile_nav { display: none; }
+
+.mobile_nav__list { display: none; list-style: none; padding: 0; margin: .75rem 0 0; }
+.mobile_nav.open .mobile_nav__list { display: block; }
+
+@media (max-width: 960px) {
+  .desktop_nav { display: none; }
+  .mobile_nav { display: block; }
+}`;
+
+const FOOTER_STARTER_CODE = `<footer class="site-footer">
+  <div class="footer-brand">
+    <img src="{{global.logoUrl}}" alt="{{global.companyName}}">
+    <p>{{global.companyName}}</p>
+  </div>
+  <nav aria-label="Footer-Navigation">
+    {{#each:global.footerLinks}}
+      <a href="{{url}}">{{label}}</a>
+    {{/each:global.footerLinks}}
+  </nav>
+  <p class="footer-copy">{{global.copyrightText}}</p>
+</footer>`;
+
+// ── Presets ──────────────────────────────────────────────────────────────────
+const PRESETS = {
+  FOOTER: [
+    {
+      label: 'Standard-Footer',
+      description: 'Logo, Footer-Navigation (globale Variablen) und Copyright-Zeile',
+      code: FOOTER_STARTER_CODE,
+    },
+  ],
+  MAIN: [
+    {
+      label: 'Responsive Combo (Desktop + Mobile)',
+      description: 'Ein Template mit .desktop_nav und .mobile_nav; Umschaltung per CSS-Media-Query',
+      code: `<style>
+.desktop_nav { display: block; }
+.mobile_nav { display: none; }
+.mobile_nav__list { display: none; list-style: none; padding: 0; margin: .75rem 0 0; }
+.mobile_nav.open .mobile_nav__list { display: block; }
+
+@media (max-width: 960px) {
+  .desktop_nav { display: none; }
+  .mobile_nav { display: block; }
+}
+</style>
+
+<div class="site-nav-combo">
+  <nav class="desktop_nav" aria-label="Hauptnavigation Desktop">
+    <ul class="desktop_nav__list">
+      {{#pages}}
+      <li class="desktop_nav__item{{#hasChildren}} has-children{{/hasChildren}}">
+        <a class="desktop_nav__link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="desktop_nav__sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
+      {{/pages}}
+    </ul>
+  </nav>
+
+  <nav class="mobile_nav" aria-label="Hauptnavigation Mobile">
+    <button class="mobile_nav__toggle" type="button" onclick="this.closest('.mobile_nav').classList.toggle('open')">
+      Menü
+    </button>
+    <ul class="mobile_nav__list">
+      {{#pages}}
+      <li class="mobile_nav__item{{#hasChildren}} has-children{{/hasChildren}}">
+        <a class="mobile_nav__link" href="/{{slug}}">{{title}}</a>
+        {{#hasChildren}}
+        <ul class="mobile_nav__sub">
+          {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+        {{/hasChildren}}
+      </li>
+      {{/pages}}
+    </ul>
+  </nav>
+</div>`
+    },
+    {
+      label: 'Horizontal Bar',
+      description: 'Klassische horizontale Navigation mit Untermenü',
+      code: `<nav class="main-nav horizontal-nav">
+  <ul class="nav-list">
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li class="nav-sub-item"><a class="nav-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Dropdown Menu',
+      description: 'Navigation mit Dropdown-Untermenü',
+      code: `<nav class="main-nav dropdown-nav">
+  <ul class="nav-list">
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-dropdown{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="dropdown-menu">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Centered Split',
+      description: 'Logo in der Mitte, Links links und rechts',
+      code: `<nav class="main-nav centered-nav">
+  <ul class="nav-left">
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+  <a class="nav-logo" href="/">
+    <span class="logo-text">Logo</span>
+  </a>
+  <ul class="nav-right">
+    {{#pages}}
+    <li class="nav-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="nav-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="nav-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Sidebar Vertical',
+      description: 'Vertikale Sidebar-Navigation mit Unterebenen',
+      code: `<nav class="main-nav sidebar-nav">
+  <div class="sidebar-brand">
+    <a href="/" class="brand-link">Marke</a>
+  </div>
+  <ul class="sidebar-list">
+    {{#pages}}
+    <li class="sidebar-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="sidebar-link" href="/{{slug}}">
+        <span class="link-text">{{title}}</span>
+      </a>
+      {{#hasChildren}}
+      <ul class="sidebar-sub">
+        {{#children}}<li class="sidebar-sub-item"><a class="sidebar-sub-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Mega Menu',
+      description: 'Breites Dropdown mit Unterseiten als Spalten',
+      code: `<nav class="main-nav mega-menu-nav">
+  <ul class="mega-top-list">
+    {{#pages}}
+    <li class="mega-top-item{{#hasChildren}} has-mega{{/hasChildren}}">
+      <a class="mega-top-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <div class="mega-panel">
+        <div class="mega-panel-inner">
+          <div class="mega-col">
+            <ul class="mega-col-list">
+              {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+            </ul>
+          </div>
+        </div>
+      </div>
+      {{/hasChildren}}
+    </li>
+    {{/pages}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Footer-Navigation',
+      description: 'Mehrspaltiger Footer mit Link-Gruppen',
+      code: `<footer class="site-footer">
+  <div class="footer-nav-inner">
+    <div class="footer-brand">
+      <a href="/" class="footer-logo">Logo</a>
+      <p class="footer-tagline">Kurze Beschreibung des Unternehmens.</p>
+    </div>
+    <nav class="footer-links" aria-label="Footer-Navigation">
+      {{#pages}}
+      {{#hasChildren}}
+      <div class="footer-col">
+        <p class="footer-col-heading">{{title}}</p>
+        <ul class="footer-col-list">
+          {{#children}}<li><a class="footer-link" href="/{{slug}}">{{title}}</a></li>{{/children}}
+        </ul>
+      </div>
+      {{/hasChildren}}
+      {{/pages}}
+      <div class="footer-col">
+        <p class="footer-col-heading">Navigation</p>
+        <ul class="footer-col-list">
+          {{#pages}}<li><a class="footer-link" href="/{{slug}}">{{title}}</a></li>{{/pages}}
+        </ul>
+      </div>
+    </nav>
+  </div>
+  <div class="footer-bottom">
+    <p class="footer-copy">&copy; 2026 Meine Website · <a href="/datenschutz">Datenschutz</a> · <a href="/impressum">Impressum</a></p>
+  </div>
+</footer>`,
+    },
+  ],
+  PAGE: [
+    {
+      label: 'Unterseiten-Liste',
+      description: 'Zeigt alle direkten Unterseiten der aktuellen Seite (inkl. einer Unterebene)',
+      code: `<nav class="page-nav subpages" aria-label="Unterseiten">
+  <ul class="subpages-list">
+    {{#childPages}}
+    <li class="subpages-item{{#hasChildren}} has-children{{/hasChildren}}">
+      <a class="subpages-link" href="/{{slug}}">{{title}}</a>
+      {{#hasChildren}}
+      <ul class="subpages-sub">
+        {{#children}}<li><a href="/{{slug}}">{{title}}</a></li>{{/children}}
+      </ul>
+      {{/hasChildren}}
+    </li>
+    {{/childPages}}
+  </ul>
+  {{^childPages}}
+  <p class="subpages-empty">Keine Unterseiten vorhanden.</p>
+  {{/childPages}}
+</nav>`,
+    },
+    {
+      label: 'Anchor Sidebar',
+      description: 'Seitliche Anker-Navigation für lange Seiten',
+      code: `<nav class="page-nav anchor-sidebar">
+  <p class="page-nav-heading">Inhalt</p>
+  <ul class="anchor-list">
+    {{#anchors}}
+    <li class="anchor-item">
+      <a class="anchor-link" href="#{{anchorId}}">{{title}}</a>
+    </li>
+    {{/anchors}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Anchor Sidebar (freie Ziel-IDs)',
+      description: 'Wie Anchor Sidebar, aber für Ziel-IDs ohne Anchor-ID-Feld am Block (z. B. eigene Template-Felder als id) — kombinierbar mit der normalen Anchor Sidebar auf derselben Seite',
+      code: `<nav class="page-nav anchor-sidebar">
+  <p class="page-nav-heading">Inhalt</p>
+  <ul class="anchor-list">
+    {{#customAnchors}}
+    <li class="anchor-item">
+      <a class="anchor-link" href="#{{anchorId}}">{{title}}</a>
+    </li>
+    {{/customAnchors}}
+  </ul>
+</nav>`,
+    },
+    {
+      label: 'Sticky TOC',
+      description: 'Sticky Inhaltsverzeichnis',
+      code: `<aside class="page-nav sticky-toc">
+  <nav aria-label="Inhaltsverzeichnis">
+    <h2 class="toc-title">Auf dieser Seite</h2>
+    <ol class="toc-list">
+      {{#anchors}}
+      <li class="toc-item">
+        <a class="toc-link" href="#{{anchorId}}">{{title}}</a>
+      </li>
+      {{/anchors}}
+    </ol>
+  </nav>
+</aside>`,
+    },
+    {
+      label: 'Breadcrumb',
+      description: 'Breadcrumb-Navigation',
+      code: `<nav class="page-nav breadcrumb" aria-label="Brotkrümel">
+  <ol class="breadcrumb-list">
+    <li class="breadcrumb-item">
+      <a href="/" class="breadcrumb-link">Start</a>
+    </li>
+    {{#anchors}}
+    <li class="breadcrumb-item">
+      <span class="breadcrumb-sep" aria-hidden="true">›</span>
+      <a class="breadcrumb-link" href="#{{anchorId}}">{{title}}</a>
+    </li>
+    {{/anchors}}
+  </ol>
+</nav>`,
+    },
+    {
+      label: 'Step Progress',
+      description: 'Nummerierte Schritt-Navigation',
+      code: `<nav class="page-nav step-progress" aria-label="Schritte">
+  <ol class="step-list">
+    {{#anchors}}
+    <li class="step-item">
+      <a class="step-link" href="#{{anchorId}}">
+        <span class="step-number">{{@index}}</span>
+        <span class="step-label">{{title}}</span>
+      </a>
+    </li>
+    {{/anchors}}
+  </ol>
+</nav>`,
+    },
+    {
+      label: 'Vertikale Sidebar',
+      description: 'Seitennavigation in der Sidebar mit Abschnitts-Links',
+      code: `<aside class="page-nav vertical-sidebar" aria-label="Seitennavigation">
+  <nav>
+    <p class="sidebar-nav-heading">Auf dieser Seite</p>
+    <ul class="sidebar-nav-list">
+      {{#anchors}}
+      <li class="sidebar-nav-item">
+        <a class="sidebar-nav-link" href="#{{anchorId}}">{{title}}</a>
+      </li>
+      {{/anchors}}
+    </ul>
+  </nav>
+</aside>`,
+    },
+    {
+      label: 'Pagination',
+      description: 'Seitenzahlen-Navigation (Vorherige / Seiten / Nächste)',
+      code: `<nav class="page-nav pagination" aria-label="Seitennavigation">
+  <ul class="pagination-list">
+    <li class="pagination-item prev">
+      <a class="pagination-link" href="#" aria-label="Vorherige Seite">‹ Zurück</a>
+    </li>
+    {{#anchors}}
+    <li class="pagination-item">
+      <a class="pagination-link" href="#{{anchorId}}" aria-label="{{title}}">{{title}}</a>
+    </li>
+    {{/anchors}}
+    <li class="pagination-item next">
+      <a class="pagination-link" href="#" aria-label="Nächste Seite">Weiter ›</a>
+    </li>
+  </ul>
+</nav>`,
+    },
+  ],
+  WIDGET: [
+    {
+      label: 'Info-Box',
+      description: 'Einfache Sidebar-Box mit Titel und Text',
+      code: `<aside class="widget widget-info">
+  <h3 class="widget-title">Titel</h3>
+  <p class="widget-text">Freier Text für diese Box.</p>
+</aside>`,
+    },
+    {
+      label: 'CTA-Box',
+      description: 'Call-to-Action-Box mit Button, nutzt globale Variablen',
+      code: `<aside class="widget widget-cta">
+  <h3 class="widget-title">{{global.companyName}} kontaktieren</h3>
+  <p class="widget-text">Fragen? Wir helfen gerne weiter.</p>
+  <a class="widget-cta-button" href="/kontakt">Jetzt Kontakt aufnehmen</a>
+</aside>`,
+    },
+    {
+      label: 'Kontakt-Karte',
+      description: 'Kompakte Kontaktdaten-Box für Sidebars',
+      code: `<aside class="widget widget-contact">
+  <h3 class="widget-title">Kontakt</h3>
+  <p class="widget-text">{{global.companyName}}</p>
+  <p class="widget-text">{{global.contactEmail}}</p>
+  <p class="widget-text">{{global.contactPhone}}</p>
+</aside>`,
+    },
+  ],
+};
+
+const ROLE_TABS = [
+  { id: 'MAIN', label: 'Hauptnavigation', Icon: Globe },
+  { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
+  { id: 'FOOTER', label: 'Footer', Icon: Layers },
+  { id: 'WIDGET', label: 'Widget', Icon: Sidebar },
+];
+
+// Rollen mit genau einem exklusiv aktiven Eintrag — zeigen den
+// Aktivieren/Deaktivieren-Schalter und das "Aktiv"-Badge. PAGE-Navs sind
+// immer aktiv (als Baustein platziert, kein Aktivierungskonzept).
+const EXCLUSIVE_ACTIVE_ROLES = ['MAIN', 'FOOTER'];
+
+/**
+ * Verwaltet alle "globalen Seitenkomponenten" — Footer, Hauptnavigation und
+ * Seitennavigation — in einer Oberfläche (lib/globalPageStore.js). Ersetzt
+ * die vormals getrennten Komponenten NavigationView.js und FooterView.js.
+ */
+export default function GlobalPagesView({ showToast }) {
+  const [role, setRole] = useState('MAIN');
+  const [list, setList] = useState([]);
+  const [editing, setEditing] = useState(null); // { id?, name, role, code, isNew }
+  const [editName, setEditName] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [navigationCssCode, setNavigationCssCode] = useState('');
+  const [isSavingNavigationCss, setIsSavingNavigationCss] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showDocs, setShowDocs] = useState(true);
+
+  const loadList = useCallback(() => {
+    setIsLoading(true);
+    fetch('/api/global-pages')
+      .then(r => r.json())
+      .then(data => {
+        setList(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setList([]))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const loadOrCreateNavigationCss = useCallback(async () => {
+    try {
+      const listRes = await fetch('/api/css');
+      const listData = await listRes.json();
+      const files = Array.isArray(listData?.files) ? listData.files : [];
+      const hasNavigationCss = files.some((f) => f?.source === 'extern_css' && f?.name === NAVIGATION_CSS_FILENAME);
+
+      if (!hasNavigationCss) {
+        const createRes = await fetch('/api/css', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: NAVIGATION_CSS_FILENAME, content: DEFAULT_NAVIGATION_CSS }),
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok || !createData.success) {
+          throw new Error(createData.error || 'navigation.css konnte nicht erstellt werden');
+        }
+        showToast('navigation.css wurde erstellt und ist im CSS-Menü verfügbar', 'success');
+      }
+
+      const fileRes = await fetch(`/api/css?file=${encodeURIComponent(NAVIGATION_CSS_FILENAME)}`);
+      const fileData = await fileRes.json().catch(() => ({}));
+      if (!fileRes.ok) {
+        throw new Error(fileData.error || 'navigation.css konnte nicht geladen werden');
+      }
+      setNavigationCssCode(String(fileData.content || ''));
+    } catch (e) {
+      showToast(`Fehler bei navigation.css: ${e.message}`, 'error');
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    loadList();
+    loadOrCreateNavigationCss();
+  }, [loadList, loadOrCreateNavigationCss]);
+
+  async function handleSaveNavigationCss() {
+    setIsSavingNavigationCss(true);
+    try {
+      const res = await fetch('/api/css', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: NAVIGATION_CSS_FILENAME, content: navigationCssCode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'navigation.css konnte nicht gespeichert werden');
+      }
+      showToast('navigation.css gespeichert', 'success');
+    } catch (e) {
+      showToast(`Fehler: ${e.message}`, 'error');
+    } finally {
+      setIsSavingNavigationCss(false);
+    }
+  }
+
+  const filteredList = list.filter(e => e.role === role);
+  const isExclusiveActiveRole = EXCLUSIVE_ACTIVE_ROLES.includes(role);
+  const roleLabel = ROLE_TABS.find(t => t.id === role)?.label || 'Eintrag';
+  const isFooter = role === 'FOOTER';
+  const isWidget = role === 'WIDGET';
+  const entityNoun = isFooter ? 'Footer' : isWidget ? 'Widget' : 'Navigation';
+  // Für den "Neue(n/s) <Noun> erstellen"-Titel — deutsche Artikel/Endungen je Rolle.
+  const entityAccusativeSuffix = isFooter ? 'n' : isWidget ? 's' : '';
+
+  function handleNew() {
+    const entry = { isNew: true, role };
+    setEditing(entry);
+    setEditName('');
+    if (role === 'FOOTER') {
+      setEditCode(FOOTER_STARTER_CODE);
+      setShowPresets(false);
+    } else {
+      setEditCode('');
+      setShowPresets(true);
+    }
+  }
+
+  function handleEdit(item) {
+    setIsLoading(true);
+    fetch(`/api/global-pages?id=${encodeURIComponent(item.id)}`)
+      .then(r => r.json())
+      .then(data => {
+        setEditing(data);
+        setEditName(data.name);
+        setEditCode(data.code);
+        setShowPresets(false);
+      })
+      .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'))
+      .finally(() => setIsLoading(false));
+  }
+
+  function handleCancel() {
+    setEditing(null);
+    setEditName('');
+    setEditCode('');
+    setShowPresets(false);
+  }
+
+  async function handleSave() {
+    if (!editName.trim()) {
+      showToast('Bitte einen Namen eingeben', 'error');
+      return;
+    }
+    if (!editCode.trim()) {
+      showToast(`Bitte ${entityNoun}-Code eingeben`, 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const isNew = editing?.isNew;
+      const method = isNew ? 'POST' : 'PUT';
+      const body = isNew
+        ? { name: editName.trim(), role, code: editCode }
+        : { id: editing.id, name: editName.trim(), code: editCode };
+
+      const res = await fetch('/api/global-pages', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Unbekannter Fehler');
+      }
+      const saved = await res.json();
+      showToast(`${entityNoun} "${editName.trim()}" gespeichert`, 'success');
+      loadList();
+      setEditing(saved);
+      setEditName(saved.name);
+      setEditCode(saved.code);
+      setShowPresets(false);
+    } catch (e) {
+      showToast('Fehler: ' + e.message, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleActivate(item) {
+    try {
+      const res = await fetch('/api/global-pages', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, isActive: !item.isActive }),
+      });
+      if (!res.ok) throw new Error('Fehler beim Aktualisieren');
+      showToast(item.isActive ? 'Deaktiviert' : `"${item.name}" aktiviert`, 'success');
+      loadList();
+    } catch (e) {
+      showToast('Fehler: ' + e.message, 'error');
+    }
+  }
+
+  async function handleDelete(item) {
+    if (!window.confirm(`${entityNoun} "${item.name}" wirklich löschen?`)) return;
+    try {
+      const res = await fetch('/api/global-pages', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!res.ok) throw new Error('Fehler beim Löschen');
+      showToast(`"${item.name}" gelöscht`, 'success');
+      if (editing && editing.id === item.id) handleCancel();
+      loadList();
+    } catch (e) {
+      showToast('Fehler: ' + e.message, 'error');
+    }
+  }
+
+  function applyPreset(preset) {
+    setEditCode(preset.code);
+    if (!editName) setEditName(preset.label);
+    setShowPresets(false);
+  }
+
+  const currentPresets = PRESETS[role] || [];
+
+  return (
+    <div className="nav-view">
+      {/* ── Role Tabs ─────────────────────────────────────────────────────── */}
+      <div className="nav-type-tabs">
+        {ROLE_TABS.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            className={`nav-type-tab ${role === id ? 'active' : ''}`}
+            onClick={() => { setRole(id); handleCancel(); }}
+          >
+            <Icon size={16} />
+            <span>{label}</span>
+          </button>
+        ))}
+        <button
+          className={`nav-type-tab nav-docs-toggle ${showDocs ? 'active' : ''}`}
+          onClick={() => setShowDocs(v => !v)}
+          title={showDocs ? 'Dokumentation ausblenden' : 'Dokumentation einblenden'}
+        >
+          <BookOpen size={16} />
+          <span>Doku</span>
+        </button>
+      </div>
+
+      <div className="nav-body">
+        {/* ── Left: list ──────────────────────────────────────────────────── */}
+        <div className="nav-list-panel">
+          <div className="nav-list-header">
+            <h3 className="nav-list-title">{roleLabel}</h3>
+            <button className="btn-icon-label" onClick={handleNew} title={`Neue${entityAccusativeSuffix} ${entityNoun} erstellen`}>
+              <Plus size={15} /> Neu
+            </button>
+          </div>
+
+          {isLoading && !editing ? (
+            <div className="nav-empty-hint">Lädt…</div>
+          ) : filteredList.length === 0 ? (
+            <div className="nav-empty-hint">
+              {isFooter ? 'Noch kein Footer angelegt.' : isWidget ? 'Noch keine Widgets angelegt.' : 'Noch keine Navigationen dieses Typs.'}<br />
+              <button className="nav-empty-cta" onClick={handleNew}>
+                {isFooter ? 'Ersten Footer erstellen' : isWidget ? 'Erstes Widget erstellen' : 'Erste Navigation erstellen'}
+              </button>
+            </div>
+          ) : (
+            <ul className="nav-template-list">
+              {filteredList.map(item => (
+                <li
+                  key={item.id}
+                  className={`nav-template-card ${editing?.id === item.id ? 'selected' : ''} ${isExclusiveActiveRole && item.isActive ? 'is-active' : ''}`}
+                >
+                  <div className="nav-card-info">
+                    <span className="nav-card-name">{item.name}</span>
+                    {item.isResponsiveCombined && (
+                      <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
+                        Responsive Combo
+                      </span>
+                    )}
+                    {isExclusiveActiveRole && item.isActive && (
+                      <span className="nav-active-badge">
+                        <Check size={11} /> Aktiv
+                      </span>
+                    )}
+                  </div>
+                  <div className="nav-card-actions">
+                    {isExclusiveActiveRole && (
+                      <button
+                        className={`nav-card-btn activate ${item.isActive ? 'deactivate' : ''}`}
+                        onClick={() => handleActivate(item)}
+                        title={item.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                      >
+                        {item.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                      </button>
+                    )}
+                    <button className="nav-card-btn edit" onClick={() => handleEdit(item)} title="Bearbeiten">
+                      <Edit2 size={13} />
+                    </button>
+                    <button className="nav-card-btn delete" onClick={() => handleDelete(item)} title="Löschen">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* ── Right: Editor panel ─────────────────────────────────────────── */}
+        {editing ? (
+          <div className="nav-editor-panel">
+            <div className="nav-editor-header">
+              <input
+                className="nav-name-input"
+                type="text"
+                placeholder={`Name diese${isFooter ? 's Footers' : isWidget ? 's Widgets' : 'r Navigation'}…`}
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+              />
+              <div className="nav-editor-actions">
+                {currentPresets.length > 0 && (
+                  <button className="nav-card-btn" onClick={() => setShowPresets(v => !v)} title="Preset-Galerie">
+                    <Layout size={14} /> Presets
+                  </button>
+                )}
+                <button className="nav-card-btn" onClick={handleCancel} title="Abbrechen">
+                  <X size={14} /> Abbrechen
+                </button>
+                <button className="nav-card-btn save" onClick={handleSave} disabled={isSaving} title="Speichern">
+                  <Check size={14} /> {isSaving ? 'Speichert…' : 'Speichern'}
+                </button>
+              </div>
+            </div>
+
+            {/* Preset Gallery */}
+            {showPresets && (
+              <div className="nav-preset-gallery">
+                <div className="nav-preset-gallery-head">
+                  <span>Preset wählen</span>
+                  <button className="preset-close" onClick={() => setShowPresets(false)}><X size={13} /></button>
+                </div>
+                <div className="nav-preset-grid">
+                  {currentPresets.map(preset => (
+                    <button key={preset.label} className="nav-preset-card" onClick={() => applyPreset(preset)}>
+                      <span className="preset-name">{preset.label}</span>
+                      <span className="preset-desc">{preset.description}</span>
+                      <span className="preset-use">
+                        Verwenden <ChevronRight size={12} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isFooter || isWidget ? (
+              <div className="nav-editor-code" style={{ height: '60vh' }}>
+                <div className="nav-panel-label">Mustache-Template</div>
+                <div className="nav-monaco-wrap">
+                  <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                </div>
+              </div>
+            ) : (
+              <div className="nav-editor-split">
+                <div className="nav-editor-code">
+                  <div className="nav-panel-label">Mustache-Template</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                  </div>
+                </div>
+                <div className="nav-editor-preview">
+                  <div className="nav-panel-label">navigation.css</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor
+                      value={navigationCssCode}
+                      onChange={value => setNavigationCssCode(value || '')}
+                      language="css"
+                      height="100%"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button
+                      className="nav-card-btn save"
+                      onClick={handleSaveNavigationCss}
+                      disabled={isSavingNavigationCss}
+                      title="navigation.css speichern"
+                    >
+                      <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
+                    </button>
+                  </div>
+                  <div className="nav-preview-hint">
+                    Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
+                  </div>
+                  <div className="nav-preview-hint">
+                    Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Placeholder reference */}
+            <div className="nav-placeholder-ref">
+              {isFooter ? (
+                <>
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  der Footer wird am Ende des Seiten-Layouts eingefügt, wenn er aktiv ist.
+                </>
+              ) : isWidget ? (
+                <>
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  das Widget wird über einen eigenen Block im Seiten-Editor platziert (Template-Auswahl am
+                  Block → „Widget: {editName.trim() || '…'}").
+                </>
+              ) : (
+                <>
+                  <strong>Platzhalter:</strong>
+                  <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
+                  <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
+                  {role === 'PAGE' && editName.trim() && (
+                    <>
+                      {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="nav-editor-panel nav-editor-empty">
+            {isFooter ? (
+              <>
+                <Layers size={40} strokeWidth={1} />
+                <p>Footer aus der Liste wählen oder einen neuen erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Nur ein aktiver Footer wird gerendert, am Ende des Seiteninhalts.
+                </p>
+              </>
+            ) : isWidget ? (
+              <>
+                <Sidebar size={40} strokeWidth={1} />
+                <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Widgets brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite als
+                  eigener Block platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"), beliebig oft
+                  und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie Sidebars,
+                  Info- oder CTA-Boxen. Nur <code>{`{{global.<key>}}`}</code> steht zur Verfügung — keine
+                  seitenbaum-spezifischen Daten wie bei Navigationen.
+                </p>
+              </>
+            ) : (
+              <>
+                <Compass size={40} strokeWidth={1} />
+                <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
+                  Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
+                  (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
+                  <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
+                  Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
+                  im Reiter „Navigation" per Klick einfügen.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Right: Docs panel ────────────────────────────────────────────── */}
+        {showDocs && (
+          <aside className="nav-docs-panel">
+            <div className="nav-docs-header">
+              <BookOpen size={15} />
+              <span>{isFooter ? 'Wie der Footer funktioniert' : isWidget ? 'Wie Widgets funktionieren' : 'Wie Navigationen funktionieren'}</span>
+              <button className="nav-docs-close" onClick={() => setShowDocs(false)} title="Dokumentation ausblenden">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="nav-docs-body">
+              {role === 'FOOTER' ? (
+                <div className="nav-docs-group">
+                  <div className="nav-docs-heading">Genau ein aktiver Footer</div>
+                  <p>
+                    Es kann beliebig viele Footer-Vorlagen geben, aber nur der als „aktiv" markierte wird
+                    tatsächlich gerendert — am Ende des Seiteninhalts, auf jeder Seite.
+                  </p>
+                  <p>
+                    Im Code stehen globale Variablen über <code>{`{{global.<key>}}`}</code> zur Verfügung
+                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen".
+                  </p>
+                </div>
+              ) : isWidget ? (
+                <>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Freie, wiederverwendbare Inhaltsbausteine</div>
+                    <p>
+                      Ein Widget hat — anders als Footer/Hauptnavigation — kein Aktivierungskonzept und
+                      keinen festen Platz im Layout. Es wird wie ein Baustein gezielt in genau den Seiten
+                      platziert, in denen es gebraucht wird, beliebig oft und unabhängig vom Seitenbaum.
+                      Gedacht für Dinge wie Sidebars, Info- oder CTA-Boxen, die an mehreren Stellen
+                      wiederverwendet werden sollen, ohne den Inhalt mehrfach zu pflegen.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Einbinden im Seiten-Editor</div>
+                    <p>
+                      An einem Block die Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das
+                      gewünschte Widget wählen — der Block zeigt dann live den Widget-Inhalt.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variablen</div>
+                    <p>
+                      Nur <code>{`{{global.<key>}}`}</code> (globale Variablen, z. B. Firmenname, Logo)
+                      steht zur Verfügung — keine seitenbaum-spezifischen Daten wie <code>pages</code>,
+                      <code>anchors</code> oder <code>childPages</code> bei Navigationen.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Zwei Typen</div>
+                    <p>
+                      <strong>Hauptnavigation (MAIN)</strong>: site-weit, genau eine ist „aktiv" und wird
+                      automatisch in jede Seite eingebunden.
+                    </p>
+                    <p>
+                      <strong>Seitennavigation (PAGE)</strong>: braucht keine Aktivierung. Sie wird wie ein
+                      Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
+                      können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
+                      selben Template auftauchen.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Drei Wege, eine PAGE-Nav einzubinden</div>
+                    <ol className="nav-docs-list">
+                      <li><strong>Seiten-Navigationsauswahl</strong> — im Seitenbaum einer Seite eine
+                        Navigation zuweisen. Rendert über <code>{`{{{nav:page}}}`}</code>. Nur ein Slot pro
+                        Seite.</li>
+                      <li><strong>Navigations-Block</strong> — im Seiten-Editor als eigenen Block einfügen,
+                        auch mehrfach mit unterschiedlichen Navs. Nutzen, sobald mehr als eine PAGE-Nav auf
+                        derselben Seite gebraucht wird.</li>
+                      <li><strong>Direkt im Template-Code</strong> — Platzhalter
+                        <code>{`{{{nav:<name>}}}`}</code> per Hand schreiben oder im Template-Editor im
+                        Reiter „Navigation" per Klick einfügen.</li>
+                    </ol>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Platzhalter: Nav einbinden</div>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>{`{{{nav:main}}}`}</code></td><td>aktive Hauptnavigation (wird automatisch am Seitenanfang ergänzt, falls nicht referenziert)</td></tr>
+                        <tr><td><code>{`{{{nav:page}}}`}</code></td><td>Seiten-Navigationsauswahl (Standard-Slot)</td></tr>
+                        <tr><td><code>{`{{{nav:<name>}}}`}</code></td><td>eine bestimmte PAGE-Nav namentlich</td></tr>
+                        <tr><td><code>{`{{{nav:mobile}}}`}</code></td><td>aktive Mobile-Navigation</td></tr>
+                        <tr><td><code>{`{{{nav:auto}}}`}</code></td><td>automatisch aus dem Seitenbaum generiert, kein eigenes Template nötig</td></tr>
+                      </tbody>
+                    </table>
+                    <p className="nav-docs-note">
+                      Der Name-Platzhalter wird aus dem Navigationsnamen abgeleitet (Kleinschreibung,
+                      Sonderzeichen → „-"). Ergeben zwei Namen denselben Platzhalter, hängt die zweite
+                      Navigation automatisch „-2" an — eigenen Platzhalter beim Bearbeiten einer Navigation
+                      live prüfen.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variablen: <code>{`{{#pages}}`}</code> / <code>{`{{#children}}`}</code> (MAIN/MOBILE)</div>
+                    <p>Schleife über den Seitenbaum. Jedes Element:</p>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>slug</code></td><td>vollständiger Pfad inkl. Eltern, z. B. <code>ueber-uns/team</code></td></tr>
+                        <tr><td><code>title</code></td><td>Seitentitel</td></tr>
+                        <tr><td><code>hasChildren</code></td><td>nur zum Verzweigen (<code>{`{{#hasChildren}}`}</code>), kein Text</td></tr>
+                        <tr><td><code>children</code></td><td>Unterseiten, gleiche Struktur, rekursiv</td></tr>
+                        <tr><td><code>isCurrent</code></td><td>aktive Seite hervorheben — <strong>nicht</strong> auf Startseite/Static-Export verfügbar</td></tr>
+                        <tr><td><code>data</code></td><td>freies Datenfeld der Seite (z. B. <code>data.navImage</code>) — gleiche Einschränkung wie <code>isCurrent</code></td></tr>
+                      </tbody>
+                    </table>
+                    <p className="nav-docs-note">
+                      Innerhalb von <code>{`{{#children}}`}</code> zeigen <code>{`{{slug}}`}</code>/<code>{`{{title}}`}</code>
+                      wieder auf die Unterseite, nicht die Elternseite.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variable: <code>{`{{#childPages}}`}</code> (nur PAGE-Navs)</div>
+                    <p>
+                      Direkte Unterseiten <strong>der gerade angezeigten Seite</strong> — serverseitig pro
+                      Aufruf neu berechnet, kein manuelles Pflegen pro Seite. Gleiche Feldstruktur wie
+                      <code> pages</code>/<code>children</code>.
+                    </p>
+                    <pre className="nav-docs-code"><code>{`{{#childPages}}
+  <a href="/{{slug}}">{{title}}</a>
+{{/childPages}}
+{{^childPages}}
+  <p>Keine Unterseiten.</p>
+{{/childPages}}`}</code></pre>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading"><code>{`{{#anchors}}`}</code> vs. <code>{`{{#customAnchors}}`}</code> (nur PAGE-Navs)</div>
+                    <p>Beide: Sprungmarken auf der aktuellen Seite, Felder <code>anchorId</code> (Ziel-<code>id</code>, ohne <code>#</code>) und <code>title</code>.</p>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>anchors</code></td><td>Seiten-Editor → Einstellungen → „Anker-Navigation" — Dropdown, nur Blöcke mit gesetztem Anchor-ID-Feld, keine Tippfehler möglich</td></tr>
+                        <tr><td><code>customAnchors</code></td><td>„Freie Sprungmarken" — freie Texteingabe für Ziel-IDs aus eigenen Template-Feldern (z. B. eine Kicker-Überschrift, die selbst als <code>id</code> gerendert wird)</td></tr>
+                      </tbody>
+                    </table>
+                    <pre className="nav-docs-code"><code>{`{{#anchors}}
+  <a href="#{{anchorId}}">{{title}}</a>
+{{/anchors}}`}</code></pre>
+                    <p className="nav-docs-note">Beide Listen lassen sich in einer Navigation kombinieren (zwei Schleifen).</p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Mustache-Kurzreferenz</div>
+                    <table className="nav-docs-table">
+                      <tbody>
+                        <tr><td><code>{`{{feld}}`}</code></td><td>Wert, HTML-escaped</td></tr>
+                        <tr><td><code>{`{{{feld}}}`}</code></td><td>Wert roh (kein Escaping — für HTML-Inhalte)</td></tr>
+                        <tr><td><code>{`{{#liste}}…{{/liste}}`}</code></td><td>je Element wiederholen; bei Wahrheitswert: nur rendern wenn <code>true</code></td></tr>
+                        <tr><td><code>{`{{^liste}}…{{/liste}}`}</code></td><td>Gegenteil — nur rendern wenn leer/<code>false</code></td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Best Practices</div>
+                    <ul className="nav-docs-list">
+                      <li>Sprechenden Namen wählen — er wird zum Platzhalter (<code>{`{{{nav:<name>}}}`}</code>).</li>
+                      <li>Für eine simple, immer aktuelle Hauptnav <code>{`{{{nav:auto}}}`}</code> nutzen statt eigenes Template zu pflegen.</li>
+                      <li>Leerzustände mit <code>{`{{^liste}}…{{/liste}}`}</code> abfangen (z. B. „Keine Unterseiten vorhanden"), statt einer leeren, unsichtbaren Liste.</li>
+                      <li><code>aria-label</code> auf <code>{`<nav>`}</code> und <code>aria-current="page"</code> bei <code>{`{{#isCurrent}}`}</code> für Barrierefreiheit setzen.</li>
+                      <li><code>isCurrent</code>/<code>data</code> fehlen auf Startseite &amp; Static-Export — nicht als einzige Quelle für essenzielle Logik verwenden.</li>
+                      <li>Mehrere PAGE-Navs auf einer Seite: Navigations-Block statt Seiten-Navigationsauswahl (die ist nur 1× pro Seite verfügbar).</li>
+                      <li><code>anchors</code> für Blöcke mit Anchor-ID-Feld, <code>customAnchors</code> nur wenn die Ziel-<code>id</code> anderswo herkommt — vermeidet Tippfehler wo möglich.</li>
+                      <li>Für einen schnellen Start: Presets (Button oben) als Vorlage nehmen und anpassen, statt bei Null zu beginnen.</li>
+                    </ul>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Beispiel: Hauptnav mit aktivem Zustand &amp; Untermenü</div>
+                    <pre className="nav-docs-code"><code>{`<ul>
+  {{#pages}}
+  <li class="{{#isCurrent}}active{{/isCurrent}}">
+    <a href="/{{slug}}"{{#isCurrent}} aria-current="page"{{/isCurrent}}>
+      {{title}}
+    </a>
+    {{#hasChildren}}
+    <ul>
+      {{#children}}
+      <li><a href="/{{slug}}">{{title}}</a></li>
+      {{/children}}
+    </ul>
+    {{/hasChildren}}
+  </li>
+  {{/pages}}
+</ul>`}</code></pre>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Beispiel: eigenes Datenfeld (<code>data</code>)</div>
+                    <pre className="nav-docs-code"><code>{`{{#pages}}
+<li>
+  {{#data.navImage}}
+  <img src="{{data.navImage}}" alt="">
+  {{/data.navImage}}
+  <a href="/{{slug}}">{{title}}</a>
+</li>
+{{/pages}}`}</code></pre>
+                    <p className="nav-docs-note">Feld z. B. „Nav-Bild" im Seiten-Editor unter „Weitere Optionen".</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </aside>
+        )}
+      </div>
+    </div>
+  );
+}

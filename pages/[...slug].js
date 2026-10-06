@@ -34,6 +34,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
   )
   const [accessDenied, setAccessDenied] = useState(false)
+  const [passwordGate, setPasswordGate] = useState(null) // { pageId } | null
+  const [reloadToken, setReloadToken] = useState(0)
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
     if (debugRender) console.log(...args)
@@ -147,6 +149,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     })
 
     setLoading(true)
+    setPasswordGate(null)
 
     let cancelled = false
 
@@ -362,6 +365,25 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       }
       // ────────────────────────────────────────────────────────────────────
 
+      // ── Passwortschutz (entschärfte Variante ohne Mitgliedskonto) ───────
+      if (foundPage.passwordProtected) {
+        let unlocked = false;
+        try {
+          const lockRes = await fetch(`/api/pages/password-lock?pageId=${encodeURIComponent(foundPage.id)}`);
+          const lockData = lockRes.ok ? await lockRes.json() : { unlocked: false };
+          unlocked = Boolean(lockData.unlocked);
+        } catch (_e) {
+          unlocked = false;
+        }
+        if (!unlocked) {
+          if (cancelled) return;
+          setPasswordGate({ pageId: foundPage.id });
+          setLoading(false);
+          return;
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       // target "_self" ist bereits serverseitig in getServerSideProps als echte
       // HTTP-Weiterleitung abgefangen worden (siehe oben) — läuft dieser Code
       // trotzdem noch (z. B. Vorschau eines Entwurfs lokal, der dort nicht
@@ -521,6 +543,19 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
       }
 
+      const globalPages = { byId: {} };
+      try {
+        const widgetsRes = await fetch(`/api/global-pages?active=true&role=WIDGET&_t=${Date.now()}`);
+        if (widgetsRes.ok) {
+          const widgets = await widgetsRes.json();
+          for (const w of (Array.isArray(widgets) ? widgets : [])) {
+            if (w?.id) globalPages.byId[w.id] = { code: w.code };
+          }
+        }
+      } catch (e) {
+        console.warn('Widgets konnten nicht geladen werden:', e.message);
+      }
+
       const folderContents = {};
       try {
         const folderPaths = collectFolderBlockPaths(foundPage.blocks, templateCodes);
@@ -535,7 +570,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents)
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents, globalPages)
       if (cancelled) return
       setHtml(html)
       setLoading(false)
@@ -546,7 +581,25 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     })() // end IIFE
 
     return () => { cancelled = true }
-  }, [query.slug, session, sessionStatus])
+  }, [query.slug, session, sessionStatus, reloadToken])
+
+  async function submitPasswordUnlock(pageId, password) {
+    try {
+      const res = await fetch('/api/pages/password-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pageId, password }),
+      })
+      if (res.ok) {
+        setReloadToken(k => k + 1)
+        return { ok: true }
+      }
+      const data = await res.json().catch(() => ({}))
+      return { ok: false, error: data.error || 'Falsches Passwort.' }
+    } catch (_e) {
+      return { ok: false, error: 'Ein Fehler ist aufgetreten. Bitte versuche es erneut.' }
+    }
+  }
 
   useEffect(() => {
     loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
@@ -686,6 +739,16 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       </div>
     </>
   )
+  if (passwordGate) return (
+    <>
+      <SeoHead meta={seoMeta} />
+      <div style={{ padding: '60px 24px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+        <h1 style={{ fontSize: '2rem', marginBottom: '12px' }}>Geschützter Bereich</h1>
+        <p style={{ color: '#6b7280', marginBottom: '8px' }}>Diese Seite ist passwortgeschützt. Bitte gib das Passwort ein.</p>
+        <PasswordGateForm onSubmit={(password) => submitPasswordUnlock(passwordGate.pageId, password)} />
+      </div>
+    </>
+  )
   if (!page) return (
     <>
       <SeoHead meta={seoMeta} />
@@ -708,6 +771,44 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         </div>
       )}
     </div>
+  )
+}
+
+function PasswordGateForm({ onSubmit }) {
+  const [value, setValue] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!value || submitting) return
+    setSubmitting(true)
+    setError('')
+    const result = await onSubmit(value)
+    setSubmitting(false)
+    if (!result.ok) setError(result.error)
+  }
+
+  return (
+    <form onSubmit={handleSubmit} style={{ display: 'inline-block', textAlign: 'left', marginTop: '16px' }}>
+      <input
+        type="password"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        placeholder="Passwort"
+        autoFocus
+        autoComplete="current-password"
+        style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '0.95rem', marginRight: '8px' }}
+      />
+      <button
+        type="submit"
+        disabled={submitting}
+        style={{ padding: '10px 18px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 600, cursor: 'pointer' }}
+      >
+        {submitting ? 'Prüfe…' : 'Bestätigen'}
+      </button>
+      {error && <p style={{ color: '#991b1b', marginTop: '10px', fontSize: '0.875rem' }}>{error}</p>}
+    </form>
   )
 }
 

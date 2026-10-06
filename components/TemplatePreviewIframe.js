@@ -181,7 +181,7 @@ export default function TemplatePreviewIframe({ code, height = 400 }) {
     <div className="template-preview-wrapper">
       <iframe
         ref={iframeRef}
-        title="Template Preview"
+        title="Template-Vorschau"
         sandbox="allow-scripts"
         className="template-preview-iframe"
         style={{ height: typeof height === 'number' ? `${height}px` : height }}

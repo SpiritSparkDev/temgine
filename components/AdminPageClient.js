@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Compass, Type, Rss, Mail, Shield, Palette, Functions, Layers, Tag, Cookie } from '../lib/muiIcons';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Type, Rss, Mail, Shield, Palette, Functions, Tag, Cookie } from '../lib/muiIcons';
 import pkg from '../package.json';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
@@ -17,8 +17,6 @@ import BackupView from './BackupView';
 import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import ErrorBoundary from './ErrorBoundary';
-import NavigationView from './NavigationView';
-import FooterView from './FooterView';
 import ContactFormTemplatesView from './ContactFormTemplatesView';
 import CookieConsentView from './CookieConsentView';
 import GlobalVariablesView from './GlobalVariablesView';
@@ -42,7 +40,7 @@ export default function AdminPageClient() {
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
   const [settingsTab, setSettingsTab] = useState('users');
-  const [adminLogo, setAdminLogo] = useState('/assets/light.png');
+  const [adminLogo, setAdminLogo] = useState('/brand/light.png');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [membersTab, setMembersTab] = useState('members');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -50,7 +48,7 @@ export default function AdminPageClient() {
 
   // Eigenes Admin-Logo (Einstellungen → Erscheinungsbild); lädt beim Start und nach Änderungen
   useEffect(() => {
-    const loadLogo = () => fetch('/api/settings').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setAdminLogo(d.admin_logo_url || '/assets/light.png'); }).catch(() => {});
+    const loadLogo = () => fetch('/api/settings').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setAdminLogo(d.admin_logo_url || '/brand/light.png'); }).catch(() => {});
     loadLogo();
     window.addEventListener('admin-logo-changed', loadLogo);
     return () => window.removeEventListener('admin-logo-changed', loadLogo);
@@ -108,7 +106,7 @@ export default function AdminPageClient() {
       const legacyBuilderMap = {
         templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','js','navigation','footer','contactForms','cookies','globalVariables','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','js','contactForms','cookies','globalVariables','users','settings','backup'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -499,8 +497,6 @@ export default function AdminPageClient() {
       { id: 'css', label: 'CSS' },
       { id: 'js', label: 'JS' },
       { id: 'fonts', label: 'Fonts' },
-      { id: 'navigation', label: 'Navigation' },
-      { id: 'footer', label: 'Footer' },
       { id: 'globalVariables', label: 'Globale Variablen' },
       { id: 'users', label: 'Benutzer' },
       { id: 'settings', label: 'Settings' },
@@ -677,7 +673,7 @@ export default function AdminPageClient() {
             <Menu size={18} />
           </button>
           <a href="/" className="admin-logo-link" title="Temgine CMS">
-            <img style={{ marginRight: '10px' }} src={adminLogo || '/assets/light.png'} alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Admin Bereich</h1>
+            <img style={{ marginRight: '10px' }} src={adminLogo || '/brand/light.png'} alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Admin Bereich</h1>
           </a>
         </div>
         <div className="admin-navbar-right">
@@ -730,10 +726,8 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
               <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
-              <li><button className={`menu-item ${view==='navigation'?'active':''}`} onClick={() => handleSelectView('navigation')}><Compass size={18} /> Navigation</button></li>
               <li><button className={`menu-item ${view==='contactForms'?'active':''}`} onClick={() => handleSelectView('contactForms')}><Mail size={18} /> Kontaktformulare</button></li>
               <li><button className={`menu-item ${view==='cookies'?'active':''}`} onClick={() => handleSelectView('cookies')}><Cookie size={18} /> Cookies</button></li>
-              <li><button className={`menu-item ${view==='footer'?'active':''}`} onClick={() => handleSelectView('footer')}><Layers size={18} /> Footer</button></li>
               <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
 
               <li className="menu-group-label">Design</li>
@@ -868,10 +862,8 @@ export default function AdminPageClient() {
               </div>
             </div>
           )}
-          {view === 'navigation' && <NavigationView showToast={showToast} />}
           {view === 'contactForms' && <ContactFormTemplatesView showToast={showToast} />}
           {view === 'cookies' && <CookieConsentView showToast={showToast} />}
-          {view === 'footer' && <FooterView showToast={showToast} />}
           {view === 'globalVariables' && <GlobalVariablesView showToast={showToast} />}
           {view === 'users' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 const TAB_KEY = 'temgine_settings_tab';
-const DEFAULT_LOGO = '/assets/light.png';
+const DEFAULT_LOGO = '/brand/light.png';
 
 const TABS = [
   { id: 'general', label: 'Allgemein' },
@@ -176,6 +177,11 @@ export default function SettingsView({ showToast }) {
     saveEntries('retention', [['revisionRetentionDays', n]], 'Einstellung gespeichert');
   };
 
+  const handleRichTextMode = async (next) => {
+    setValues((prev) => ({ ...prev, [RICH_TEXT_EDITOR_MODE_KEY]: next }));
+    await saveEntries('rtmode', [[RICH_TEXT_EDITOR_MODE_KEY, next]], `Rich-Text-Editor gespeichert: ${next === 'wysiwyg' ? 'WYSIWYG' : 'Markdown'}`);
+  };
+
   // --- Admin-Logo ---
   const announceLogoChange = () => window.dispatchEvent(new Event('admin-logo-changed'));
 
@@ -296,6 +302,15 @@ export default function SettingsView({ showToast }) {
               </Row>
               <Row label="Ordner per Drag-and-Drop" hint="Standardmäßig deaktiviert. Fehleranfällig, kann je nach Browser oder Dateistruktur unzuverlässig sein.">
                 <Toggle checked={folderDragDropEnabled} onChange={handleFolderDragDrop} disabled={saving === 'dragdrop'} label="Ordner per Drag-and-Drop ein-/ausschalten" />
+              </Row>
+            </Card>
+
+            <Card title="Rich-Text-Editor" description="Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge). In beiden Modi wird derselbe Markdown-Text gespeichert, ein Wechsel verändert keine bestehenden Inhalte.">
+              <Row label="Editor">
+                <select className="st-input st-input-narrow" value={val(RICH_TEXT_EDITOR_MODE_KEY, 'markdown') === 'wysiwyg' ? 'wysiwyg' : 'markdown'} onChange={(e) => handleRichTextMode(e.target.value)} disabled={saving === 'rtmode'}>
+                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
+                  <option value="wysiwyg">WYSIWYG (TipTap)</option>
+                </select>
               </Row>
             </Card>
 

@@ -65,7 +65,7 @@ export default async function handler(req, res) {
           return res.status(200).send(content)
         } catch (e) {
           console.error('Failed to read backup:', e.message)
-          return res.status(500).json({ error: 'Failed to read backup', details: e.message })
+          return res.status(500).json({ error: 'Backup konnte nicht gelesen werden', details: e.message })
         }
       }
 
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
         })
       } catch (e) {
         console.error('Failed to save backup:', e.message)
-        return res.status(500).json({ error: 'Failed to save backup', details: e.message })
+        return res.status(500).json({ error: 'Backup konnte nicht gespeichert werden', details: e.message })
       }
     }
 
@@ -143,11 +143,11 @@ export default async function handler(req, res) {
         }
       } catch (e) {
         console.error('Failed to delete backup:', e.message)
-        return res.status(500).json({ error: 'Failed to delete backup', details: e.message })
+        return res.status(500).json({ error: 'Backup konnte nicht gelöscht werden', details: e.message })
       }
     }
 
-    res.status(405).json({ error: 'Method not allowed' })
+    res.status(405).json({ error: 'Methode nicht erlaubt' })
   } catch (e) {
     console.error('[/api/admin/backups] Error:', e.message, e.stack)
     res.status(500).json({ error: 'Server error', details: e.message })

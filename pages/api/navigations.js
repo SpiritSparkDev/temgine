@@ -40,7 +40,9 @@ export default async function handler(req, res) {
         return res.status(200).json(navs);
       }
 
-      // Full list (with responsive marker, but without code body) — used by NavigationView
+      // Full list (with responsive marker, but without code body) — legacy
+      // endpoint, kept for backward compatibility (see lib/navigationStore.js);
+      // the admin UI now uses /api/global-pages (components/GlobalPagesView.js)
       const navs = listNavigations().filter((n) => VALID_TYPES.includes(n.type));
       navs.sort((a, b) => (a.type === b.type ? String(a.createdAt).localeCompare(String(b.createdAt)) : a.type.localeCompare(b.type)));
 

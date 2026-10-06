@@ -98,9 +98,19 @@ services:
       ROBOTS_DISALLOW: ${ROBOTS_DISALLOW:-}
       ROBOTS_CRAWL_DELAY: ${ROBOTS_CRAWL_DELAY:-}
       ROBOTS_REQUEST_RATE: ${ROBOTS_REQUEST_RATE:-}
+    # Nur die tatsächlich zur Laufzeit veränderlichen Unterordner werden gemountet
+    # (muss zur Liste in .dockerignore passen) — ein einzelner "./public:/app/public"-
+    # Mount würde den GESAMTEN public/-Ordner des Image überdecken, inklusive
+    # statischer, ins Image gebackener Inhalte wie public/brand (Logo, Font), die
+    # dann nur erscheinen, wenn der Host-Ordner sie zufällig auch schon enthält.
     volumes:
       - ./data:/app/data
-      - ./public:/app/public
+      - ./public/uploads:/app/public/uploads
+      - ./public/extern_css:/app/public/extern_css
+      - ./public/extern_js:/app/public/extern_js
+      - ./public/assets/template:/app/public/assets/template
+      - ./public/assets/template_blog:/app/public/assets/template_blog
+      - ./public/__live:/app/public/__live
     # Fixed, single host port on purpose (no range fallback): a reverse proxy
     # in front (Plesk, nginx, ...) needs a known, stable port to forward to.
     ports:

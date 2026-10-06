@@ -4,7 +4,8 @@ import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, C
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
-import RichTextEditor from './RichTextEditor';
+import SmartRichTextEditor from './SmartRichTextEditor';
+import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
@@ -39,8 +40,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return normalized.slice(NAV_TEMPLATE_VALUE_PREFIX.length).trim() || null;
   };
 
+  const WIDGET_TEMPLATE_VALUE_PREFIX = '__widget__:';
+  const WIDGET_TEMPLATE_LABEL_PREFIX = 'Widget: ';
+
+  const makeWidgetTemplateValue = (id) => `${WIDGET_TEMPLATE_VALUE_PREFIX}${id}`;
+  const parseWidgetTemplateValue = (value) => {
+    const normalized = String(value || '');
+    if (!normalized.startsWith(WIDGET_TEMPLATE_VALUE_PREFIX)) return null;
+    return normalized.slice(WIDGET_TEMPLATE_VALUE_PREFIX.length).trim() || null;
+  };
+
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
+  const richTextEditorMode = useRichTextEditorMode();
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -59,6 +71,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [isHomepage, setIsHomepage] = useState(false);
   const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
   const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
+  // Passwortschutz "ohne Konto" (Alternative zu accessGroups, siehe AccessGroupsPanel).
+  // passwordProtected spiegelt nur, ob der Server aktuell einen Hash gespeichert hat —
+  // der Hash selbst wird nie an den Client geschickt. newAccessPassword/clearAccessPassword
+  // sind transiente Eingaben, die erst beim Speichern in lib/pageAccessPassword.js gehasht
+  // bzw. gelöscht werden.
+  const [passwordProtected, setPasswordProtected] = useState(false);
+  const [newAccessPassword, setNewAccessPassword] = useState('');
+  const [clearAccessPassword, setClearAccessPassword] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
@@ -71,7 +91,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [fileModalMode, setFileModalMode] = useState('file');
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
-  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-seo', 'outline-workflow']));
+  const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-datafields', 'outline-access', 'outline-seo', 'outline-workflow']));
+  const [showAnchorsModal, setShowAnchorsModal] = useState(false);
+  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [scrollTick, setScrollTick] = useState(0); // erzwingt Scroll/Fokus auch bei erneutem Klick auf dieselbe Stelle
   const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
@@ -100,6 +122,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [blogChannels, setBlogChannels] = useState([]);
   const [blogTemplates, setBlogTemplates] = useState([]);
   const [pageNavigations, setPageNavigations] = useState([]);
+  const [globalWidgets, setGlobalWidgets] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
   const fieldNodeRefs = useRef({});
@@ -209,6 +232,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       id: String(nav.id || '').trim(),
     }))
     .filter(opt => opt.id);
+  const widgetOptions = [...globalWidgets]
+    .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || ''), 'de', { sensitivity: 'base' }))
+    .map(w => ({
+      value: makeWidgetTemplateValue(String(w.id || '')),
+      label: `${WIDGET_TEMPLATE_LABEL_PREFIX}${String(w.name || '').trim()}`,
+      id: String(w.id || '').trim(),
+    }))
+    .filter(opt => opt.id);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
@@ -228,6 +259,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
+      const initialPasswordProtected = Boolean(page.passwordProtected);
       const initialPageFieldsTemplate = page.template || '';
 
       setTitle(page.title || '');
@@ -240,6 +272,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectTarget(initialRedirectTarget);
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
+      setPasswordProtected(initialPasswordProtected);
+      setNewAccessPassword('');
+      setClearAccessPassword(false);
       setSelectedBlockPath(migratedBlocks.length > 0 ? '0' : '');
       // Minimized-block state is an editor-only UI preference (not page content),
       // so it lives in localStorage per page rather than being saved to the DB.
@@ -530,6 +565,22 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     };
     loadPageNavigations();
+  }, []);
+
+  useEffect(() => {
+    // Lade Widgets für Widget-Blöcke
+    const loadGlobalWidgets = async () => {
+      try {
+        const res = await fetch('/api/global-pages?role=WIDGET');
+        if (res.ok) {
+          const data = await res.json();
+          setGlobalWidgets(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        // Silently ignore — widgets are optional
+      }
+    };
+    loadGlobalWidgets();
   }, []);
 
   useEffect(() => {
@@ -1032,6 +1083,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const parts = String(path).split('.').map(p => parseInt(p, 10));
     const selectedChannelSlug = parseChannelTemplateValue(templateName);
     const selectedNavigationId = parseNavTemplateValue(templateName);
+    const selectedWidgetId = parseWidgetTemplateValue(templateName);
     let cur = copy;
     for (let i = 0; i < parts.length; i++) {
       const idx = parts[i];
@@ -1055,8 +1107,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           break;
         }
 
+        if (selectedWidgetId) {
+          cur[idx].type = 'global-page';
+          cur[idx].template = '';
+          cur[idx].props = { globalPageId: selectedWidgetId };
+          break;
+        }
+
         cur[idx].template = templateName || '';
-        if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation') {
+        if (cur[idx].type === 'blog-channel' || cur[idx].type === 'navigation' || cur[idx].type === 'global-page') {
           cur[idx].type = 'content';
         }
 
@@ -1472,6 +1531,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     };
     delete updatedPage.redirectType;
     delete updatedPage.redirectUrl;
+    delete updatedPage.passwordProtected;
+    if (newAccessPassword) {
+      updatedPage.newAccessPassword = newAccessPassword;
+    } else if (clearAccessPassword) {
+      updatedPage.clearAccessPassword = true;
+    }
 
     try {
       if (opts.autosave) {
@@ -1499,6 +1564,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         isHomepage,
         pageFieldsTemplate,
       });
+      if (newAccessPassword) setPasswordProtected(true);
+      else if (clearAccessPassword) setPasswordProtected(false);
+      setNewAccessPassword('');
+      setClearAccessPassword(false);
       setIsDirty(false);
       setAutosaveStatus('gespeichert');
       onDirtyChange?.(false);
@@ -1789,8 +1858,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 {(() => {
                   const v = block.type === 'blog-channel' ? makeChannelTemplateValue(block.props?.channelSlug || '')
                     : block.type === 'navigation' ? makeNavTemplateValue(block.props?.navigationId || '')
+                    : block.type === 'global-page' ? makeWidgetTemplateValue(block.props?.globalPageId || '')
                     : (block.template || '');
-                  const opt = [...channelTemplateOptions, ...navigationOptions].find(o => o.value === v);
+                  const opt = [...channelTemplateOptions, ...navigationOptions, ...widgetOptions].find(o => o.value === v);
                   return opt ? opt.label : (v || 'Kein Template (HTML)');
                 })()}
                 <ChevronDown size={12} />
@@ -2066,7 +2136,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item field-item-textarea">
                         <label className="field-label-xs">{label}</label>
                         <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                          <RichTextEditor value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                          <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                         </div>
                       </div>
                     );
@@ -2221,7 +2291,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
                                     <label className="field-label-xs">{formatLabel(sf.name)}</label>
                                     <div ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)} className="field-quill-wrapper">
-                                      <RichTextEditor
+                                      <SmartRichTextEditor
+                                        mode={richTextEditorMode}
                                         value={sfVal}
                                         onChange={val => {
                                           const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
@@ -2410,7 +2481,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Kein Template: freies HTML-Feld (rohes HTML nur für Admin/Moderator, siehe pages/api/pages.js) */}
-          {!block.template && !['text', 'gallery', 'blog-channel', 'navigation'].includes(block.type) && (
+          {!block.template && !['text', 'gallery', 'blog-channel', 'navigation', 'global-page'].includes(block.type) && (
             <div className="field-item field-item-textarea block-html-field">
               <label className="field-label-xs">HTML</label>
               {['ADMIN', 'MODERATOR'].includes(String(userRole || '').toUpperCase()) ? (
@@ -2424,11 +2495,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
           )}
 
+          {/* Widget-Block: Auswahl passiert im Template-Select oben; Inhalt wird im Widget selbst gepflegt */}
+          {block.type === 'global-page' && (
+            <div className="blog-channel-editor__preview">
+              <span style={{ fontSize: 11, opacity: .6 }}>Widget: </span>
+              <code style={{ fontSize: 11 }}>
+                {globalWidgets.find(w => w.id === block.props?.globalPageId)?.name || block.props?.globalPageId || '-'}
+              </code>
+            </div>
+          )}
+
           {!block.template && block.type === 'text' && (
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
               <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
-                <RichTextEditor value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                <SmartRichTextEditor mode={richTextEditorMode} value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
               </div>
             </>
           )}
@@ -2706,7 +2787,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 </div>
                 {selectedElementId && (
                   <div style={{ flex: 0.3, overflowY: 'auto', borderLeft: '1px solid #ddd', padding: '16px' }}>
-                    <h4 style={{ marginBottom: '12px' }}>Element Properties</h4>
+                    <h4 style={{ marginBottom: '12px' }}>Element-Eigenschaften</h4>
                     <ElementPropertyEditor
                       element={domLayout.find(el => el.id === selectedElementId)}
                       onChange={(updates) => {
@@ -2778,6 +2859,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 if (next.has(id)) next.delete(id); else next.add(id);
                 return next;
               });
+              const toggleOutline = (id) => setOutlineCollapsed(prev => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id); else next.add(id);
+                return next;
+              });
+              const OutlineHead = ({ id, icon, label }) => (
+                <button
+                  type="button"
+                  className="inspector-section-head"
+                  onClick={() => toggleOutline(id)}
+                  aria-expanded={!outlineCollapsed.has(id)}
+                >
+                  <span className="inspector-section-icon">{icon}</span>
+                  <span className="inspector-section-label">{label}</span>
+                  {outlineCollapsed.has(id) ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                </button>
+              );
               const selectedBlock = getBlockAtPath(selectedBlockPath);
 
               return (
@@ -2895,14 +2993,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   {/* ── Seite ─────────────────────────────── */}
                   <div className="inspector-section-divider" />
 
-                  {/* Einstellungen */}
+                  {/* Seite */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-settings') ? n.delete('outline-settings') : n.add('outline-settings'); return n; })} aria-expanded={!outlineCollapsed.has('outline-settings')}>
-                      <span className="inspector-section-icon">⚙</span>
-                      <span className="inspector-section-label">Einstellungen</span>
-                      {outlineCollapsed.has('outline-settings') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
-                    {!outlineCollapsed.has('outline-settings') && (
+                    <OutlineHead id="outline-page" icon="⚙" label="Seite" />
+                    {!outlineCollapsed.has('outline-page') && (
                       <div className="page-editor-outline-settings">
                         <label className="field-label-xs">Seitentitel</label>
                         <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Seitentitel" className="input-field-small" aria-label="Seitentitel" />
@@ -2930,7 +3024,29 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           In Navigation ausblenden
                         </label>
 
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Seiten-Datenfelder</label>
+                        <div className="inspector-more-actions">
+                          <button type="button" className="btn-modern-small" onClick={() => setShowAdvancedModal(true)}>
+                            🧩 Erweiterte Optionen…
+                            {(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
+                          </button>
+                          <button type="button" className="btn-modern-small" onClick={() => setShowAnchorsModal(true)}>
+                            ⚓ Sprungmarken verwalten…
+                            {(() => {
+                              const n = (Array.isArray(pageData.anchors) ? pageData.anchors.length : 0) + (Array.isArray(pageData.customAnchors) ? pageData.customAnchors.length : 0);
+                              return n > 0 ? <span className="inspector-more-badge">{n}</span> : null;
+                            })()}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seiten-Datenfelder */}
+                  <div className="inspector-section">
+                    <OutlineHead id="outline-datafields" icon="▤" label="Seiten-Datenfelder" />
+                    {!outlineCollapsed.has('outline-datafields') && (
+                      <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Vorlage</label>
                         <select
                           value={pageFieldsTemplate}
                           onChange={e => setPageFieldsTemplate(e.target.value)}
@@ -2968,8 +3084,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           );
                         })()}
                         <p className="blog-channel-editor__hint">Vorlagen dafür im Template Manager unter „Seiten-Datenfelder" anlegen. Ausgabe im Block-Template als <code>{'{{data.X}}'}</code> / <code>{'{{page.data.X}}'}</code>, in Navigationen pro Seite als <code>{'{{data.X}}'}</code> innerhalb <code>{'{{#pages}}'}</code>.</p>
+                      </div>
+                    )}
+                  </div>
 
-                        {/* Access Control */}
+                  {/* Zugriff */}
+                  <div className="inspector-section">
+                    <OutlineHead id="outline-access" icon="🔒" label="Zugriff" />
+                    {!outlineCollapsed.has('outline-access') && (
+                      <div className="page-editor-outline-settings">
                         <AccessGroupsPanel
                           accessGroups={accessGroups}
                           onChange={setAccessGroups}
@@ -2982,45 +3105,80 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                 .catch(() => {});
                             }
                           }}
+                          passwordProtected={passwordProtected}
+                          newAccessPassword={newAccessPassword}
+                          onPasswordChange={(value) => {
+                            setNewAccessPassword(value);
+                            setClearAccessPassword(false);
+                          }}
+                          onClearPassword={() => {
+                            setClearAccessPassword(true);
+                            setNewAccessPassword('');
+                            setPasswordProtected(false);
+                          }}
                         />
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Wrapper-Klasse</label>
-                        <input
-                          type="text"
-                          value={pageData.wrapperClass || ''}
-                          onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
-                          placeholder="z.B. page-home dark-theme"
-                          className="input-field-small"
-                          aria-label="CSS-Klasse für den Seiten-Wrapper"
-                        />
-                        <label className="field-label-xs">Wrapper-ID</label>
-                        <input
-                          type="text"
-                          value={pageData.wrapperId || ''}
-                          onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
-                          placeholder="z.B. main-page"
-                          className="input-field-small"
-                          aria-label="ID für den Seiten-Wrapper"
-                        />
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
-                        <div className="field-url-row">
+                      </div>
+                    )}
+                  </div>
+
+                  {showAdvancedModal && (
+                    <div className="file-modal-overlay" onClick={() => setShowAdvancedModal(false)}>
+                      <div className="file-modal inspector-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="file-modal-header">
+                          <h3 className="file-modal-title">Erweiterte Optionen</h3>
+                          <button onClick={() => setShowAdvancedModal(false)} className="file-modal-close-btn" aria-label="Schließen">×</button>
+                        </div>
+                        <div className="page-editor-outline-settings">
+                          <label className="field-label-xs">Wrapper-Klasse</label>
                           <input
                             type="text"
-                            value={pageData.navImage || ''}
-                            onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
-                            placeholder="Bild-URL"
-                            className="input-field-small field-input-full"
-                            aria-label="Navigations-Bild für diese Seite"
+                            value={pageData.wrapperClass || ''}
+                            onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
+                            placeholder="z.B. page-home dark-theme"
+                            className="input-field-small"
+                            aria-label="CSS-Klasse für den Seiten-Wrapper"
                           />
-                          <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
-                        </div>
-                        {pageData.navImage && (
-                          <div className="field-image-thumb-row">
-                            <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                          <label className="field-label-xs">Wrapper-ID</label>
+                          <input
+                            type="text"
+                            value={pageData.wrapperId || ''}
+                            onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
+                            placeholder="z.B. main-page"
+                            className="input-field-small"
+                            aria-label="ID für den Seiten-Wrapper"
+                          />
+                          <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
+                          <div className="field-url-row">
+                            <input
+                              type="text"
+                              value={pageData.navImage || ''}
+                              onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
+                              placeholder="Bild-URL"
+                              className="input-field-small field-input-full"
+                              aria-label="Navigations-Bild für diese Seite"
+                            />
+                            <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
                           </div>
-                        )}
-                        <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+                          {pageData.navImage && (
+                            <div className="field-image-thumb-row">
+                              <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                            </div>
+                          )}
+                          <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                        <label className="field-label-xs" style={{marginTop:'10px'}}>Anker-Navigation</label>
+                  {showAnchorsModal && (
+                    <div className="file-modal-overlay" onClick={() => setShowAnchorsModal(false)}>
+                      <div className="file-modal inspector-modal inspector-modal-wide" onClick={(e) => e.stopPropagation()}>
+                        <div className="file-modal-header">
+                          <h3 className="file-modal-title">Sprungmarken verwalten</h3>
+                          <button onClick={() => setShowAnchorsModal(false)} className="file-modal-close-btn" aria-label="Schließen">×</button>
+                        </div>
+                        <div className="page-editor-outline-settings">
+                        <label className="field-label-xs">Anker-Navigation</label>
                         {(() => {
                           const anchorBlocks = flattenBlocks(blocks).filter(({ block }) => String(block?.props?.anchorId || '').trim());
                           const anchorList = Array.isArray(pageData.anchors) ? pageData.anchors : [];
@@ -3155,17 +3313,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           );
                         })()}
                         <p className="blog-channel-editor__hint">Für Ziel-IDs, die nicht über das Anchor-ID-Feld eines Blocks kommen (z. B. eine <code>id</code>, die ein eigenes Template-Feld selbst rendert). Verfügbar in PAGE-Navigationen als <code>{'{{#customAnchors}}'}</code> (Felder <code>anchorId</code>, <code>title</code>) — freie Eingabe, keine Prüfung gegen vorhandene Blöcke.</p>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* SEO */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-seo') ? n.delete('outline-seo') : n.add('outline-seo'); return n; })} aria-expanded={!outlineCollapsed.has('outline-seo')}>
-                      <span className="inspector-section-icon">◎</span>
-                      <span className="inspector-section-label">SEO</span>
-                      {outlineCollapsed.has('outline-seo') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-seo" icon="◎" label="SEO" />
                     {!outlineCollapsed.has('outline-seo') && (
                       <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
                         <SeoPanel pageData={pageData} slug={slug} onChange={setPageData} />
@@ -3175,11 +3330,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
                   {/* Workflow */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-workflow') ? n.delete('outline-workflow') : n.add('outline-workflow'); return n; })} aria-expanded={!outlineCollapsed.has('outline-workflow')}>
-                      <span className="inspector-section-icon">◈</span>
-                      <span className="inspector-section-label">Workflow</span>
-                      {outlineCollapsed.has('outline-workflow') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-workflow" icon="◈" label="Workflow" />
                     {!outlineCollapsed.has('outline-workflow') && (
                       <div className="inspector-section-body" style={{ padding: '4px 0 0' }}>
                         <WorkflowPanel pageId={page?.id} status={pageStatus} userRole={userRole} onTransition={(s) => setPageStatus(s.toUpperCase())} />
@@ -3189,11 +3340,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
                   {/* Strukturvorschau */}
                   <div className="inspector-section">
-                    <button type="button" className="inspector-section-head" onClick={() => setOutlineCollapsed(prev => { const n = new Set(prev); n.has('outline-structure') ? n.delete('outline-structure') : n.add('outline-structure'); return n; })} aria-expanded={!outlineCollapsed.has('outline-structure')}>
-                      <span className="inspector-section-icon">▦</span>
-                      <span className="inspector-section-label">Strukturvorschau</span>
-                      {outlineCollapsed.has('outline-structure') ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
+                    <OutlineHead id="outline-structure" icon="▦" label="Strukturvorschau" />
                     {!outlineCollapsed.has('outline-structure') && (
                       <div className="page-editor-outline-structure">
                         <label className="page-editor-outline-toggle" style={{ marginBottom: '8px' }}>
@@ -3296,12 +3443,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         templateNames={blockTemplateNames}
         templateCodes={templateCodes}
         channelOptions={channelTemplateOptions}
-        navigationOptions={navigationOptions}
+        navigationOptions={[...navigationOptions, ...widgetOptions]}
         current={(() => {
           const b = templatePickerPath !== null ? getBlockAtPath(templatePickerPath) : null;
           if (!b) return '';
           return b.type === 'blog-channel' ? makeChannelTemplateValue(b.props?.channelSlug || '')
             : b.type === 'navigation' ? makeNavTemplateValue(b.props?.navigationId || '')
+            : b.type === 'global-page' ? makeWidgetTemplateValue(b.props?.globalPageId || '')
             : (b.template || '');
         })()}
         onSelect={(value) => { updateNestedBlockTemplate(templatePickerPath, value); setTemplatePickerPath(null); }}
@@ -3731,12 +3879,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 // writes to pageData[varName] via the injected onChange instead of a block
 // path — page fields have no nested-path/group/repeater support (v1 scope).
 function PageDataFieldInput({ varName, inputType, label, value, onChange, openFileModal, devTitle }) {
+  const richTextEditorMode = useRichTextEditorMode();
   if (inputType === 'textarea') {
     return (
       <div className="field-item field-item-textarea">
         <label className="field-label-xs">{label}</label>
         <div className="field-quill-wrapper">
-          <RichTextEditor value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+          <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
         </div>
       </div>
     );
@@ -3816,21 +3965,34 @@ function PageDataFieldInput({ varName, inputType, label, value, onChange, openFi
   );
 }
 
-function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGroups }) {
+function AccessGroupsPanel({
+  accessGroups, onChange, availableGroups, onLoadGroups,
+  passwordProtected, newAccessPassword, onPasswordChange, onClearPassword,
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [showPasswordInput, setShowPasswordInput] = useState(false);
 
-  const accessMode = accessGroups.length === 0
+  const accessMode = (passwordProtected || newAccessPassword)
+    ? 'password'
+    : accessGroups.length === 0
     ? 'public'
     : accessGroups[0] === '*'
     ? 'all-members'
     : 'specific';
 
   function handleModeChange(mode) {
-    if (mode === 'public') onChange([]);
-    else if (mode === 'all-members') onChange(['*']);
-    else {
-      onLoadGroups();
+    if (mode === 'password') {
       onChange([]);
+      setShowPasswordInput(!passwordProtected);
+    } else {
+      if (passwordProtected || newAccessPassword) onClearPassword();
+      setShowPasswordInput(false);
+      if (mode === 'public') onChange([]);
+      else if (mode === 'all-members') onChange(['*']);
+      else {
+        onLoadGroups();
+        onChange([]);
+      }
     }
     setExpanded(mode === 'specific');
   }
@@ -3856,6 +4018,7 @@ function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGrou
         <option value="public">Öffentlich (alle)</option>
         <option value="all-members">Alle Mitglieder</option>
         <option value="specific">Bestimmte Gruppen</option>
+        <option value="password">Passwortgeschützt (ohne Konto)</option>
       </select>
       {accessMode === 'specific' && (
         <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
@@ -3872,6 +4035,34 @@ function AccessGroupsPanel({ accessGroups, onChange, availableGroups, onLoadGrou
               {g.name}
             </label>
           ))}
+        </div>
+      )}
+      {accessMode === 'password' && (
+        <div style={{ marginTop: '6px', paddingLeft: '2px' }}>
+          {passwordProtected && !showPasswordInput ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
+              <span style={{ color: '#059669' }}>Passwort ist gesetzt.</span>
+              <button
+                type="button"
+                onClick={() => setShowPasswordInput(true)}
+                style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', padding: 0, fontSize: '0.85rem', textDecoration: 'underline' }}
+              >
+                Ändern
+              </button>
+            </div>
+          ) : (
+            <input
+              type="password"
+              className="input-field-small"
+              placeholder="Neues Passwort für diesen Bereich"
+              value={newAccessPassword}
+              onChange={e => onPasswordChange(e.target.value)}
+              autoComplete="new-password"
+            />
+          )}
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>
+            Besucher*innen müssen dieses Passwort eingeben, um die Seite zu sehen — kein Mitgliedskonto nötig.
+          </p>
         </div>
       )}
     </div>

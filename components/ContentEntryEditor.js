@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AlertCircle, Save, X, Trash2 } from '../lib/muiIcons';
 import Toast from './Toast';
-import RichTextEditor from './RichTextEditor';
+import SmartRichTextEditor from './SmartRichTextEditor';
+import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 
 /**
  * ContentEntryEditor - Form-based editor for content entries based on a content model
@@ -15,6 +16,7 @@ export default function ContentEntryEditor({
   onDelete = null,
   showToast = null,
 }) {
+  const richTextEditorMode = useRichTextEditorMode();
   const [values, setValues] = useState({});
   const [errors, setErrors] = useState({});
   const [isDirty, setIsDirty] = useState(false);
@@ -289,7 +291,8 @@ export default function ContentEntryEditor({
           <div key={field.key} className={containerCls}>
             <FieldLabel />
             <div className="cee-richtext-wrap">
-              <RichTextEditor
+              <SmartRichTextEditor
+                mode={richTextEditorMode}
                 value={value}
                 onChange={v => handleFieldChange(field.key, v)}
                 readOnly={isSaving}
@@ -376,113 +379,6 @@ export default function ContentEntryEditor({
             />
             <FieldErrors />
             <FieldHelp />
-          </div>
-        );
-    }
-  };
-            </div>
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
-          </div>
-        );
-
-      case 'date':
-        return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
-            <input
-              type="date"
-              {...commonProps}
-            />
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
-          </div>
-        );
-
-      case 'select':
-        return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">
-              {field.name}
-              {field.required && <span className="required-mark">*</span>}
-            </label>
-            <select
-              {...commonProps}
-            >
-              <option value="">-- Bitte auswählen --</option>
-              {(field.options || []).map(opt => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
-          </div>
-        );
-
-      case 'checkbox':
-        return (
-          <div key={field.key} className={`${containerClass} checkbox-container`}>
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={Boolean(value)}
-                onChange={e => handleFieldChange(field.key, e.target.checked ? 1 : 0)}
-                disabled={isSaving}
-              />
-              <span>{field.name}</span>
-            </label>
-            {hasError && (
-              <div className="field-errors">
-                {errorMessages.map((msg, i) => (
-                  <div key={i} className="error-message">
-                    <AlertCircle size={14} /> {msg}
-                  </div>
-                ))}
-              </div>
-            )}
-            {field.helpText && <div className="field-help">{field.helpText}</div>}
-          </div>
-        );
-
-      default:
-        return (
-          <div key={field.key} className={containerClass}>
-            <label className="form-label">{field.name}</label>
-            <input
-              type="text"
-              {...commonProps}
-              placeholder={`Feld-Typ ${field.type} nicht unterstützt`}
-              disabled
-            />
           </div>
         );
     }
@@ -832,187 +728,6 @@ export default function ContentEntryEditor({
         .cee-btn-danger:not(:disabled):hover {
           background: rgba(239,68,68,0.08);
           border-color: #ef4444;
-        }
-      `}</style>
-    </div>
-  );
-}
-        .content-entry-editor {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          gap: 16px;
-          padding: 16px;
-          background: var(--bg-primary);
-          color: var(--text-primary);
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell;
-        }
-
-        .content-entry-editor-empty {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          opacity: 0.5;
-        }
-
-        .editor-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          gap: 16px;
-          border-bottom: 1px solid var(--border-color);
-          padding-bottom: 16px;
-        }
-
-        .editor-header h2 {
-          margin: 0 0 4px 0;
-          font-size: 1.5rem;
-          font-weight: 600;
-        }
-
-        .editor-subtitle {
-          margin: 0;
-          font-size: 0.875rem;
-          opacity: 0.7;
-        }
-
-        .editor-actions {
-          display: flex;
-          gap: 8px;
-        }
-
-        .editor-form {
-          flex: 1;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 24px;
-        }
-
-        .form-field {
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
-
-        .form-field.has-error {
-          background: rgba(198, 40, 40, 0.04);
-          padding: 12px;
-          border-radius: 4px;
-          border-left: 3px solid #c62828;
-        }
-
-        .form-label {
-          font-weight: 500;
-          font-size: 0.95rem;
-          color: var(--text-primary);
-        }
-
-        .required-mark {
-          color: #c62828;
-          margin-left: 4px;
-        }
-
-        .form-input,
-        .form-input select,
-        .form-input textarea {
-          padding: 8px 12px;
-          border: 1px solid var(--border-color);
-          border-radius: 4px;
-          font-size: 0.95rem;
-          font-family: inherit;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          transition: border-color 0.2s, box-shadow 0.2s;
-        }
-
-        .form-input:focus,
-        .form-input select:focus,
-        .form-input textarea:focus {
-          outline: none;
-          border-color: #667eea;
-          box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-input.error,
-        .form-input.error:focus {
-          border-color: #c62828;
-          box-shadow: 0 0 0 3px rgba(198, 40, 40, 0.1);
-        }
-
-        .form-input:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-        }
-
-        .form-richtext-wrapper {
-          border: 1px solid var(--border-color);
-          border-radius: 4px;
-          overflow: hidden;
-        }
-
-        .form-richtext-wrapper :global(.ql-container) {
-          font-size: 0.95rem;
-          font-family: inherit;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-        }
-
-        .form-richtext-wrapper :global(.ql-toolbar) {
-          border-top: 1px solid var(--border-color);
-          background: var(--bg-tertiary);
-          border: none;
-        }
-
-        .form-richtext-wrapper :global(.ql-editor) {
-          min-height: 200px;
-          padding: 12px;
-        }
-
-        .form-richtext-wrapper :global(.ql-editor.ql-blank::before) {
-          color: #999;
-          font-style: italic;
-        }
-
-        .checkbox-container {
-          gap: 0;
-        }
-
-        .checkbox-label {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          font-weight: normal;
-          margin: 0;
-        }
-
-        .checkbox-label input {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
-
-        .field-errors {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          margin-top: 4px;
-        }
-
-        .error-message {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 0.85rem;
-          color: #c62828;
-        }
-
-        .field-help {
-          font-size: 0.8rem;
-          color: #999;
-          margin-top: 2px;
         }
       `}</style>
     </div>

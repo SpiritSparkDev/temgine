@@ -1,5 +1,6 @@
 import { prisma } from '../../../lib/prisma'
 import { logAudit } from '../../../lib/audit'
+import { stripPageAccessPasswords } from '../../../lib/pageAccessPassword'
 
 export default async function handler(req, res) {
   try {
@@ -100,7 +101,7 @@ export default async function handler(req, res) {
         await logAudit({ action: 'restore_revision', resource: 'page', resourceId: updated.id, userId: null, details: { revisionId: revisionId } })
       } catch (e) {}
 
-      return res.status(200).json({ ok: true, page: updated })
+      return res.status(200).json({ ok: true, page: stripPageAccessPasswords(updated) })
     }
 
     // DELETE: einzelne Revision löschen { revisionId }
@@ -120,7 +121,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
-    res.status(405).json({ error: 'Method not allowed' })
+    res.status(405).json({ error: 'Methode nicht erlaubt' })
   } catch (e) {
     console.error(e)
     res.status(500).json({ error: 'Server Fehler' })

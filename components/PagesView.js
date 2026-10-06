@@ -1,7 +1,21 @@
 import React, { useState } from 'react';
 import PageTreeEditor from './PageTreeEditor';
 import PageEditor from './PageEditor';
+import GlobalPagesView from './GlobalPagesView';
 import Toast from './Toast';
+
+const pagesTabButtonStyle = (active) => ({
+  padding: '0.5rem 1.25rem',
+  border: 'none',
+  borderBottom: active ? '2px solid var(--accent-primary)' : '2px solid transparent',
+  background: 'transparent',
+  cursor: 'pointer',
+  fontWeight: 600,
+  fontSize: '0.9rem',
+  color: active ? 'var(--accent-primary)' : 'var(--text-secondary)',
+  marginBottom: '-2px',
+  transition: 'color 0.15s, border-color 0.15s',
+});
 
 export default function PagesView({ 
   pages, 
@@ -15,7 +29,7 @@ export default function PagesView({
   onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
-  const [pagesTab, setPagesTab] = useState('pages'); // 'pages' or 'maintenance'
+  const [pagesTab, setPagesTab] = useState('pages'); // 'pages', 'global' or 'maintenance'
   const [maintenanceTab, setMaintenanceTab] = useState('404');
   const [maintenanceContent, setMaintenanceContent] = useState({
     '404': { html: '', css: '', js: '' },
@@ -106,7 +120,7 @@ export default function PagesView({
         });
         if (!r.ok) throw new Error((await r.json()).error || 'Fehler');
       }
-      showToast('Maintenance-Seiten gespeichert', 'success');
+      showToast('Wartungsseiten gespeichert', 'success');
     } catch (e) {
       showToast('Fehler beim Speichern: ' + e.message, 'error');
     } finally {
@@ -205,45 +219,31 @@ export default function PagesView({
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', paddingLeft: '1rem', marginBottom: '1rem' }}>
-        <button 
-          style={{
-            padding: '0.5rem 1.25rem',
-            border: 'none',
-            borderBottom: pagesTab === 'pages' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: pagesTab === 'pages' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-            marginBottom: '-2px',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'pages')}
           onClick={() => setPagesTab('pages')}
         >
           Seiten
         </button>
-        <button 
-          style={{
-            padding: '0.5rem 1.25rem',
-            border: 'none',
-            borderBottom: pagesTab === 'maintenance' ? '2px solid var(--accent-primary)' : '2px solid transparent',
-            background: 'transparent',
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontSize: '0.9rem',
-            color: pagesTab === 'maintenance' ? 'var(--accent-primary)' : 'var(--text-secondary)',
-            marginBottom: '-2px',
-            transition: 'color 0.15s, border-color 0.15s',
-          }}
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'global')}
+          onClick={() => setPagesTab('global')}
+        >
+          Globale Seiten
+        </button>
+        <button
+          style={pagesTabButtonStyle(pagesTab === 'maintenance')}
           onClick={() => {
             setPagesTab('maintenance');
             if (!maintenanceLoaded) loadMaintenancePages();
           }}
         >
-          Maintenance Seiten
+          Wartungsseiten
         </button>
       </div>
-      
+
+      {pagesTab === 'global' && <GlobalPagesView showToast={showToast} />}
+
       {pagesTab === 'pages' && editingPage ? (
         <PageEditor 
           page={editingPage} 
@@ -372,13 +372,13 @@ export default function PagesView({
           userRole={userRole}
           onRefreshPages={onRefreshPages}
         />
-      ) : (
+      ) : pagesTab === 'maintenance' ? (
         <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-          <h2 style={{ marginBottom: '1.5rem' }}>Maintenance Seiten</h2>
+          <h2 style={{ marginBottom: '1.5rem' }}>Wartungsseiten</h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
             <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Für jede Maintenance-Seite können HTML, CSS und JS separat gepflegt werden.
+              Für jede Wartungsseite können HTML, CSS und JS separat gepflegt werden.
             </p>
 
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
@@ -415,7 +415,7 @@ export default function PagesView({
                 <textarea
                   value={maintenanceContent[maintenanceTab]?.html || ''}
                   onChange={e => updateMaintenanceField(maintenanceTab, 'html', e.target.value)}
-                  placeholder="<h1>Maintenance Inhalt</h1>"
+                  placeholder="<h1>Wartungsinhalt</h1>"
                   rows={14}
                   style={{
                     width: '100%',
@@ -465,7 +465,7 @@ export default function PagesView({
                 <textarea
                   value={maintenanceContent[maintenanceTab]?.js || ''}
                   onChange={e => updateMaintenanceField(maintenanceTab, 'js', e.target.value)}
-                  placeholder="console.log('Maintenance Screen');"
+                  placeholder="console.log('Wartungsbildschirm');"
                   rows={14}
                   style={{
                     width: '100%',
@@ -491,7 +491,7 @@ export default function PagesView({
               background: 'var(--bg-secondary)',
             }}>
               <div style={{ marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Maintenance'})
+                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Wartung'})
               </div>
               <iframe
                 title={`maintenance-preview-${maintenanceTab}`}
@@ -508,7 +508,7 @@ export default function PagesView({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Maintenance-Seiten</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Wartungsseiten</div>
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -577,12 +577,12 @@ export default function PagesView({
                   opacity: isSavingMaintenance ? 0.6 : 1,
                 }}
               >
-                {isSavingMaintenance ? 'Speichern…' : 'Maintenance Seiten speichern'}
+                {isSavingMaintenance ? 'Speichern…' : 'Wartungsseiten speichern'}
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
