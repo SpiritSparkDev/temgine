@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma'
+import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
@@ -25,6 +26,11 @@ export default async function handler(req, res) {
 
     // PUT: einzelne Einstellung speichern { key, value }
     if (req.method === 'PUT') {
+      // Schreiben nur für Admin/Moderator (wie Templates/CSS/JS); GET bleibt offen, weil öffentliche Seiten
+      // (Wartungsmodus, SEO-Defaults, Matomo) die Einstellungen lesen.
+      const auth = await requireAuth(req, res, ['ADMIN', 'MODERATOR'])
+      if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
       const { key, value } = req.body || {}
       if (!key) {
         const [status, resp] = errorResponse(400, 'key erforderlich', 'VALIDATION_ERROR', { missing: ['key'] });

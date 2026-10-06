@@ -5,7 +5,7 @@ import { GLOBAL_PAGE_ROLES, listGlobalPages, getGlobalPageById, getActiveGlobalP
 // Rollen, die über diese API erstellt werden können — MOBILE bleibt wie
 // schon in der alten Navigation-API (pages/api/navigations.js) nicht
 // erstellbar (totes Gleis, siehe lib/globalPageStore.js).
-const CREATABLE_ROLES = ['FOOTER', 'MAIN', 'PAGE'];
+const CREATABLE_ROLES = ['FOOTER', 'MAIN', 'PAGE', 'WIDGET'];
 
 function isResponsiveCombinedNavCode(code) {
   const src = String(code || '');

@@ -19,11 +19,19 @@ export default async function handler(req, res) {
           email: true,
           role: true,
           createdAt: true,
-          image: true
+          image: true,
+          password: true
         }
       });
 
-      res.status(200).json({ users });
+      // password bleibt serverseitig — Clients bekommen nur, ob eines gesetzt ist
+      // (z. B. um bei reinen GitHub-OAuth-Konten den Passwort-ändern-Hinweis zu zeigen).
+      const sanitizedUsers = users.map(({ password, ...rest }) => ({
+        ...rest,
+        hasPassword: Boolean(password)
+      }));
+
+      res.status(200).json({ users: sanitizedUsers });
     } catch (error) {
       res.status(500).json({ error: 'Fehler beim Laden der Benutzer' });
     }

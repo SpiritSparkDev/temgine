@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen } from '../lib/muiIcons';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar } from '../lib/muiIcons';
 import { navPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -376,12 +376,42 @@ const PRESETS = {
 </nav>`,
     },
   ],
+  WIDGET: [
+    {
+      label: 'Info-Box',
+      description: 'Einfache Sidebar-Box mit Titel und Text',
+      code: `<aside class="widget widget-info">
+  <h3 class="widget-title">Titel</h3>
+  <p class="widget-text">Freier Text für diese Box.</p>
+</aside>`,
+    },
+    {
+      label: 'CTA-Box',
+      description: 'Call-to-Action-Box mit Button, nutzt globale Variablen',
+      code: `<aside class="widget widget-cta">
+  <h3 class="widget-title">{{global.companyName}} kontaktieren</h3>
+  <p class="widget-text">Fragen? Wir helfen gerne weiter.</p>
+  <a class="widget-cta-button" href="/kontakt">Jetzt Kontakt aufnehmen</a>
+</aside>`,
+    },
+    {
+      label: 'Kontakt-Karte',
+      description: 'Kompakte Kontaktdaten-Box für Sidebars',
+      code: `<aside class="widget widget-contact">
+  <h3 class="widget-title">Kontakt</h3>
+  <p class="widget-text">{{global.companyName}}</p>
+  <p class="widget-text">{{global.contactEmail}}</p>
+  <p class="widget-text">{{global.contactPhone}}</p>
+</aside>`,
+    },
+  ],
 };
 
 const ROLE_TABS = [
   { id: 'MAIN', label: 'Hauptnavigation', Icon: Globe },
   { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
   { id: 'FOOTER', label: 'Footer', Icon: Layers },
+  { id: 'WIDGET', label: 'Widget', Icon: Sidebar },
 ];
 
 // Rollen mit genau einem exklusiv aktiven Eintrag — zeigen den
@@ -477,7 +507,11 @@ export default function GlobalPagesView({ showToast }) {
   const filteredList = list.filter(e => e.role === role);
   const isExclusiveActiveRole = EXCLUSIVE_ACTIVE_ROLES.includes(role);
   const roleLabel = ROLE_TABS.find(t => t.id === role)?.label || 'Eintrag';
-  const entityNoun = role === 'FOOTER' ? 'Footer' : 'Navigation';
+  const isFooter = role === 'FOOTER';
+  const isWidget = role === 'WIDGET';
+  const entityNoun = isFooter ? 'Footer' : isWidget ? 'Widget' : 'Navigation';
+  // Für den "Neue(n/s) <Noun> erstellen"-Titel — deutsche Artikel/Endungen je Rolle.
+  const entityAccusativeSuffix = isFooter ? 'n' : isWidget ? 's' : '';
 
   function handleNew() {
     const entry = { isNew: true, role };
@@ -622,7 +656,7 @@ export default function GlobalPagesView({ showToast }) {
         <div className="nav-list-panel">
           <div className="nav-list-header">
             <h3 className="nav-list-title">{roleLabel}</h3>
-            <button className="btn-icon-label" onClick={handleNew} title={`Neue${role === 'FOOTER' ? 'n' : ''} ${entityNoun} erstellen`}>
+            <button className="btn-icon-label" onClick={handleNew} title={`Neue${entityAccusativeSuffix} ${entityNoun} erstellen`}>
               <Plus size={15} /> Neu
             </button>
           </div>
@@ -631,9 +665,9 @@ export default function GlobalPagesView({ showToast }) {
             <div className="nav-empty-hint">Lädt…</div>
           ) : filteredList.length === 0 ? (
             <div className="nav-empty-hint">
-              {role === 'FOOTER' ? 'Noch kein Footer angelegt.' : 'Noch keine Navigationen dieses Typs.'}<br />
+              {isFooter ? 'Noch kein Footer angelegt.' : isWidget ? 'Noch keine Widgets angelegt.' : 'Noch keine Navigationen dieses Typs.'}<br />
               <button className="nav-empty-cta" onClick={handleNew}>
-                {role === 'FOOTER' ? 'Ersten Footer erstellen' : 'Erste Navigation erstellen'}
+                {isFooter ? 'Ersten Footer erstellen' : isWidget ? 'Erstes Widget erstellen' : 'Erste Navigation erstellen'}
               </button>
             </div>
           ) : (
@@ -686,7 +720,7 @@ export default function GlobalPagesView({ showToast }) {
               <input
                 className="nav-name-input"
                 type="text"
-                placeholder={`Name diese${role === 'FOOTER' ? 's Footers' : 'r Navigation'}…`}
+                placeholder={`Name diese${isFooter ? 's Footers' : isWidget ? 's Widgets' : 'r Navigation'}…`}
                 value={editName}
                 onChange={e => setEditName(e.target.value)}
               />
@@ -726,7 +760,7 @@ export default function GlobalPagesView({ showToast }) {
               </div>
             )}
 
-            {role === 'FOOTER' ? (
+            {isFooter || isWidget ? (
               <div className="nav-editor-code" style={{ height: '60vh' }}>
                 <div className="nav-panel-label">Mustache-Template</div>
                 <div className="nav-monaco-wrap">
@@ -773,10 +807,16 @@ export default function GlobalPagesView({ showToast }) {
 
             {/* Placeholder reference */}
             <div className="nav-placeholder-ref">
-              {role === 'FOOTER' ? (
+              {isFooter ? (
                 <>
                   <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
                   der Footer wird am Ende des Seiten-Layouts eingefügt, wenn er aktiv ist.
+                </>
+              ) : isWidget ? (
+                <>
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  das Widget wird über einen eigenen Block im Seiten-Editor platziert (Template-Auswahl am
+                  Block → „Widget: {editName.trim() || '…'}").
                 </>
               ) : (
                 <>
@@ -794,12 +834,24 @@ export default function GlobalPagesView({ showToast }) {
           </div>
         ) : (
           <div className="nav-editor-panel nav-editor-empty">
-            {role === 'FOOTER' ? (
+            {isFooter ? (
               <>
                 <Layers size={40} strokeWidth={1} />
                 <p>Footer aus der Liste wählen oder einen neuen erstellen.</p>
                 <p className="nav-editor-empty-hint">
                   Nur ein aktiver Footer wird gerendert, am Ende des Seiteninhalts.
+                </p>
+              </>
+            ) : isWidget ? (
+              <>
+                <Sidebar size={40} strokeWidth={1} />
+                <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Widgets brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite als
+                  eigener Block platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"), beliebig oft
+                  und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie Sidebars,
+                  Info- oder CTA-Boxen. Nur <code>{`{{global.<key>}}`}</code> steht zur Verfügung — keine
+                  seitenbaum-spezifischen Daten wie bei Navigationen.
                 </p>
               </>
             ) : (
@@ -824,7 +876,7 @@ export default function GlobalPagesView({ showToast }) {
           <aside className="nav-docs-panel">
             <div className="nav-docs-header">
               <BookOpen size={15} />
-              <span>{role === 'FOOTER' ? 'Wie der Footer funktioniert' : 'Wie Navigationen funktionieren'}</span>
+              <span>{isFooter ? 'Wie der Footer funktioniert' : isWidget ? 'Wie Widgets funktionieren' : 'Wie Navigationen funktionieren'}</span>
               <button className="nav-docs-close" onClick={() => setShowDocs(false)} title="Dokumentation ausblenden">
                 <X size={14} />
               </button>
@@ -843,6 +895,36 @@ export default function GlobalPagesView({ showToast }) {
                     (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen".
                   </p>
                 </div>
+              ) : isWidget ? (
+                <>
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Freie, wiederverwendbare Inhaltsbausteine</div>
+                    <p>
+                      Ein Widget hat — anders als Footer/Hauptnavigation — kein Aktivierungskonzept und
+                      keinen festen Platz im Layout. Es wird wie ein Baustein gezielt in genau den Seiten
+                      platziert, in denen es gebraucht wird, beliebig oft und unabhängig vom Seitenbaum.
+                      Gedacht für Dinge wie Sidebars, Info- oder CTA-Boxen, die an mehreren Stellen
+                      wiederverwendet werden sollen, ohne den Inhalt mehrfach zu pflegen.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Einbinden im Seiten-Editor</div>
+                    <p>
+                      An einem Block die Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das
+                      gewünschte Widget wählen — der Block zeigt dann live den Widget-Inhalt.
+                    </p>
+                  </div>
+
+                  <div className="nav-docs-group">
+                    <div className="nav-docs-heading">Variablen</div>
+                    <p>
+                      Nur <code>{`{{global.<key>}}`}</code> (globale Variablen, z. B. Firmenname, Logo)
+                      steht zur Verfügung — keine seitenbaum-spezifischen Daten wie <code>pages</code>,
+                      <code>anchors</code> oder <code>childPages</code> bei Navigationen.
+                    </p>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="nav-docs-group">

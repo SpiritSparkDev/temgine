@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds, collectFolderBlockPaths, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectFolderBlockPaths, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -81,6 +81,69 @@ describe('renderPage navigation blocks (type: navigation)', () => {
     const navigations = { byId: { nav1: { code: '<nav>{{global.companyName}}</nav>', data: {} } } };
     const html = renderPage(page, {}, {}, navigations, null, { companyName: 'Temgine' });
     expect(html).toContain('<nav>Temgine</nav>');
+  });
+});
+
+describe('collectGlobalPageBlockIds', () => {
+  it('collects globalPageId from top-level global-page blocks', () => {
+    const blocks = [{ type: 'global-page', props: { globalPageId: 'w1' } }, { template: 'Text', props: {} }];
+    expect(collectGlobalPageBlockIds(blocks)).toEqual(['w1']);
+  });
+
+  it('collects globalPageId from nested children', () => {
+    const blocks = [{ template: 'Wrapper', props: {}, children: [{ type: 'global-page', props: { globalPageId: 'w2' } }] }];
+    expect(collectGlobalPageBlockIds(blocks)).toEqual(['w2']);
+  });
+
+  it('dedupes repeated globalPageIds and ignores blocks without one', () => {
+    const blocks = [
+      { type: 'global-page', props: { globalPageId: 'w1' } },
+      { type: 'global-page', props: { globalPageId: 'w1' } },
+      { type: 'global-page', props: {} },
+    ];
+    expect(collectGlobalPageBlockIds(blocks)).toEqual(['w1']);
+  });
+
+  it('returns an empty array for no blocks', () => {
+    expect(collectGlobalPageBlockIds([])).toEqual([]);
+    expect(collectGlobalPageBlockIds(undefined)).toEqual([]);
+  });
+
+  it('does not pick up navigation blocks', () => {
+    const blocks = [{ type: 'navigation', props: { navigationId: 'nav1' } }];
+    expect(collectGlobalPageBlockIds(blocks)).toEqual([]);
+  });
+});
+
+describe('renderPage widget blocks (type: global-page)', () => {
+  const page = {
+    title: 'Test',
+    slug: 'test',
+    blocks: [
+      { type: 'global-page', props: { globalPageId: 'w1' } },
+    ],
+  };
+
+  it('renders the widget code looked up by globalPageId from globalPages.byId', () => {
+    const globalPages = { byId: { w1: { code: '<aside id="sidebar">Sidebar</aside>' } } };
+    const html = renderPage(page, {}, {}, {}, null, {}, {}, globalPages);
+    expect(html).toContain('<aside id="sidebar">Sidebar</aside>');
+  });
+
+  it('renders nothing when globalPageId does not resolve in globalPages.byId', () => {
+    const html = renderPage(page, {}, {}, {}, null, {}, {}, { byId: {} });
+    expect(html).not.toContain('<aside');
+  });
+
+  it('renders nothing when globalPages is omitted entirely (backward compatible default)', () => {
+    const html = renderPage(page, {}, {});
+    expect(html).not.toContain('<aside');
+  });
+
+  it('exposes global.* inside the resolved widget code', () => {
+    const globalPages = { byId: { w1: { code: '<aside>{{global.companyName}}</aside>' } } };
+    const html = renderPage(page, {}, {}, {}, null, { companyName: 'Temgine' }, {}, globalPages);
+    expect(html).toContain('<aside>Temgine</aside>');
   });
 });
 
@@ -259,5 +322,20 @@ describe('renderPage footer + global variables', () => {
     const navigations = { main: { code: '<nav>{{global.companyName}}</nav>', data: {} } };
     const html = renderPage(page, blockTemplates, {}, navigations, null, { companyName: 'Temgine' });
     expect(html).toContain('<nav>Temgine</nav>');
+  });
+});
+
+describe('|Gruppe annotation rendering', () => {
+  test('is stripped before rendering', () => {
+    const { renderTemplate } = require('../lib/templateEngine');
+    expect(renderTemplate('<p>{{a:text|Inhalt}}-{{{b:textarea|X}}}-{{c|Y}}</p>', { a: '1', b: '2', c: '3' })).toBe('<p>1-2-3</p>');
+  });
+});
+
+describe('Block ohne Template = freies HTML-Feld', () => {
+  test('props.html wird unverändert ausgegeben', () => {
+    const { renderPage } = require('../lib/templateEngine');
+    const page = { title: 'T', slug: 't', blocks: [{ type: 'content', template: '', props: { html: '<div class="x" style="color:red">Hallo</div>' } }] };
+    expect(renderPage(page, {}, {}, {})).toContain('<div class="x" style="color:red">Hallo</div>');
   });
 });

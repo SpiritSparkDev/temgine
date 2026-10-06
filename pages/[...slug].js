@@ -543,6 +543,19 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
       }
 
+      const globalPages = { byId: {} };
+      try {
+        const widgetsRes = await fetch(`/api/global-pages?active=true&role=WIDGET&_t=${Date.now()}`);
+        if (widgetsRes.ok) {
+          const widgets = await widgetsRes.json();
+          for (const w of (Array.isArray(widgets) ? widgets : [])) {
+            if (w?.id) globalPages.byId[w.id] = { code: w.code };
+          }
+        }
+      } catch (e) {
+        console.warn('Widgets konnten nicht geladen werden:', e.message);
+      }
+
       const folderContents = {};
       try {
         const folderPaths = collectFolderBlockPaths(foundPage.blocks, templateCodes);
@@ -557,7 +570,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents)
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents, globalPages)
       if (cancelled) return
       setHtml(html)
       setLoading(false)

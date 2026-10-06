@@ -37,6 +37,11 @@ export default async function handler(req, res) {
       return String(value).trim().replace(/\s+/g, '-')
     }
 
+    // Freies HTML-Feld (Block ohne Template, props.html): bleibt roh erhalten, wenn der Nutzer
+    // Templates bearbeiten darf (ADMIN/MODERATOR) oder der Wert bereits unverändert so gespeichert ist
+    // (damit ein Editor beim Speichern fremdes HTML nicht beschädigt). Sonst normal bereinigt.
+    let rawHtmlAllowed = () => false
+
     const sanitizeBlockNode = (block) => {
       if (!block || typeof block !== 'object') return block
 
@@ -45,7 +50,11 @@ export default async function handler(req, res) {
         next.hidden = Boolean(next.hidden)
       }
       if (next.props && typeof next.props === 'object') {
-        next.props = sanitizeRecursive(next.props)
+        const { html, ...rest } = next.props
+        next.props = sanitizeRecursive(rest)
+        if (typeof html === 'string') {
+          next.props.html = (!next.template && rawHtmlAllowed(html)) ? html : sanitizeRecursive(html)
+        }
       }
 
       if (next.slot !== undefined) {
@@ -104,6 +113,19 @@ export default async function handler(req, res) {
     if (req.method === 'POST') {
       const auth = await requireAuth(req, res, PERMISSIONS.PAGES_EDIT)
       if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
+      if (PERMISSIONS.TEMPLATES_EDIT.includes(auth.user.role)) {
+        rawHtmlAllowed = () => true
+      } else {
+        const stored = new Set()
+        const walk = (nodes) => (nodes || []).forEach((b) => {
+          if (b && typeof b.props?.html === 'string') stored.add(b.props.html)
+          walk(b?.children)
+        })
+        const walkPages = (pgs) => (Array.isArray(pgs) ? pgs : []).forEach((p) => { walk(p?.blocks); walkPages(p?.children) })
+        walkPages(await prisma.page.findMany({ select: { blocks: true, children: true } }))
+        rawHtmlAllowed = (v) => stored.has(v)
+      }
 
       const body = req.body
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
