@@ -857,6 +857,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                         <tr><td><code>{'{{#each:name}}…{{/each:name}}'}</code></td><td>Wiederholbare Gruppe (Liste)</td></tr>
                         <tr><td><code>{'{{#folder}}…{{/folder}}'}</code></td><td>Iteriert über alle Dateien eines im Editor gewählten Upload-Ordners (rekursiv, inkl. Unterordner)</td></tr>
                         <tr><td><code>{'{{#folder:name}}…{{/folder:name}}'}</code></td><td>Wie <code>{'{{#folder}}'}</code>, benannt — für mehrere Ordnerfelder in einem Template</td></tr>
+                        <tr><td><code>{'{{#picgine:name}}…{{/picgine:name}}'}</code></td><td>Picgine-Galerie, im Editor gewählt (<code>{'=slug'}</code> für eine feste Galerie) — siehe help/picgine-galerien.md</td></tr>
                         <tr><td><code>{'{{#if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name nicht leer</td></tr>
                         <tr><td><code>{'{{^if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name leer</td></tr>
                         <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Roher Mustache-Abschnitt (Sonderfälle)</td></tr>

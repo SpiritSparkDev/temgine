@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
+import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths, collectPicgineSlugs } from '../lib/templateEngine'
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
+import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
@@ -30,6 +31,8 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
   )
   const [homePage, setHomePage] = useState(null)
+  // Picgine-Entsperren/Logout: >0 rendert neu, ohne Ladebildschirm (siehe lib/picgineRuntime.js)
+  const [picgineReload, setPicgineReload] = useState(0)
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
     if (debugRender) console.log(...args)
@@ -122,7 +125,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 
   useEffect(() => {
     loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
-    setLoading(true)
+    if (!picgineReload) setLoading(true)
 
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
@@ -366,8 +369,10 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message)
         }
 
+        const picgineContents = await loadPicgineContents(collectPicgineSlugs(homePage.blocks, templateCodes))
+
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents, globalPages)
+        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)
@@ -418,7 +423,8 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
                 metaLooksValid,
               })
 
-              if (metaLooksValid) {
+              // Snapshots mit gesperrter Picgine-Galerie dynamisch rendern (Viewer-Token)
+              if (metaLooksValid && !staticHtml.includes('data-picgine-unlock')) {
                 setHtml(staticHtml)
                 setHomePage({ data: {} })
                 setLoading(false)
@@ -435,7 +441,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
       debugLog('[home-route] rendering dynamically')
       startDynamicRender()
     })()
-  }, [])
+  }, [picgineReload])
 
   // Wire up any form[data-temgine-form="contact"] rendered inside the home
   // page's block HTML — see lib/contactFormRuntime.js. Core behaviour, not
@@ -445,6 +451,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     const containerId = homePage?.data?.wrapperId || 'page-html-output'
     const container = document.getElementById(containerId)
     hydrateContactForms(container)
+    hydratePicgine(container, () => setPicgineReload(k => k + 1))
   }, [html])
 
   useEffect(() => {

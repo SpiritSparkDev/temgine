@@ -85,6 +85,7 @@ export default function ContactFormTemplatesView({ showToast }) {
   const [isSavingSmtp, setIsSavingSmtp]       = useState(false);
   const [isSendingTest, setIsSendingTest]     = useState(false);
   const [smtpPassChanged, setSmtpPassChanged] = useState(false);
+  const [smtpPassSet, setSmtpPassSet]         = useState(false);
 
   useEffect(() => {
     fetch('/api/settings')
@@ -94,7 +95,7 @@ export default function ContactFormTemplatesView({ showToast }) {
         if (data.smtp_host)               setSmtpHost(data.smtp_host);
         if (data.smtp_port)               setSmtpPort(data.smtp_port);
         if (data.smtp_user)               setSmtpUser(data.smtp_user);
-        if (data.smtp_pass)               setSmtpPass(data.smtp_pass);
+        if (data.smtp_pass_set)           setSmtpPassSet(true);
         if (data.smtp_secure)             setSmtpSecure(data.smtp_secure === 'true');
         if (data.contact_recipient_email) setRecipientEmail(data.contact_recipient_email);
         if (data.contact_sender_name)     setSenderName(data.contact_sender_name);
@@ -489,7 +490,7 @@ export default function ContactFormTemplatesView({ showToast }) {
                 <Field label="Passwort">
                   <input type="password" value={smtpPass}
                     onChange={e => { setSmtpPass(e.target.value); setSmtpPassChanged(true); }}
-                    placeholder={smtpPass ? '••••••••' : 'Passwort eingeben'}
+                    placeholder={smtpPassSet ? '•••••••• (gesetzt)' : 'Passwort eingeben'}
                     autoComplete="current-password" style={inputStyle} />
                 </Field>
                 <Field label="TLS / SSL (Port 465)" style={{ gridColumn: '1 / -1' }}>

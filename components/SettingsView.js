@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
+import PicginePanel from './PicginePanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 const TAB_KEY = 'temgine_settings_tab';
@@ -10,6 +11,7 @@ const TABS = [
   { id: 'general', label: 'Allgemein' },
   { id: 'seo', label: 'SEO' },
   { id: 'stats', label: 'Statistik' },
+  { id: 'picgine', label: 'Picgine' },
   { id: 'live', label: 'Live & Wartung' },
 ];
 
@@ -433,6 +435,8 @@ export default function SettingsView({ showToast }) {
         )}
 
         {tab === 'stats' && <MatomoPanel showToast={showToast} />}
+
+        {tab === 'picgine' && <PicginePanel showToast={showToast} />}
 
         {tab === 'live' && (
           <>

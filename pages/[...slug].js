@@ -1,10 +1,11 @@
 import { useRouter } from 'next/router'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths } from '../lib/templateEngine'
+import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths, collectPicgineSlugs } from '../lib/templateEngine'
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
+import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
@@ -36,6 +37,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   const [accessDenied, setAccessDenied] = useState(false)
   const [passwordGate, setPasswordGate] = useState(null) // { pageId } | null
   const [reloadToken, setReloadToken] = useState(0)
+  // Picgine-Entsperren/Logout: neu rendern ohne Ladebildschirm (siehe lib/picgineRuntime.js)
+  const silentReload = useRef(false)
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
     if (debugRender) console.log(...args)
@@ -148,7 +151,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       query,
     })
 
-    setLoading(true)
+    if (!silentReload.current) setLoading(true)
+    silentReload.current = false
     setPasswordGate(null)
 
     let cancelled = false
@@ -208,7 +212,9 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
               metaLooksValid,
             })
 
-            if (metaLooksValid) {
+            // Snapshots mit gesperrter Picgine-Galerie dynamisch rendern — nur so greift
+            // der Viewer-Token (Cookie) des Besuchers; der Snapshot kennt ihn nicht.
+            if (metaLooksValid && !staticHtml.includes('data-picgine-unlock')) {
               if (cancelled) return
               setPage({ title: '', data: {} })
               setHtml(staticHtml)
@@ -570,7 +576,9 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
       }
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents, globalPages)
+      const picgineContents = await loadPicgineContents(collectPicgineSlugs(foundPage.blocks, templateCodes));
+
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
       if (cancelled) return
       setHtml(html)
       setLoading(false)
@@ -707,6 +715,10 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     const containerId = page?.data?.wrapperId || 'page-html-output';
     const container = document.getElementById(containerId);
     hydrateContactForms(container);
+    hydratePicgine(container, () => {
+      silentReload.current = true;
+      setReloadToken(k => k + 1);
+    });
   }, [html]);
 
   useEffect(() => {

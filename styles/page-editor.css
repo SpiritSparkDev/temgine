@@ -2441,6 +2441,7 @@
 .tpm-t-select { --tpm-c: #94a3b8; }
 .tpm-t-array { --tpm-c: #eab308; }
 .tpm-t-folder { --tpm-c: #06b6d4; }
+.tpm-t-gallery { --tpm-c: #d946ef; }
 .tpm-t-html { --tpm-c: #f43f5e; }
 .block-html-field { grid-column: 1 / -1; }
 
