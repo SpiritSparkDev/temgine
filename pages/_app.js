@@ -169,13 +169,12 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
   return (
     <SessionProvider session={session} refetchOnWindowFocus={false}>
       <Head>
-        {/* Favicon files served from /public/favicon/ */}
-        <link rel="icon" href="/favicon/favicon.ico" />
-        <link rel="shortcut icon" href="/favicon/favicon.ico" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png" />
-        <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png" />
-        <link rel="manifest" href="/favicon/site.webmanifest" />
+        {/* Favicon files served from /public/uploads/favicon/ */}
+        <link rel="icon" href="/uploads/favicon/favicon.ico" />
+        <link rel="shortcut icon" href="/uploads/favicon/favicon.ico" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/uploads/favicon/apple-touch-icon.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/uploads/favicon/favicon-32x32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/uploads/favicon/favicon-16x16.png" />
         <meta name="theme-color" content="#ffffff" />
         <meta name="msapplication-TileImage" content="/brand/light.png" />
         {/* Seiten-spezifische Title/Description/OG/Twitter/JSON-LD-Tags kommen

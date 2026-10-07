@@ -190,6 +190,35 @@ export default function SettingsView({ showToast }) {
     if (await saveEntries('logo', [['admin_logo_url', url]], message)) announceLogoChange();
   };
 
+  const [faviconVersion, setFaviconVersion] = useState(() => Date.now());
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+
+  const handleFaviconUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploadingFavicon(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/settings/favicon', { method: 'POST', body: fd });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Fehler beim Hochladen');
+      setFaviconVersion(d.version);
+      showToast('Favicon erzeugt und eingebunden', 'success');
+    } catch (err) {
+      showToast(err.message || 'Fehler beim Hochladen', 'error');
+    } finally {
+      setUploadingFavicon(false);
+    }
+  };
+
+  const handleFaviconDelete = async () => {
+    const res = await fetch('/api/settings/favicon', { method: 'DELETE' });
+    if (res.ok) { setFaviconVersion(Date.now()); showToast('Favicon entfernt', 'success'); }
+    else showToast('Fehler beim Entfernen', 'error');
+  };
+
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -292,6 +321,26 @@ export default function SettingsView({ showToast }) {
                   <button type="button" className="st-btn" onClick={() => saveLogo('', 'Standard-Logo wiederhergestellt')} disabled={!logoUrl || saving === 'logo'}>
                     Zurücksetzen
                   </button>
+                </div>
+              </Row>
+            </Card>
+
+            <Card title="Favicon" description="Das Symbol im Browser-Tab. Die Grafik wird automatisch quadratisch zugeschnitten und in alle Größen (ICO, 16/32 px, Apple-Touch-Icon) umgewandelt. Browser cachen Favicons stark, ggf. erst nach Hard-Reload sichtbar.">
+              <Row label="Aktuelles Favicon">
+                <img
+                  src={`/uploads/favicon/favicon-32x32.png?v=${faviconVersion}`}
+                  alt="" width={32} height={32}
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                  onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
+                />
+              </Row>
+              <Row label="Grafik hochladen" hint="Quadratisch, mind. 180×180 px; PNG, SVG, JPG oder WebP, max. 10 MB">
+                <div className="st-inline">
+                  <label className={`st-btn${uploadingFavicon ? ' is-disabled' : ''}`}>
+                    {uploadingFavicon ? 'Lade hoch…' : 'Datei wählen…'}
+                    <input type="file" accept="image/*" onChange={handleFaviconUpload} disabled={uploadingFavicon} hidden />
+                  </label>
+                  <button type="button" className="st-btn" onClick={handleFaviconDelete}>Entfernen</button>
                 </div>
               </Row>
             </Card>
