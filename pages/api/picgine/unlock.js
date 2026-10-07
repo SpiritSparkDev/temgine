@@ -1,7 +1,8 @@
 import { rateLimit } from '../../../lib/rateLimit';
 import { picgineFetch, isValidSlug, isValidToken, readAccessCookie, serializeAccessCookie, sendPicgineError } from '../../../lib/picgine';
 
-const limiter = rateLimit({ windowMs: 15 * 60_000, max: 10, keyFn: (req) => `picgine-unlock:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}` });
+const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+const limiter = rateLimit({ windowMs: 15 * 60_000, max: 10, keyFn: (req) => `picgine-unlock:${clientIp(req)}` });
 
 // Öffentlich: entsperrt eine Galerie per Passwort (oder E-Mail + Passwort bei
 // Viewer-Login) und legt den von Picgine signierten Token im Cookie ab.
@@ -22,7 +23,7 @@ export default async function handler(req, res) {
   if (oldToken) body.token = oldToken;
 
   try {
-    const data = await picgineFetch('/api/v1/access/unlock', { method: 'POST', body });
+    const data = await picgineFetch('/api/v1/access/unlock', { method: 'POST', body, clientIp: clientIp(req) });
     if (!isValidToken(data?.token)) return res.status(502).json({ error: 'Ungültige Antwort von Picgine' });
     res.setHeader('Set-Cookie', serializeAccessCookie(data.token));
     return res.status(200).json({ ok: true });
