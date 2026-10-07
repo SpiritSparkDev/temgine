@@ -37,6 +37,8 @@ export default function SettingsView({ showToast }) {
   const [seoDefaultOgImage, setSeoDefaultOgImage] = useState('');
   const [seoTwitterHandle, setSeoTwitterHandle] = useState('');
   const [isSavingSeoDefaults, setIsSavingSeoDefaults] = useState(false);
+  const [faviconVersion, setFaviconVersion] = useState(() => Date.now());
+  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
 
   // --- SEO / Suchmaschinen & Struktur ---
   const [seoTitleTemplate, setSeoTitleTemplate] = useState('');
@@ -117,6 +119,32 @@ export default function SettingsView({ showToast }) {
     } finally {
       setIsSavingSeoAdvanced(false);
     }
+  };
+
+  const handleFaviconUpload = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setIsUploadingFavicon(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/settings/favicon', { method: 'POST', body: fd });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Fehler beim Hochladen');
+      setFaviconVersion(d.version);
+      showToast('Favicon erzeugt und eingebunden', 'success');
+    } catch (err) {
+      showToast(err.message || 'Fehler beim Hochladen', 'error');
+    } finally {
+      setIsUploadingFavicon(false);
+    }
+  };
+
+  const handleFaviconDelete = async () => {
+    const res = await fetch('/api/settings/favicon', { method: 'DELETE' });
+    if (res.ok) { setFaviconVersion(Date.now()); showToast('Favicon entfernt', 'success'); }
+    else showToast('Fehler beim Entfernen', 'error');
   };
 
   const handleSaveSeoDefaults = async () => {
@@ -550,6 +578,27 @@ export default function SettingsView({ showToast }) {
                     {isSavingSeoDefaults ? 'Speichern…' : 'Speichern'}
                   </button>
                 </div>
+              </div>
+            </section>
+
+            <section style={{ marginTop: '2.5rem' }}>
+              <h3 style={{ marginBottom: '0.5rem' }}>Favicon</h3>
+              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
+                Grafik hochladen (am besten quadratisch, mind. 180×180px, PNG/SVG/JPG) — sie wird automatisch
+                in alle Favicon-Größen (ICO, 16/32px, Apple-Touch-Icon) umgewandelt und eingebunden.
+                Browser cachen Favicons stark; Änderungen erscheinen ggf. erst nach einem Hard-Reload.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <img
+                  src={`/uploads/favicon/favicon-32x32.png?v=${faviconVersion}`}
+                  alt=""
+                  width={32}
+                  height={32}
+                  onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
+                  onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
+                />
+                <input type="file" accept="image/*" onChange={handleFaviconUpload} disabled={isUploadingFavicon} />
+                <button type="button" onClick={handleFaviconDelete}>Entfernen</button>
               </div>
             </section>
 

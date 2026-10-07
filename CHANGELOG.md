@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.27.0] - 2026-10-07
+
+### Added
+- Favicon-Upload unter Einstellungen → "Favicon": Eine hochgeladene Grafik wird per `sharp` automatisch quadratisch zugeschnitten und in `favicon.ico`, 16×16, 32×32 und Apple-Touch-Icon (180×180) umgewandelt (`pages/api/settings/favicon.js`, Ablage in `public/uploads/favicon/`, damit sie im Docker-Volume erhalten bleibt). `pages/_app.js` bindet die Dateien von dort ein; der Verweis auf die nicht existierende `site.webmanifest` entfällt.
+
+---
+
 ## [0.26.0] - 2026-10-03
 
 ### Added
