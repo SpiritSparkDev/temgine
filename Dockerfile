@@ -8,12 +8,12 @@ WORKDIR /app
 # sharp against libvips from source — which needs these present to succeed.
 RUN apt-get update -y && apt-get install -y openssl libvips-dev build-essential python3 pkg-config && rm -rf /var/lib/apt/lists/*
 
-# package.json + scripts/ first so `npm install` is its own cached layer —
+# package.json + Lockfile + scripts/ first so `npm ci` is its own cached layer —
 # rebuilds after source-only changes skip reinstalling dependencies.
-# (No package-lock.json in this repo, so `npm ci` isn't an option here.)
-COPY package.json ./
+# `npm ci` installiert exakt den Stand aus package-lock.json (reproduzierbar).
+COPY package.json package-lock.json ./
 COPY scripts/ ./scripts/
-RUN npm install
+RUN npm ci
 
 COPY . .
 RUN npm run build

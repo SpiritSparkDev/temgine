@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.31.1] - 2026-10-07
+
+### Fixed
+- Docker-Build schlug mit "Module not found" in `node_modules/@codemirror/language` fehl: `npm install` ohne Lockfile lieferte (und cachte) einen unvollständigen Abhängigkeitsbaum. Das Dockerfile nutzt jetzt `package-lock.json` mit `npm ci` für reproduzierbare Installationen.
+
+---
+
 ## [0.31.0] - 2026-10-07
 
 ### Added
