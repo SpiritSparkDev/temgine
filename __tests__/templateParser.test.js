@@ -129,3 +129,21 @@ describe('extractFolderBlocks', () => {
     expect(vars).toContain('name');
   });
 });
+
+describe('|Gruppe annotation', () => {
+  test('group label is parsed and not part of the variable name', () => {
+    const typed = extractTypedVariables('<h1>{{title:text|Inhalt}}</h1>{{lvl|Darstellung}}');
+    expect(typed).toEqual([
+      { varName: 'title', explicitType: 'text', group: 'Inhalt' },
+      { varName: 'lvl', explicitType: null, group: 'Darstellung' },
+    ]);
+    expect(extractTemplateVariables('{{title:text|Inhalt}}')).toEqual(['title']);
+  });
+});
+
+describe('guessInputType: Link-Beschriftung ist Text', () => {
+  const { guessInputType } = require('../lib/templateParser');
+  test.each([['Link Text', 'text'], ['link-label', 'text'], ['Button Link', 'url'], ['url', 'url']])('%s → %s', (name, type) => {
+    expect(guessInputType(name)).toBe(type);
+  });
+});

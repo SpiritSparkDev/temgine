@@ -3,57 +3,151 @@ import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
+const TAB_KEY = 'temgine_settings_tab';
+const DEFAULT_LOGO = '/brand/light.png';
 
-const labelStyle = { display: 'block', marginBottom: '0.4rem', fontWeight: 600 };
-const inputStyleSettings = {
-  width: '100%',
-  padding: '0.6rem 0.75rem',
-  border: '1px solid var(--border-color)',
-  borderRadius: '4px',
-  boxSizing: 'border-box',
-};
+const TABS = [
+  { id: 'general', label: 'Allgemein' },
+  { id: 'seo', label: 'SEO' },
+  { id: 'stats', label: 'Statistik' },
+  { id: 'live', label: 'Live & Wartung' },
+];
+
+function Toggle({ checked, onChange, disabled, label }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`st-toggle${checked ? ' is-on' : ''}`}
+    >
+      <span />
+    </button>
+  );
+}
+
+// Karte mit Titel/Beschreibung; Inhalt sind Zeilen (Row) oder freie Elemente
+function Card({ title, description, children, footer }) {
+  return (
+    <section className="st-card">
+      <header className="st-card-head">
+        <h3>{title}</h3>
+        {description && <p>{description}</p>}
+      </header>
+      <div className="st-card-body">{children}</div>
+      {footer && <footer className="st-card-foot">{footer}</footer>}
+    </section>
+  );
+}
+
+// Zeile: links Label + Hilfetext, rechts das Bedienelement
+function Row({ label, hint, children, stacked }) {
+  return (
+    <div className={`st-row${stacked ? ' is-stacked' : ''}`}>
+      <div className="st-row-label">
+        <strong>{label}</strong>
+        {hint && <small>{hint}</small>}
+      </div>
+      <div className="st-row-control">{children}</div>
+    </div>
+  );
+}
+
+function SaveButton({ onClick, saving, children = 'Speichern' }) {
+  return (
+    <button type="button" className="st-btn st-btn-primary" onClick={onClick} disabled={saving}>
+      {saving ? 'Speichern…' : children}
+    </button>
+  );
+}
 
 export default function SettingsView({ showToast }) {
-  // --- General tab state ---
-  const [revisionRetentionDays, setRevisionRetentionDays] = useState('7');
-  const [isSavingRetention, setIsSavingRetention] = useState(false);
+  const [tab, setTab] = useState('general');
+  // Alle einfachen Text-/Zahl-Einstellungen: { settingKey: value }
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState('');
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
   const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
-  const [isSavingFolderDragDrop, setIsSavingFolderDragDrop] = useState(false);
-  const [richTextEditorMode, setRichTextEditorMode] = useState('markdown');
-  const [isSavingRichTextMode, setIsSavingRichTextMode] = useState(false);
+  const [seoIndexingEnabled, setSeoIndexingEnabled] = useState(true);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // --- Live-Render ---
   const [liveRenderMode, setLiveRenderMode] = useState('dynamic');
   const [isSavingLiveMode, setIsSavingLiveMode] = useState(false);
   const [isRenderingLive, setIsRenderingLive] = useState(false);
-  const [liveRenderStatus, setLiveRenderStatus] = useState('');
-  const [liveRenderLastAt, setLiveRenderLastAt] = useState('');
-  const [liveRenderLastDurationMs, setLiveRenderLastDurationMs] = useState('');
-  const [liveRenderLastRoutes, setLiveRenderLastRoutes] = useState('');
-  const [liveRenderLastError, setLiveRenderLastError] = useState('');
+  const [live, setLive] = useState({ status: '', at: '', duration: '', routes: '', error: '' });
 
-  // --- SEO / Link-Vorschau defaults ---
-  const [seoSiteName, setSeoSiteName] = useState('');
-  const [seoDefaultDescription, setSeoDefaultDescription] = useState('');
-  const [seoDefaultOgImage, setSeoDefaultOgImage] = useState('');
-  const [seoTwitterHandle, setSeoTwitterHandle] = useState('');
-  const [isSavingSeoDefaults, setIsSavingSeoDefaults] = useState(false);
-  const [faviconVersion, setFaviconVersion] = useState(() => Date.now());
-  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
-
-  // --- SEO / Suchmaschinen & Struktur ---
-  const [seoTitleTemplate, setSeoTitleTemplate] = useState('');
-  const [seoOrganizationName, setSeoOrganizationName] = useState('');
-  const [seoOrganizationLogo, setSeoOrganizationLogo] = useState('');
-  const [seoGoogleVerification, setSeoGoogleVerification] = useState('');
-  const [seoBingVerification, setSeoBingVerification] = useState('');
-  const [seoIndexingEnabled, setSeoIndexingEnabled] = useState(true);
-  const [seoRobotsExtraDisallow, setSeoRobotsExtraDisallow] = useState('');
-  const [isSavingSeoAdvanced, setIsSavingSeoAdvanced] = useState(false);
+  const val = (key, fallback = '') => (values[key] !== undefined ? values[key] : fallback);
+  const setVal = (key) => (e) => setValues((prev) => ({ ...prev, [key]: e.target.value }));
 
   useEffect(() => {
     const stored = localStorage.getItem(AUTOSAVE_KEY);
     if (stored !== null) setAutosaveEnabled(stored !== 'false');
+    try {
+      const t = localStorage.getItem(TAB_KEY);
+      if (TABS.some((x) => x.id === t)) setTab(t);
+    } catch (_e) { /* storage nicht verfügbar */ }
   }, []);
+
+  const selectTab = (id) => {
+    setTab(id);
+    try { localStorage.setItem(TAB_KEY, id); } catch (_e) { /* ignorieren */ }
+  };
+
+  const applyLive = (data) => setLive({
+    status: data.liveRenderLastStatus || '',
+    at: data.liveRenderLastAt || '',
+    duration: data.liveRenderLastDurationMs || '',
+    routes: data.liveRenderLastRoutes || '',
+    error: data.liveRenderLastError || '',
+  });
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setValues(data);
+        if (data.folderDragDropEnabled !== undefined) setFolderDragDropEnabled(data.folderDragDropEnabled === 'true');
+        if (data.seo_indexing_enabled !== undefined) setSeoIndexingEnabled(data.seo_indexing_enabled !== 'false');
+        if (data.liveRenderMode) setLiveRenderMode(data.liveRenderMode);
+        applyLive(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const putSetting = async (key, value) => {
+    const res = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value: String(value ?? '') }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.error || 'Fehler beim Speichern');
+    }
+  };
+
+  // Speichert mehrere Einstellungen nacheinander; `entries` = [[key, value], ...]
+  const saveEntries = async (name, entries, message) => {
+    setSaving(name);
+    try {
+      for (const [key, value] of entries) await putSetting(key, value);
+      showToast(message, 'success');
+      return true;
+    } catch (e) {
+      showToast(e.message || 'Fehler beim Speichern', 'error');
+      return false;
+    } finally {
+      setSaving('');
+    }
+  };
+
+  const saveKeys = (name, keys, message, extra = []) =>
+    saveEntries(name, [...keys.map((k) => [k, val(k)]), ...extra], message);
 
   const handleAutosaveToggle = (enabled) => {
     setAutosaveEnabled(enabled);
@@ -61,71 +155,49 @@ export default function SettingsView({ showToast }) {
     showToast(enabled ? 'Autospeichern aktiviert' : 'Autospeichern deaktiviert', 'success');
   };
 
-  useEffect(() => {
-    fetch('/api/settings')
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
-        if (data.revisionRetentionDays !== undefined) setRevisionRetentionDays(data.revisionRetentionDays);
-        if (data.folderDragDropEnabled  !== undefined) setFolderDragDropEnabled(data.folderDragDropEnabled === 'true');
-        if (data[RICH_TEXT_EDITOR_MODE_KEY] === 'wysiwyg') setRichTextEditorMode('wysiwyg');
-        if (data.liveRenderMode)            setLiveRenderMode(data.liveRenderMode);
-        if (data.liveRenderLastStatus)      setLiveRenderStatus(data.liveRenderLastStatus);
-        if (data.liveRenderLastAt)          setLiveRenderLastAt(data.liveRenderLastAt);
-        if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
-        if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
-        if (data.liveRenderLastError)       setLiveRenderLastError(data.liveRenderLastError);
-        if (data.seo_site_name !== undefined)           setSeoSiteName(data.seo_site_name);
-        if (data.seo_default_description !== undefined) setSeoDefaultDescription(data.seo_default_description);
-        if (data.seo_default_og_image !== undefined)    setSeoDefaultOgImage(data.seo_default_og_image);
-        if (data.seo_twitter_handle !== undefined)      setSeoTwitterHandle(data.seo_twitter_handle);
-        if (data.seo_title_template !== undefined)             setSeoTitleTemplate(data.seo_title_template);
-        if (data.seo_organization_name !== undefined)          setSeoOrganizationName(data.seo_organization_name);
-        if (data.seo_organization_logo !== undefined)          setSeoOrganizationLogo(data.seo_organization_logo);
-        if (data.seo_google_site_verification !== undefined)   setSeoGoogleVerification(data.seo_google_site_verification);
-        if (data.seo_bing_site_verification !== undefined)     setSeoBingVerification(data.seo_bing_site_verification);
-        if (data.seo_indexing_enabled !== undefined)            setSeoIndexingEnabled(data.seo_indexing_enabled !== 'false');
-        if (data.seo_robots_txt_extra_disallow !== undefined)   setSeoRobotsExtraDisallow(data.seo_robots_txt_extra_disallow);
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleSaveSeoAdvanced = async () => {
-    setIsSavingSeoAdvanced(true);
+  const handleFolderDragDrop = async (enabled) => {
+    setSaving('dragdrop');
     try {
-      const entries = [
-        ['seo_title_template', seoTitleTemplate],
-        ['seo_organization_name', seoOrganizationName],
-        ['seo_organization_logo', seoOrganizationLogo],
-        ['seo_google_site_verification', seoGoogleVerification],
-        ['seo_bing_site_verification', seoBingVerification],
-        ['seo_indexing_enabled', String(seoIndexingEnabled)],
-        ['seo_robots_txt_extra_disallow', seoRobotsExtraDisallow],
-      ];
-      for (const [key, value] of entries) {
-        const res = await fetch('/api/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, value: String(value || '') }),
-        });
-        if (!res.ok) {
-          const d = await res.json();
-          throw new Error(d.error || 'Fehler beim Speichern');
-        }
-      }
-      showToast('SEO-Struktureinstellungen gespeichert', 'success');
+      await putSetting('folderDragDropEnabled', enabled);
+      setFolderDragDropEnabled(enabled);
+      showToast(enabled ? 'Drag-and-Drop für Ordner aktiviert' : 'Drag-and-Drop für Ordner deaktiviert', 'success');
     } catch (e) {
-      showToast(e.message || 'Fehler beim Speichern', 'error');
+      showToast(e.message, 'error');
     } finally {
-      setIsSavingSeoAdvanced(false);
+      setSaving('');
     }
   };
+
+  const handleSaveRetention = () => {
+    const n = parseInt(val('revisionRetentionDays', '7'), 10);
+    if (isNaN(n) || n < 0) {
+      showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
+      return;
+    }
+    saveEntries('retention', [['revisionRetentionDays', n]], 'Einstellung gespeichert');
+  };
+
+  const handleRichTextMode = async (next) => {
+    setValues((prev) => ({ ...prev, [RICH_TEXT_EDITOR_MODE_KEY]: next }));
+    await saveEntries('rtmode', [[RICH_TEXT_EDITOR_MODE_KEY, next]], `Rich-Text-Editor gespeichert: ${next === 'wysiwyg' ? 'WYSIWYG' : 'Markdown'}`);
+  };
+
+  // --- Admin-Logo ---
+  const announceLogoChange = () => window.dispatchEvent(new Event('admin-logo-changed'));
+
+  const saveLogo = async (url, message) => {
+    setValues((prev) => ({ ...prev, admin_logo_url: url }));
+    if (await saveEntries('logo', [['admin_logo_url', url]], message)) announceLogoChange();
+  };
+
+  const [faviconVersion, setFaviconVersion] = useState(() => Date.now());
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
 
   const handleFaviconUpload = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
-    setIsUploadingFavicon(true);
+    setUploadingFavicon(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -137,7 +209,7 @@ export default function SettingsView({ showToast }) {
     } catch (err) {
       showToast(err.message || 'Fehler beim Hochladen', 'error');
     } finally {
-      setIsUploadingFavicon(false);
+      setUploadingFavicon(false);
     }
   };
 
@@ -147,639 +219,252 @@ export default function SettingsView({ showToast }) {
     else showToast('Fehler beim Entfernen', 'error');
   };
 
-  const handleSaveSeoDefaults = async () => {
-    setIsSavingSeoDefaults(true);
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Bitte eine Bilddatei wählen', 'error');
+      return;
+    }
+    setUploadingLogo(true);
     try {
-      const entries = [
-        ['seo_site_name', seoSiteName],
-        ['seo_default_description', seoDefaultDescription],
-        ['seo_default_og_image', seoDefaultOgImage],
-        ['seo_twitter_handle', seoTwitterHandle],
-      ];
-      for (const [key, value] of entries) {
-        const res = await fetch('/api/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, value: String(value || '') }),
-        });
-        if (!res.ok) {
-          const d = await res.json();
-          throw new Error(d.error || 'Fehler beim Speichern');
-        }
-      }
-      showToast('SEO-Standardwerte gespeichert', 'success');
-    } catch (e) {
-      showToast(e.message || 'Fehler beim Speichern', 'error');
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/files', { method: 'POST', body: formData });
+      const data = await res.json().catch(() => ({}));
+      const url = data.file?.url || data.files?.[0]?.url;
+      if (!res.ok || !url) throw new Error(data.error || 'Upload fehlgeschlagen');
+      await saveLogo(url, 'Logo hochgeladen und gespeichert');
+    } catch (err) {
+      showToast(err.message || 'Upload fehlgeschlagen', 'error');
     } finally {
-      setIsSavingSeoDefaults(false);
+      setUploadingLogo(false);
     }
   };
 
-  const reloadLiveRenderSettings = async () => {
+  // --- Live-Render ---
+  const reloadLive = async () => {
     try {
       const res = await fetch('/api/settings');
       if (!res.ok) return;
       const data = await res.json();
-      if (data.liveRenderMode)            setLiveRenderMode(data.liveRenderMode);
-      if (data.liveRenderLastStatus)      setLiveRenderStatus(data.liveRenderLastStatus);
-      if (data.liveRenderLastAt)          setLiveRenderLastAt(data.liveRenderLastAt);
-      if (data.liveRenderLastDurationMs)  setLiveRenderLastDurationMs(data.liveRenderLastDurationMs);
-      if (data.liveRenderLastRoutes)      setLiveRenderLastRoutes(data.liveRenderLastRoutes);
-      if (data.liveRenderLastError !== undefined) setLiveRenderLastError(data.liveRenderLastError || '');
-    } catch (_e) {}
+      if (data.liveRenderMode) setLiveRenderMode(data.liveRenderMode);
+      applyLive(data);
+    } catch (_e) { /* ignorieren */ }
   };
 
   const handleSaveLiveMode = async (nextMode) => {
-    console.log('[settings] save live mode requested', { nextMode });
     setIsSavingLiveMode(true);
     try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'liveRenderMode', value: nextMode }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Fehler beim Speichern');
-      }
-      console.log('[settings] live mode saved', { nextMode, status: res.status });
+      await putSetting('liveRenderMode', nextMode);
       setLiveRenderMode(nextMode);
       showToast(`Live-Modus gespeichert: ${nextMode === 'static' ? 'Statisch' : 'Dynamisch'}`, 'success');
     } catch (e) {
-      console.error('[settings] save live mode failed', e);
-      showToast(e.message || 'Fehler beim Speichern', 'error');
+      showToast(e.message, 'error');
     } finally {
       setIsSavingLiveMode(false);
     }
   };
 
-  const handleSaveRichTextMode = async (nextMode) => {
-    setIsSavingRichTextMode(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: RICH_TEXT_EDITOR_MODE_KEY, value: nextMode }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || 'Fehler beim Speichern');
-      }
-      setRichTextEditorMode(nextMode);
-      showToast(`Rich-Text-Editor gespeichert: ${nextMode === 'wysiwyg' ? 'WYSIWYG' : 'Markdown'}`, 'success');
-    } catch (e) {
-      showToast(e.message || 'Fehler beim Speichern', 'error');
-    } finally {
-      setIsSavingRichTextMode(false);
-    }
-  };
-
   const handleRenderLiveNow = async () => {
-    console.log('[settings] render live requested', {
-      liveRenderMode,
-      liveRenderStatus,
-    });
     setIsRenderingLive(true);
-    setLiveRenderStatus('running');
-    setLiveRenderLastError('');
+    setLive((prev) => ({ ...prev, status: 'running', error: '' }));
     try {
-      const res = await fetch('/api/admin/render-live', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      console.log('[settings] render live response received', {
-        ok: res.ok,
-        status: res.status,
-      });
+      const res = await fetch('/api/admin/render-live', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
       const data = await res.json();
-      console.log('[settings] render live payload', {
-        ok: data.ok,
-        activatedMode: data.activatedMode,
-        renderedRoutes: data.renderedRoutes,
-        totalRoutes: data.totalRoutes,
-        durationMs: data.durationMs,
-        errorCount: Array.isArray(data.errors) ? data.errors.length : null,
-      });
-      if (!res.ok) {
-        throw new Error(data.error || 'Render fehlgeschlagen');
-      }
+      if (!res.ok) throw new Error(data.error || 'Render fehlgeschlagen');
       showToast(`Live erfolgreich gerendert (${data.renderedRoutes || 0} Seiten)`, 'success');
-      await reloadLiveRenderSettings();
+      await reloadLive();
     } catch (e) {
-      console.error('[settings] render live failed', e);
-      setLiveRenderStatus('error');
-      setLiveRenderLastError(e.message || 'Render fehlgeschlagen');
+      setLive((prev) => ({ ...prev, status: 'error', error: e.message || 'Render fehlgeschlagen' }));
       showToast(e.message || 'Render fehlgeschlagen', 'error');
     } finally {
       setIsRenderingLive(false);
     }
   };
 
-  const handleSaveFolderDragDrop = async (enabled) => {
-    setIsSavingFolderDragDrop(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'folderDragDropEnabled', value: String(enabled) }),
-      });
-      if (res.ok) {
-        setFolderDragDropEnabled(enabled);
-        showToast(enabled ? 'Drag-and-Drop für Ordner aktiviert' : 'Drag-and-Drop für Ordner deaktiviert', 'success');
-      } else {
-        const d = await res.json();
-        showToast(d.error || 'Fehler beim Speichern', 'error');
-      }
-    } catch (_e) {
-      showToast('Fehler beim Speichern', 'error');
-    } finally {
-      setIsSavingFolderDragDrop(false);
-    }
-  };
-
-  const handleSaveRetention = async () => {
-    const val = parseInt(revisionRetentionDays, 10);
-    if (isNaN(val) || val < 0) {
-      showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
-      return;
-    }
-    setIsSavingRetention(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'revisionRetentionDays', value: String(val) }),
-      });
-      if (res.ok) {
-        showToast('Einstellung gespeichert', 'success');
-      } else {
-        const d = await res.json();
-        showToast(d.error || 'Fehler beim Speichern', 'error');
-      }
-    } catch (e) {
-      showToast('Fehler beim Speichern', 'error');
-    } finally {
-      setIsSavingRetention(false);
-    }
-  };
-
-  // Reusable toggle button
-  const Toggle = ({ checked, onChange, disabled, label }) => (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      style={{
-        position: 'relative',
-        width: '44px', height: '24px',
-        borderRadius: '999px', border: 'none',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        background: checked ? 'var(--accent-primary)' : 'var(--border-color)',
-        transition: 'background 0.2s',
-        flexShrink: 0,
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: '3px',
-        left: checked ? '23px' : '3px',
-        width: '18px', height: '18px',
-        borderRadius: '50%', background: '#fff',
-        transition: 'left 0.2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-      }} />
-    </button>
-  );
-
+  const logoUrl = val('admin_logo_url');
 
   return (
-    <div className="admin-editor-area">
-      <div className="settings-content" style={{ padding: '2rem', maxWidth: '800px' }}>
-        <h2 style={{ marginBottom: '1.5rem' }}>Einstellungen</h2>
+    <div className="admin-editor-area st-page">
+      <div className="st-header">
+        <h2>Einstellungen</h2>
+        <nav className="st-tabs" role="tablist">
+          {TABS.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className={`st-tab${tab === t.id ? ' is-active' : ''}`} onClick={() => selectTab(t.id)}>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-        <table style={{
-              width: '100%', borderCollapse: 'collapse',
-              marginBottom: '3rem',
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px', overflow: 'hidden',
-              fontSize: '0.9rem',
-            }}>
-              <thead>
-                <tr style={{ background: 'var(--bg-tertiary)', borderBottom: '2px solid var(--border-color)' }}>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)', width: '140px' }}>Bereich</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Einstellung</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 600, color: 'var(--text-secondary)' }}>Beschreibung</th>
-                  <th style={{ padding: '0.65rem 1rem', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', width: '80px' }}>Aktiv</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'var(--bg-primary)' }}>
-                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-tertiary)', fontWeight: 500, verticalAlign: 'middle' }}>Editor</td>
-                  <td style={{ padding: '0.85rem 1rem', fontWeight: 600, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>Autospeichern</td>
-                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    Änderungen werden automatisch nach 1,2&nbsp;Sekunden gespeichert.
-                  </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                    <Toggle
-                      checked={autosaveEnabled}
-                      onChange={handleAutosaveToggle}
-                      label="Autospeichern ein-/ausschalten"
-                    />
-                  </td>
-                </tr>
-                <tr style={{ background: 'var(--bg-primary)' }}>
-                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-tertiary)', fontWeight: 500, verticalAlign: 'middle' }}>Dateiupload</td>
-                  <td style={{ padding: '0.85rem 1rem', fontWeight: 600, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>Ordner per Drag-and-Drop</td>
-                  <td style={{ padding: '0.85rem 1rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                    Standardmäßig deaktiviert. Fehleranfällig, kann je nach Browser oder Dateistruktur unzuverlässig sein.
-                  </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'center', verticalAlign: 'middle' }}>
-                    <Toggle
-                      checked={folderDragDropEnabled}
-                      onChange={handleSaveFolderDragDrop}
-                      disabled={isSavingFolderDragDrop}
-                      label="Ordner per Drag-and-Drop ein-/ausschalten"
-                    />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-
-            <section>
-              <h3 style={{ marginBottom: '1rem' }}>Versionierung</h3>
-              <p style={{ marginBottom: '1.5rem', color: '#666' }}>
-                Legt fest, wie viele Tage alte Seitenversionen gespeichert bleiben. Nach Ablauf der Frist werden ältere Versionen beim nächsten Speichern automatisch gelöscht. Setze den Wert auf <strong>0</strong>, um alle alten Versionen sofort zu löschen.
-              </p>
-
-              <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                    Aufbewahrungsdauer (Tage)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={revisionRetentionDays}
-                    onChange={e => setRevisionRetentionDays(e.target.value)}
-                    style={{
-                      width: '120px',
-                      padding: '0.6rem 0.75rem',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      fontSize: '1rem',
-                    }}
-                  />
+      <div className="st-content">
+        {tab === 'general' && (
+          <>
+            <Card title="Erscheinungsbild" description="Das Logo oben links im Admin-Bereich. Ohne eigene Angabe wird das Temgine-Logo verwendet.">
+              <Row label="Aktuelles Logo" hint="Vorschau auf der Admin-Navigationsleiste">
+                <div className="st-logo-preview">
+                  <img src={logoUrl || DEFAULT_LOGO} alt="Admin-Logo" onError={(e) => { e.currentTarget.style.opacity = 0.3; }} onLoad={(e) => { e.currentTarget.style.opacity = 1; }} />
                 </div>
-
-                <button
-                  onClick={handleSaveRetention}
-                  disabled={isSavingRetention}
-                  style={{
-                    marginTop: '1.4rem',
-                    padding: '0.6rem 1.5rem',
-                    background: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: isSavingRetention ? 'not-allowed' : 'pointer',
-                    opacity: isSavingRetention ? 0.6 : 1,
-                  }}
-                >
-                  {isSavingRetention ? 'Speichern…' : 'Speichern'}
-                </button>
-              </div>
-
-              <small style={{ color: '#6b7280' }}>
-                Standard: 7 Tage. Versionen, die durch eine automatische Wiederherstellung entstanden sind, unterliegen ebenfalls dieser Frist.
-              </small>
-            </section>
-
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>Rich-Text-Editor</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge).
-                Gespeichert wird in beiden Modi derselbe Markdown-Text — ein Wechsel verändert keine
-                bestehenden Inhalte.
-              </p>
-
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <label style={{ fontWeight: 600 }}>Editor</label>
-                <select
-                  value={richTextEditorMode}
-                  onChange={(e) => handleSaveRichTextMode(e.target.value)}
-                  disabled={isSavingRichTextMode}
-                  style={{
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
-                  <option value="wysiwyg">WYSIWYG (TipTap)</option>
-                </select>
-              </div>
-            </section>
-
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>Wartung &amp; Reparatur</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Findet und behebt Datenintegritätsprobleme im Seitenbaum (z.&nbsp;B. doppelte Slugs oder IDs),
-                die das Speichern mit einer Fehlermeldung wie „Slug(s) mehrfach vergeben" blockieren können —
-                auch dann, wenn der Editor selbst wegen genau dieses Problems nicht mehr speichern kann.
-              </p>
-              <a href="/repair" className="btn-modern" style={{ textDecoration: 'none' }}>
-                Reparatur-Werkzeug öffnen
-              </a>
-            </section>
-
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>SEO — Standardwerte für die Link-Vorschau</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Greift für jede Seite, die im SEO-Panel kein eigenes Meta-Bild/-Beschreibung hinterlegt hat —
-                etwa die Startseite, 404-Seite oder vergessene Einzelseiten. So sieht jeder geteilte Link
-                plausibel aus, auch ohne seitenspezifische Pflege.
-              </p>
-
-              <div style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
-                    Website-Name
-                  </label>
-                  <input
-                    type="text"
-                    value={seoSiteName}
-                    onChange={(e) => setSeoSiteName(e.target.value)}
-                    placeholder="z. B. Meine Firma GmbH"
-                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
-                    Standard Meta-Beschreibung
-                  </label>
-                  <textarea
-                    value={seoDefaultDescription}
-                    onChange={(e) => setSeoDefaultDescription(e.target.value)}
-                    placeholder="Kurzbeschreibung, die verwendet wird, wenn eine Seite keine eigene hat"
-                    rows={2}
-                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box', resize: 'vertical' }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
-                    Standard-Vorschaubild (Open Graph)
-                  </label>
-                  <input
-                    type="url"
-                    value={seoDefaultOgImage}
-                    onChange={(e) => setSeoDefaultOgImage(e.target.value)}
-                    placeholder="https://example.com/vorschaubild.jpg"
-                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                  <small style={{ color: 'var(--text-tertiary)' }}>
-                    Empfohlen: 1200×630px (Seitenverhältnis 1.91:1) — so wird es auf Facebook, LinkedIn &amp; Co. nicht zugeschnitten.
-                  </small>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 600 }}>
-                    X (Twitter) Handle
-                  </label>
-                  <input
-                    type="text"
-                    value={seoTwitterHandle}
-                    onChange={(e) => setSeoTwitterHandle(e.target.value)}
-                    placeholder="@firmenname"
-                    style={{ width: '100%', padding: '0.6rem 0.75rem', border: '1px solid var(--border-color)', borderRadius: '4px', boxSizing: 'border-box' }}
-                  />
-                </div>
-
-                <div>
-                  <button
-                    onClick={handleSaveSeoDefaults}
-                    disabled={isSavingSeoDefaults}
-                    style={{
-                      padding: '0.6rem 1.5rem',
-                      background: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: isSavingSeoDefaults ? 'not-allowed' : 'pointer',
-                      opacity: isSavingSeoDefaults ? 0.6 : 1,
-                    }}
-                  >
-                    {isSavingSeoDefaults ? 'Speichern…' : 'Speichern'}
+              </Row>
+              <Row label="Logo hochladen" hint="PNG, SVG, JPG oder WebP, max. 10 MB">
+                <label className={`st-btn${uploadingLogo ? ' is-disabled' : ''}`}>
+                  {uploadingLogo ? 'Lade hoch…' : 'Datei wählen…'}
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} disabled={uploadingLogo} hidden />
+                </label>
+              </Row>
+              <Row label="oder Logo-URL" hint="Absoluter Link oder Pfad, z. B. /uploads/logo.png" stacked>
+                <div className="st-inline">
+                  <input type="text" className="st-input" value={logoUrl} onChange={setVal('admin_logo_url')} placeholder="https://example.com/logo.png" />
+                  <SaveButton onClick={() => saveLogo(logoUrl.trim(), 'Logo gespeichert')} saving={saving === 'logo'} />
+                  <button type="button" className="st-btn" onClick={() => saveLogo('', 'Standard-Logo wiederhergestellt')} disabled={!logoUrl || saving === 'logo'}>
+                    Zurücksetzen
                   </button>
                 </div>
-              </div>
-            </section>
+              </Row>
+            </Card>
 
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>Favicon</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Grafik hochladen (am besten quadratisch, mind. 180×180px, PNG/SVG/JPG) — sie wird automatisch
-                in alle Favicon-Größen (ICO, 16/32px, Apple-Touch-Icon) umgewandelt und eingebunden.
-                Browser cachen Favicons stark; Änderungen erscheinen ggf. erst nach einem Hard-Reload.
-              </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+            <Card title="Favicon" description="Das Symbol im Browser-Tab. Die Grafik wird automatisch quadratisch zugeschnitten und in alle Größen (ICO, 16/32 px, Apple-Touch-Icon) umgewandelt. Browser cachen Favicons stark, ggf. erst nach Hard-Reload sichtbar.">
+              <Row label="Aktuelles Favicon">
                 <img
                   src={`/uploads/favicon/favicon-32x32.png?v=${faviconVersion}`}
-                  alt=""
-                  width={32}
-                  height={32}
+                  alt="" width={32} height={32}
                   onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }}
                   onLoad={(e) => { e.currentTarget.style.visibility = 'visible'; }}
                 />
-                <input type="file" accept="image/*" onChange={handleFaviconUpload} disabled={isUploadingFavicon} />
-                <button type="button" onClick={handleFaviconDelete}>Entfernen</button>
+              </Row>
+              <Row label="Grafik hochladen" hint="Quadratisch, mind. 180×180 px; PNG, SVG, JPG oder WebP, max. 10 MB">
+                <div className="st-inline">
+                  <label className={`st-btn${uploadingFavicon ? ' is-disabled' : ''}`}>
+                    {uploadingFavicon ? 'Lade hoch…' : 'Datei wählen…'}
+                    <input type="file" accept="image/*" onChange={handleFaviconUpload} disabled={uploadingFavicon} hidden />
+                  </label>
+                  <button type="button" className="st-btn" onClick={handleFaviconDelete}>Entfernen</button>
+                </div>
+              </Row>
+            </Card>
+
+            <Card title="Editor &amp; Dateien">
+              <Row label="Autospeichern" hint="Änderungen werden automatisch nach 1,2 Sekunden gespeichert.">
+                <Toggle checked={autosaveEnabled} onChange={handleAutosaveToggle} label="Autospeichern ein-/ausschalten" />
+              </Row>
+              <Row label="Ordner per Drag-and-Drop" hint="Standardmäßig deaktiviert. Fehleranfällig, kann je nach Browser oder Dateistruktur unzuverlässig sein.">
+                <Toggle checked={folderDragDropEnabled} onChange={handleFolderDragDrop} disabled={saving === 'dragdrop'} label="Ordner per Drag-and-Drop ein-/ausschalten" />
+              </Row>
+            </Card>
+
+            <Card title="Rich-Text-Editor" description="Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge). In beiden Modi wird derselbe Markdown-Text gespeichert, ein Wechsel verändert keine bestehenden Inhalte.">
+              <Row label="Editor">
+                <select className="st-input st-input-narrow" value={val(RICH_TEXT_EDITOR_MODE_KEY, 'markdown') === 'wysiwyg' ? 'wysiwyg' : 'markdown'} onChange={(e) => handleRichTextMode(e.target.value)} disabled={saving === 'rtmode'}>
+                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
+                  <option value="wysiwyg">WYSIWYG (TipTap)</option>
+                </select>
+              </Row>
+            </Card>
+
+            <Card
+              title="Versionierung"
+              description="Wie lange alte Seitenversionen gespeichert bleiben. Ältere Versionen werden beim nächsten Speichern gelöscht. 0 = keine Aufbewahrung. Standard: 7 Tage; auch durch Wiederherstellung entstandene Versionen unterliegen der Frist."
+            >
+              <Row label="Aufbewahrungsdauer (Tage)">
+                <div className="st-inline">
+                  <input type="number" min="0" className="st-input st-input-narrow" value={val('revisionRetentionDays', '7')} onChange={setVal('revisionRetentionDays')} />
+                  <SaveButton onClick={handleSaveRetention} saving={saving === 'retention'} />
+                </div>
+              </Row>
+            </Card>
+          </>
+        )}
+
+        {tab === 'seo' && (
+          <>
+            <Card
+              title="Link-Vorschau"
+              description="Standardwerte für jede Seite ohne eigenes Meta-Bild bzw. eigene Beschreibung (z. B. Startseite oder 404). So sieht jeder geteilte Link plausibel aus."
+              footer={<SaveButton onClick={() => saveKeys('seoDefaults', ['seo_site_name', 'seo_default_description', 'seo_default_og_image', 'seo_twitter_handle'], 'SEO-Standardwerte gespeichert')} saving={saving === 'seoDefaults'} />}
+            >
+              <Row label="Website-Name" stacked>
+                <input type="text" className="st-input" value={val('seo_site_name')} onChange={setVal('seo_site_name')} placeholder="z. B. Meine Firma GmbH" />
+              </Row>
+              <Row label="Standard Meta-Beschreibung" stacked>
+                <textarea className="st-input" rows={2} value={val('seo_default_description')} onChange={setVal('seo_default_description')} placeholder="Kurzbeschreibung, die verwendet wird, wenn eine Seite keine eigene hat" />
+              </Row>
+              <Row label="Standard-Vorschaubild (Open Graph)" hint="Empfohlen: 1200×630 px (1,91:1), damit es auf Facebook, LinkedIn & Co. nicht zugeschnitten wird." stacked>
+                <input type="url" className="st-input" value={val('seo_default_og_image')} onChange={setVal('seo_default_og_image')} placeholder="https://example.com/vorschaubild.jpg" />
+              </Row>
+              <Row label="X (Twitter) Handle" stacked>
+                <input type="text" className="st-input" value={val('seo_twitter_handle')} onChange={setVal('seo_twitter_handle')} placeholder="@firmenname" />
+              </Row>
+            </Card>
+
+            <Card
+              title="Suchmaschinen & Struktur"
+              description="Wirkt sich auf alle Seiten aus: Titel-Vorlage, strukturierte Daten (Organization-Schema für Google) und die Sichtbarkeit für Suchmaschinen."
+              footer={<SaveButton onClick={() => saveKeys('seoAdvanced', ['seo_title_template', 'seo_organization_name', 'seo_organization_logo', 'seo_google_site_verification', 'seo_bing_site_verification', 'seo_robots_txt_extra_disallow'], 'SEO-Struktureinstellungen gespeichert', [['seo_indexing_enabled', seoIndexingEnabled]])} saving={saving === 'seoAdvanced'} />}
+            >
+              <Row label="Titel-Vorlage" hint="%s wird durch den Seitentitel ersetzt. Leer: „Seitentitel – Website-Name“." stacked>
+                <input type="text" className="st-input" value={val('seo_title_template')} onChange={setVal('seo_title_template')} placeholder="%s – Meine Firma GmbH" />
+              </Row>
+              <Row label="Organisationsname" hint="Für strukturierte Daten" stacked>
+                <input type="text" className="st-input" value={val('seo_organization_name')} onChange={setVal('seo_organization_name')} placeholder="z. B. Meine Firma GmbH" />
+              </Row>
+              <Row label="Organisations-Logo (URL)" stacked>
+                <input type="url" className="st-input" value={val('seo_organization_logo')} onChange={setVal('seo_organization_logo')} placeholder="https://example.com/logo.png" />
+              </Row>
+              <Row label="Google Search Console" hint="Verifizierungscode (Inhalt des content-Attributs, ohne Meta-Tag)" stacked>
+                <input type="text" className="st-input" value={val('seo_google_site_verification')} onChange={setVal('seo_google_site_verification')} />
+              </Row>
+              <Row label="Bing Webmaster Tools" hint="Verifizierungscode (Inhalt des content-Attributs, ohne Meta-Tag)" stacked>
+                <input type="text" className="st-input" value={val('seo_bing_site_verification')} onChange={setVal('seo_bing_site_verification')} />
+              </Row>
+              <Row label="Zusätzliche robots.txt Disallow-Pfade" hint="Ein Pfad pro Zeile, ergänzt die Standard-Sperrliste (/admin, /api)." stacked>
+                <textarea className="st-input" rows={3} value={val('seo_robots_txt_extra_disallow')} onChange={setVal('seo_robots_txt_extra_disallow')} placeholder={'/intern\n/entwuerfe'} />
+              </Row>
+              <div className={`st-danger${seoIndexingEnabled ? '' : ' is-active'}`}>
+                <Toggle checked={!seoIndexingEnabled} onChange={(on) => setSeoIndexingEnabled(!on)} label="Indexierung durch Suchmaschinen global deaktivieren" />
+                <div>
+                  <strong>Indexierung global deaktivieren</strong>
+                  <small>Für Staging/Test: erzwingt <code>noindex, nofollow</code> auf allen Seiten und <code>Disallow: /</code> in der robots.txt, unabhängig von den Seiteneinstellungen.</small>
+                </div>
               </div>
-            </section>
+            </Card>
+          </>
+        )}
 
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>SEO — Suchmaschinen &amp; Struktur</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Wirkt sich auf <strong>alle</strong> Seiten aus: Titel-Vorlage, strukturierte Daten
-                (Organization-Schema für Google) und die Sichtbarkeit für Suchmaschinen insgesamt.
-              </p>
+        {tab === 'stats' && <MatomoPanel showToast={showToast} />}
 
-              <div style={{ display: 'grid', gap: '1rem', maxWidth: '520px' }}>
-                <div>
-                  <label style={labelStyle}>Titel-Vorlage</label>
-                  <input
-                    type="text"
-                    value={seoTitleTemplate}
-                    onChange={(e) => setSeoTitleTemplate(e.target.value)}
-                    placeholder="%s – Meine Firma GmbH"
-                    style={inputStyleSettings}
-                  />
-                  <small style={{ color: 'var(--text-tertiary)' }}>
-                    <code>%s</code> wird durch den jeweiligen Seitentitel ersetzt. Leer lassen für
-                    „Seitentitel – Website-Name".
-                  </small>
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Organisationsname (für strukturierte Daten)</label>
-                  <input
-                    type="text"
-                    value={seoOrganizationName}
-                    onChange={(e) => setSeoOrganizationName(e.target.value)}
-                    placeholder="z. B. Meine Firma GmbH"
-                    style={inputStyleSettings}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Organisations-Logo (URL)</label>
-                  <input
-                    type="url"
-                    value={seoOrganizationLogo}
-                    onChange={(e) => setSeoOrganizationLogo(e.target.value)}
-                    placeholder="https://example.com/logo.png"
-                    style={inputStyleSettings}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Google Search Console — Verifizierungscode</label>
-                  <input
-                    type="text"
-                    value={seoGoogleVerification}
-                    onChange={(e) => setSeoGoogleVerification(e.target.value)}
-                    placeholder="Inhalt des content-Attributs, ohne <meta>-Tag"
-                    style={inputStyleSettings}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Bing Webmaster Tools — Verifizierungscode</label>
-                  <input
-                    type="text"
-                    value={seoBingVerification}
-                    onChange={(e) => setSeoBingVerification(e.target.value)}
-                    placeholder="Inhalt des content-Attributs, ohne <meta>-Tag"
-                    style={inputStyleSettings}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Zusätzliche robots.txt Disallow-Pfade</label>
-                  <textarea
-                    value={seoRobotsExtraDisallow}
-                    onChange={(e) => setSeoRobotsExtraDisallow(e.target.value)}
-                    placeholder={'/intern\n/entwuerfe'}
-                    rows={3}
-                    style={{ ...inputStyleSettings, resize: 'vertical' }}
-                  />
-                  <small style={{ color: 'var(--text-tertiary)' }}>
-                    Ein Pfad pro Zeile, ergänzt die Standard-Sperrliste (/admin, /api).
-                  </small>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', border: '1px solid var(--border-color)', borderRadius: '6px', background: seoIndexingEnabled ? 'transparent' : 'rgba(220, 38, 38, 0.08)' }}>
-                  <Toggle
-                    checked={!seoIndexingEnabled}
-                    onChange={(checked) => setSeoIndexingEnabled(!checked)}
-                    label="Indexierung durch Suchmaschinen global deaktivieren"
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>Indexierung global deaktivieren</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      Für Staging/Test-Umgebungen: erzwingt <code>noindex, nofollow</code> auf allen Seiten
-                      und <code>Disallow: /</code> in der robots.txt — unabhängig von den Einstellungen
-                      einzelner Seiten.
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <button
-                    onClick={handleSaveSeoAdvanced}
-                    disabled={isSavingSeoAdvanced}
-                    style={{
-                      padding: '0.6rem 1.5rem',
-                      background: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: isSavingSeoAdvanced ? 'not-allowed' : 'pointer',
-                      opacity: isSavingSeoAdvanced ? 0.6 : 1,
-                    }}
-                  >
-                    {isSavingSeoAdvanced ? 'Speichern…' : 'Speichern'}
+        {tab === 'live' && (
+          <>
+            <Card title="Staging / Live-Auslieferung" description="Die Vorschau bleibt dynamisch über die Datenbank. Für eine ausfallsichere Live-Seite kannst du hier einen statischen Snapshot rendern.">
+              <Row label="Live-Modus">
+                <div className="st-inline">
+                  <select className="st-input st-input-narrow" value={liveRenderMode} onChange={(e) => handleSaveLiveMode(e.target.value)} disabled={isSavingLiveMode}>
+                    <option value="dynamic">Dynamisch (DB/API)</option>
+                    <option value="static">Statisch (Snapshot)</option>
+                  </select>
+                  <button type="button" className="st-btn st-btn-primary" onClick={handleRenderLiveNow} disabled={isRenderingLive}>
+                    {isRenderingLive ? 'Rendere Live…' : 'Live jetzt rendern'}
                   </button>
                 </div>
-              </div>
-            </section>
+              </Row>
+              <dl className="st-facts">
+                <div><dt>Status</dt><dd>{live.status || 'n/a'}</dd></div>
+                <div><dt>Letzter Render</dt><dd>{live.at || 'n/a'}</dd></div>
+                <div><dt>Dauer</dt><dd>{live.duration ? `${live.duration} ms` : 'n/a'}</dd></div>
+                <div><dt>Gerenderte Seiten</dt><dd>{live.routes || 'n/a'}</dd></div>
+              </dl>
+              {live.error && <p className="st-error">Letzter Fehler: {live.error}</p>}
+              <small className="st-note">Tipp: Mit <strong>?preview=1</strong> an der Seiten-URL erzwingst du die dynamische Vorschau.</small>
+            </Card>
 
-            <MatomoPanel showToast={showToast} />
-
-            <section style={{ marginTop: '2.5rem' }}>
-              <h3 style={{ marginBottom: '0.5rem' }}>Staging / Live-Auslieferung</h3>
-              <p style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>
-                Vorschau bleibt dynamisch über die Datenbank. Für eine ausfallsichere Live-Seite kannst du hier einen statischen Snapshot rendern.
-              </p>
-
-              <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                <label style={{ fontWeight: 600 }}>Live-Modus</label>
-                <select
-                  value={liveRenderMode}
-                  onChange={(e) => handleSaveLiveMode(e.target.value)}
-                  disabled={isSavingLiveMode}
-                  style={{
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)'
-                  }}
-                >
-                  <option value="dynamic">Dynamisch (DB/API)</option>
-                  <option value="static">Statisch (Snapshot)</option>
-                </select>
-
-                <button
-                  onClick={handleRenderLiveNow}
-                  disabled={isRenderingLive}
-                  style={{
-                    padding: '0.6rem 1.5rem',
-                    background: '#2563eb',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    cursor: isRenderingLive ? 'not-allowed' : 'pointer',
-                    opacity: isRenderingLive ? 0.6 : 1,
-                  }}
-                >
-                  {isRenderingLive ? 'Rendere Live…' : 'Live jetzt rendern'}
-                </button>
-              </div>
-
-              <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                <div>Status: <strong>{liveRenderStatus || 'n/a'}</strong></div>
-                <div>Letzter Render: <strong>{liveRenderLastAt || 'n/a'}</strong></div>
-                <div>Dauer: <strong>{liveRenderLastDurationMs ? `${liveRenderLastDurationMs} ms` : 'n/a'}</strong></div>
-                <div>Gerenderte Seiten: <strong>{liveRenderLastRoutes || 'n/a'}</strong></div>
-                {liveRenderLastError && (
-                  <div style={{ color: '#b91c1c' }}>
-                    Letzter Fehler: {liveRenderLastError}
-                  </div>
-                )}
-              </div>
-
-              <small style={{ color: 'var(--text-tertiary)', display: 'block', marginTop: '0.75rem' }}>
-                Tipp: Mit <strong>?preview=1</strong> am Seiten-URL kannst du die dynamische Vorschau erzwingen.
-              </small>
-            </section>
-
+            <Card
+              title="Wartung & Reparatur"
+              description="Findet und behebt Datenintegritätsprobleme im Seitenbaum (z. B. doppelte Slugs oder IDs), die das Speichern mit „Slug(s) mehrfach vergeben“ blockieren können, auch wenn der Editor selbst nicht mehr speichern kann."
+              footer={<a href="/repair" className="st-btn">Reparatur-Werkzeug öffnen</a>}
+            />
+          </>
+        )}
       </div>
     </div>
   );

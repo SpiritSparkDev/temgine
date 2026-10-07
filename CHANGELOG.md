@@ -5,13 +5,72 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.27.0] - 2026-10-07
+## [0.31.0] - 2026-10-07
 
 ### Added
-- Favicon-Upload unter Einstellungen → "Favicon": Eine hochgeladene Grafik wird per `sharp` automatisch quadratisch zugeschnitten und in `favicon.ico`, 16×16, 32×32 und Apple-Touch-Icon (180×180) umgewandelt (`pages/api/settings/favicon.js`, Ablage in `public/uploads/favicon/`, damit sie im Docker-Volume erhalten bleibt). `pages/_app.js` bindet die Dateien von dort ein; der Verweis auf die nicht existierende `site.webmanifest` entfällt.
+- **Favicon-Upload** unter Einstellungen → Allgemein → Favicon: Eine hochgeladene Grafik wird per `sharp` automatisch quadratisch zugeschnitten und in `favicon.ico`, 16×16, 32×32 und Apple-Touch-Icon (180×180) umgewandelt (`pages/api/settings/favicon.js`, Ablage in `public/uploads/favicon/`, damit sie im Docker-Volume erhalten bleibt). `pages/_app.js` bindet die Dateien von dort ein; der Verweis auf die nicht existierende `site.webmanifest` entfällt.
 
 ---
 
+## [0.30.0] - 2026-10-06
+
+### Changed
+- **Ruhigere Feldmasken im Seiten-Editor:** Felder ohne eigene Box (eine Rahmenebene pro Block), Labels normal geschrieben in lesbarer Systemschrift statt orangefarbener Mini-Versalien in Monospace.
+- **Link-Feld:** Art-Auswahl "Interne Seite" (Dropdown mit allen Seiten und Pfad), "Externe URL" oder "Datei"; die Art wird aus dem Wert erkannt.
+- **Bild-Feld:** Thumbnail mit Klick zum Auswählen, Buttons "Ändern" und "Entfernen", URL-Eingabe als Alternative.
+- Begriffe: "Anchor ID" → "Sprungmarke", "Kindblöcke" → "Unterblöcke", Repeater-Buttons und -Einträge tragen den Namen des Repeaters ("Features hinzufügen", "Features 1").
+
+### Fixed
+- Feldnamen wie "Link Text"/"Link Label" wurden als URL-Feld erkannt (`guessInputType`); sie sind jetzt normale Textfelder.
+
+---
+
+## [0.29.2] - 2026-10-05
+
+### Security
+- `PUT /api/settings` hatte keine Anmeldeprüfung: Jeder, der die Seite erreichte, konnte Einstellungen (SEO, Wartungsseiten, Admin-Logo, Matomo, SMTP-Passwort …) ändern. Schreibzugriff ist jetzt auf eingeloggte Admins und Moderatoren beschränkt (gleiche Rollen wie Templates/CSS/JS); `GET` bleibt öffentlich, weil ausgelieferte Seiten die Einstellungen lesen.
+
+---
+
+## [0.29.1] - 2026-10-05
+
+### Changed
+- Content-Security-Policy: `frame-src` erlaubt zusätzlich `https://www.youtube.com` und `https://www.youtube-nocookie.com`, damit eingebettete YouTube-Videos auf ausgelieferten Seiten nicht mehr von der CSP blockiert werden. (Fehler 153 in den `srcdoc`-basierten Editor-Vorschauen ist eine YouTube-Referrer-Einschränkung und davon nicht betroffen.)
+
+---
+
+## [0.29.0] - 2026-10-05
+
+### Added
+- **Admin-Logo überschreibbar:** Einstellungen → Allgemein → Erscheinungsbild: Logo hochladen oder per URL/Pfad setzen (Setting `admin_logo_url`), Zurücksetzen auf das Temgine-Logo; die Admin-Navigationsleiste übernimmt Änderungen ohne Neuladen.
+
+### Changed
+- **Einstellungen neu gestaltet:** Vier Tabs (Allgemein, SEO, Statistik, Live & Wartung) statt einer langen Seite; Karten mit Titel, Beschreibung und einheitlichen Zeilen/Bedienelementen, Speichern pro Karte, gemerkter Tab, responsive. Alle bisherigen Einstellungen bleiben erhalten.
+
+---
+
+## [0.28.0] - 2026-10-05
+
+### Added
+- **Schneller zur Bearbeitungsstelle im Editor:** Ein Klick in der Split-Vorschau auf Text, Bild oder Link springt direkt zum passenden Feld (auch in Repeater-Einträgen und in verschachtelten Blöcken); zugeklappte Blöcke und Repeater-Einträge werden dafür aufgeklappt. Die Zuordnung steckt in `lib/previewFieldMatch.js` (mit Tests).
+- Block-Header zeigen immer eine Inhaltszeile (erster gefüllter Text, erstes Bild); Toolbar-Button "Übersicht" klappt alle Blöcke zu einer Liste zusammen bzw. wieder auf.
+
+### Fixed
+- Klick in der Split- bzw. Strukturvorschau scrollte den Editor nicht zur Stelle (zu knappes "nearest"-Scrollen, Ziel unter der Sticky-Toolbar, kein Neu-Auslösen bei gleichem Block). Der Editor scrollt jetzt zum Blockanfang bzw. Feld, auch bei erneutem Klick.
+
+---
+
+## [0.27.0] - 2026-10-05
+
+### Added
+- **Template-Auswahl als Popup** (`TemplatePickerModal`): Statt des Dropdowns im Block-Header öffnet ein Dialog mit Suche und Farblegende. Jede Karte zeigt das Template schematisch mit farbigen Feldern je Datentyp (Text, Richtext, Bild, Link, Zahl, Datum, Farbe, Auswahl, Liste, Ordner) und Repeatern.
+- **Feld-Gruppen im Template:** `{{titel:text|Inhalt}}` ordnet ein Feld einem Abschnitt im Editor zu (Parser + Render-Engine strippen die Annotation). Ohne Angabe: "Inhalt", Auswahl/Farbe/Zahl/Level/Klasse automatisch "Darstellung".
+- **"Kein Template" = freies HTML-Feld:** Blöcke ohne Template haben ein HTML-Feld (`props.html`), das unverändert ausgegeben wird. Rohes HTML bleibt nur bei Admin/Moderator erhalten, bei Editoren bleibt bereits gespeichertes HTML unverändert, neues wird bereinigt.
+- **Repeater:** "Eintrag hinzufügen" vor jedem Eintrag (fügt an dieser Position ein) und am Ende; Einträge einzeln zuklappbar mit Zusammenfassungszeile.
+- `docker-compose.dev.yml` (App + Postgres für die lokale Entwicklung, Port 3020), `DEVELOPMENT.md` und `scripts/seed-example-pages.js` (Beispiel-Seiten).
+
+### Changed
+- Block-Felder erscheinen in Template-Reihenfolge (keine Sonderbehandlung für Textareas mehr, keine aus dem HTML abgeleiteten Gruppen); zugeklappte Blöcke zeigen eine Zusammenfassung.
 ## [0.26.0] - 2026-10-03
 
 ### Added

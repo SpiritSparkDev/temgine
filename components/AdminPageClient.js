@@ -40,10 +40,19 @@ export default function AdminPageClient() {
   const [builderTab, setBuilderTab] = useState('templates');
   const [builderSearch, setBuilderSearch] = useState('');
   const [settingsTab, setSettingsTab] = useState('users');
+  const [adminLogo, setAdminLogo] = useState('/brand/light.png');
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [membersTab, setMembersTab] = useState('members');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+
+  // Eigenes Admin-Logo (Einstellungen → Erscheinungsbild); lädt beim Start und nach Änderungen
+  useEffect(() => {
+    const loadLogo = () => fetch('/api/settings').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setAdminLogo(d.admin_logo_url || '/brand/light.png'); }).catch(() => {});
+    loadLogo();
+    window.addEventListener('admin-logo-changed', loadLogo);
+    return () => window.removeEventListener('admin-logo-changed', loadLogo);
+  }, []);
 
   useEffect(() => {
     if (view === 'users') {
@@ -664,7 +673,7 @@ export default function AdminPageClient() {
             <Menu size={18} />
           </button>
           <a href="/" className="admin-logo-link" title="Temgine CMS">
-            <img style={{ marginRight: '10px' }} src="/brand/light.png" alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Admin Bereich</h1>
+            <img style={{ marginRight: '10px' }} src={adminLogo || '/brand/light.png'} alt="Temgine CMS" className="admin-logo-img" /> <h1 className='admin-logo'>Admin Bereich</h1>
           </a>
         </div>
         <div className="admin-navbar-right">

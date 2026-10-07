@@ -324,3 +324,18 @@ describe('renderPage footer + global variables', () => {
     expect(html).toContain('<nav>Temgine</nav>');
   });
 });
+
+describe('|Gruppe annotation rendering', () => {
+  test('is stripped before rendering', () => {
+    const { renderTemplate } = require('../lib/templateEngine');
+    expect(renderTemplate('<p>{{a:text|Inhalt}}-{{{b:textarea|X}}}-{{c|Y}}</p>', { a: '1', b: '2', c: '3' })).toBe('<p>1-2-3</p>');
+  });
+});
+
+describe('Block ohne Template = freies HTML-Feld', () => {
+  test('props.html wird unverändert ausgegeben', () => {
+    const { renderPage } = require('../lib/templateEngine');
+    const page = { title: 'T', slug: 't', blocks: [{ type: 'content', template: '', props: { html: '<div class="x" style="color:red">Hallo</div>' } }] };
+    expect(renderPage(page, {}, {}, {})).toContain('<div class="x" style="color:red">Hallo</div>');
+  });
+});
