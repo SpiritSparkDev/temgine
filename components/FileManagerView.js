@@ -117,6 +117,7 @@ export default function FileManagerView({ showToast }) {
   const [showExtImport, setShowExtImport] = useState(false);
 
   const dragCounter = useRef(0);
+  const [usedUrls, setUsedUrls] = useState(() => new Set());
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -124,6 +125,13 @@ export default function FileManagerView({ showToast }) {
   useEffect(() => {
     loadFiles();
   }, [currentFolder]);
+
+  useEffect(() => {
+    fetch('/api/files/usage')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setUsedUrls(new Set(d?.urls || [])))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch('/api/external-sources')
@@ -857,6 +865,7 @@ export default function FileManagerView({ showToast }) {
           const isSelected = selectedUrls.has(file.url);
           const meta       = metadataMap[file.url];
           const missingAlt = isImage(file.name) && !meta?.altText;
+          const inUse      = usedUrls.has(file.url);
           return (
             <div key={index} className={`file-card${isSelected ? ' file-card-selected' : ''}`} style={{ position: 'relative' }}>
 
@@ -867,6 +876,14 @@ export default function FileManagerView({ showToast }) {
                   {isSelected
                     ? <CheckSquare size={18} style={{ color: '#2563eb' }} />
                     : <Square size={18} style={{ color: '#9ca3af' }} />}
+                </div>
+              )}
+
+              {/* In Verwendung Badge */}
+              {inUse && (
+                <div title="Diese Datei ist bereits eingebunden (Seiten, Templates, Navigationen, Inhalte oder Einstellungen)"
+                  style={{ position: 'absolute', top: missingAlt ? 30 : 6, right: 6, zIndex: 2, background: 'rgba(22,163,74,0.9)', color: '#fff', borderRadius: 4, padding: '2px 6px', fontSize: '0.65rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <CheckSquare size={10} /> In Verwendung
                 </div>
               )}
 

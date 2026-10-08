@@ -90,6 +90,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // 'file' = bestehendes Verhalten (Bild-/Datei-Auswahl); 'folder' = {{#folder}}-Felder wählen
   // einen ganzen Ordner statt einer einzelnen Datei.
   const [fileModalMode, setFileModalMode] = useState('file');
+  const [galleryFilter, setGalleryFilter] = useState({ types: [], created: 'all', modified: 'all' });
+  const [gallerySort, setGallerySort] = useState('asc');
+  const [galleryLimit, setGalleryLimit] = useState(60);
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-datafields', 'outline-access', 'outline-seo', 'outline-workflow']));
@@ -789,9 +792,40 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const formatBlockNumber = (path) => String(path).split('.').map(part => Number(part) + 1).join('.');
 
+  const FILE_TYPE_GROUPS = {
+    image: { label: 'Bilder', ext: /\.(jpe?g|png|gif|webp|svg|avif)$/i },
+    document: { label: 'Dokumente', ext: /\.(pdf|docx?|xlsx?|pptx?|txt|csv)$/i },
+    video: { label: 'Video/Audio', ext: /\.(mp4|mov|avi|webm|mp3|wav|ogg)$/i },
+    archive: { label: 'Archive', ext: /\.(zip|rar|7z)$/i },
+  };
+  const DATE_RANGES = { all: 0, today: 1, week: 7, month: 30, year: 365 };
+  const inRange = (dateStr, range) => {
+    const days = DATE_RANGES[range];
+    if (!days) return true;
+    const t = new Date(dateStr).getTime();
+    return !isNaN(t) && Date.now() - t <= days * 86400000;
+  };
+  const getFilteredGalleryFiles = () => {
+    const { types, created, modified } = galleryFilter;
+    const list = uploadedFiles.filter(f => {
+      const name = f.filename || f.name || '';
+      if (types.length) {
+        const group = Object.keys(FILE_TYPE_GROUPS).find(k => FILE_TYPE_GROUPS[k].ext.test(name)) || 'other';
+        if (!types.includes(group)) return false;
+      }
+      return inRange(f.created, created) && inRange(f.modified, modified);
+    });
+    const dir = gallerySort === 'desc' ? -1 : 1;
+    return list.sort((a, b) => dir * (a.filename || a.name || '').localeCompare(b.filename || b.name || '', 'de', { sensitivity: 'base', numeric: true }));
+  };
+  // Nur beim offenen Modal berechnen, nur einmal pro Render
+  const galleryFiles = showFileModal ? getFilteredGalleryFiles() : [];
+  const galleryFilterActive = galleryFilter.types.length > 0 || galleryFilter.created !== 'all' || galleryFilter.modified !== 'all';
+
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
     setFileModalMode('file');
+    setGalleryLimit(60);
     setFileModalTab('gallery');
     setFileModalFolder('');
     setFileModalFolderContents({ files: [], folders: [] });
@@ -861,26 +895,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (files.length === 0) return;
 
     setUploading(true);
+    let okCount = 0;
+    const inFolders = fileModalTab === 'folders';
 
     for (const file of files) {
       const formData = new FormData();
       formData.append('file', file);
 
       try {
-        const res = await fetch('/api/files', {
+        const res = await fetch(inFolders ? `/api/files?folder=${encodeURIComponent(fileModalFolder || '')}` : '/api/files', {
           method: 'POST',
           body: formData
         });
 
         if (!res.ok) {
-          const error = await res.json();
+          const error = await res.json().catch(() => ({}));
           console.error('Upload-Fehler:', error);
           showToast(`Fehler beim Hochladen von ${file.name}: ${error.error || 'Unbekannter Fehler'}`, 'error');
           continue;
         }
 
-        const result = await res.json();
-        console.log('Datei hochgeladen:', result);
+        okCount += 1;
       } catch (error) {
         console.error('Upload-Fehler:', error);
         showToast(`Fehler beim Hochladen von ${file.name}`, 'error');
@@ -898,9 +933,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       console.error('Fehler beim Laden der Dateien:', error);
     }
 
+    if (inFolders) await loadFolderContents(fileModalFolder);
+
     setUploading(false);
     e.target.value = ''; // Reset input
-    showToast('Dateien erfolgreich aktualisiert', 'success');
+    if (okCount > 0) showToast(`${okCount} von ${files.length} Datei(en) hochgeladen`, okCount === files.length ? 'success' : 'error');
   };
 
   function handleAddBlock(type) {
@@ -2688,6 +2725,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             >
               <History size={14} /> Verlauf
             </button>
+            <button
+              type="button"
+              className="pe-tb-btn"
+              onClick={() => setShowAdvancedModal(true)}
+              title="Erweiterte Seiten-Optionen (Wrapper, Navigations-Bild)"
+            >
+              🧩 Erweitert{(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
+            </button>
             <div className="pe-toolbar-sep" />
             <button
               type="button"
@@ -3051,10 +3096,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                         </label>
 
                         <div className="inspector-more-actions">
-                          <button type="button" className="btn-modern-small" onClick={() => setShowAdvancedModal(true)}>
-                            🧩 Erweiterte Optionen…
-                            {(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
-                          </button>
                           <button type="button" className="btn-modern-small" onClick={() => setShowAnchorsModal(true)}>
                             ⚓ Sprungmarken verwalten…
                             {(() => {
@@ -3637,7 +3678,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
       {/* Datei-Auswahl Modal */}
       {showFileModal && (
-        <div className="file-modal-overlay">
+        <div className="file-modal-overlay" style={{ zIndex: 10001 }}>
           <div className="file-modal">
             <div className="file-modal-header">
               <h3 className="file-modal-title">{fileModalMode === 'folder' ? 'Ordner auswählen' : 'Datei auswählen'}</h3>
@@ -3683,13 +3724,50 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
             {/* Gallery Tab */}
             {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
+              <div className="file-modal-filterbar">
+                <div className="file-modal-filter-group">
+                  {[...Object.entries(FILE_TYPE_GROUPS), ['other', { label: 'Sonstige' }]].map(([key, g]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`file-modal-chip${galleryFilter.types.includes(key) ? ' active' : ''}`}
+                      onClick={() => { setGalleryLimit(60); setGalleryFilter(f => ({ ...f, types: f.types.includes(key) ? f.types.filter(t => t !== key) : [...f.types, key] })); }}
+                    >{g.label}</button>
+                  ))}
+                </div>
+                {[['created', 'Erstellt'], ['modified', 'Geändert']].map(([field, label]) => (
+                  <label key={field} className="file-modal-filter-select">
+                    {label}:
+                    <select value={galleryFilter[field]} onChange={e => { const v = e.target.value; setGalleryLimit(60); setGalleryFilter(f => ({ ...f, [field]: v })); }}>
+                      <option value="all">Alle</option>
+                      <option value="today">Letzte 24 Std.</option>
+                      <option value="week">Letzte 7 Tage</option>
+                      <option value="month">Letzte 30 Tage</option>
+                      <option value="year">Letztes Jahr</option>
+                    </select>
+                  </label>
+                ))}
+                <label className="file-modal-filter-select">
+                  Sortierung:
+                  <select value={gallerySort} onChange={e => { setGallerySort(e.target.value); setGalleryLimit(60); }}>
+                    <option value="asc">A → Z</option>
+                    <option value="desc">Z → A</option>
+                  </select>
+                </label>
+                {galleryFilterActive && (
+                  <button type="button" className="file-modal-chip" onClick={() => { setGalleryFilter({ types: [], created: 'all', modified: 'all' }); setGalleryLimit(60); }}>✕ Filter zurücksetzen</button>
+                )}
+              </div>
+            )}
+
+            {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
               <div className="file-modal-grid">
-                {uploadedFiles.length === 0 ? (
+                {galleryFiles.length === 0 ? (
                   <div className="file-modal-empty">
-                    Keine Dateien hochgeladen
+                    {uploadedFiles.length === 0 ? 'Keine Dateien hochgeladen' : 'Keine Dateien für diese Filter'}
                   </div>
                 ) : (
-                  uploadedFiles.map(file => {
+                  galleryFiles.slice(0, galleryLimit).map(file => {
                     const filename = file.filename || file.name;
                     const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
                     const preview = isImage ? file.url : getFilePreview(file);
@@ -3707,6 +3785,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                             <img
                               src={file.url}
                               alt={filename}
+                              loading="lazy"
+                              decoding="async"
                             />
                           ) : (
                             <span className="file-modal-icon">{preview}</span>
@@ -3723,6 +3803,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       </div>
                     );
                   })
+                )}
+                {galleryFiles.length > galleryLimit && (
+                  <button type="button" className="file-modal-chip file-modal-more" onClick={() => setGalleryLimit(l => l + 60)}>
+                    Mehr laden ({galleryLimit} von {galleryFiles.length})
+                  </button>
                 )}
               </div>
             )}
@@ -3782,7 +3867,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       >
                         <div className="file-modal-thumb">
                           {isImage
-                            ? <img src={file.url} alt={file.name} />
+                            ? <img src={file.url} alt={file.name} loading="lazy" decoding="async" />
                             : <span className="file-modal-icon">📎</span>}
                         </div>
                         <div className="file-modal-filename">{file.name}</div>

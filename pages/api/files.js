@@ -488,6 +488,7 @@ export default async function handler(req, res) {
                 name: item,
                 size: stat.size,
                 modified: stat.mtime,
+                created: stat.birthtime,
                 type: path.extname(item).toLowerCase(),
                 url: `/uploads/${urlPath}`
               });
@@ -522,6 +523,7 @@ export default async function handler(req, res) {
               filename: rel,
               size: stat.size,
               modified: stat.mtime,
+              created: stat.birthtime,
               type: path.extname(item).toLowerCase(),
               url: `/uploads/${rel}`
             });

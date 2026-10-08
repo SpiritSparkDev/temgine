@@ -2496,3 +2496,13 @@
 .field-media-thumb:hover { border-color: var(--accent-primary); }
 .field-media-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .field-media-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Datei-Auswähler: Filter- und Sortierleiste (Galerie) */
+.file-modal-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 16px; border-bottom: 1px solid var(--border-color, #e5e7eb); font-size: 13px; }
+.file-modal-filter-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.file-modal-chip { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-color, #d1d5db); background: transparent; color: inherit; cursor: pointer; font-size: 12px; }
+.file-modal-chip.active { background: var(--primary-color, #2563eb); border-color: var(--primary-color, #2563eb); color: #fff; }
+.file-modal-filter-select { display: flex; align-items: center; gap: 5px; }
+.file-modal-filter-select select { padding: 2px 6px; font-size: 12px; }
+.file-modal-more { grid-column: 1 / -1; justify-self: center; padding: 6px 18px; }
+.file-modal-item { content-visibility: auto; contain-intrinsic-size: 160px 150px; }

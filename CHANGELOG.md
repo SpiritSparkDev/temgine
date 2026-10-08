@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.35.0] - 2026-10-08
+
+### Added
+- **Datei-Auswähler (Galerie):** Mehrfach kombinierbare Filter nach Dateityp, Erstellungs- und Änderungsdatum sowie Sortierung A→Z / Z→A. `GET /api/files` liefert zusätzlich `created`.
+- **Datei-Auswähler Performance:** Galerie rendert 60 Dateien auf einmal (Button „Mehr laden“), Bilder laden lazy, Kacheln außerhalb des Sichtbereichs werden nicht gerendert – flüssig auch bei tausenden Dateien.
+
+### Fixed
+- **Datei-Auswähler Upload:** Im Ordner-Tab landen Uploads jetzt im geöffneten Ordner (vorher immer im Root), die Ordneransicht wird danach neu geladen, und der Erfolgs-Toast zeigt die tatsächliche Anzahl statt immer „erfolgreich“.
+
+---
+
+## [0.34.0] - 2026-10-08
+
+### Added
+- **Dateimanager:** Dateien, die bereits in Seiten, Templates, Snippets, Navigationen, Inhalten, Blog-Beiträgen oder Einstellungen eingebunden sind, tragen das Badge „In Verwendung“ (`pages/api/files/usage.js`).
+
+### Changed
+- **Content-Editor:** „Erweiterte Optionen“ liegt jetzt als Button „Erweitert“ in der Toolbar neben Vorschau, Split und Verlauf (statt in der Seiten-Sidebar).
+
+### Fixed
+- Der Dateiwähler für das Navigations-Bild öffnete sich hinter dem Dialog „Erweiterte Optionen“; er liegt jetzt davor.
+
+---
+
 ## [0.33.0] - 2026-10-08
 
 ### Added
