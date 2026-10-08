@@ -223,7 +223,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             }
           }
 
-          if (routePath !== '/') {
+          // Gesperrte Picgine-Galerie: Snapshot existiert, nur dynamisch rendern (kein 404)
+          if (routePath !== '/' && !staticHtml.includes('data-picgine-unlock')) {
             const notFoundRes = await fetch(`/__live/404.html?_t=${Date.now()}`, { cache: 'no-store' })
             debugLog('[page-route] static 404 response', {
               ok: notFoundRes.ok,
