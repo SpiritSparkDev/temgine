@@ -1,7 +1,6 @@
 import { rateLimit } from '../../../lib/rateLimit';
-import { picgineFetch, isValidSlug, isValidToken, readAccessCookie, serializeAccessCookie, sendPicgineError } from '../../../lib/picgine';
+import { picgineFetch, clientIp, isValidSlug, isValidToken, readAccessCookie, serializeAccessCookie, sendPicgineError } from '../../../lib/picgine';
 
-const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
 const limiter = rateLimit({ windowMs: 15 * 60_000, max: 10, keyFn: (req) => `picgine-unlock:${clientIp(req)}` });
 
 // Öffentlich: entsperrt eine Galerie per Passwort (oder E-Mail + Passwort bei

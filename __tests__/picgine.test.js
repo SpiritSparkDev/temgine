@@ -104,3 +104,69 @@ describe('renderTemplate picgine expansion', () => {
     expect(renderTemplate('{{#picgine:g=x}}{{title}}{{/picgine:g=x}}', {}, { g: { title: 'T' } })).toBe('T');
   });
 });
+
+describe('Phase 5: Kontext-Durchreichung und Unterordner-Navigation', () => {
+  const { toPicgineContext } = require('../lib/templateEngine');
+  const { loadPicgineContents, readPicgineParam } = require('../lib/picgineRuntime');
+
+  // Unterordner "kirche" liegt in welt > hochzeit > kirche; im Block gewählt ist "hochzeit"
+  const sub = {
+    slug: 'kirche', title: 'Kirche', locked: false, parentSlug: 'hochzeit',
+    breadcrumb: [{ slug: 'welt', title: 'Welt' }, { slug: 'hochzeit', title: 'Hochzeit' }],
+    allowDownload: true, zip: 'https://p/dl/zip/kirche',
+    images: [{ id: 'a', download: 'https://p/dl/a' }],
+    children: [{ slug: 'altar', title: 'Altar' }],
+  };
+
+  it('passes allowDownload, zip, images[].download, parentSlug through', () => {
+    const ctx = toPicgineContext(sub, 'hochzeit', '/fotos');
+    expect(ctx.allowDownload).toBe(true);
+    expect(ctx.zip).toBe('https://p/dl/zip/kirche');
+    expect(ctx.images[0].download).toBe('https://p/dl/a');
+    expect(ctx.parentSlug).toBe('hochzeit');
+  });
+
+  it('restricts breadcrumb/parentUrl to the selected subtree and builds child URLs', () => {
+    const ctx = toPicgineContext(sub, 'hochzeit', '/fotos');
+    expect(ctx.breadcrumb).toEqual([{ slug: 'hochzeit', title: 'Hochzeit', url: '/fotos' }]);
+    expect(ctx.parentUrl).toBe('/fotos');
+    expect(ctx.children[0].url).toBe('/fotos?picgine=altar');
+
+    const deeper = toPicgineContext({ ...sub, slug: 'altar', parentSlug: 'kirche', breadcrumb: [...sub.breadcrumb, { slug: 'kirche', title: 'Kirche' }] }, 'hochzeit', '/fotos');
+    expect(deeper.breadcrumb.map((c) => c.url)).toEqual(['/fotos', '/fotos?picgine=kirche']);
+    expect(deeper.parentUrl).toBe('/fotos?picgine=kirche');
+  });
+
+  it('has no breadcrumb/parentUrl at the selected root', () => {
+    const ctx = toPicgineContext({ ...sub, slug: 'hochzeit', parentSlug: 'welt', breadcrumb: [{ slug: 'welt', title: 'Welt' }] }, 'hochzeit', '/fotos');
+    expect(ctx.breadcrumb).toEqual([]);
+    expect(ctx.parentUrl).toBeNull();
+  });
+
+  it('renders the links via renderPage with picgineBasePath', () => {
+    const tpl = '{{#picgine:galerie}}{{#breadcrumb}}<a href="{{url}}">{{title}}</a>{{/breadcrumb}}{{#children}}<a href="{{url}}">{{title}}</a>{{/children}}{{/picgine:galerie}}';
+    const html = renderPage(page({ galerie: 'hochzeit' }), { Galerie: tpl }, { picgineBasePath: '/fotos' }, {}, null, {}, {}, {}, { hochzeit: sub });
+    expect(html).toContain('href="&#x2F;fotos">Hochzeit</a>');
+    expect(html).toContain('href="&#x2F;fotos?picgine&#x3D;altar">Altar</a>');
+    expect(html).not.toContain('Welt');
+  });
+
+  it('readPicgineParam validates the slug', () => {
+    expect(readPicgineParam('?picgine=kirche&x=1')).toBe('kirche');
+    expect(readPicgineParam('?picgine=..%2Fadmin')).toBeNull();
+    expect(readPicgineParam('')).toBeNull();
+  });
+
+  it('loadPicgineContents uses the subfolder only where ?within= accepts it', async () => {
+    const json = (status, body) => ({ ok: status === 200, status, json: async () => body });
+    global.fetch = jest.fn(async (url) => {
+      if (url === '/api/picgine/galleries/kirche?within=hochzeit') return json(200, sub);
+      if (url === '/api/picgine/galleries/kirche?within=andere') return json(404, {});
+      if (url === '/api/picgine/galleries/andere') return json(200, { slug: 'andere' });
+      return json(500, {});
+    });
+    const out = await loadPicgineContents(['hochzeit', 'andere'], 'kirche');
+    expect(out.hochzeit.slug).toBe('kirche');
+    expect(out.andere.slug).toBe('andere');
+  });
+});

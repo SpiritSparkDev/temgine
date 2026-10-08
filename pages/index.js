@@ -4,7 +4,7 @@ import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlo
 import { findRawPageNodeById } from '../lib/navTreeHelpers'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
-import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
+import { hydratePicgine, loadPicgineContents, readPicgineParam } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
@@ -369,10 +369,10 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message)
         }
 
-        const picgineContents = await loadPicgineContents(collectPicgineSlugs(homePage.blocks, templateCodes))
+        const picgineContents = await loadPicgineContents(collectPicgineSlugs(homePage.blocks, templateCodes), readPicgineParam())
 
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
+        const html = renderPage(homePage, templateCodes, { isChild: false, picgineBasePath: window.location.pathname }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)
@@ -384,7 +384,8 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 
     ;(async () => {
       const liveRenderMode = await loadLiveRenderMode()
-      const shouldTryStatic = !previewMode && liveRenderMode === 'static'
+      // ?picgine= (Unterordner-Navigation) gibt es nicht im Snapshot → dynamisch rendern
+    const shouldTryStatic = !previewMode && liveRenderMode === 'static' && !readPicgineParam()
 
       debugLog('[home-route] render mode', { liveRenderMode, previewMode, shouldTryStatic })
 

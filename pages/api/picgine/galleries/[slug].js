@@ -7,10 +7,14 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'private, no-store');
 
   const slug = req.query?.slug;
-  if (!isValidSlug(slug)) return res.status(400).json({ error: 'Ungültiger Galerie-Slug' });
+  // within: Unterordner-Navigation — Picgine liefert 404, wenn slug nicht im Teilbaum liegt
+  const within = req.query?.within;
+  if (!isValidSlug(slug) || (within !== undefined && !isValidSlug(within))) {
+    return res.status(400).json({ error: 'Ungültiger Galerie-Slug' });
+  }
 
   try {
-    const data = await picgineFetch(`/api/v1/galleries/${slug}`, { accessToken: readAccessCookie(req) });
+    const data = await picgineFetch(`/api/v1/galleries/${slug}${within ? `?within=${within}` : ''}`, { accessToken: readAccessCookie(req) });
     return res.status(200).json(data);
   } catch (e) {
     return sendPicgineError(res, e);

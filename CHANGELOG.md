@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.37.0] - 2026-10-09
+
+### Added
+- **Picgine Phase 5 – Downloads:** In `{{#picgine:…}}`-Sections stehen `allowDownload`, `zip` (ZIP aller Originale) und `images[].download` sowie `parentSlug` zur Verfügung.
+- **Picgine Unterordner-Navigation:** `?picgine=<slug>` zeigt in jeder Picgine-Section, deren gewählte Galerie den Unterordner enthält (geprüft über `GET /api/picgine/galleries/<slug>?within=<wurzel>`), den Unterordner an. Neu im Kontext: `children[].url`, `parentUrl` und `breadcrumb[]` (`slug`, `title`, `url`) – beschränkt auf den im Block gewählten Teilbaum. Seiten mit `?picgine=` werden immer dynamisch gerendert.
+- **Picgine Passwort-Reset:** `form[data-picgine-reset]` sendet an den neuen Proxy `POST /api/picgine/reset-request` (Rate-Limit, Besucher-IP als `X-Forwarded-For`) und zeigt in `[data-picgine-message]` den neutralen Hinweis.
+- **Picgine Webhook:** `POST /api/picgine/webhook` prüft `X-Picgine-Signature` (HMAC-SHA256, Schlüssel = SHA-256 des API-Schlüssels, constant-time) und baut im statischen Modus den Live-Snapshot neu – entprellt, nie parallel. Die Webhook-URL steht in Einstellungen → Picgine. Doku in `help/picgine-galerien.md`.
+
+---
+
 ## [0.36.0] - 2026-10-08
 
 ### Added

@@ -5,7 +5,7 @@ import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, co
 import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
-import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
+import { hydratePicgine, loadPicgineContents, readPicgineParam } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
@@ -163,7 +163,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
     const liveRenderMode = await loadLiveRenderMode()
-    const shouldTryStatic = !previewMode && liveRenderMode === 'static'
+    // ?picgine= (Unterordner-Navigation) gibt es nicht im Snapshot → dynamisch rendern
+    const shouldTryStatic = !previewMode && liveRenderMode === 'static' && !readPicgineParam()
 
     debugLog('[page-route] render mode decision', {
       isLocal,
@@ -577,9 +578,9 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
       }
 
-      const picgineContents = await loadPicgineContents(collectPicgineSlugs(foundPage.blocks, templateCodes));
+      const picgineContents = await loadPicgineContents(collectPicgineSlugs(foundPage.blocks, templateCodes), readPicgineParam());
 
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1 }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
+      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1, picgineBasePath: window.location.pathname }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
       if (cancelled) return
       setHtml(html)
       setLoading(false)
