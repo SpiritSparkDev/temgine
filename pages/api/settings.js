@@ -2,6 +2,10 @@ import { prisma } from '../../lib/prisma'
 import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
 
+// Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
+// stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
+const SECRET_KEYS = ['picgine_api_key', 'smtp_pass']
+
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
   if (details) response.details = details;
@@ -15,7 +19,8 @@ export default async function handler(req, res) {
       const settings = await prisma.setting.findMany()
       const map = {}
       for (const s of settings) {
-        map[s.key] = s.value
+        if (SECRET_KEYS.includes(s.key)) map[`${s.key}_set`] = !!s.value
+        else map[s.key] = s.value
       }
       // Maintenance-Seiten (404/503/keine Startseite/Ladebildschirm) liegen als
       // Dateien vor, nicht in der Setting-Tabelle — unter denselben Keys mergen,
@@ -52,7 +57,7 @@ export default async function handler(req, res) {
         update: { value: String(value) },
         create: { key: String(key), value: String(value) },
       })
-      return res.status(200).json(setting)
+      return res.status(200).json(SECRET_KEYS.includes(setting.key) ? { key: setting.key, set: !!setting.value } : setting)
     }
 
     const [status, resp] = errorResponse(405, 'Methode nicht erlaubt', 'METHOD_NOT_ALLOWED');

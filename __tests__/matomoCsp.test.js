@@ -11,6 +11,12 @@ describe('matomoCsp', () => {
     expect(out).toContain("img-src 'self' https:");
   });
 
+  test('adds origin to given directives only (Picgine: img-src)', () => {
+    const out = addOriginToCsp(csp, 'http://localhost:3040', ['img-src']);
+    expect(out).toContain("img-src 'self' https: http://localhost:3040");
+    expect(out).toContain("connect-src 'self';");
+  });
+
   test('does not add the origin twice', () => {
     const once = addOriginToCsp(csp, 'https://m.example.de');
     expect(addOriginToCsp(once, 'https://m.example.de')).toBe(once);

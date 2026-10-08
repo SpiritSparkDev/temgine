@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { extractTypedVariables, extractRepeaterBlocks, extractFolderBlocks, guessInputType } from '../lib/templateParser';
+import { extractTypedVariables, extractRepeaterBlocks, extractFolderBlocks, extractPicgineBlocks, guessInputType } from '../lib/templateParser';
 
 // Farbe + Label pro Datentyp (Farben in styles/page-editor.css: .tpm-t-<type>)
 const TYPE_LABELS = {
@@ -14,6 +14,7 @@ const TYPE_LABELS = {
   select: 'Auswahl',
   array: 'Liste',
   folder: 'Ordner',
+  gallery: 'Galerie',
 };
 
 const resolveType = (name, explicit) => {
@@ -32,6 +33,7 @@ function FieldShape({ type }) {
     case 'select': return <div className="tpm-shape tpm-shape-select"><i className="tpm-line tpm-line-short" /><span>▾</span></div>;
     case 'array': return <div className="tpm-shape"><i className="tpm-line tpm-line-short" /><i className="tpm-line tpm-line-short" /></div>;
     case 'folder': return <div className="tpm-shape tpm-shape-image"><span>▤</span></div>;
+    case 'gallery': return <div className="tpm-shape tpm-shape-image"><span>▦</span></div>;
     default: return <div className="tpm-shape"><i className="tpm-line" /></div>;
   }
 }
@@ -48,19 +50,20 @@ function Field({ name, type }) {
 const MAX_ITEMS = 8;
 
 function TemplateSchema({ code }) {
-  const { fields, repeaters, folders } = useMemo(() => {
+  const { fields, repeaters, folders, galleries } = useMemo(() => {
     try {
       return {
         fields: (extractTypedVariables(code) || []).map(({ varName, explicitType }) => ({ name: varName, type: resolveType(varName, explicitType) })),
         repeaters: extractRepeaterBlocks(code) || [],
         folders: extractFolderBlocks(code) || [],
+        galleries: (extractPicgineBlocks(code) || []).filter(g => !g.fixedSlug),
       };
     } catch (e) {
-      return { fields: [], repeaters: [], folders: [] };
+      return { fields: [], repeaters: [], folders: [], galleries: [] };
     }
   }, [code]);
 
-  if (!fields.length && !repeaters.length && !folders.length) {
+  if (!fields.length && !repeaters.length && !folders.length && !galleries.length) {
     return <div className="tpm-empty">Keine Eingabefelder</div>;
   }
   const shown = fields.slice(0, MAX_ITEMS);
@@ -79,6 +82,7 @@ function TemplateSchema({ code }) {
         </div>
       ))}
       {folders.map(f => <Field key={f.sectionName} name={f.sectionName} type="folder" />)}
+      {galleries.map(g => <Field key={`picgine-${g.sectionName}`} name={g.sectionName} type="gallery" />)}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks } from '../lib/templateParser';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks, extractPicgineBlocks } from '../lib/templateParser';
+import PicgineGallerySelect from './PicgineGallerySelect';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import SmartRichTextEditor from './SmartRichTextEditor';
@@ -756,6 +757,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
       try {
         out[name] = extractFolderBlocks(code) || [];
+      } catch (e) {
+        out[name] = [];
+      }
+    });
+    return out;
+  }, [templateCodes]);
+
+  // Maps template name → editor-picked Picgine sections [{ sectionName }] (fixed "=slug" ones have no field)
+  const templatePicgineBlocksByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        out[name] = (extractPicgineBlocks(code) || []).filter(b => !b.fixedSlug);
       } catch (e) {
         out[name] = [];
       }
@@ -2403,6 +2417,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   </div>
                 );
               })}
+
+              {/* Picgine fields: {{#picgine:name}}...{{/picgine:name}} */}
+              {(templatePicgineBlocksByName[block.template] || []).map(({ sectionName }) => (
+                <div key={`picgine-${sectionName}`} className="field-item">
+                  <label className="field-label-xs">{formatLabel(sectionName)} (Picgine-Galerie)</label>
+                  <PicgineGallerySelect
+                    value={block.props[sectionName] || ''}
+                    label={`Picgine-Galerie für ${formatLabel(sectionName)}`}
+                    onChange={(slug) => updateNestedBlock(path, { [sectionName]: slug })}
+                  />
+                </div>
+              ))}
             </div>
           )}
 

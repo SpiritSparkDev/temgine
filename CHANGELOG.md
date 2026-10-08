@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.32.0] - 2026-10-08
+
+### Added
+- **Picgine-Galerien:** Anbindung der Foto-App Picgine. Templates binden Galerien über `{{#picgine:name}}…{{/picgine:name}}` ein (im Seiten-Editor per Auswahlfeld „Picgine-Galerie“, hierarchisch mit 🔒 für geschützte) oder fest über `{{#picgine:name=slug}}`. Kontext: `title`, `images` (mit `index`), `locked`, `lockPassword`/`lockLogin`, `loggedIn`, `cover`, `children` u. a.; ohne Galerie bleibt die Section leer (`lib/templateParser.js`, `lib/templateEngine.js`).
+- Proxy-Routen `pages/api/picgine/` (Galerie-Liste nur für Admins, Galerie-Daten, Entsperren mit Rate-Limit, Logout) und Client `lib/picgine.js`; der Viewer-Token liegt 30 Tage im HttpOnly-Cookie `temgine_picgine`, der API-Schlüssel bleibt serverseitig.
+- `lib/picgineRuntime.js`: Entsperr-Formulare (`data-picgine-unlock`) und Logout (`data-picgine-logout`) ohne eigenes JS; danach Neu-Rendern ohne Seiten-Reload und Event `picgine:rendered`.
+- Einstellungen → **Picgine** (URL, write-only API-Schlüssel, „Verbindung testen“), Hilfe `help/picgine-galerien.md`. Der Live-Snapshot enthält öffentliche Galerien; Seiten mit gesperrter Galerie werden dynamisch gerendert.
+
+### Security
+- `GET /api/settings` (öffentlich) gibt `picgine_api_key` und `smtp_pass` nicht mehr heraus, nur noch `<key>_set`.
+
+### Fixed
+- Live-Snapshot (`/__live`) lieferte im Produktionsserver 404, weil Next nur beim Start vorhandene `public/`-Dateien ausliefert — der statische Modus funktioniert jetzt.
+- Bilder einer per http angebundenen Picgine wurden von der CSP blockiert: der Picgine-Origin wird zur `img-src` hinzugefügt.
+
+---
+
 ## [0.31.1] - 2026-10-07
 
 ### Fixed
