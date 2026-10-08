@@ -13,6 +13,7 @@ const TYPE_LABELS = {
   color: 'Farbe',
   select: 'Auswahl',
   array: 'Liste',
+  checkbox: 'Checkbox',
   folder: 'Ordner',
   gallery: 'Galerie',
 };

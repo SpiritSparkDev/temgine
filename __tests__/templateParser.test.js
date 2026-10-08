@@ -147,3 +147,41 @@ describe('guessInputType: Link-Beschriftung ist Text', () => {
     expect(guessInputType(name)).toBe(type);
   });
 });
+
+describe(':checkbox annotation', () => {
+  test('explicit type is recognised for top-level and repeater fields', () => {
+    expect(extractTypedVariables('{{aktiv:checkbox}}')).toEqual([
+      { varName: 'aktiv', explicitType: 'checkbox', group: null },
+    ]);
+    const code = '{{#each:Fragen}}<details{{#if:Offen}} open{{/if:Offen}}><!-- {{Offen:checkbox}} -->{{Titel:text}}</details>{{/each:Fragen}}';
+    expect(extractRepeaterBlocks(code)).toEqual([
+      { sectionName: 'Fragen', subFields: [{ name: 'Offen', type: 'checkbox' }, { name: 'Titel', type: 'text' }] },
+    ]);
+  });
+});
+
+describe(':select(...) annotation', () => {
+  test('options are parsed (Wert = Label oder Label=wert) und der Feldname bleibt sauber', () => {
+    expect(extractTypedVariables('{{align:select(links, Mitte=center, rechts)|Darstellung}}')).toEqual([
+      {
+        varName: 'align', explicitType: 'select', group: 'Darstellung',
+        options: [
+          { value: 'links', label: 'links' },
+          { value: 'center', label: 'Mitte' },
+          { value: 'rechts', label: 'rechts' },
+        ],
+      },
+    ]);
+    expect(extractTemplateVariables('{{align:select(links, rechts)}}')).toEqual(['align']);
+  });
+
+  test('ohne Klammer-Liste bleibt select ein Feld ohne options; Repeater-Unterfelder tragen options', () => {
+    expect(extractTypedVariables('{{x:select}}')).toEqual([{ varName: 'x', explicitType: 'select', group: null }]);
+    expect(extractRepeaterBlocks('{{#each:Items}}{{Pos:select(oben, unten)}}{{Titel}}{{/each:Items}}')).toEqual([
+      { sectionName: 'Items', subFields: [
+        { name: 'Pos', type: 'select', options: [{ value: 'oben', label: 'oben' }, { value: 'unten', label: 'unten' }] },
+        { name: 'Titel', type: 'text' },
+      ] },
+    ]);
+  });
+});

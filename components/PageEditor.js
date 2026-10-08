@@ -729,6 +729,19 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
+  // Maps template name → { varName: [{ value, label }] } aus {{var:select(a, b, Label=wert)}}
+  const templateOptionsMapByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      const map = {};
+      try {
+        (extractTypedVariables(code) || []).forEach(({ varName, options }) => { if (options) map[varName] = options; });
+      } catch (e) { /* ignore */ }
+      out[name] = map;
+    });
+    return out;
+  }, [templateCodes]);
+
   // Maps template name → { varName: 'Gruppe' } aus {{var:type|Gruppe}}
   const templateGroupMapByName = useMemo(() => {
     const out = {};
@@ -1805,6 +1818,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
     // Resolve effective input type: explicit annotation wins over guessed type
     const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
+    const selectOptionsMap = block.template ? (templateOptionsMapByName[block.template] || {}) : {};
     // Zusammenfassung für zugeklappte Blöcke: erster gefüllter Text + erstes Bild
     const summaryVars = templateVariables;
     const summaryImage = summaryVars.map(v => (resolveInputType(v) === 'image' ? block.props?.[v] : '')).find(v => typeof v === 'string' && v) || '';
@@ -2080,6 +2094,28 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     );
                   }
 
+                  if (inputType === 'select' && selectOptionsMap[varName]) {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs">{label}</label>
+                        <select ref={(el) => setFieldRef(path, varName, el)} value={value || ''} onChange={e => updateNestedBlock(path, { [varName]: e.target.value })} className="input-field-small field-input-full">
+                          <SelectOptions options={selectOptionsMap[varName]} value={value} />
+                        </select>
+                      </div>
+                    );
+                  }
+
+                  if (inputType === 'checkbox') {
+                    return (
+                      <div key={varName} className="field-item">
+                        <label className="field-label-xs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                          <input ref={(el) => setFieldRef(path, varName, el)} type="checkbox" checked={isCheckedValue(value)} onChange={e => updateNestedBlock(path, { [varName]: e.target.checked ? true : '' })} />
+                          {label}
+                        </label>
+                      </div>
+                    );
+                  }
+
                   if (inputType === 'color') {
                     return (
                       <div key={varName} className="field-item">
@@ -2278,7 +2314,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                               {isOpen(rowIdx) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                               <span className="repeater-row-num">{itemLabel} {rowIdx + 1}</span>
                               {!isOpen(rowIdx) && (() => {
-                                const sum = subFields.filter(sf => sf.type !== 'image' && sf.type !== 'url').map(sf => stripTags(String(row[sf.name] ?? '')).trim()).find(Boolean);
+                                const sum = subFields.filter(sf => sf.type !== 'image' && sf.type !== 'url' && sf.type !== 'checkbox' && sf.type !== 'select').map(sf => stripTags(String(row[sf.name] ?? '')).trim()).find(Boolean);
                                 return <span className="repeater-row-summary">{sum ? (sum.length > 60 ? `${sum.slice(0, 60)}…` : sum) : '(leer)'}</span>;
                               })()}
                             </button>
@@ -2337,6 +2373,42 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           {isOpen(rowIdx) && <div className="repeater-row-fields">
                             {subFields.map(sf => {
                               const sfVal = row[sf.name] !== undefined ? row[sf.name] : '';
+                              if (sf.type === 'select' && sf.options) {
+                                return (
+                                  <div key={sf.name} className="repeater-subfield">
+                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
+                                    <select
+                                      ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
+                                      value={sfVal || ''}
+                                      onChange={e => {
+                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
+                                        updateNestedBlock(path, { [sectionName]: next });
+                                      }}
+                                      className="input-field-small field-input-full"
+                                    >
+                                      <SelectOptions options={sf.options} value={sfVal} />
+                                    </select>
+                                  </div>
+                                );
+                              }
+                              if (sf.type === 'checkbox') {
+                                return (
+                                  <div key={sf.name} className="repeater-subfield">
+                                    <label className="field-label-xs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                                      <input
+                                        ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
+                                        type="checkbox"
+                                        checked={isCheckedValue(sfVal)}
+                                        onChange={e => {
+                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.checked ? true : '' } : r);
+                                          updateNestedBlock(path, { [sectionName]: next });
+                                        }}
+                                      />
+                                      {formatLabel(sf.name)}
+                                    </label>
+                                  </div>
+                                );
+                              }
                               if (sf.type === 'textarea') {
                                 return (
                                   <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
@@ -3135,10 +3207,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           }
                           return (
                             <div className="page-fields-editor">
-                              {fields.map(({ varName, explicitType }) => (
+                              {fields.map(({ varName, explicitType, options }) => (
                                 <PageDataFieldInput
                                   key={varName}
                                   varName={varName}
+                                  options={options}
                                   inputType={explicitType || guessInputType(varName)}
                                   label={formatLabel(varName)}
                                   value={pageData[varName]}
@@ -3984,13 +4057,42 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   );
 }
 
+// Checkbox-Felder ({{feld:checkbox}}) speichern true bzw. '' (Mustache: leer = aus);
+// "true"/"1" aus älteren Texteingaben gelten ebenfalls als angehakt.
+function isCheckedValue(v) {
+  return v === true || v === 'true' || v === 1 || v === '1';
+}
+
+// <option>-Liste für {{feld:select(…)}}; ein bereits gespeicherter Wert, der nicht
+// (mehr) in der Liste steht, bleibt als eigener Eintrag erhalten statt still zu verschwinden.
+function SelectOptions({ options, value }) {
+  const known = options.some(o => o.value === value);
+  return (
+    <>
+      <option value="">-- Bitte wählen --</option>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      {value && !known && <option value={value}>{value}</option>}
+    </>
+  );
+}
+
 // Renders one input for a page-level {{data.X}} field, declared by a
 // PAGE_FIELDS template and edited under Einstellungen → Seiten-Datenfelder.
 // Mirrors the per-type input rendering already used for block props, but
 // writes to pageData[varName] via the injected onChange instead of a block
 // path — page fields have no nested-path/group/repeater support (v1 scope).
-function PageDataFieldInput({ varName, inputType, label, value, onChange, openFileModal, devTitle }) {
+function PageDataFieldInput({ varName, inputType, options, label, value, onChange, openFileModal, devTitle }) {
   const richTextEditorMode = useRichTextEditorMode();
+  if (inputType === 'select' && options) {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs">{label}</label>
+        <select value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full">
+          <SelectOptions options={options} value={value} />
+        </select>
+      </div>
+    );
+  }
   if (inputType === 'textarea') {
     return (
       <div className="field-item field-item-textarea">
@@ -4039,6 +4141,17 @@ function PageDataFieldInput({ varName, inputType, label, value, onChange, openFi
       <div className="field-item">
         <label className="field-label-xs">{label}</label>
         <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
+      </div>
+    );
+  }
+
+  if (inputType === 'checkbox') {
+    return (
+      <div className="field-item">
+        <label className="field-label-xs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={isCheckedValue(value)} onChange={e => onChange(e.target.checked ? true : '')} />
+          {label}
+        </label>
       </div>
     );
   }

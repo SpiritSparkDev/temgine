@@ -6,7 +6,7 @@
 // anywhere in the module throws before this test body even runs.
 jest.mock('next-auth/react', () => ({ useSession: () => ({ data: null, status: 'unauthenticated' }) }));
 jest.mock('next/dynamic', () => () => () => null);
-jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
+jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} }, Marked: class { use() {} parse(s) { return s; } } }));
 
 describe('editor components compile cleanly', () => {
   it.each([
@@ -18,6 +18,8 @@ describe('editor components compile cleanly', () => {
     'PageEditor',
     'GlobalPagesView',
     'UsersViewModern',
+    'TemplatesViewModern',
+    'HelpDocModal',
   ])('%s', (name) => {
     expect(() => require(`../components/${name}`)).not.toThrow();
   });
