@@ -8,6 +8,7 @@ describe('public static asset routing', () => {
     expect(isPublicStaticAssetPath('/uploads/images/logo.png')).toBe(true);
     expect(isPublicStaticAssetPath('/assets/site/logo.svg')).toBe(true);
     expect(isPublicStaticAssetPath('/favicon/favicon.ico')).toBe(true);
+    expect(isPublicStaticAssetPath('/__live/blog/index.html')).toBe(true); // Live-Snapshot, entsteht erst zur Laufzeit
     expect(isPublicStaticAssetPath('/hello/world')).toBe(false);
   });
 

@@ -18,7 +18,7 @@ const { applyMatomoCsp } = require('./lib/matomoCsp');
 
 const PUBLIC_ROOT = path.join(__dirname, 'public');
 const PUBLIC_UPLOAD_ROOT = path.join(PUBLIC_ROOT, 'uploads');
-const PUBLIC_STATIC_PREFIXES = ['/extern_css', '/extern_js', '/uploads', '/assets', '/favicon'];
+const PUBLIC_STATIC_PREFIXES = ['/extern_css', '/extern_js', '/uploads', '/assets', '/favicon', '/__live'];
 
 for (const dir of [
   PUBLIC_ROOT,
