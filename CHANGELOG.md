@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.33.0] - 2026-10-08
+
+### Added
+- **Add-on „Externe Quellen“:** In Einstellungen → *Externe Quellen* zuschaltbar. Verwaltet Quellen vom Typ SFTP, Nextcloud (WebDAV, App-Passwort) und S3 (AWS oder kompatibel, z. B. MinIO). Im Dateimanager importiert „Von externer Quelle“ ausgewählte Dateien und ganze Ordner in den aktuellen Upload-Ordner (kein Überschreiben, Limit 1000 Dateien / 200 MB je Datei). Zugangsdaten sind write-only und werden nie an den Browser ausgeliefert (`lib/externalSources.js`, `pages/api/external-sources.js`).
+
+---
+
 ## [0.32.0] - 2026-10-08
 
 ### Added

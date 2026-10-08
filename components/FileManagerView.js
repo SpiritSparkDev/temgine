@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import ExternalImportModal from './ExternalImportModal';
 import { Upload, Trash2, Image as ImageIcon, FileText, Download, Copy, FolderPlus, Folder, ChevronRight, Clock, CheckSquare, Square, AlertTriangle, Tag, X, Info } from '../lib/muiIcons';
 
 // ── XHR-Upload mit Fortschritts-Callback ────────────────────────────────────
@@ -112,6 +113,8 @@ export default function FileManagerView({ showToast }) {
   const [metaModalFile, setMetaModalFile] = useState(null);
   const [folderDragDropEnabled, setFolderDragDropEnabled] = useState(false);
   const [isRepairingNames, setIsRepairingNames] = useState(false);
+  const [extSources, setExtSources] = useState([]); // Add-on Externe Quellen (nur wenn aktiv + Admin)
+  const [showExtImport, setShowExtImport] = useState(false);
 
   const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
@@ -121,6 +124,13 @@ export default function FileManagerView({ showToast }) {
   useEffect(() => {
     loadFiles();
   }, [currentFolder]);
+
+  useEffect(() => {
+    fetch('/api/external-sources')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setExtSources(d?.enabled ? d.sources || [] : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch('/api/settings')
@@ -548,6 +558,11 @@ export default function FileManagerView({ showToast }) {
         </div>
       )}
 
+      {showExtImport && (
+        <ExternalImportModal sources={extSources} targetFolder={currentFolder} showToast={showToast}
+          onClose={() => setShowExtImport(false)} onDone={loadFiles} />
+      )}
+
       {/* Metadaten-Modal */}
       {metaModalFile && (
         <MetadataModal
@@ -571,6 +586,14 @@ export default function FileManagerView({ showToast }) {
             <FolderPlus size={16} />
             Neuer Ordner
           </button>
+
+          {extSources.length > 0 && (
+            <button className="btn-secondary" onClick={() => setShowExtImport(true)} title="Dateien von SFTP, Nextcloud oder S3 importieren"
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Upload size={16} />
+              Von externer Quelle
+            </button>
+          )}
 
           <button
             className={`btn-secondary${batchMode ? ' active' : ''}`}
