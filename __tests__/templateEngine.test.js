@@ -339,3 +339,25 @@ describe('Block ohne Template = freies HTML-Feld', () => {
     expect(renderPage(page, {}, {}, {})).toContain('<div class="x" style="color:red">Hallo</div>');
   });
 });
+
+describe('{{feld:checkbox}}', () => {
+  const tpl = { Faq: '{{#each:Fragen}}<details{{#if:Offen}} open{{/if:Offen}}><!-- {{Offen:checkbox}} -->{{Titel:text}}</details>{{/each:Fragen}}' };
+  const render = (rows) => renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Faq', props: { Fragen: rows } }] }, tpl, {}, {});
+
+  it('annotation is stripped and #if:… reacts to true / "" / "true"', () => {
+    const html = render([{ Offen: true, Titel: 'A' }, { Offen: '', Titel: 'B' }, { Offen: 'true', Titel: 'C' }]);
+    expect(html).not.toContain(':checkbox');
+    expect(html).toContain('<details open><!-- true -->A</details>');
+    expect(html).toContain('<details><!--  -->B</details>');
+    expect(html).toContain('<details open><!-- true -->C</details>');
+  });
+});
+
+describe('{{feld:select(...)}}', () => {
+  it('Annotation samt Optionsliste wird entfernt, nur der Wert wird ausgegeben', () => {
+    const tpl = { Box: '<div class="{{align:select(Links=left, Mitte=center)}}">{{#each:Items}}<i class="{{Pos:select(oben, unten)}}"></i>{{/each:Items}}</div>' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Box', props: { align: 'center', Items: [{ Pos: 'unten' }] } }] }, tpl, {}, {});
+    expect(html).toContain('<div class="center"><i class="unten"></i></div>');
+    expect(html).not.toContain('select');
+  });
+});

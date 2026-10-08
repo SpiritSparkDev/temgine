@@ -6,6 +6,7 @@ import { FONT_AWESOME_ICONS, getIconHtml } from '../lib/fontAwesomeIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 import { buildNavPlaceholderKeys } from '../lib/templateEngine';
 import { extractTypedVariables, guessInputType } from '../lib/templateParser';
+import HelpDocModal from './HelpDocModal';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -357,6 +358,11 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [rightTab, setRightTab] = useState('referenz');
+  const [helpDoc, setHelpDoc] = useState({ open: false, doc: 'templates', anchor: '', dark: true });
+  const openDocs = (doc, anchor = '') => setHelpDoc({ open: true, doc, anchor, dark: !!document.querySelector('.dark-mode') });
+  const DocLink = ({ doc = 'templates', anchor = '' }) => (
+    <button type="button" className="tce-ref-more" onClick={() => openDocs(doc, anchor)}>Beispiele →</button>
+  );
   const [iconSearch, setIconSearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
@@ -568,6 +574,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
 
   return (
     <>
+    <HelpDocModal open={helpDoc.open} dark={helpDoc.dark} doc={helpDoc.doc} anchor={helpDoc.anchor} onClose={() => setHelpDoc(h => ({ ...h, open: false }))} />
     <div className="tce-root">
       {/* TOP TOOLBAR */}
       <div className="tce-toolbar">
@@ -805,89 +812,58 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
               {rightTab === 'referenz' && (
                 <div className="tce-ref-tab">
 
+                  <button type="button" className="tce-ref-doc-btn" onClick={() => openDocs('templates')}>
+                    <BookOpen size={13} aria-hidden="true" />
+                    Ausführliche Doku mit Beispielen
+                  </button>
+
                   <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Typen-Annotationen</div>
+                    <div className="tce-ref-heading">Feldtypen <code>{'{{feld:typ}}'}</code></div>
                     <table className="tce-ref-table">
                       <tbody>
-                        <tr><td><code>:text</code></td><td>Einzeiliges Textfeld</td></tr>
-                        <tr><td><code>|Gruppe</code></td><td>Abschnitt im Editor, z. B. <code>{'{{titel:text|Inhalt}}'}</code>. Ohne Angabe: „Inhalt“, Auswahl/Farbe/Zahl/Level automatisch „Darstellung“ (eingeklappt)</td></tr>
-                        <tr><td><code>:textarea</code></td><td>Richtext-Editor</td></tr>
-                        <tr><td><code>:number</code></td><td>Zahlenfeld</td></tr>
-                        <tr><td><code>:url</code></td><td>URL + Datei-Picker</td></tr>
-                        <tr><td><code>:image</code></td><td>Bildpfad-Picker + Vorschau</td></tr>
-                        <tr><td><code>:date</code></td><td>Datumsfeld (nativer Picker)</td></tr>
-                        <tr><td><code>:color</code></td><td>Farbauswahl (nativer Picker)</td></tr>
-                        <tr><td><code>:array</code></td><td>Liste (zeilenweise)</td></tr>
-                        <tr><td><code>:select</code></td><td>Wie :text — eigenes Widget noch nicht gebaut</td></tr>
+                        <tr><td><code>:text</code></td><td>Einzeilig</td></tr>
+                        <tr><td><code>:textarea</code></td><td>Richtext (HTML roh: <code>{'{{{feld:textarea}}}'}</code>)</td></tr>
+                        <tr><td><code>:number</code> <code>:date</code> <code>:color</code></td><td>Zahl, Datum, Farbe</td></tr>
+                        <tr><td><code>:url</code> <code>:image</code></td><td>Link / Bild mit Datei-Auswahl</td></tr>
+                        <tr><td><code>:array</code></td><td>Liste, ein Wert pro Zeile</td></tr>
+                        <tr><td><code>:checkbox</code></td><td>An/aus — <code>true</code> oder leer <DocLink anchor="checkbox" /></td></tr>
+                        <tr><td><code>:select(a, b)</code></td><td>Dropdown, <code>Anzeige=wert</code> möglich <DocLink anchor="select" /></td></tr>
+                        <tr><td><code>|Gruppe</code></td><td>Abschnitt im Editor <DocLink anchor="gruppen" /></td></tr>
                       </tbody>
                     </table>
                   </div>
 
                   <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Systemvariablen (überall)</div>
+                    <div className="tce-ref-heading">Struktur</div>
                     <table className="tce-ref-table">
                       <tbody>
-                        <tr><td><code>{'{{page.title}}'}</code></td><td>Seitentitel</td></tr>
-                        <tr><td><code>{'{{page.slug}}'}</code></td><td>Seiten-Slug</td></tr>
-                        <tr><td><code>{'{{inner}}'}</code></td><td>HTML der Kindblöcke</td></tr>
-                        <tr><td><code>{'{{{nav:main}}}'}</code></td><td>Hauptnavigation (HTML, wird zusätzlich automatisch eingefügt)</td></tr>
-                        <tr><td><code>{'{{{nav:page}}}'}</code></td><td>Seitennavigation, Standard-Zuweisung (HTML)</td></tr>
-                        <tr><td><code>{'{{{nav:<name>}}}'}</code></td><td>Eine bestimmte Seitennavigation namentlich — siehe Reiter „Navigation"</td></tr>
-                        <tr><td><code>{'{{{nav:mobile}}}'}</code></td><td>Mobile-Navigation (HTML)</td></tr>
-                        <tr><td><code>{'{{{nav:auto}}}'}</code></td><td>Auto-Nav aus Seitenbaum</td></tr>
-                        <tr><td><code>{'{{global.<key>}}'}</code></td><td>Globale Variable (siehe „Globale Variablen")</td></tr>
-                        <tr><td><code>{'{{page.data.<key>}}'}</code></td><td>Freies Datenfeld der aktuellen Seite</td></tr>
-                        <tr><td><code>{'{{data.<key>}}'}</code></td><td>Kurzform für <code>{'{{page.data.<key>}}'}</code> — gleiche Schreibweise wie in Navigations-Templates</td></tr>
+                        <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped) <DocLink anchor="variablen" /></td></tr>
+                        <tr><td><code>{'{{#if:f}}…{{/if:f}}'}</code></td><td>Wenn <code>f</code> nicht leer / angehakt; <code>{'{{^if:f}}'}</code> = wenn leer <DocLink anchor="bedingungen" /></td></tr>
+                        <tr><td><code>{'{{#each:n}}…{{/each:n}}'}</code></td><td>Wiederholbare Liste <DocLink anchor="wiederholungen" /></td></tr>
+                        <tr><td><code>{'{{#folder:n}}…{{/folder:n}}'}</code></td><td>Dateien eines Upload-Ordners <DocLink anchor="dateien" /></td></tr>
+                        <tr><td><code>{'{{#picgine:n}}…{{/picgine:n}}'}</code></td><td>Picgine-Galerie <DocLink doc="picgine-galerien" /></td></tr>
                       </tbody>
                     </table>
-                    <p className="tce-ref-note">
-                      Eigene Felder unter <code>data.&lt;key&gt;</code> deklarierst du im Tab
-                      „Seiten-Datenfelder" oben — eine dort angelegte Vorlage weist du im
-                      Seiten-Editor unter Einstellungen einer Seite zu, dann erscheinen die
-                      Felder dort automatisch als Eingabefelder.
-                    </p>
                   </div>
 
                   <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Mustache-Syntax (überall)</div>
+                    <div className="tce-ref-heading">Systemvariablen</div>
                     <table className="tce-ref-table">
                       <tbody>
-                        <tr><td><code>{'{{var}}'}</code></td><td>Variable (escaped)</td></tr>
-                        <tr><td><code>{'{{{'}<span>{'var}'}</span>{'}'}</code></td><td>Variable (HTML roh)</td></tr>
-                        <tr><td><code>{'{{#each:name}}…{{/each:name}}'}</code></td><td>Wiederholbare Gruppe (Liste)</td></tr>
-                        <tr><td><code>{'{{#folder}}…{{/folder}}'}</code></td><td>Iteriert über alle Dateien eines im Editor gewählten Upload-Ordners (rekursiv, inkl. Unterordner)</td></tr>
-                        <tr><td><code>{'{{#folder:name}}…{{/folder:name}}'}</code></td><td>Wie <code>{'{{#folder}}'}</code>, benannt — für mehrere Ordnerfelder in einem Template</td></tr>
-                        <tr><td><code>{'{{#picgine:name}}…{{/picgine:name}}'}</code></td><td>Picgine-Galerie, im Editor gewählt (<code>{'=slug'}</code> für eine feste Galerie) — siehe help/picgine-galerien.md</td></tr>
-                        <tr><td><code>{'{{#if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name nicht leer</td></tr>
-                        <tr><td><code>{'{{^if:name}}…{{/if:name}}'}</code></td><td>Bedingt, wenn name leer</td></tr>
-                        <tr><td><code>{'{{#s}}…{{/s}}'}</code></td><td>Roher Mustache-Abschnitt (Sonderfälle)</td></tr>
-                        <tr><td><code>{'{{^s}}…{{/s}}'}</code></td><td>Roher invertierter Abschnitt</td></tr>
+                        <tr><td><code>{'{{page.title}}'}</code> <code>{'{{page.slug}}'}</code></td><td>Seitentitel, Slug</td></tr>
+                        <tr><td><code>{'{{{inner}}}'}</code></td><td>HTML der Kindblöcke</td></tr>
+                        <tr><td><code>{'{{global.key}}'}</code></td><td>Globale Variable</td></tr>
+                        <tr><td><code>{'{{data.key}}'}</code></td><td>Seiten-Datenfeld</td></tr>
+                        <tr><td><code>{'{{{nav:main}}}'}</code> <code>{'{{{nav:page}}}'}</code> <code>{'{{{nav:name}}}'}</code> <code>{'{{{nav:mobile}}}'}</code> <code>{'{{{nav:auto}}}'}</code></td><td>Navigationen (HTML) <DocLink doc="navigationen" /></td></tr>
                       </tbody>
                     </table>
-                    <p className="tce-ref-note">
-                      Innerhalb von <code>{'{{#folder}}…{{/folder}}'}</code> steht pro Datei zur
-                      Verfügung: <code>name</code> (Dateiname), <code>slug</code> (Dateiname ohne
-                      Endung, URL-sicher), <code>url</code> (öffentliche Adresse — für
-                      <code> href</code>/<code>src</code>), <code>path</code> (Pfad relativ zum
-                      gewählten Ordner), <code>ext</code>, <code>size</code> (Bytes),
-                      <code> modified</code> und <code>isImage</code> (Bool, für
-                      z. B. <code>{'{{#isImage}}<img src="{{url}}">{{/isImage}}'}</code>).
-                    </p>
                   </div>
 
-                  <div className="tce-ref-group">
-                    <div className="tce-ref-heading">Nur in Navigations-Templates</div>
-                    <table className="tce-ref-table">
-                      <tbody>
-                        <tr><td><code>{'{{#hasChildren}}'}</code></td><td>Wenn Unterseiten existieren</td></tr>
-                        <tr><td><code>{'{{#children}}'}</code></td><td>Unterseiten iterieren</td></tr>
-                        <tr><td><code>{'{{#pages}}'}</code></td><td>gesamten Seitenbaum iterieren</td></tr>
-                        <tr><td><code>{'{{#childPages}}'}</code></td><td>nur die direkten Unterseiten der aktuell gerenderten Seite</td></tr>
-                        <tr><td><code>{'{{#anchors}}'}</code></td><td>Anker iterieren, Zielblock hat Anchor-ID-Feld (Typ Seite)</td></tr>
-                        <tr><td><code>{'{{#customAnchors}}'}</code></td><td>Anker iterieren, freie Ziel-ID ohne Anchor-ID-Feld (Typ Seite)</td></tr>
-                      </tbody>
-                    </table>
-                  </div>
+                  <p className="tce-ref-note">
+                    Nur in Navigations-Templates: <code>{'{{#pages}}'}</code> <code>{'{{#children}}'}</code>{' '}
+                    <code>{'{{#hasChildren}}'}</code> <code>{'{{#childPages}}'}</code>{' '}
+                    <code>{'{{#anchors}}'}</code> <code>{'{{#customAnchors}}'}</code> <DocLink doc="navigationen" />
+                  </p>
 
                 </div>
               )}

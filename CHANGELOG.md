@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.36.0] - 2026-10-08
+
+### Added
+- **Feldtyp `:checkbox`:** `{{feld:checkbox}}` rendert im Editor eine Checkbox (Block-Felder, Wiederholungs-Unterfelder und Seiten-Datenfelder). Gespeichert wird `true` bzw. leer – passt zu `{{#if:feld}}…{{/if:feld}}`; die Annotation wird beim Rendern entfernt. Bereits gespeicherte Texte `"true"`/`"1"` erscheinen als angehakt. Dokumentiert in der Typen-Tabelle des Template-Editors.
+- **Feldtyp `:select(…)` (Dropdown):** `{{ausrichtung:select(links, mitte, rechts)}}` bzw. mit Beschriftung `select(Links=left, Mitte=center)` rendert im Editor ein Dropdown (Block-Felder, Wiederholungs-Unterfelder, Seiten-Datenfelder). Ausgegeben wird der Wert; ein gespeicherter Wert außerhalb der Liste bleibt als Eintrag erhalten. Ohne Klammer-Liste verhält sich `:select` wie bisher wie `:text`.
+- **Dokumentation im Editor:** Die Referenz in der rechten Sidebar des Template-Editors ist jetzt eine Kurzreferenz. Der Button „Ausführliche Doku mit Beispielen“ und die „Beispiele →“-Links öffnen ein Dokumentations-Fenster (`components/HelpDocModal.js`), das die Anleitungen aus `help/*.md` rendert und direkt zum passenden Abschnitt springt. Neu: `help/templates.md` (Variablen, Feldtypen, Checkbox, Select, Bedingungen, Wiederholungen, Ordner, Systemvariablen). Die Anleitungen liefert `GET /api/help` bzw. `GET /api/help/<name>` (nur `help/*.md`, kein freier Pfad).
+- **FAQ-Akkordeon:** Startzustand pro Frage über die Checkbox „Offen" (Felder in Wiederholungsblöcken werden nur aus normalen `{{Feld}}`-Platzhaltern erkannt, nicht aus `{{#if:…}}` – deshalb steht `{{Offen:checkbox}}` in einem Kommentar im Block).
+
+---
+
 ## [0.35.0] - 2026-10-08
 
 ### Added
