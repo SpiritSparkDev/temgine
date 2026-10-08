@@ -16,6 +16,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 ### Security
 - `GET /api/settings` (öffentlich) gibt `picgine_api_key` und `smtp_pass` nicht mehr heraus, nur noch `<key>_set`.
 
+### Fixed
+- Live-Snapshot (`/__live`) lieferte im Produktionsserver 404, weil Next nur beim Start vorhandene `public/`-Dateien ausliefert — der statische Modus funktioniert jetzt.
+- Bilder einer per http angebundenen Picgine wurden von der CSP blockiert: der Picgine-Origin wird zur `img-src` hinzugefügt.
+
 ---
 
 ## [0.31.1] - 2026-10-07
