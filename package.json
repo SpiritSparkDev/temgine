@@ -1,6 +1,6 @@
 {
   "name": "temgine",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "private": true,
   "scripts": {
     "dev": "npm run test && next dev",
@@ -22,6 +22,7 @@
     "clean": "if (Test-Path .next) { Remove-Item .next -Recurse -Force }; if (Test-Path .next-dev) { Remove-Item .next-dev -Recurse -Force }; if (Test-Path node_modules/.cache) { Remove-Item node_modules/.cache -Recurse -Force }; Write-Host 'Cleaned build artifacts and caches'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1148.0",
     "@codemirror/autocomplete": "^6.18.4",
     "@codemirror/commands": "^6.7.1",
     "@codemirror/lang-css": "^6.3.1",
@@ -59,6 +60,7 @@
     "sanitize-html": "^2.11.0",
     "sharp": "^0.32.6",
     "simple-icons": "^16.18.1",
+    "ssh2-sftp-client": "^12.1.1",
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {

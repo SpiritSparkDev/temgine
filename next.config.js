@@ -47,6 +47,7 @@ const securityHeaders = [
 module.exports = {
   distDir: isDev ? '.next-dev' : '.next',
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  serverExternalPackages: ['ssh2', 'ssh2-sftp-client'], // native Module, nicht bündeln
   async rewrites() {
     return {
       fallback: [
