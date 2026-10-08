@@ -1,0 +1,26 @@
+<section class="gallery">
+{{#picgine:galerie}}
+  <h2>{{title}}</h2>
+
+  {{#locked}}
+    <form class="gallery-lock" data-picgine-unlock="{{slug}}">
+      {{#lockLogin}}<input name="email" type="email" placeholder="E-Mail" required>{{/lockLogin}}
+      <input name="password" type="password" placeholder="Passwort" required>
+      <button type="submit">Galerie öffnen</button>
+      <p class="gallery-lock__error" data-picgine-error></p>
+    </form>
+  {{/locked}}
+
+  {{^locked}}
+    <div class="gallery-grid">
+      {{#images}}
+        <a href="{{large}}" data-index="{{index}}">
+          <img src="{{thumb}}" srcset="{{srcset}}" sizes="(min-width: 800px) 25vw, 50vw"
+               width="{{width}}" height="{{height}}" alt="{{alt}}" loading="lazy">
+        </a>
+      {{/images}}
+    </div>
+    {{#loggedIn}}<button data-picgine-logout>Abmelden</button>{{/loggedIn}}
+  {{/locked}}
+{{/picgine:galerie}}
+</section>

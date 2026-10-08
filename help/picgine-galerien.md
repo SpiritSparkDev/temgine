@@ -95,6 +95,8 @@ Die Freigabe merkt sich Temgine 30 Tage im HttpOnly-Cookie `temgine_picgine`.
 
 Lightbox, Masonry usw. kommen wie bei jedem Block aus dem CSS-/JS-Manager.
 
+Das Template liegt als Starter-Block **Galerie Raster** (`public/assets/template/block/Galerie-Raster.html`) bereit; `.gallery-grid` & Co. werden im CSS-Manager gestaltet.
+
 ## Live-Snapshot
 
 - Der statische Snapshot enthält öffentliche Galerien fertig gerendert, geschützte als gesperrt.
