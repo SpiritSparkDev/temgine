@@ -1,13 +1,11 @@
 import crypto from 'crypto';
-import { prisma } from '../../../lib/prisma';
 import { getPicgineConfig } from '../../../lib/picgine';
-import { renderLiveSnapshot } from '../../../lib/liveSnapshot';
+import { rebuildLiveSnapshot } from '../../../lib/liveRebuild';
 
 // Rohen Body selbst lesen — die Signatur gilt für die exakten Bytes.
 export const config = { api: { bodyParser: false } };
 
 const MAX_BODY_BYTES = 64 * 1024;
-const DEBOUNCE_MS = 5000;
 
 async function readRawBody(req) {
   const chunks = [];
@@ -30,48 +28,6 @@ export function verifySignature(rawBody, header, apiKey) {
   return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
-async function upsertSetting(key, value) {
-  await prisma.setting.upsert({ where: { key }, update: { value: String(value) }, create: { key, value: String(value) } });
-}
-
-// Snapshot nur im statischen Modus neu bauen; Status wie pages/api/admin/render-live.js.
-async function rebuildSnapshot() {
-  const mode = await prisma.setting.findUnique({ where: { key: 'liveRenderMode' } });
-  if (mode?.value !== 'static') return;
-  const meta = await renderLiveSnapshot();
-  const hasErrors = Array.isArray(meta.errors) && meta.errors.length > 0;
-  await upsertSetting('liveRenderLastStatus', hasErrors ? 'warning' : 'success');
-  await upsertSetting('liveRenderLastAt', meta.renderedAt || new Date().toISOString());
-  await upsertSetting('liveRenderLastDurationMs', meta.durationMs || 0);
-  await upsertSetting('liveRenderLastRoutes', meta.renderedRoutes || 0);
-  await upsertSetting('liveRenderLastErrors', JSON.stringify(meta.errors || []));
-  await upsertSetting('liveRenderLastError', hasErrors ? 'Einzelne Seiten konnten nicht gerendert werden' : '');
-}
-
-// Entprellt + zusammengefasst: höchstens ein Rebuild gleichzeitig; Webhooks während eines
-// laufenden Rebuilds lösen genau einen weiteren aus.
-// ponytail: prozesslokaler Zustand, kennt den manuellen Rebuild (render-live) nicht — bei
-// mehreren Instanzen oder Kollisionen gemeinsame Sperre in der DB.
-let timer = null;
-let running = false;
-let again = false;
-export function scheduleRebuild(rebuild = rebuildSnapshot, delayMs = DEBOUNCE_MS) {
-  if (running) { again = true; return; }
-  if (timer) return;
-  timer = setTimeout(async () => {
-    timer = null;
-    running = true;
-    try {
-      await rebuild();
-    } catch (e) {
-      console.error('[picgine-webhook] Snapshot-Rebuild fehlgeschlagen', e?.message);
-    } finally {
-      running = false;
-      if (again) { again = false; scheduleRebuild(rebuild, delayMs); }
-    }
-  }, delayMs);
-}
-
 // Öffentlich, aber signiert: Picgine meldet Änderungen an Galerien (SPEC §11.5).
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Methode nicht erlaubt' });
@@ -88,6 +44,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'Ungültige Signatur' });
   }
 
-  scheduleRebuild();
+  rebuildLiveSnapshot(); // entprellt, nur im statischen Modus
   return res.status(202).json({ ok: true });
 }

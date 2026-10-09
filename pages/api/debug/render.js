@@ -56,8 +56,7 @@ export default async function handler(req, res) {
     } catch (e) {}
 
     // Render page (will produce debug panels if blocks missing)
-    const pageTemplateCode = page.template ? (templateCodes[page.template] || null) : null
-    const rendered = renderPage(page, templateCodes, pageTemplateCode, allPages, {}, templateCodes)
+    const rendered = renderPage(page, templateCodes, { navigations: allPages, footer: {}, globalVars: templateCodes })
 
     return res.status(200).json({
       slug: page.slug,

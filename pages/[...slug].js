@@ -1,12 +1,10 @@
 import { useRouter } from 'next/router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
-import { renderPage, renderTemplate, buildNavHtml, collectNavigationBlockIds, collectFolderBlockPaths, collectPicgineSlugs } from '../lib/templateEngine'
-import { findRawPageNodeByPath } from '../lib/navTreeHelpers'
+import { renderTemplate } from '../lib/templateEngine'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
-import { hydrateContactForms } from '../lib/contactFormRuntime'
-import { hydratePicgine, loadPicgineContents, readPicgineParam } from '../lib/picgineRuntime'
-import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydrateBlogChannels, hydratePage, useRerender } from '../lib/renderPipeline'
+import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
@@ -36,9 +34,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   )
   const [accessDenied, setAccessDenied] = useState(false)
   const [passwordGate, setPasswordGate] = useState(null) // { pageId } | null
-  const [reloadToken, setReloadToken] = useState(0)
-  // Picgine-Entsperren/Logout: neu rendern ohne Ladebildschirm (siehe lib/picgineRuntime.js)
-  const silentReload = useRef(false)
+  // reload: nach Passwort-Entsperren; rerender: Picgine-Entsperren/Logout ohne Ladebildschirm
+  const { token: reloadToken, reload, rerender, consumeSilent } = useRerender()
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
     if (debugRender) console.log(...args)
@@ -129,17 +126,6 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     return buildMaintenanceHtml(settings, 'maintenance_loading', defaultLoadingHtml)
   }
 
-  const loadLiveRenderMode = async () => {
-    try {
-      const settingsRes = await fetch(`/api/settings?_t=${Date.now()}`, { cache: 'no-store' })
-      if (!settingsRes.ok) return 'dynamic'
-      const settings = await settingsRes.json()
-      return settings?.liveRenderMode === 'static' ? 'static' : 'dynamic'
-    } catch (_) {
-      return 'dynamic'
-    }
-  }
-
   useEffect(() => {
     const raw = query.slug
     if (raw === undefined) return
@@ -151,8 +137,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       query,
     })
 
-    if (!silentReload.current) setLoading(true)
-    silentReload.current = false
+    if (!consumeSilent()) setLoading(true)
     setPasswordGate(null)
 
     let cancelled = false
@@ -161,96 +146,13 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
     (async () => {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
-    const liveRenderMode = await loadLiveRenderMode()
-    // ?picgine= (Unterordner-Navigation) gibt es nicht im Snapshot → dynamisch rendern
-    const shouldTryStatic = !previewMode && liveRenderMode === 'static' && !readPicgineParam()
-
-    debugLog('[page-route] render mode decision', {
-      isLocal,
-      previewMode,
-      liveRenderMode,
-      shouldTryStatic,
-      segments,
-      currentUrl: typeof window !== 'undefined' ? window.location.href : null,
-    })
-
-    if (shouldTryStatic) {
-      try {
-        const routePath = segments.length ? `/${segments.join('/')}` : '/'
-        const staticRoute = routePath === '/' ? '/__live/index.html' : `/__live${routePath}/index.html`
-        debugLog('[page-route] trying static snapshot', { routePath, staticRoute })
-        const staticRes = await fetch(`${staticRoute}?_t=${Date.now()}`, { cache: 'no-store' })
-        debugLog('[page-route] static snapshot response', {
-          ok: staticRes.ok,
-          status: staticRes.status,
-          contentType: staticRes.headers.get('content-type'),
-          url: staticRoute,
-        })
-        if (staticRes.ok) {
-          const staticHtml = await staticRes.text()
-          const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || (staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000)
-          debugLog('[page-route] static snapshot loaded', {
-            routePath,
-            htmlLength: staticHtml.length,
-            containsLoadingText: staticHtml.includes('Lädt'),
-            containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
-            preview: staticHtml.slice(0, 220),
-            looksLikeLoadingShell,
-          })
-
-          if (!looksLikeLoadingShell) {
-            const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
-            const metaText = await metaRes.text().catch(() => '')
-            const metaContentType = metaRes.headers.get('content-type') || ''
-            const metaLooksValid = metaRes.ok && metaContentType.includes('application/json') && !metaText.includes('<!DOCTYPE html>')
-
-            debugLog('[page-route] static meta response', {
-              ok: metaRes.ok,
-              status: metaRes.status,
-              contentType: metaContentType,
-              preview: metaText.slice(0, 240),
-              metaLooksValid,
-            })
-
-            // Snapshots mit gesperrter Picgine-Galerie dynamisch rendern — nur so greift
-            // der Viewer-Token (Cookie) des Besuchers; der Snapshot kennt ihn nicht.
-            if (metaLooksValid && !staticHtml.includes('data-picgine-unlock')) {
-              if (cancelled) return
-              setPage({ title: '', data: {} })
-              setHtml(staticHtml)
-              setLoading(false)
-              return
-            }
-          }
-
-          // Gesperrte Picgine-Galerie: Snapshot existiert, nur dynamisch rendern (kein 404)
-          if (routePath !== '/' && !staticHtml.includes('data-picgine-unlock')) {
-            const notFoundRes = await fetch(`/__live/404.html?_t=${Date.now()}`, { cache: 'no-store' })
-            debugLog('[page-route] static 404 response', {
-              ok: notFoundRes.ok,
-              status: notFoundRes.status,
-              contentType: notFoundRes.headers.get('content-type'),
-            })
-            if (notFoundRes.ok) {
-              const notFoundHtml = await notFoundRes.text()
-              const looksInvalid404 = notFoundHtml.includes('Lädt') || (notFoundHtml.includes('<!DOCTYPE html>') && notFoundHtml.length < 5000)
-              if (!looksInvalid404) {
-                debugLog('[page-route] using static 404 fallback', { htmlLength: notFoundHtml.length })
-                if (cancelled) return
-                setPage({ title: '404', data: {} })
-                setHtml(notFoundHtml)
-                setLoading(false)
-                return
-              }
-            }
-          }
-        }
-      } catch (_e) {
-        debugLog('[page-route] static snapshot failed, falling back to dynamic render', {
-          error: _e?.message || String(_e),
-        })
-      }
+    const snapshot = await loadStaticSnapshot(segments)
+    if (snapshot) {
+      if (cancelled) return
+      setPage(snapshot.notFound ? { title: '404', data: {} } : { title: '', data: {} })
+      setHtml(snapshot.html)
+      setLoading(false)
+      return
     }
 
     debugLog('[page-route] falling back to dynamic render', { segments })
@@ -412,175 +314,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         return
       }
 
-      const templatesToLoad = new Set()
-      const collectBlockTemplates = (blocks) => {
-        if (!Array.isArray(blocks)) return
-        for (const block of blocks) {
-          const tname = block.template || block.type
-          if (tname) templatesToLoad.add(tname)
-          if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
-        }
-      }
-      collectBlockTemplates(foundPage.blocks)
-      console.debug('catchall: templatesToLoad ->', Array.from(templatesToLoad))
-
-      const templateCodes = {}
-      const fetchTemplate = async (templateName) => {
-        if (templateCodes[templateName] !== undefined) return
-        templateCodes[templateName] = null
-        try {
-          const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}&_t=${Date.now()}`)
-          if (res.ok) {
-            const data = await res.json()
-            templateCodes[templateName] = data.code
-            if (data.name && data.name !== templateName) templateCodes[data.name] = data.code
-          }
-        } catch (e) {
-          console.error(`Fehler beim Laden von Template "${templateName}":`, e)
-        }
-      }
-      await Promise.all(Array.from(templatesToLoad).map(fetchTemplate))
-
-      let navigations = {};
-      try {
-        const navRes = await fetch(`/api/navigations?active=true&_t=${Date.now()}`);
-        if (navRes.ok) {
-          const activeNavs = await navRes.json();
-          if (Array.isArray(activeNavs)) {
-            const currentPath = segments.join('/');
-            // isCurrent/data let a page-level nav template exclude the page it's
-            // rendered on (e.g. "other artists") and read custom per-page fields
-            // (e.g. data.navImage) without any block-specific plumbing.
-            const buildNestedPages = (nodes, parentPath = '') =>
-              (nodes || [])
-                .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
-                .map(n => {
-                  const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
-                  const children = buildNestedPages(n.children || [], slug);
-                  return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: slug === currentPath, data: n.data || {} };
-                });
-            const nestedPages = buildNestedPages(pages);
-            const anchors = Array.isArray(foundPage?.data?.anchors) ? foundPage.data.anchors : [];
-            const customAnchors = Array.isArray(foundPage?.data?.customAnchors) ? foundPage.data.customAnchors : [];
-            // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
-            // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
-            // Suche über den rohen (ungefilterten) Baum nach dem Pfad, nicht nach
-            // nestedPages/id: die aktuelle Seite kann selbst ein Entwurf sein (dann
-            // fehlt sie in nestedPages) und die client-seitig vergebene id auf
-            // verschachtelten Unterseiten ist nicht so verlässlich wie der Pfad,
-            // über den die Seite ohnehin gerade gefunden wurde.
-            const rawCurrentMatch = findRawPageNodeByPath(pages, currentPath);
-            const childPages = rawCurrentMatch ? buildNestedPages(rawCurrentMatch.node.children || [], rawCurrentMatch.parentPath) : [];
-            const navData = { pages: nestedPages, anchors, customAnchors, childPages };
-            for (const nav of activeNavs) {
-              const key = String(nav.type).toLowerCase();
-              navigations[key] = { code: nav.code, data: navData };
-            }
-            navigations['auto'] = { code: buildNavHtml(pages, currentPath), data: {} };
-            if (foundPage.data?.pageNav) {
-              try {
-                const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(foundPage.data.pageNav)}&_t=${Date.now()}`);
-                if (pageNavRes.ok) {
-                  const pageNavData = await pageNavRes.json();
-                  if (pageNavData && pageNavData.code) navigations['page'] = { code: pageNavData.code, data: navData };
-                }
-              } catch (e) {
-                console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message);
-              }
-            }
-
-            // Jede (aktive) Navigation ist zusätzlich per {{{nav:<Name>}}} ansprechbar —
-            // navigations.byId (mit name, für die Platzhalter-Auflösung in templateEngine.js)
-            // deckt damit standardmäßig schon alle PAGE-Navs ab.
-            navigations.byId = {};
-            for (const nav of activeNavs) {
-              if (nav?.id && nav?.code) {
-                navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: navData };
-              }
-            }
-
-            // Navigations, die als eigener Block (type: 'navigation') in dieser Seite platziert
-            // wurden aber (z. B. eine MAIN-Nav) nicht in activeNavs enthalten sind, per ID nachladen.
-            const navBlockIds = collectNavigationBlockIds(foundPage?.blocks).filter((id) => !navigations.byId[id]);
-            if (navBlockIds.length > 0) {
-              await Promise.all(navBlockIds.map(async (id) => {
-                try {
-                  const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`);
-                  if (res.ok) {
-                    const nav = await res.json();
-                    if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: navData };
-                  }
-                } catch (e) {
-                  console.warn('Navigations-Block konnte nicht geladen werden:', e.message);
-                }
-              }));
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Navigations konnten nicht geladen werden:', e.message);
-      }
-
-      let footer = null;
-      try {
-        const footerRes = await fetch(`/api/footers?active=true&_t=${Date.now()}`);
-        if (footerRes.ok) {
-          const activeFooter = await footerRes.json();
-          if (activeFooter && activeFooter.code) footer = { code: activeFooter.code, data: {} };
-        }
-      } catch (e) {
-        console.warn('Footer konnte nicht geladen werden:', e.message);
-      }
-      if (foundPage.data?.pageFooter) {
-        try {
-          const pageFooterRes = await fetch(`/api/footers?id=${encodeURIComponent(foundPage.data.pageFooter)}&_t=${Date.now()}`);
-          if (pageFooterRes.ok) {
-            const pageFooterData = await pageFooterRes.json();
-            if (pageFooterData && pageFooterData.code) footer = { code: pageFooterData.code, data: {} };
-          }
-        } catch (e) {
-          console.warn('Seiten-spezifischer Footer konnte nicht geladen werden:', e.message);
-        }
-      }
-
-      let globalVars = {};
-      try {
-        const globalRes = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`);
-        if (globalRes.ok) globalVars = await globalRes.json();
-      } catch (e) {
-        console.warn('Globale Variablen konnten nicht geladen werden:', e.message);
-      }
-
-      const globalPages = { byId: {} };
-      try {
-        const widgetsRes = await fetch(`/api/global-pages?active=true&role=WIDGET&_t=${Date.now()}`);
-        if (widgetsRes.ok) {
-          const widgets = await widgetsRes.json();
-          for (const w of (Array.isArray(widgets) ? widgets : [])) {
-            if (w?.id) globalPages.byId[w.id] = { code: w.code };
-          }
-        }
-      } catch (e) {
-        console.warn('Widgets konnten nicht geladen werden:', e.message);
-      }
-
-      const folderContents = {};
-      try {
-        const folderPaths = collectFolderBlockPaths(foundPage.blocks, templateCodes);
-        await Promise.all(folderPaths.map(async (folderPath) => {
-          const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`);
-          if (res.ok) {
-            const data = await res.json();
-            folderContents[folderPath] = data.files || [];
-          }
-        }));
-      } catch (e) {
-        console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message);
-      }
-
-      const picgineContents = await loadPicgineContents(collectPicgineSlugs(foundPage.blocks, templateCodes), readPicgineParam());
-
-      const html = renderPage(foundPage, templateCodes, { isChild: segments.length > 1, picgineBasePath: window.location.pathname }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
+      const pageData = await loadPageData(foundPage, pages, { currentPath: segments.join('/') })
+      const html = renderPageHtml(foundPage, pageData, { isChild: segments.length > 1 })
       if (cancelled) return
       setHtml(html)
       setLoading(false)
@@ -601,7 +336,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         body: JSON.stringify({ pageId, password }),
       })
       if (res.ok) {
-        setReloadToken(k => k + 1)
+        reload()
         return { ok: true }
       }
       const data = await res.json().catch(() => ({}))
@@ -615,120 +350,17 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
   }, [])
 
-  // Führe inline <script>-Tags im gerenderten HTML aus.
-  // React's dangerouslySetInnerHTML wertet Scripts nicht aus — dieser Effect holt das nach.
-  // Nur Scripts ohne src-Attribut werden ausgeführt (keine externen URLs).
+  // Inline-Scripts ausführen, Blog-Kanäle füllen, dann Kontaktformulare, Picgine und
+  // Consent-Embeds verdrahten (lib/renderPipeline.js). Kernverhalten, nicht Teil des
+  // abschaltbaren /api/js-Bundles.
   useEffect(() => {
     if (!html) return
     const containerId = page?.data?.wrapperId || 'page-html-output'
     const container = document.getElementById(containerId)
-    if (!container) return
-    container.querySelectorAll('script:not([src])').forEach(old => {
-      const s = document.createElement('script')
-      s.textContent = old.textContent
-      document.body.appendChild(s)
-      document.body.removeChild(s)
-    })
+    runInlineScripts(container)
+    hydrateBlogChannels(container)
+    hydratePage(container, rerender)
   }, [html])
-
-  // Hydrate blog-channel placeholder divs after HTML is set.
-  // Each <div class="blog-channel-block" data-channel="…" data-slot="…" data-template="…" data-limit="…">
-  // is filled with rendered post cards fetched from the public API.
-  useEffect(() => {
-    if (!html) return;
-    const containerId = page?.data?.wrapperId || 'page-html-output';
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    const blocks = container.querySelectorAll('.blog-channel-block[data-channel]');
-    if (!blocks.length) return;
-
-    blocks.forEach(async (el) => {
-      const channelSlug = el.getAttribute('data-channel');
-      const templateSlot = el.getAttribute('data-slot') || 'templateDetailPreview';
-      const directTemplateName = String(el.getAttribute('data-template') || '').trim();
-      const limit = parseInt(el.getAttribute('data-limit'), 10) || 6;
-      if (!channelSlug) return;
-
-      try {
-        // 1. Fetch published posts
-        const postsRes = await fetch(`/api/blog/public/${encodeURIComponent(channelSlug)}?limit=${limit}`);
-        if (!postsRes.ok) return;
-        const { channel, posts } = await postsRes.json();
-
-        if (!posts || !posts.length) {
-          el.innerHTML = '';
-          return;
-        }
-
-        // 2. Resolve template candidates: explicit override first, then channel slot
-        const slotTemplateName = channel && channel[templateSlot] ? String(channel[templateSlot]).trim() : '';
-        const candidates = [];
-        if (directTemplateName) candidates.push(directTemplateName);
-        if (slotTemplateName && slotTemplateName !== directTemplateName) candidates.push(slotTemplateName);
-
-        let tCode = '';
-        for (const name of candidates) {
-          try {
-            const tRes = await fetch(`/api/templates?name=${encodeURIComponent(name)}`);
-            if (!tRes.ok) continue;
-            const tData = await tRes.json();
-            if (tData && tData.code) {
-              tCode = String(tData.code);
-              break;
-            }
-          } catch (_) {
-            // keep trying next candidate
-          }
-        }
-
-        // 3. Render fallback when no template could be loaded
-        if (!tCode) {
-          el.innerHTML = posts.map((p) => (
-            `<article class="blog-fallback-card">`
-            + `<h3>${String(p.title || '')}</h3>`
-            + `${p.excerpt ? `<p>${String(p.excerpt)}</p>` : ''}`
-            + `</article>`
-          )).join('\n');
-          return;
-        }
-
-        // 4. Render each post and set innerHTML
-        const rendered = posts.map(p =>
-          renderTemplate(tCode, {
-            ...p,
-            channelSlug: channel.slug,
-            channelUrl: `/${channel.slug}`,
-            postUrl: `/${channel.slug}/${p.slug}`,
-          })
-        ).join('\n');
-
-        el.innerHTML = rendered;
-      } catch (e) {
-        // Silently ignore — block stays empty
-      }
-    });
-  }, [html]);
-
-  // Wire up any form[data-temgine-form="contact"] rendered inside the page's
-  // block HTML — see lib/contactFormRuntime.js. Core behaviour, not part of
-  // the disableable /api/js bundle.
-  useEffect(() => {
-    if (!html) return;
-    const containerId = page?.data?.wrapperId || 'page-html-output';
-    const container = document.getElementById(containerId);
-    hydrateContactForms(container);
-    hydratePicgine(container, () => {
-      silentReload.current = true;
-      setReloadToken(k => k + 1);
-    });
-  }, [html]);
-
-  useEffect(() => {
-    if (!html) return;
-    const containerId = page?.data?.wrapperId || 'page-html-output';
-    const container = document.getElementById(containerId);
-    hydrateConsentGatedEmbeds(container);
-  }, [html]);
 
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
   const showDebug = params && params.get('debug') === '1'

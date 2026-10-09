@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
-import { renderPage, renderTemplate, collectNavigationBlockIds, collectFolderBlockPaths, collectPicgineSlugs } from '../lib/templateEngine'
-import { findRawPageNodeById } from '../lib/navTreeHelpers'
+import { renderTemplate } from '../lib/templateEngine'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
-import { hydrateContactForms } from '../lib/contactFormRuntime'
-import { hydratePicgine, loadPicgineContents, readPicgineParam } from '../lib/picgineRuntime'
-import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import { loadStaticSnapshot, loadPageData, renderPageHtml, hydratePage, useRerender } from '../lib/renderPipeline'
+import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
@@ -31,12 +29,8 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
   )
   const [homePage, setHomePage] = useState(null)
-  // Picgine-Entsperren/Logout: >0 rendert neu, ohne Ladebildschirm (siehe lib/picgineRuntime.js)
-  const [picgineReload, setPicgineReload] = useState(0)
-  const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
-  const debugLog = (...args) => {
-    if (debugRender) console.log(...args)
-  }
+  // Picgine-Entsperren/Logout: neu rendern ohne Ladebildschirm (siehe lib/renderPipeline.js)
+  const { token: rerenderToken, rerender, consumeSilent } = useRerender()
 
   const defaultNoHomepageHtml = '<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>'
   const default503Html = '<div style="padding: 40px; text-align: center;"><h1>Service vorübergehend nicht verfügbar</h1><p>Bitte versuche es später erneut.</p></div>'
@@ -125,22 +119,10 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
 
   useEffect(() => {
     loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
-    if (!picgineReload) setLoading(true)
+    if (!consumeSilent()) setLoading(true)
 
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    const previewMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === '1'
     const pagesUrl = `/api/pages?${isLocal ? 'includeDrafts=true&' : ''}_t=${Date.now()}`
-
-    const loadLiveRenderMode = async () => {
-      try {
-        const settingsRes = await fetch(`/api/settings?_t=${Date.now()}`, { cache: 'no-store' })
-        if (!settingsRes.ok) return 'dynamic'
-        const settings = await settingsRes.json()
-        return settings?.liveRenderMode === 'static' ? 'static' : 'dynamic'
-      } catch (_e) {
-        return 'dynamic'
-      }
-    }
 
     const startDynamicRender = () => fetch(pagesUrl)
       .then(r => r.json())
@@ -200,179 +182,10 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           return
         }
 
-        // Sammle alle Templates
-        const templatesToLoad = new Set()
-        const collectBlockTemplates = (blocks) => {
-          if (!Array.isArray(blocks)) return
-          for (const block of blocks) {
-            const tname = block.template || block.type
-            if (tname) templatesToLoad.add(tname)
-            if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
-          }
-        }
-        collectBlockTemplates(homePage.blocks)
-        if (homePage.template) templatesToLoad.add(homePage.template)
-
-        // Lade alle Templates
-        const templateCodes = {}
-        await Promise.all(
-          Array.from(templatesToLoad).map(async templateName => {
-            try {
-              const res = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}&_t=${Date.now()}`)
-              if (res.ok) {
-                const data = await res.json()
-                templateCodes[templateName] = data.code
-              }
-            } catch (e) {
-              console.error(`Fehler beim Laden von Template "${templateName}":`, e)
-            }
-          })
-        )
-
-        // Lade aktive Navigationen (gleiche Logik wie in [...slug].js)
-        const navigations = {}
-        try {
-          const navRes = await fetch(`/api/navigations?active=true&_t=${Date.now()}`)
-          if (navRes.ok) {
-            const activeNavs = await navRes.json()
-            if (Array.isArray(activeNavs)) {
-              const buildNestedPages = (nodes, parentPath = '') =>
-                (nodes || [])
-                  .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
-                  .map(n => {
-                    const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug
-                    const children = buildNestedPages(n.children || [], slug)
-                    return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, isCurrent: n.id === homePage?.id, data: n.data || {} }
-                  })
-              const nestedPages = buildNestedPages(pages)
-
-              const anchors = Array.isArray(homePage?.data?.anchors) ? homePage.data.anchors : []
-              const customAnchors = Array.isArray(homePage?.data?.customAnchors) ? homePage.data.customAnchors : []
-              // Unterseiten der aktuell gerenderten Seite — für PAGE-Navs, die z. B. nur
-              // "{{{nav:unterseiten}}}" der aktuellen Seite zeigen sollen (siehe help/navigationen.md).
-              // Suche über den rohen (ungefilterten) Baum, nicht über nestedPages: die
-              // Startseite kann verschachtelt liegen und selbst ein Entwurf sein.
-              const rawHomeMatch = findRawPageNodeById(pages, homePage?.id)
-              const childPages = rawHomeMatch ? buildNestedPages(rawHomeMatch.node.children || [], rawHomeMatch.parentPath) : []
-              const navData = { pages: nestedPages, anchors, customAnchors, childPages }
-
-              for (const nav of activeNavs) {
-                const key = String(nav.type).toLowerCase()
-                navigations[key] = { code: nav.code, data: navData }
-              }
-
-              // If this page has a specific navigation assigned, use it as the optional page nav
-              if (homePage?.data?.pageNav) {
-                try {
-                  const pageNavRes = await fetch(`/api/navigations?id=${encodeURIComponent(homePage.data.pageNav)}&_t=${Date.now()}`)
-                  if (pageNavRes.ok) {
-                    const pageNavData = await pageNavRes.json()
-                    if (pageNavData && pageNavData.code) {
-                      navigations['page'] = { code: pageNavData.code, data: navData }
-                    }
-                  }
-                } catch (e) {
-                  console.warn('Seiten-spezifische Navigation konnte nicht geladen werden:', e.message)
-                }
-              }
-
-              // Jede (aktive) Navigation ist zusätzlich per {{{nav:<Name>}}} ansprechbar —
-              // navigations.byId (mit name, für die Platzhalter-Auflösung in templateEngine.js)
-              // deckt damit standardmäßig schon alle PAGE-Navs ab.
-              navigations.byId = {}
-              for (const nav of activeNavs) {
-                if (nav?.id && nav?.code) {
-                  navigations.byId[nav.id] = { name: nav.name, code: nav.code, data: navData }
-                }
-              }
-
-              // Navigations, die als eigener Block (type: 'navigation') platziert wurden aber
-              // (z. B. eine MAIN-Nav) nicht in activeNavs enthalten sind, werden per ID nachgeladen.
-              const navBlockIds = collectNavigationBlockIds(homePage?.blocks).filter((id) => !navigations.byId[id])
-              if (navBlockIds.length > 0) {
-                await Promise.all(navBlockIds.map(async (id) => {
-                  try {
-                    const res = await fetch(`/api/navigations?id=${encodeURIComponent(id)}&_t=${Date.now()}`)
-                    if (res.ok) {
-                      const nav = await res.json()
-                      if (nav && nav.code) navigations.byId[id] = { name: nav.name, code: nav.code, data: navData }
-                    }
-                  } catch (e) {
-                    console.warn('Navigations-Block konnte nicht geladen werden:', e.message)
-                  }
-                }))
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Fehler beim Laden der Navigationen:', e)
-        }
-
-        // Lade aktiven Footer (gleiche Logik wie in [...slug].js)
-        let footer = null
-        try {
-          const footerRes = await fetch(`/api/footers?active=true&_t=${Date.now()}`)
-          if (footerRes.ok) {
-            const activeFooter = await footerRes.json()
-            if (activeFooter && activeFooter.code) footer = { code: activeFooter.code, data: {} }
-          }
-        } catch (e) {
-          console.warn('Footer konnte nicht geladen werden:', e.message)
-        }
-        if (homePage.data?.pageFooter) {
-          try {
-            const pageFooterRes = await fetch(`/api/footers?id=${encodeURIComponent(homePage.data.pageFooter)}&_t=${Date.now()}`)
-            if (pageFooterRes.ok) {
-              const pageFooterData = await pageFooterRes.json()
-              if (pageFooterData && pageFooterData.code) footer = { code: pageFooterData.code, data: {} }
-            }
-          } catch (e) {
-            console.warn('Seiten-spezifischer Footer konnte nicht geladen werden:', e.message)
-          }
-        }
-
-        // Lade globale Variablen (gleiche Logik wie in [...slug].js)
-        let globalVars = {}
-        try {
-          const globalRes = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`)
-          if (globalRes.ok) globalVars = await globalRes.json()
-        } catch (e) {
-          console.warn('Globale Variablen konnten nicht geladen werden:', e.message)
-        }
-
-        // Lade Widgets (gleiche Logik wie in [...slug].js)
-        const globalPages = { byId: {} }
-        try {
-          const widgetsRes = await fetch(`/api/global-pages?active=true&role=WIDGET&_t=${Date.now()}`)
-          if (widgetsRes.ok) {
-            const widgets = await widgetsRes.json()
-            for (const w of (Array.isArray(widgets) ? widgets : [])) {
-              if (w?.id) globalPages.byId[w.id] = { code: w.code }
-            }
-          }
-        } catch (e) {
-          console.warn('Widgets konnten nicht geladen werden:', e.message)
-        }
-
-        // Lade Ordner-Inhalte für {{#folder}}-Blöcke (gleiche Logik wie in [...slug].js)
-        const folderContents = {}
-        try {
-          const folderPaths = collectFolderBlockPaths(homePage.blocks, templateCodes)
-          await Promise.all(folderPaths.map(async (folderPath) => {
-            const res = await fetch(`/api/files?folder=${encodeURIComponent(folderPath)}&recursive=1&_t=${Date.now()}`)
-            if (res.ok) {
-              const data = await res.json()
-              folderContents[folderPath] = data.files || []
-            }
-          }))
-        } catch (e) {
-          console.warn('Ordner-Inhalte konnten nicht geladen werden:', e.message)
-        }
-
-        const picgineContents = await loadPicgineContents(collectPicgineSlugs(homePage.blocks, templateCodes), readPicgineParam())
+        const pageData = await loadPageData(homePage, pages)
 
         // Rendere Seite
-        const html = renderPage(homePage, templateCodes, { isChild: false, picgineBasePath: window.location.pathname }, navigations, footer, globalVars, folderContents, globalPages, picgineContents)
+        const html = renderPageHtml(homePage, pageData, { isChild: false })
         setHtml(html)
         setHomePage(homePage)
         setLoading(false)
@@ -383,83 +196,23 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
       })
 
     ;(async () => {
-      const liveRenderMode = await loadLiveRenderMode()
-      // ?picgine= (Unterordner-Navigation) gibt es nicht im Snapshot → dynamisch rendern
-    const shouldTryStatic = !previewMode && liveRenderMode === 'static' && !readPicgineParam()
-
-      debugLog('[home-route] render mode', { liveRenderMode, previewMode, shouldTryStatic })
-
-      if (shouldTryStatic) {
-        try {
-          debugLog('[home-route] trying static snapshot', { route: '/__live/index.html' })
-          const staticRes = await fetch(`/__live/index.html?_t=${Date.now()}`, { cache: 'no-store' })
-          debugLog('[home-route] static snapshot response', {
-            ok: staticRes.ok,
-            status: staticRes.status,
-            contentType: staticRes.headers.get('content-type'),
-          })
-
-          if (staticRes.ok) {
-            const staticHtml = await staticRes.text()
-            const looksLikeLoadingShell = staticHtml.includes('Lädt') || staticHtml.includes('Lade Admin-Daten') || (staticHtml.includes('<!DOCTYPE html>') && staticHtml.length < 5000)
-            debugLog('[home-route] using static snapshot', {
-              htmlLength: staticHtml.length,
-              containsLoadingText: staticHtml.includes('Lädt'),
-              containsLoadingDots: staticHtml.includes('Lade Admin-Daten'),
-              preview: staticHtml.slice(0, 220),
-              looksLikeLoadingShell,
-            })
-
-            if (!looksLikeLoadingShell) {
-              const metaRes = await fetch(`/__live/__meta.json?_t=${Date.now()}`, { cache: 'no-store' })
-              const metaText = await metaRes.text().catch(() => '')
-              const metaContentType = metaRes.headers.get('content-type') || ''
-              const metaLooksValid = metaRes.ok && metaContentType.includes('application/json') && !metaText.includes('<!DOCTYPE html>')
-
-              debugLog('[home-route] static snapshot meta response', {
-                ok: metaRes.ok,
-                status: metaRes.status,
-                contentType: metaContentType,
-                preview: metaText.slice(0, 240),
-                metaLooksValid,
-              })
-
-              // Snapshots mit gesperrter Picgine-Galerie dynamisch rendern (Viewer-Token)
-              if (metaLooksValid && !staticHtml.includes('data-picgine-unlock')) {
-                setHtml(staticHtml)
-                setHomePage({ data: {} })
-                setLoading(false)
-                return
-              }
-            }
-          }
-          debugLog('[home-route] static snapshot rejected, falling back to dynamic render')
-        } catch (_e) {
-          debugLog('[home-route] static snapshot fetch failed, falling back to dynamic render')
-        }
+      const snapshot = await loadStaticSnapshot([])
+      if (snapshot) {
+        setHtml(snapshot.html)
+        setHomePage({ data: {} })
+        setLoading(false)
+        return
       }
-
-      debugLog('[home-route] rendering dynamically')
       startDynamicRender()
     })()
-  }, [picgineReload])
+  }, [rerenderToken])
 
-  // Wire up any form[data-temgine-form="contact"] rendered inside the home
-  // page's block HTML — see lib/contactFormRuntime.js. Core behaviour, not
-  // part of the disableable /api/js bundle.
+  // Kontaktformulare, Picgine und Consent-Embeds im gerenderten HTML verdrahten
+  // (lib/renderPipeline.js). Kernverhalten, nicht Teil des abschaltbaren /api/js-Bundles.
   useEffect(() => {
     if (!html) return
     const containerId = homePage?.data?.wrapperId || 'page-html-output'
-    const container = document.getElementById(containerId)
-    hydrateContactForms(container)
-    hydratePicgine(container, () => setPicgineReload(k => k + 1))
-  }, [html])
-
-  useEffect(() => {
-    if (!html) return
-    const containerId = homePage?.data?.wrapperId || 'page-html-output'
-    const container = document.getElementById(containerId)
-    hydrateConsentGatedEmbeds(container)
+    hydratePage(document.getElementById(containerId), rerender)
   }, [html])
 
   // Strip not-yet-consented embed srcs before React ever inserts the HTML.
