@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { extractTypedVariables, extractRepeaterBlocks, extractFolderBlocks, extractPicgineBlocks, guessInputType } from '../lib/templateParser';
+import { extractTypedVariables, extractRepeaterBlocks, extractEditorSections, guessInputType } from '../lib/templateParser';
 
 // Farbe + Label pro Datentyp (Farben in styles/page-editor.css: .tpm-t-<type>)
 const TYPE_LABELS = {
@@ -51,20 +51,19 @@ function Field({ name, type }) {
 const MAX_ITEMS = 8;
 
 function TemplateSchema({ code }) {
-  const { fields, repeaters, folders, galleries } = useMemo(() => {
+  const { fields, repeaters, sections } = useMemo(() => {
     try {
       return {
         fields: (extractTypedVariables(code) || []).map(({ varName, explicitType }) => ({ name: varName, type: resolveType(varName, explicitType) })),
         repeaters: extractRepeaterBlocks(code) || [],
-        folders: extractFolderBlocks(code) || [],
-        galleries: (extractPicgineBlocks(code) || []).filter(g => !g.fixedSlug),
+        sections: extractEditorSections(code) || [],
       };
     } catch (e) {
-      return { fields: [], repeaters: [], folders: [], galleries: [] };
+      return { fields: [], repeaters: [], sections: [] };
     }
   }, [code]);
 
-  if (!fields.length && !repeaters.length && !folders.length && !galleries.length) {
+  if (!fields.length && !repeaters.length && !sections.length) {
     return <div className="tpm-empty">Keine Eingabefelder</div>;
   }
   const shown = fields.slice(0, MAX_ITEMS);
@@ -82,8 +81,7 @@ function TemplateSchema({ code }) {
           ))}
         </div>
       ))}
-      {folders.map(f => <Field key={f.sectionName} name={f.sectionName} type="folder" />)}
-      {galleries.map(g => <Field key={`picgine-${g.sectionName}`} name={g.sectionName} type="gallery" />)}
+      {sections.map(s => <Field key={`${s.prefix}-${s.sectionName}`} name={s.sectionName} type={TYPE_LABELS[s.provider.editorType] ? s.provider.editorType : 'text'} />)}
     </div>
   );
 }

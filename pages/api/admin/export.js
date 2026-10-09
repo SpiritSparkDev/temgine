@@ -8,7 +8,7 @@ import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { listGlobalPages } from '../../../lib/globalPageStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
-import { renderPage, buildNavHtml, collectFolderBlockPaths } from '../../../lib/templateEngine'
+import { renderPage, buildNavHtml, collectSectionKeys } from '../../../lib/templateEngine'
 import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
 import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
@@ -630,11 +630,12 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
       const footer = resolveFooterForPage(entry.page, activeFooter, allFootersById)
-      const folderContents = {}
-      for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
-        folderContents[folderPath] = listFolderItemsRecursive(folderPath)
+      // Statischer Export: nur Ordner-Sections (lokale Dateien), wie vor dem Section-Provider-System
+      const folder = {}
+      for (const folderPath of collectSectionKeys(entry.page.blocks, blockTemplates).folder || []) {
+        folder[folderPath] = listFolderItemsRecursive(folderPath)
       }
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, folderContents, globalPages })
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, sectionData: { folder }, globalPages })
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)

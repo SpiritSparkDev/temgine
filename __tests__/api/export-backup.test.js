@@ -24,7 +24,7 @@ jest.mock('../../lib/templateStore', () => ({ listTemplates: jest.fn().mockRetur
 jest.mock('../../lib/navigationStore', () => ({ listNavigations: jest.fn().mockReturnValue([]) }));
 jest.mock('../../lib/footerStore', () => ({ listFooters: jest.fn().mockReturnValue([]) }));
 jest.mock('../../lib/maintenanceStore', () => ({ getAllMaintenanceAsSettings: jest.fn().mockReturnValue({}) }));
-jest.mock('../../lib/templateEngine', () => ({ renderPage: jest.fn(), buildNavHtml: jest.fn(), collectFolderBlockPaths: jest.fn() }));
+jest.mock('../../lib/templateEngine', () => ({ renderPage: jest.fn(), buildNavHtml: jest.fn(), collectSectionKeys: jest.fn(() => ({})) }));
 jest.mock('../../lib/uploadFolder', () => ({ listFolderItemsRecursive: jest.fn().mockReturnValue([]) }));
 jest.mock('../../lib/navTreeHelpers', () => ({ findRawPageNodeById: jest.fn() }));
 jest.mock('../../lib/globalVariables', () => ({ buildGlobalContext: jest.fn() }));
