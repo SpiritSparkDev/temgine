@@ -2,10 +2,12 @@ import { prisma } from '../../lib/prisma'
 import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
 import { CORE_SETTING_KEYS } from '../../lib/settingsKeys'
+import { pluginSecretKeys, pluginSettingKeys } from '../../lib/plugins/registry'
 
 // Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
 // stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
-const SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources']
+// Dazu kommen alle Settings vom Typ "secret" aus den Plugin-Manifesten.
+const CORE_SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources']
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -14,6 +16,7 @@ const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) 
 };
 
 export default async function handler(req, res) {
+  const SECRET_KEYS = [...CORE_SECRET_KEYS, ...pluginSecretKeys()]
   try {
     // GET: alle Settings als { key: value }-Map zurückgeben
     if (req.method === 'GET') {
@@ -42,9 +45,10 @@ export default async function handler(req, res) {
         const [status, resp] = errorResponse(400, 'key erforderlich', 'VALIDATION_ERROR', { missing: ['key'] });
         return res.status(status).json(resp);
       }
-      // Allow-List (lib/settingsKeys.js) + Wartungsseiten-Keys — sonst könnte jeder
+      // Allow-List (lib/settingsKeys.js) + Plugin-Manifest-Keys inkl. plugin_<id>_enabled
+      // + Wartungsseiten-Keys — sonst könnte jeder
       // Admin/Moderator beliebige Keys anlegen oder überschreiben.
-      if (!CORE_SETTING_KEYS.includes(key) && !parseSettingKey(key)) {
+      if (!CORE_SETTING_KEYS.includes(key) && !pluginSettingKeys().includes(key) && !parseSettingKey(key)) {
         console.warn('[/api/settings] Unbekannter Key abgelehnt:', String(key))
         const [status, resp] = errorResponse(400, `Unbekannte Einstellung "${String(key)}"`, 'UNKNOWN_SETTING_KEY', { key: String(key) });
         return res.status(status).json(resp);

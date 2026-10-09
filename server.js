@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const next = require('next');
-const { applyMatomoCsp } = require('./lib/matomoCsp');
+const { applyPluginCsp } = require('./lib/pluginCsp');
 
 const PUBLIC_ROOT = path.join(__dirname, 'public');
 const PUBLIC_UPLOAD_ROOT = path.join(PUBLIC_ROOT, 'uploads');
@@ -215,7 +215,7 @@ app.prepare().then(() => {
       return;
     }
 
-    applyMatomoCsp(res);
+    applyPluginCsp(res);
     handle(req, res);
   }).listen(port, (err) => {
     if (err) throw err;

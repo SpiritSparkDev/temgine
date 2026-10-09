@@ -1,0 +1,20 @@
+{
+  "id": "echo",
+  "name": "Echo (Test-Plugin)",
+  "version": "1.0.0",
+  "temgineApi": 1,
+  "description": "Test-Plugin, das jeden Hook des Plugin-Systems minimal nutzt",
+  "settings": {
+    "echo_greeting": { "label": "Begrüßung", "type": "text" },
+    "echo_url": { "label": "Echo-URL", "type": "url" },
+    "echo_count": { "label": "Anzahl", "type": "number" },
+    "echo_loud": { "label": "Laut", "type": "bool" },
+    "echo_token": { "label": "Token", "type": "secret" }
+  },
+  "csp": [
+    { "directive": "img-src", "originFromSetting": "echo_url" },
+    { "directive": "connect-src", "origin": "https://echo.example" }
+  ],
+  "sections": ["echo"],
+  "help": "help.md"
+}

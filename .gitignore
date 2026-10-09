@@ -88,3 +88,6 @@ development_docs
 # bewusst ausgenommen — landet im Repo statt nur lokal)
 !/help/
 !/help/**
+# Plugin-Hilfen (plugins/<id>/help.md, auch im Test-Plugin) gehören ebenfalls ins Repo
+!/plugins/*/help.md
+!/__tests__/fixtures/plugins/*/help.md
