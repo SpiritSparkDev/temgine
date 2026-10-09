@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectFolderBlockPaths, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectSectionKeys, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -152,17 +152,17 @@ describe('collectFolderBlockPaths', () => {
 
   it('collects the chosen folder path from a block using a folder-block template', () => {
     const blocks = [{ template: 'Gallery', props: { folder: 'produkte/bilder' } }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['produkte/bilder']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['produkte/bilder']);
   });
 
   it('collects folder paths from nested children', () => {
     const blocks = [{ template: 'Text', props: {}, children: [{ template: 'Gallery', props: { folder: 'sub' } }] }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['sub']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['sub']);
   });
 
   it('ignores blocks with no folder chosen yet (empty string)', () => {
     const blocks = [{ template: 'Gallery', props: { folder: '' } }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual([]);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual([]);
   });
 
   it('dedupes repeated folder paths', () => {
@@ -170,7 +170,7 @@ describe('collectFolderBlockPaths', () => {
       { template: 'Gallery', props: { folder: 'bilder' } },
       { template: 'Gallery', props: { folder: 'bilder' } },
     ];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['bilder']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['bilder']);
   });
 });
 
@@ -186,7 +186,7 @@ describe('renderPage folder blocks ({{#folder}})', () => {
 
   it('iterates over the pre-resolved items for the chosen folder path', () => {
     const folderContents = { bilder: [{ name: 'a.jpg', url: '/uploads/bilder/a.jpg' }, { name: 'b.jpg', url: '/uploads/bilder/b.jpg' }] };
-    const html = renderPage(page, blockTemplates, { folderContents });
+    const html = renderPage(page, blockTemplates, { sectionData: { folder: folderContents } });
     // {{url}} is Mustache-escaped like any other double-brace field (same convention as
     // existing {{ctaUrl:url}}/{{image:image}} template fields) — browsers decode the
     // resulting HTML entities in attribute values, so the link still works correctly.
@@ -201,7 +201,7 @@ describe('renderPage folder blocks ({{#folder}})', () => {
 
   it('renders nothing when no folder has been chosen', () => {
     const emptyPage = { ...page, blocks: [{ template: 'Gallery', props: { folder: '' } }] };
-    const html = renderPage(emptyPage, blockTemplates, { folderContents: { '': [{ name: 'root.jpg', url: '/uploads/root.jpg' }] } });
+    const html = renderPage(emptyPage, blockTemplates, { sectionData: { folder: { '': [{ name: 'root.jpg', url: '/uploads/root.jpg' }] } } });
     expect(html).not.toContain('<a href=');
   });
 
@@ -209,7 +209,7 @@ describe('renderPage folder blocks ({{#folder}})', () => {
     const namedTemplates = { Gallery: '<ul>{{#folder:bilder}}<li>{{name}}</li>{{/folder:bilder}}</ul><ol>{{#folder:dokumente}}<li>{{name}}</li>{{/folder:dokumente}}</ol>' };
     const namedPage = { ...page, blocks: [{ template: 'Gallery', props: { bilder: 'b', dokumente: 'd' } }] };
     const folderContents = { b: [{ name: 'foto.jpg' }], d: [{ name: 'vertrag.pdf' }] };
-    const html = renderPage(namedPage, namedTemplates, { folderContents });
+    const html = renderPage(namedPage, namedTemplates, { sectionData: { folder: folderContents } });
     expect(html).toContain('<li>foto.jpg</li>');
     expect(html).toContain('<li>vertrag.pdf</li>');
   });

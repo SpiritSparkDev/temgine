@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.40.0] - 2026-10-09
+
+### Added
+- **Plugin-System P2 (Section-Provider):** Ein generischer Mechanismus für `{{#<prefix>:feld}}…{{/<prefix>:feld}}` und `{{#<prefix>:feld=wert}}` (Spezifikation §4). `lib/sections/` enthält die Registry: Kern-Provider `folder` und `picgine` plus `sections` aus den Client-Hooks der Plugins (reservierte bzw. belegte Präfixe werden geloggt und ausgelassen). Provider-Form: `loadClient(keys, ctx)`, `toContext(data, ctx)` mit `ctx = { fieldName, value, basePath, query }`, `EditorField`, `editorFieldLabel`, `editorType`, `requiresDynamic({ html, query })`; serverseitig `loadServer(keys, ctx)` (`lib/sections/server.js`, Kern plus Server-Hooks aktiver Plugins). Laden parallel je Provider, bei Fehler oder Timeout (5 s) bleibt die Section leer.
+- **Tests:** `__tests__/sections.test.js` prüft den Mechanismus mit einem Fake-Provider (Parsen, fester Wert, Sammeln, Timeout/Fehler, `toContext`, Escaping fremder Daten, reservierte Präfixe, `requiresDynamic`, Editor-Feld je Provider).
+
+### Changed
+- **Parser/Engine generisch:** `extractSectionBlocks()`/`extractEditorSections()` und `collectSectionKeys(blocks, templates)` → `{ <prefix>: [werte] }` ersetzen die Ordner-/Picgine-Sonderwege (`extractFolderBlocks`/`extractPicgineBlocks` bleiben als Wrapper; `collectFolderBlockPaths`, `collectPicgineSlugs` und `toPicgineContext` aus `lib/templateEngine.js` entfallen bzw. liegen jetzt in `lib/sections/picgine.js`). Daten fremder Provider sind immer HTML-escaped und von der Markdown- und `{{{ }}}`-Umschreibung ausgenommen; Ordner-Daten (lokale Uploads) werden wie bisher verarbeitet.
+- **`renderPage`-Optionen:** `sectionData = { <prefix>: { <wert>: daten } }`, `basePath` und `query` ersetzen `folderContents`, `picgineContents` und `picgineBasePath`. Render-Pipeline, Live-Snapshot (Section-Daten jetzt einmal für alle Routen geladen, `__meta.json` listet `dynamicRoutes`) und statischer Export angepasst; das gerenderte HTML ist unverändert (Render-Snapshot identisch).
+- **Snapshot-Entscheidung:** `requiresDynamic` aller Provider statt fester Picgine-Prüfung (`?picgine=`, `data-picgine-unlock`).
+- **Seiteneditor/Template-Auswahl:** `PageEditor` und `TemplatePickerModal` zeigen für jede Section das `EditorField` bzw. den `editorType` ihres Providers (Ordner-Picker, Picgine-Galerie-Auswahl) – für Nutzer unverändert.
+
+---
+
 ## [0.39.0] - 2026-10-09
 
 ### Added

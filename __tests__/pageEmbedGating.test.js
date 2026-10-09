@@ -10,7 +10,7 @@ jest.mock('next/router', () => {
 });
 jest.mock('next-auth/react', () => ({ useSession: () => ({ data: null, status: 'unauthenticated' }) }));
 // Not used on the static-snapshot path; mocked to avoid an unrelated ESM (marked) load issue.
-jest.mock('../lib/templateEngine', () => ({ renderPage: jest.fn(), collectNavigationBlockIds: jest.fn(() => []), collectFolderBlockPaths: jest.fn(() => []) }));
+jest.mock('../lib/templateEngine', () => ({ renderPage: jest.fn(), collectNavigationBlockIds: jest.fn(() => []), collectSectionKeys: jest.fn(() => ({})) }));
 jest.mock('../lib/contactFormRuntime', () => ({ hydrateContactForms: jest.fn() }));
 
 import Home from '../pages/index';

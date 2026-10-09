@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
-import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractFolderBlocks, extractPicgineBlocks } from '../lib/templateParser';
-import PicgineGallerySelect from './PicgineGallerySelect';
+import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractEditorSections } from '../lib/templateParser';
 import { renderPage, renderTemplate } from '../lib/templateEngine';
 import Toast from './Toast';
 import SmartRichTextEditor from './SmartRichTextEditor';
@@ -767,25 +766,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     return out;
   }, [templateCodes]);
 
-  // Maps template name → folder blocks [{ sectionName }]
-  const templateFolderBlocksByName = useMemo(() => {
+  // Maps template name → editor-picked provider sections [{ prefix, sectionName, provider }]
+  // ({{#folder:name}}, {{#picgine:name}}, Plugin-Präfixe; feste "=wert"-Sections haben kein Feld)
+  const templateSectionsByName = useMemo(() => {
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {
       try {
-        out[name] = extractFolderBlocks(code) || [];
-      } catch (e) {
-        out[name] = [];
-      }
-    });
-    return out;
-  }, [templateCodes]);
-
-  // Maps template name → editor-picked Picgine sections [{ sectionName }] (fixed "=slug" ones have no field)
-  const templatePicgineBlocksByName = useMemo(() => {
-    const out = {};
-    Object.entries(templateCodes || {}).forEach(([name, code]) => {
-      try {
-        out[name] = (extractPicgineBlocks(code) || []).filter(b => !b.fixedSlug);
+        out[name] = extractEditorSections(code) || [];
       } catch (e) {
         out[name] = [];
       }
@@ -856,6 +843,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     setShowFileModal(true);
     loadFolderContents('');
   };
+
+  // Helfer, die EditorFields der Section-Provider vom Seiteneditor bekommen
+  const sectionEditor = { pickFolder: openFolderModal };
 
   const loadFolderContents = async (folder) => {
     const safe = folder || '';
@@ -2492,52 +2482,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 );
               })}
 
-              {/* Folder fields: {{#folder}}...{{/folder}} / {{#folder:name}}...{{/folder:name}} */}
-              {(templateFolderBlocksByName[block.template] || []).map(({ sectionName }) => {
-                const folderPath = block.props[sectionName] || '';
+              {/* Section fields: EditorField des Section-Providers (lib/sections/) */}
+              {(templateSectionsByName[block.template] || []).map(({ prefix, sectionName, provider }) => {
+                const EditorField = provider.EditorField;
+                if (!EditorField) return null;
                 return (
-                  <div key={sectionName} className="field-item">
-                    <label className="field-label-xs">{formatLabel(sectionName)}</label>
-                    <div className="field-url-row">
-                      <input
-                        type="text"
-                        readOnly
-                        placeholder="Kein Ordner gewählt"
-                        value={folderPath ? `uploads/${folderPath}` : ''}
-                        className="input-field-small field-input-full"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => openFolderModal((chosenPath) => updateNestedBlock(path, { [sectionName]: chosenPath }))}
-                        className="btn-modern-small"
-                        title={`Ordner für ${formatLabel(sectionName)} auswählen`}
-                        aria-label={`Ordner für ${formatLabel(sectionName)} auswählen`}
-                      >📁 Ordner</button>
-                      {folderPath && (
-                        <button
-                          type="button"
-                          onClick={() => updateNestedBlock(path, { [sectionName]: '' })}
-                          className="btn-modern-small hollow"
-                          title={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
-                          aria-label={`Ordner für ${formatLabel(sectionName)} zurücksetzen`}
-                        >Leeren</button>
-                      )}
-                    </div>
+                  <div key={`${prefix}-${sectionName}`} className="field-item">
+                    <label className="field-label-xs">{formatLabel(sectionName)}{provider.editorFieldLabel ? ` (${provider.editorFieldLabel})` : ''}</label>
+                    <EditorField
+                      value={block.props[sectionName] || ''}
+                      fieldName={sectionName}
+                      fieldLabel={formatLabel(sectionName)}
+                      onChange={(value) => updateNestedBlock(path, { [sectionName]: value })}
+                      editor={sectionEditor}
+                    />
                   </div>
                 );
               })}
-
-              {/* Picgine fields: {{#picgine:name}}...{{/picgine:name}} */}
-              {(templatePicgineBlocksByName[block.template] || []).map(({ sectionName }) => (
-                <div key={`picgine-${sectionName}`} className="field-item">
-                  <label className="field-label-xs">{formatLabel(sectionName)} (Picgine-Galerie)</label>
-                  <PicgineGallerySelect
-                    value={block.props[sectionName] || ''}
-                    label={`Picgine-Galerie für ${formatLabel(sectionName)}`}
-                    onChange={(slug) => updateNestedBlock(path, { [sectionName]: slug })}
-                  />
-                </div>
-              ))}
             </div>
           )}
 

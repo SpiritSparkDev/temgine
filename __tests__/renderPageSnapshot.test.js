@@ -51,7 +51,7 @@ const page = {
 };
 
 const render = (opts) => renderPage(page, templates, {
-  navigations, footer, globalVars, globalPages, folderContents, picgineContents, picgineBasePath: '/fotos', ...opts,
+  navigations, footer, globalVars, globalPages, sectionData: { folder: folderContents, picgine: picgineContents }, basePath: '/fotos', ...opts,
 });
 
 describe('renderPage snapshot (P0 equivalence)', () => {
