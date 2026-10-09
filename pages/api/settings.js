@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma'
 import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
+import { CORE_SETTING_KEYS } from '../../lib/settingsKeys'
 
 // Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
 // stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
@@ -39,6 +40,13 @@ export default async function handler(req, res) {
       const { key, value } = req.body || {}
       if (!key) {
         const [status, resp] = errorResponse(400, 'key erforderlich', 'VALIDATION_ERROR', { missing: ['key'] });
+        return res.status(status).json(resp);
+      }
+      // Allow-List (lib/settingsKeys.js) + Wartungsseiten-Keys — sonst könnte jeder
+      // Admin/Moderator beliebige Keys anlegen oder überschreiben.
+      if (!CORE_SETTING_KEYS.includes(key) && !parseSettingKey(key)) {
+        console.warn('[/api/settings] Unbekannter Key abgelehnt:', String(key))
+        const [status, resp] = errorResponse(400, `Unbekannte Einstellung "${String(key)}"`, 'UNKNOWN_SETTING_KEY', { key: String(key) });
         return res.status(status).json(resp);
       }
       if (value === undefined || value === null) {

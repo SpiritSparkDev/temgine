@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.38.0] - 2026-10-09
+
+### Changed
+- **Gemeinsame Render-Pipeline (Plugin-System P0):** `pages/index.js` und `pages/[...slug].js` nutzen `lib/renderPipeline.js` (`loadStaticSnapshot`, `loadPageData`, `renderPageHtml`, `hydratePage`, `useRerender`) statt doppelter Lade-, Snapshot-, Picgine- und Hydration-Logik. Verhalten für Besucher unverändert.
+- **`renderPage` mit Options-Objekt:** `renderPage(page, templates, { isChild, navigations, footer, globalVars, globalPages, folderContents, picgineContents, picgineBasePath })` statt positionaler Parameter; alle Aufrufer angepasst. Ein Jest-Render-Snapshot (`__tests__/renderPageSnapshot.test.js`) sichert das HTML ab.
+- **Snapshot-Neubau zentral:** `lib/liveRebuild.js` (`rebuildLiveSnapshot()`) – entprellt, nie parallel, nur im statischen Modus; der manuelle Neubau (`POST /api/admin/render-live`) läuft sofort und liefert 409, solange ein Neubau läuft – jetzt auch, wenn der Picgine-Webhook ihn ausgelöst hat.
+
+### Security
+- **Allow-List für `PUT /api/settings`:** Nur noch bekannte Kern-Keys (`lib/settingsKeys.js`) und die Wartungsseiten-Keys werden gespeichert; unbekannte Keys werden mit 400 (`UNKNOWN_SETTING_KEY`) abgelehnt und mit Namen geloggt. Ein Test prüft, dass jeder vom Admin-UI geschriebene Key erlaubt ist.
+
+---
+
 ## [0.37.0] - 2026-10-09
 
 ### Added

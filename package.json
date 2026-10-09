@@ -1,6 +1,6 @@
 {
   "name": "temgine",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "private": true,
   "scripts": {
     "dev": "npm run test && next dev",

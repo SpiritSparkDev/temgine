@@ -1,0 +1,28 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`renderPage snapshot (P0 equivalence) child page 1`] = `
+"<header><h1>Willkommen</h1><nav><a href="/a">A</a></nav><p>Temgine &lt;GmbH&gt;</p>Hallo <strong>Welt</strong></header>
+<nav class="side">Temgine &lt;GmbH&gt;</nav>
+<aside>Temgine &lt;GmbH&gt;</aside>
+<section class="wrap"><div class="block-children"><ul><li><a href="&#x2F;uploads&#x2F;bilder&#x2F;a.jpg">a.jpg</a></li><li><a href="&#x2F;uploads&#x2F;bilder&#x2F;b.jpg">b <x>.jpg</a></li></ul><section><h2>Hochzeit &lt;b&gt;M&lt;&#x2F;b&gt;</h2><img src="https:&#x2F;&#x2F;p&#x2F;img&#x2F;a&#x2F;thumb.webp?exp&#x3D;1&amp;sig&#x3D;x" data-index="1"><a href="&#x2F;fotos?picgine&#x3D;hochzeit%2Fkirche">Kirche</a><p>Öffentlich</p></section></div></section>
+<section><h2>Privat</h2><form data-picgine-unlock="privat"><input name="email"></form><p>Gesperrt</p></section>
+<div class="blog-channel-block" data-channel="news" data-slot="templateDetailPreview" data-template="Karte" data-limit="3"></div>
+<footer>© 2026</footer>"
+`;
+
+exports[`renderPage snapshot (P0 equivalence) home page 1`] = `
+"<header><h1>Willkommen</h1><nav><a href="/a">A</a></nav><p>Temgine &lt;GmbH&gt;</p>Hallo <strong>Welt</strong></header>
+<nav class="side">Temgine &lt;GmbH&gt;</nav>
+<aside>Temgine &lt;GmbH&gt;</aside>
+<section class="wrap"><div class="block-children"><ul><li><a href="&#x2F;uploads&#x2F;bilder&#x2F;a.jpg">a.jpg</a></li><li><a href="&#x2F;uploads&#x2F;bilder&#x2F;b.jpg">b <x>.jpg</a></li></ul><section><h2>Hochzeit &lt;b&gt;M&lt;&#x2F;b&gt;</h2><img src="https:&#x2F;&#x2F;p&#x2F;img&#x2F;a&#x2F;thumb.webp?exp&#x3D;1&amp;sig&#x3D;x" data-index="1"><a href="&#x2F;fotos?picgine&#x3D;hochzeit%2Fkirche">Kirche</a><p>Öffentlich</p></section></div></section>
+<section><h2>Privat</h2><form data-picgine-unlock="privat"><input name="email"></form><p>Gesperrt</p></section>
+<div class="blog-channel-block" data-channel="news" data-slot="templateDetailPreview" data-template="Karte" data-limit="3"></div>
+<footer>© 2026</footer>"
+`;
+
+exports[`renderPage snapshot (P0 equivalence) without optional data 1`] = `
+"<header><h1>Willkommen</h1><p></p>Hallo <strong>Welt</strong></header>
+<section class="wrap"><div class="block-children"><ul></ul><section><p>Öffentlich</p></section></div></section>
+<section><p>Gesperrt</p></section>
+<div class="blog-channel-block" data-channel="news" data-slot="templateDetailPreview" data-template="Karte" data-limit="3"></div>"
+`;

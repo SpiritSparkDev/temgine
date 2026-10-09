@@ -60,7 +60,7 @@ describe('renderPage with picgineContents', () => {
   const templates = { Galerie: GALLERY_TPL };
 
   it('renders a public gallery with escaped strings and 1-based index', () => {
-    const html = renderPage(page({ galerie: 'hochzeit', intro: 'Hallo' }), templates, {}, {}, null, {}, {}, {}, { hochzeit: publicGallery });
+    const html = renderPage(page({ galerie: 'hochzeit', intro: 'Hallo' }), templates, { picgineContents: { hochzeit: publicGallery } });
     expect(html).toContain('<h2>Hochzeit &lt;b&gt;M&lt;&#x2F;b&gt;</h2>');
     expect(html).toContain('src="https:&#x2F;&#x2F;p&#x2F;img&#x2F;a&#x2F;thumb.webp?exp&#x3D;1&amp;sig&#x3D;x"');
     expect(html).toContain('srcset="https:&#x2F;&#x2F;p&#x2F;a 400w, https:&#x2F;&#x2F;p&#x2F;a2 1200w"');
@@ -71,13 +71,13 @@ describe('renderPage with picgineContents', () => {
 
   it('keeps gallery strings escaped even when a block prop of the same name holds HTML', () => {
     const tpl = '<div>{{title}}</div>{{#picgine:galerie}}<h2>{{title}}</h2>{{/picgine:galerie}}';
-    const html = renderPage(page({ galerie: 'hochzeit', title: '<em>Block</em>' }), { Galerie: tpl }, {}, {}, null, {}, {}, {}, { hochzeit: publicGallery });
+    const html = renderPage(page({ galerie: 'hochzeit', title: '<em>Block</em>' }), { Galerie: tpl }, { picgineContents: { hochzeit: publicGallery } });
     expect(html).toContain('<div><em>Block</em></div>');
     expect(html).toContain('<h2>Hochzeit &lt;b&gt;');
   });
 
   it('renders a locked gallery as unlock form without images and with lock flags', () => {
-    const html = renderPage(page({ galerie: 'privat' }), templates, {}, {}, null, {}, {}, {}, { privat: lockedGallery });
+    const html = renderPage(page({ galerie: 'privat' }), templates, { picgineContents: { privat: lockedGallery } });
     expect(html).toContain('data-picgine-unlock="privat"');
     expect(html).toContain('<input name="email">');
     expect(html).not.toContain('PW');
@@ -85,7 +85,7 @@ describe('renderPage with picgineContents', () => {
   });
 
   it('renders nothing for the section when no gallery is picked or data is missing', () => {
-    const empty = renderPage(page({ galerie: '', intro: 'Hallo' }), templates, {}, {}, null, {}, {}, {}, { hochzeit: publicGallery });
+    const empty = renderPage(page({ galerie: '', intro: 'Hallo' }), templates, { picgineContents: { hochzeit: publicGallery } });
     expect(empty).toBe('<section><p>Hallo</p></section>');
     const missing = renderPage(page({ galerie: 'weg', intro: 'Hallo' }), templates);
     expect(missing).toBe('<section><p>Hallo</p></section>');
@@ -93,7 +93,7 @@ describe('renderPage with picgineContents', () => {
 
   it('uses the fixed slug from {{#picgine:name=slug}}', () => {
     const tpl = '{{#picgine:g=hochzeit}}{{#images}}[{{id}}]{{/images}}{{/picgine:g}}';
-    const html = renderPage(page({}, 'Fest'), { Fest: tpl }, {}, {}, null, {}, {}, {}, { hochzeit: publicGallery });
+    const html = renderPage(page({}, 'Fest'), { Fest: tpl }, { picgineContents: { hochzeit: publicGallery } });
     expect(html).toBe('[a][b]');
   });
 });
@@ -145,7 +145,7 @@ describe('Phase 5: Kontext-Durchreichung und Unterordner-Navigation', () => {
 
   it('renders the links via renderPage with picgineBasePath', () => {
     const tpl = '{{#picgine:galerie}}{{#breadcrumb}}<a href="{{url}}">{{title}}</a>{{/breadcrumb}}{{#children}}<a href="{{url}}">{{title}}</a>{{/children}}{{/picgine:galerie}}';
-    const html = renderPage(page({ galerie: 'hochzeit' }), { Galerie: tpl }, { picgineBasePath: '/fotos' }, {}, null, {}, {}, {}, { hochzeit: sub });
+    const html = renderPage(page({ galerie: 'hochzeit' }), { Galerie: tpl }, { picgineBasePath: '/fotos', picgineContents: { hochzeit: sub } });
     expect(html).toContain('href="&#x2F;fotos">Hochzeit</a>');
     expect(html).toContain('href="&#x2F;fotos?picgine&#x3D;altar">Altar</a>');
     expect(html).not.toContain('Welt');

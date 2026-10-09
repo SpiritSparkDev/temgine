@@ -634,7 +634,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
         folderContents[folderPath] = listFolderItemsRecursive(folderPath)
       }
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents, globalPages)
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, folderContents, globalPages })
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)
