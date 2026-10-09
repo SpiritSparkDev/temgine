@@ -3,6 +3,8 @@ import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 import PicginePanel from './PicginePanel';
 import ExternalSourcesPanel from './ExternalSourcesPanel';
+import PluginsPanel from './PluginsPanel';
+import { Toggle, Card, Row, SaveButton } from './SettingsUi';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 const TAB_KEY = 'temgine_settings_tab';
@@ -14,59 +16,9 @@ const TABS = [
   { id: 'stats', label: 'Statistik' },
   { id: 'picgine', label: 'Picgine' },
   { id: 'external', label: 'Externe Quellen' },
+  { id: 'plugins', label: 'Plugins' },
   { id: 'live', label: 'Live & Wartung' },
 ];
-
-function Toggle({ checked, onChange, disabled, label }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      className={`st-toggle${checked ? ' is-on' : ''}`}
-    >
-      <span />
-    </button>
-  );
-}
-
-// Karte mit Titel/Beschreibung; Inhalt sind Zeilen (Row) oder freie Elemente
-function Card({ title, description, children, footer }) {
-  return (
-    <section className="st-card">
-      <header className="st-card-head">
-        <h3>{title}</h3>
-        {description && <p>{description}</p>}
-      </header>
-      <div className="st-card-body">{children}</div>
-      {footer && <footer className="st-card-foot">{footer}</footer>}
-    </section>
-  );
-}
-
-// Zeile: links Label + Hilfetext, rechts das Bedienelement
-function Row({ label, hint, children, stacked }) {
-  return (
-    <div className={`st-row${stacked ? ' is-stacked' : ''}`}>
-      <div className="st-row-label">
-        <strong>{label}</strong>
-        {hint && <small>{hint}</small>}
-      </div>
-      <div className="st-row-control">{children}</div>
-    </div>
-  );
-}
-
-function SaveButton({ onClick, saving, children = 'Speichern' }) {
-  return (
-    <button type="button" className="st-btn st-btn-primary" onClick={onClick} disabled={saving}>
-      {saving ? 'Speichern…' : children}
-    </button>
-  );
-}
 
 export default function SettingsView({ showToast }) {
   const [tab, setTab] = useState('general');
@@ -441,6 +393,8 @@ export default function SettingsView({ showToast }) {
         {tab === 'picgine' && <PicginePanel showToast={showToast} />}
 
         {tab === 'external' && <ExternalSourcesPanel showToast={showToast} />}
+
+        {tab === 'plugins' && <PluginsPanel showToast={showToast} />}
 
         {tab === 'live' && (
           <>

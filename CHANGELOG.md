@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.39.0] - 2026-10-09
+
+### Added
+- **Plugin-System P1 (Plugin-Kern):** Plugins liegen als Ordner unter `plugins/<id>/` (`plugin.json`, `server.js`, `client.js`, `help.md`) und werden über `plugins/index.server.js` / `plugins/index.client.js` registriert (anfangs leer). `lib/plugins/manifest.js` liest und prüft die Manifeste (id, `temgineApi: 1`, Settings-Typen `text|url|number|bool|secret` mit Präfix `<id>_`, CSP-Regeln, Section-Präfixe eindeutig und nicht reserviert); ungültige Plugins werden geloggt und ausgelassen. `lib/plugins/registry.js` liefert `getPlugins()`, `getActivePlugins()` und `getPlugin(id)`; aktiv ist ein Plugin erst mit `plugin_<id>_enabled = "true"`.
+- **Plugin-API:** `pages/api/plugins/[plugin]/[...path].js` verteilt `/api/plugins/<id>/<pfad>` an die `routes` des Plugins (`'GET pfad/:param'`) – 404 bei unbekanntem/deaktiviertem Plugin oder Route, 405 bei falscher Methode, `auth` (`'public'`, `PERMISSIONS`-Name oder Rollen-Array) vor dem Handler, `rateLimit` pro Plugin, Route und IP, JSON-Body bis 1 MB (413) oder roher Buffer bei `rawBody: true`. Handler bekommen `ctx` mit `settings` (inkl. Secrets, nur serverseitig), `user`, `clientIp`, `params`, `query`, `cookies` (Namen auf `temgine_<id>_…` erzwungen), `log` und `rebuildSnapshot()`. `POST /api/plugins/<id>/__test` (nur Admin) ruft den `test`-Hook. `GET /api/plugins` liefert die öffentlichen Settings aktiver Plugins (ohne Secrets), `?all=1` die Plugin-Liste für den Admin.
+- **Einstellungen → Plugins:** Liste aller eingebauten Plugins mit Aktivieren-Schalter; pro aktivem Plugin ein Unter-Tab mit dessen `SettingsPanel` oder einem automatisch erzeugten Formular aus `plugin.json` (Secrets nur schreibbar, „gesetzt“-Hinweis, „Verbindung testen“).
+- **Plugin-Hooks im Frontend:** `_app.js` ruft `clientInit.run(publicSettings)` aktiver Plugins einmal pro Seitenaufruf auf (mit Consent-Kategorie erst nach Zustimmung); `hydratePage` ruft `hydrate(container, { rerender })` aktiver Plugins auf und feuert danach `temgine:rendered` (`picgine:rendered` bleibt erhalten). Ohne registrierte Client-Plugins gibt es keinen zusätzlichen Request.
+- **Hilfe:** `help.md` aktiver Plugins erscheint in der Dokumentation nach den Kern-Anleitungen (Name = Plugin-ID).
+- **Tests:** Test-Plugin `__tests__/fixtures/plugins/echo` nutzt jeden Hook; Vertragstest `__tests__/plugins.contract.test.js` prüft alle Plugins (Manifest, `temgineApi`, Präfixe, Import-Scan von `client.js`, Routen-Auth, keine Secrets in `publicSettings`).
+
+### Changed
+- **CSP:** `lib/matomoCsp.js` heißt jetzt `lib/pluginCsp.js` und ergänzt zusätzlich die CSP-Regeln aktiver Plugins (fester Origin oder Origin aus einem Setting, nur `http(s)://host[:port]`, 30 s Cache). Matomo- und Picgine-Regeln bleiben bis zur Umstellung als Kern-Regeln.
+- **`/api/settings`:** Secrets aus Plugin-Manifesten werden bei GET maskiert (`<key>_set`); PUT erlaubt zusätzlich Manifest-Keys und `plugin_<id>_enabled` bekannter Plugins, unbekannte Keys bleiben 400.
+
+---
+
 ## [0.38.0] - 2026-10-09
 
 ### Changed
