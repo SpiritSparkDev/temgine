@@ -1,10 +1,11 @@
 import { prisma } from '../../lib/prisma'
 import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
+import { SHOP_SECRET_KEYS, SHOP_KEY_PREFIX } from '../../lib/shop/keys'
 
 // Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
 // stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
-const SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources']
+const SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources', ...SHOP_SECRET_KEYS]
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -37,6 +38,10 @@ export default async function handler(req, res) {
       if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
 
       const { key, value } = req.body || {}
+      // Shop-Add-on (Schalter, Zahlungsanbieter, Zugangsdaten): nur Admins, nicht Moderatoren.
+      if (String(key || '').startsWith(SHOP_KEY_PREFIX) && auth.user?.role !== 'ADMIN') {
+        return res.status(403).json({ error: 'Zugriff verweigert. Erforderliche Rolle: ADMIN' })
+      }
       if (!key) {
         const [status, resp] = errorResponse(400, 'key erforderlich', 'VALIDATION_ERROR', { missing: ['key'] });
         return res.status(status).json(resp);

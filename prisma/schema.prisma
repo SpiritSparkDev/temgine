@@ -220,6 +220,7 @@ model Member {
   verifyTokenExp DateTime?
   blocked        Boolean                 @default(false)
   groups         MemberGroupMembership[]
+  shopOrders     ShopOrder[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
 
@@ -292,4 +293,148 @@ model BlogPost {
   @@unique([channelId, slug])
   @@index([channelId, status])
   @@index([channelId, publishedAt])
+}
+
+// ── Shop (Add-on) ─────────────────────────────────────────────────────────────
+// Beträge in Cent (Int), Währung EUR. Steuersätze in Hundertstel-Prozent (700 = 7 %).
+// null bei Preis/Steuersatz = Format ist (noch) nicht bestellbar. null beim Bestand = unbegrenzt.
+
+enum ShopOrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  CANCELLED
+  FAILED
+}
+
+enum ShopPaymentProvider {
+  SUMUP
+  STRIPE
+  PAYPAL
+}
+
+enum ShopPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+model ShopProduct {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  title       String
+  category    String?
+  subtitle    String?
+  shortText   String?
+  description String?      @db.Text
+  /// Liste von Bild-URLs (z. B. "/uploads/shop/x.webp"); das erste Bild ist das Titelbild
+  images      Json         @default("[]")
+  active      Boolean      @default(false)
+  sortOrder   Int          @default(0)
+  formats     ShopFormat[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+model ShopFormat {
+  id         String          @id @default(cuid())
+  productId  String
+  product    ShopProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku        String          @unique
+  label      String
+  priceCents Int?
+  taxRateBp  Int?
+  weightG    Int?
+  stock      Int?
+  digital    Boolean         @default(false)
+  sortOrder  Int             @default(0)
+  items      ShopOrderItem[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([productId, sortOrder])
+}
+
+model ShopOrder {
+  id              String              @id @default(cuid())
+  /// Laufende Nummer; daraus wird die Bestellnummer (reference) gebildet
+  number          Int                 @unique @default(autoincrement())
+  reference       String              @unique
+  status          ShopOrderStatus     @default(PENDING)
+  email           String
+  billing         Json
+  shipping        Json
+  subtotalCents   Int
+  shippingCents   Int
+  totalCents      Int
+  currency        String              @default("EUR")
+  /// Enthaltene MwSt. je Satz in Cent, z. B. {"700": 326}
+  taxBreakdown    Json                @default("{}")
+  acceptedTermsAt DateTime
+  acceptedWaiver  Boolean             @default(false)
+  memberId        String?
+  member          Member?             @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  paidAt          DateTime?
+  shippedAt       DateTime?
+  items           ShopOrderItem[]
+  payments        ShopPayment[]
+  stockMovements  ShopStockMovement[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status, createdAt])
+  @@index([email])
+}
+
+model ShopOrderItem {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  /// Bleibt leer, wenn das Format später gelöscht wird; die Felder darunter sind der Stand zum Kaufzeitpunkt
+  formatId  String?
+  format    ShopFormat? @relation(fields: [formatId], references: [id], onDelete: SetNull)
+  sku       String
+  title     String
+  label     String
+  qty       Int
+  unitCents Int
+  taxRateBp Int
+  digital   Boolean     @default(false)
+  weightG   Int?
+
+  @@index([orderId])
+}
+
+model ShopPayment {
+  id          String              @id @default(cuid())
+  orderId     String
+  order       ShopOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider    ShopPaymentProvider
+  /// Checkout-ID (SumUp), Checkout-Session-ID (Stripe) bzw. Order-ID (PayPal)
+  externalId  String
+  status      ShopPaymentStatus   @default(PENDING)
+  amountCents Int
+  currency    String              @default("EUR")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([orderId])
+}
+
+/// Bestandsbuchungen. Die Eindeutigkeit (orderId, sku, reason) macht die Abbuchung je Bestellung idempotent.
+model ShopStockMovement {
+  id        String     @id @default(cuid())
+  sku       String
+  delta     Int
+  reason    String
+  orderId   String?
+  order     ShopOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
+
+  @@unique([orderId, sku, reason])
+  @@index([sku, createdAt])
 }

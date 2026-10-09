@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.37.0] - 2026-10-09
+
+### Added
+- **Add-on „Online-Shop“ (in Entwicklung, Phase 0: Fundament):** In Einstellungen → *Shop* zuschaltbar (Setting `shop_enabled`, `PUT /api/shop/settings`, nur Admin). Zeigt je Zahlungsanbieter (SumUp, Stripe, PayPal – getrennt zuschaltbar) den Zustand „aktiv / bereit / nicht konfiguriert“, ohne Zugangsdaten auszuliefern. Neue Prisma-Modelle `ShopProduct`, `ShopFormat`, `ShopOrder`, `ShopOrderItem`, `ShopPayment`, `ShopStockMovement` samt Migration `20261009120000_add_shop_addon` (Beträge in Cent, Steuersätze in Hundertstel-Prozent, Bestandsbuchungen mit Eindeutigkeit je Bestellung und SKU für idempotente Abbuchung). Neue Rechte `PERMISSIONS.SHOP_*`. Dateien: `lib/shop/keys.js`, `lib/shop/config.js`, `pages/api/shop/settings.js`, `components/ShopSettingsPanel.js`. Katalog, Kasse und Zahlungsanbieter folgen in den nächsten Schritten.
+
+### Security
+- **Shop-Schlüssel nur für Admins:** `PUT /api/settings` lehnt `shop_*`-Schlüssel für Moderatoren ab (403). Zugangsdaten der Zahlungsanbieter stehen in `SECRET_KEYS`; `GET /api/settings` gibt sie nie aus, nur `<key>_set`.
+
 ## [0.36.0] - 2026-10-08
 
 ### Added

@@ -3,6 +3,7 @@ import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 import PicginePanel from './PicginePanel';
 import ExternalSourcesPanel from './ExternalSourcesPanel';
+import ShopSettingsPanel from './ShopSettingsPanel';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 const TAB_KEY = 'temgine_settings_tab';
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'stats', label: 'Statistik' },
   { id: 'picgine', label: 'Picgine' },
   { id: 'external', label: 'Externe Quellen' },
+  { id: 'shop', label: 'Shop' },
   { id: 'live', label: 'Live & Wartung' },
 ];
 
@@ -441,6 +443,8 @@ export default function SettingsView({ showToast }) {
         {tab === 'picgine' && <PicginePanel showToast={showToast} />}
 
         {tab === 'external' && <ExternalSourcesPanel showToast={showToast} />}
+
+        {tab === 'shop' && <ShopSettingsPanel showToast={showToast} />}
 
         {tab === 'live' && (
           <>
