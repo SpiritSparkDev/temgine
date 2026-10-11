@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
 import { X, Save, Rss, Layout, AlertCircle } from '../lib/muiIcons';
 
 const slugify = (v) =>
@@ -21,7 +22,20 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
   const [masterTemplate, setMasterTemplate] = useState(
     channel?.templateReading ?? channel?.templateDetailPreview ?? channel?.templateSimplePreview ?? channel?.templateArchiveEntry ?? ''
   );
+  const [sortField, setSortField] = useState(channel?.sortField ?? '');
+  const [sortDir, setSortDir] = useState(channel?.sortDir ?? 'desc');
+  const [fieldNames, setFieldNames] = useState([]);
   const [slugManual, setSlugManual] = useState(!!channel);
+
+  useEffect(() => {
+    if (!channel?.id) return undefined;
+    let cancelled = false;
+    fetch(`/api/blog/posts?channelId=${encodeURIComponent(channel.id)}&limit=1`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [channel?.id]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,6 +68,8 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
       templateDetailPreview: masterTemplate || null,
       templateSimplePreview: masterTemplate || null,
       templateArchiveEntry: masterTemplate || null,
+      sortField: sortField.trim() || null,
+      sortDir: sortField.trim() ? sortDir : null,
     });
     setSaving(false);
     if (!ok) setError('Fehler beim Speichern');
@@ -153,6 +169,32 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
                 </select>
                 <p className="template-slot-card__hint">
                   Der Kanal nutzt ein Master-Template. Vorschauen werden daraus abgeleitet.
+                </p>
+              </div>
+              <div className="template-slot-card">
+                <div className="template-slot-card__label">
+                  <span style={{ fontSize: 14 }}>⇅</span>
+                  Standard-Sortierung
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <select className="blog-form-select" value={sortField} onChange={e => setSortField(e.target.value)} style={{ flex: '1 1 200px' }}>
+                    <option value="">Veröffentlichungsdatum (Standard)</option>
+                    {BUILTIN_SORT_FIELDS.filter(f => f.value !== 'publishedAt').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    {fieldNames.length > 0 && (
+                      <optgroup label="Template-Felder">
+                        {fieldNames.map(n => <option key={n} value={n}>{n}</option>)}
+                      </optgroup>
+                    )}
+                    {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !fieldNames.includes(sortField) && <option value={sortField}>{sortField}</option>}
+                  </select>
+                  <select className="blog-form-select" value={sortDir} onChange={e => setSortDir(e.target.value)} disabled={!sortField} style={{ flex: '0 1 220px' }}>
+                    <option value="asc">aufsteigend (früheste / A zuerst)</option>
+                    <option value="desc">absteigend (neueste / Z zuerst)</option>
+                  </select>
+                </div>
+                <p className="template-slot-card__hint">
+                  Gilt für Kanal-Blöcke und Listen ohne eigene Sortierung sowie für die Beitragsliste im Backend.
+                  Termine z. B. nach „Beginn“ aufsteigend. Template-Felder erscheinen, sobald Beiträge sie verwenden.
                 </p>
               </div>
             </div>

@@ -6,12 +6,17 @@ import { requireAuth, PERMISSIONS } from '../../lib/auth'
 import { findSiblingSlugCollisions } from '../../lib/pageTreeRepair'
 import { extractRedirectForSave } from '../../lib/pageRedirect'
 import { hashPageAccessPasswords, stripPageAccessPasswords } from '../../lib/pageAccessPassword'
+import {
+  PAGES_VERSION_HEADER, computePagesVersion, acquirePagesLock, prepareTreeForWrite,
+  rowContentChanged, ownContentChanged, savedStamp, stampNode, indexNodesById, replaceNestedNode, findSiblings,
+} from '../../lib/pageConcurrency'
+import { resolvePageViewer, filterPagesForViewer } from '../../lib/pageAccess'
 
 // Löscht Revisionen, die älter als die konfigurierte Aufbewahrungsfrist sind
 async function pruneRevisions(pageId) {
   try {
     const setting = await prisma.setting.findUnique({ where: { key: 'revisionRetentionDays' } })
-    const days = setting ? parseInt(setting.value, 10) : 7
+    const days = setting ? parseInt(setting.value, 10) : 30
     if (isNaN(days) || days < 0) return
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
     await prisma.pageRevision.deleteMany({
@@ -20,6 +25,132 @@ async function pruneRevisions(pageId) {
   } catch (e) {
     console.error('Revision pruning failed', e)
   }
+}
+
+function revisionSnapshot(page) {
+  return {
+    title: page.title,
+    slug: page.slug,
+    blocks: page.blocks,
+    children: page.children,
+    status: page.status,
+    publishAt: page.publishAt,
+    template: page.template,
+    data: page.data
+  }
+}
+
+function userLabel(user) {
+  return (user && (user.name || user.email)) || null
+}
+
+// PUT /api/pages — speichert genau eine Seite (Top-Level oder verschachtelt),
+// ohne den Rest des Baums anzufassen. `expectedSavedAt` ist der Stempel
+// (data._savedAt), auf dem die Bearbeitung im Editor beruht; hat jemand
+// anderes die Seite seitdem gespeichert, wird mit 409 abgelehnt statt dessen
+// Änderungen zu überschreiben. Siehe lib/pageConcurrency.js.
+async function saveSinglePage(req, res, auth, sanitizeBlockNode) {
+  const { page: incoming, expectedSavedAt } = req.body || {}
+  if (!incoming || typeof incoming !== 'object' || !incoming.id) {
+    const [status, resp] = errorResponse(400, 'Seite mit id erforderlich', 'VALIDATION_ERROR', { missing: ['page.id'] });
+    return res.status(status).json(resp);
+  }
+  const [pageOk, pageErrors] = validate(incoming, {
+    slug:   [rules.required(), rules.string(), rules.maxLen(255)],
+    title:  [rules.string(), rules.maxLen(300)],
+    status: [rules.oneOf(['DRAFT','REVIEW','APPROVED','PUBLISHED','SCHEDULED'])],
+  });
+  if (!pageOk) {
+    const [status, resp] = errorResponse(400, 'Ungültige Seitendaten', 'VALIDATION_ERROR', pageErrors);
+    return res.status(status).json(resp);
+  }
+
+  // Unterseiten gehören zum Baum, nicht zum Editor — nie aus dem Request übernehmen.
+  const p = { ...incoming }
+  delete p.children
+  delete p.passwordProtected
+  await hashPageAccessPasswords(p)
+  if (p.data) {
+    const { data: dataWithoutRedirect, redirect } = extractRedirectForSave(p.data)
+    p.data = sanitizeRecursive(dataWithoutRedirect)
+    if (redirect) p.data.redirect = redirect
+  }
+  if (Array.isArray(p.blocks)) p.blocks = p.blocks.map(sanitizeBlockNode)
+
+  const rows = await prisma.page.findMany()
+  const hit = indexNodesById(rows).get(String(p.id))
+  if (!hit) {
+    const [status, resp] = errorResponse(404, 'Diese Seite existiert nicht mehr (wurde sie inzwischen gelöscht?). Deine Änderungen wurden nicht gespeichert.', 'PAGE_NOT_FOUND');
+    return res.status(status).json(resp);
+  }
+  const current = hit.node
+  const { savedAt, savedBy } = savedStamp(current)
+  if ((expectedSavedAt || null) !== savedAt) {
+    const [status, resp] = errorResponse(409, 'Diese Seite wurde inzwischen von jemand anderem gespeichert.', 'PAGE_CONFLICT', { savedAt, savedBy });
+    return res.status(status).json(resp);
+  }
+
+  const siblings = findSiblings(rows, p.id) || []
+  if (siblings.some(sib => sib && String(sib.id) !== String(p.id) && sib.slug === p.slug)) {
+    const [status, resp] = errorResponse(400, `Der Slug "${p.slug}" wird unter derselben Elternseite bereits verwendet.`, 'VALIDATION_ERROR', { duplicateSlugs: [p.slug] });
+    return res.status(status).json(resp);
+  }
+
+  const passwordChanged = p.accessPasswordHash !== undefined
+  if (!passwordChanged && !ownContentChanged(current, p)) {
+    return res.status(200).json({ page: stripPageAccessPasswords(current), savedAt })
+  }
+
+  const data = { ...(p.data || {}) }
+  // Sortierposition gehört dem Baum (siehe POST), nicht dem Editor-Stand.
+  if (current.data && current.data._order !== undefined) data._order = current.data._order
+  else delete data._order
+  const own = stampNode({
+    title: p.title || '',
+    slug: String(p.slug),
+    template: p.template || null,
+    blocks: Array.isArray(p.blocks) ? p.blocks : (current.blocks || []),
+    data,
+    status: p.status || current.status || 'DRAFT',
+    publishAt: p.publishAt !== undefined ? (p.publishAt || null) : (current.publishAt || null),
+    isHomepage: p.isHomepage !== undefined ? Boolean(p.isHomepage) : Boolean(current.isHomepage),
+    accessGroups: Array.isArray(p.accessGroups) ? p.accessGroups : (current.accessGroups || []),
+    ...(passwordChanged ? { accessPasswordHash: p.accessPasswordHash } : {}),
+  }, auth.user)
+
+  if (own.isHomepage) {
+    try {
+      await prisma.page.updateMany({ where: { isHomepage: true, id: { not: hit.topLevelId } }, data: { isHomepage: false } })
+    } catch (e) {
+      console.error('Error updating homepages:', e)
+    }
+  }
+
+  const isTopLevel = hit.topLevelId === String(p.id)
+  let updatedRow
+  if (isTopLevel) {
+    updatedRow = await prisma.page.update({ where: { id: hit.topLevelId }, data: own })
+  } else {
+    const row = rows.find(r => String(r.id) === hit.topLevelId)
+    const children = replaceNestedNode(row.children, p.id, (n) => ({ ...n, ...own, children: n.children }))
+    updatedRow = await prisma.page.update({ where: { id: hit.topLevelId }, data: { children } })
+  }
+  const saved = indexNodesById([updatedRow]).get(String(p.id)).node
+
+  try {
+    await prisma.pageRevision.create({ data: {
+      pageId: updatedRow.id,
+      data: revisionSnapshot(updatedRow),
+      createdBy: userLabel(auth.user),
+      note: isTopLevel ? null : `Unterseite „${saved.title || saved.slug}“ bearbeitet`
+    } })
+    await pruneRevisions(updatedRow.id)
+  } catch (e) {
+    console.error('Revision create failed', e)
+  }
+  try { await logAudit({ action: 'update', resource: 'page', resourceId: String(p.id), userId: auth.user.id, details: { slug: saved.slug, topLevelId: updatedRow.id } }) } catch (e) {}
+
+  return res.status(200).json({ page: stripPageAccessPasswords(saved), savedAt: saved.data._savedAt })
 }
 
 // Standardized error response helper
@@ -76,24 +207,31 @@ export default async function handler(req, res) {
     // GET: alle Seiten oder eine Seite per ?slug=...
     if (req.method === 'GET') {
       const slug = req.query && req.query.slug
-      const includeDrafts = req.query && (req.query.includeDrafts === 'true' || req.query.includeDrafts === true)
+      const includeDraftsRequested = req.query && (req.query.includeDrafts === 'true' || req.query.includeDrafts === true)
+      // Wer fragt? Entwürfe nur für Backend-Nutzer, Inhalte geschützter
+      // Mitglieder-Seiten nur für berechtigte Mitglieder (lib/pageAccess.js).
+      const viewer = await resolvePageViewer(req, res)
+      const includeDrafts = includeDraftsRequested && viewer.isStaff
+      // Antwort hängt von der Anmeldung ab — nicht in geteilten Caches ablegen.
+      res.setHeader('Cache-Control', 'private, no-store')
+      res.setHeader('Vary', 'Cookie')
       if (slug) {
         const page = await prisma.page.findUnique({ where: { slug: String(slug) } })
-        if (!page) {
+        const [visible] = page ? filterPagesForViewer([page], viewer, { includeDrafts }) : []
+        if (!visible) {
           const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
           return res.status(status).json(resp);
         }
-        if (!includeDrafts && page.status !== 'PUBLISHED') {
-          const [status, resp] = errorResponse(404, 'Seite nicht gefunden', 'PAGE_NOT_FOUND');
-          return res.status(status).json(resp);
-        }
-        return res.status(200).json(stripPageAccessPasswords(page))
+        return res.status(200).json(stripPageAccessPasswords(visible))
       }
 
-      const where = {}
-      if (!includeDrafts) {
-        where.status = 'PUBLISHED'
-      }
+      // Ohne Berechtigung für Entwürfe bleibt eine unveröffentlichte Startseite
+      // wie bisher über includeDrafts erreichbar (Fallback in pages/index.js).
+      const where = includeDrafts
+        ? {}
+        : includeDraftsRequested
+          ? { OR: [{ status: 'PUBLISHED' }, { isHomepage: true }] }
+          : { status: 'PUBLISHED' }
 
       // Get all root-level pages (those without a parent). To preserve editing order,
       // we don't strictly orderBy createdAt. Instead, let the client manage order via children array.
@@ -106,11 +244,15 @@ export default async function handler(req, res) {
         const bo = (b.data && typeof b.data._order === 'number') ? b.data._order : 99999
         return ao !== bo ? ao - bo : (a.createdAt < b.createdAt ? -1 : 1)
       })
-      return res.status(200).json(pages.map(stripPageAccessPasswords))
+      // Die Version gehört zu genau diesem Baum — der Admin schickt sie bei
+      // strukturellen Speicherungen zurück (siehe lib/pageConcurrency.js).
+      if (includeDrafts) res.setHeader('X-Pages-Version', computePagesVersion(pages))
+      return res.status(200).json(filterPagesForViewer(pages, viewer, { includeDrafts }).map(stripPageAccessPasswords))
     }
 
-    // POST: Seite anlegen oder aktualisieren (erwartet ein Page-Objekt)
-    if (req.method === 'POST') {
+    // POST: Seitenbaum (Array) oder einzelne Seite per slug speichern
+    // PUT:  eine einzelne Seite (auch verschachtelt) per id speichern — der Weg des Seiten-Editors
+    if (req.method === 'POST' || req.method === 'PUT') {
       const auth = await requireAuth(req, res, PERMISSIONS.PAGES_EDIT)
       if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
 
@@ -128,9 +270,35 @@ export default async function handler(req, res) {
       }
 
       const body = req.body
+
+      if (req.method === 'PUT') {
+        const release = await acquirePagesLock()
+        try {
+          return await saveSinglePage(req, res, auth, sanitizeBlockNode)
+        } finally {
+          release()
+        }
+      }
+
       // Wenn ein Array gesendet wird, upserten wir alle Einträge
       if (Array.isArray(body)) {
+       const release = await acquirePagesLock()
+       try {
         const results = []
+
+        // Veralteter Baum? Dann nichts schreiben — sonst überschreibt er fremde
+        // Änderungen und löscht Seiten, die andere inzwischen angelegt haben.
+        const dbRowsBefore = await prisma.page.findMany()
+        const clientVersion = req.headers[PAGES_VERSION_HEADER]
+        if (!clientVersion || clientVersion !== computePagesVersion(dbRowsBefore)) {
+          const [status, resp] = errorResponse(
+            409,
+            'Der Seitenbaum wurde inzwischen von jemand anderem geändert. Deine Änderung wurde nicht gespeichert, damit nichts überschrieben wird. Die Seitenliste wurde neu geladen — bitte die Aktion wiederholen.',
+            'PAGES_TREE_CONFLICT'
+          );
+          return res.status(status).json(resp);
+        }
+        const dbRowsById = new Map(dbRowsBefore.map(r => [String(r.id), r]))
 
         // helper: collect only TOP-LEVEL slugs from the provided array.
         // Children are stored as JSON inside their parent's `children` column
@@ -230,6 +398,10 @@ export default async function handler(req, res) {
           } catch (e) {
             console.warn('Failed to sanitize incoming page payload', e)
           }
+        }
+        prepareTreeForWrite(body, dbRowsBefore, auth.user)
+
+        for (const p of body) {
           if (!p || !p.slug) continue
 
           try {
@@ -275,19 +447,17 @@ export default async function handler(req, res) {
           results.push(up)
         }
 
-        // create revisions for each upserted page
+        // Revision nur für Seiten, die sich tatsächlich geändert haben — und
+        // vollständig (inkl. Template-Feldern in `data`), sonst lässt sich der
+        // Inhalt von Template-Seiten daraus nicht wiederherstellen.
         for (const up of results) {
+          const before = dbRowsById.get(String(up.id))
+          if (before && !rowContentChanged(before, up)) continue
           try {
             await prisma.pageRevision.create({ data: {
               pageId: up.id,
-              data: {
-                title: up.title,
-                slug: up.slug,
-                blocks: up.blocks,
-                children: up.children,
-                status: up.status,
-                publishAt: up.publishAt
-              }
+              data: revisionSnapshot(up),
+              createdBy: userLabel(auth.user)
             } })
             await pruneRevisions(up.id)
           } catch (e) {
@@ -326,7 +496,13 @@ export default async function handler(req, res) {
         for (const up of results) {
           try { await logAudit({ action: 'upsert', resource: 'page', resourceId: up.id, userId: auth.user.id, details: { slug: up.slug } }) } catch (e) {}
         }
+        // Neue Version unter dem Lock ermitteln: Sie beschreibt exakt den Baum,
+        // den dieser Client gerade gesendet hat.
+        res.setHeader('X-Pages-Version', computePagesVersion(await prisma.page.findMany({ select: { id: true, updatedAt: true } })))
         return res.status(200).json(results.map(stripPageAccessPasswords))
+       } finally {
+        release()
+       }
       }
 
       // Single page upsert
@@ -359,6 +535,7 @@ export default async function handler(req, res) {
         const [status, resp] = errorResponse(400, 'Ungültige Seitendaten', 'VALIDATION_ERROR', pageErrors);
         return res.status(status).json(resp);
       }
+      stampNode(p, auth.user)
       const up = await prisma.page.upsert({
         where: { slug: String(p.slug) },
         create: {
@@ -391,16 +568,8 @@ export default async function handler(req, res) {
       try {
         await prisma.pageRevision.create({ data: {
           pageId: up.id,
-          data: {
-            title: up.title,
-            slug: up.slug,
-            blocks: up.blocks,
-            children: up.children,
-            status: up.status,
-            publishAt: up.publishAt,
-            template: up.template,
-            data: up.data
-          }
+          data: revisionSnapshot(up),
+          createdBy: userLabel(auth.user)
         } })
         await pruneRevisions(up.id)
       } catch (e) {

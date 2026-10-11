@@ -18,8 +18,9 @@ import WorkflowPanel from './WorkflowPanel';
 import DOMCanvas from './DOMCanvas';
 import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
+import { BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage, onReloadFromServer }) {
   const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
   const CHANNEL_TEMPLATE_LABEL_PREFIX = 'Kanal: ';
 
@@ -128,6 +129,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [globalWidgets, setGlobalWidgets] = useState([]);
   const adminScopeRef = useRef(null);
   const blockNodeRefs = useRef({});
+  // true, wenn die Auswahl durch einen Klick direkt im Block entstand — dann
+  // ist der Block schon im Blick und das angeklickte Feld hat den Fokus; kein
+  // automatisches Scrollen/Fokussieren (sonst springt die Ansicht).
+  const selectedByClickRef = useRef(false);
   const fieldNodeRefs = useRef({});
   const initialSnapshotRef = useRef('');
   const autosaveTimerRef = useRef(null);
@@ -419,6 +424,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   useEffect(() => {
     if (!selectedBlockPath) return;
+
+    if (selectedByClickRef.current) {
+      selectedByClickRef.current = false;
+      return;
+    }
 
     if (selectedFieldKey && selectedFieldKey.startsWith(`${selectedBlockPath}::`)) {
       return;
@@ -1872,7 +1882,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         data-block-path={path}
         className={`block-item${selectedBlockPath === path ? ' selected' : ''}${block?.hidden ? ' is-hidden' : ''}${isCollapsed ? ' is-collapsed' : ''}${inLightbox ? ' block-item-lightbox' : ''}`}
         style={{ marginLeft: inLightbox ? 0 : depth * 16 }}
-        onClick={() => setSelectedBlockPath(path)}
+        onClick={(e) => {
+          // Klicks in verschachtelten Blöcken steigen zu den Eltern-Blöcken
+          // auf — nur der innerste Block wählt sich aus.
+          if (e.target.closest && e.target.closest('[data-block-path]') !== e.currentTarget) return;
+          if (selectedBlockPath === path) return;
+          selectedByClickRef.current = true;
+          setSelectedBlockPath(path);
+        }}
         title={devTitle(`Komponente: Block ${formatBlockNumber(path)}. Funktion: Block auswaehlen und Inhalte bearbeiten.`)}
         {...containerProps}
       >
@@ -2213,7 +2230,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                       <div key={varName} className="field-item field-item-textarea">
                         <label className="field-label-xs">{label}</label>
                         <div ref={(el) => setFieldRef(path, varName, el)} className="field-quill-wrapper">
-                          <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                          <SmartRichTextEditor mode={richTextEditorMode} label={label} value={value || ''} onChange={(val) => updateNestedBlock(path, { [varName]: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
                         </div>
                       </div>
                     );
@@ -2406,6 +2423,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                     <div ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)} className="field-quill-wrapper">
                                       <SmartRichTextEditor
                                         mode={richTextEditorMode}
+                                        label={formatLabel(sf.name)}
                                         value={sfVal}
                                         onChange={val => {
                                           const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
@@ -2553,6 +2571,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   style={{ width: 80 }}
                 />
               </div>
+              <ChannelQueryFields
+                channel={blogChannels.find(ch => ch.slug === block.props.channelSlug)}
+                props={block.props}
+                onChange={(patch) => updateNestedBlock(path, patch)}
+              />
               {block.props.channelSlug && (
                 <div className="blog-channel-editor__preview">
                   <span style={{ fontSize: 11, opacity: .6 }}>Kanal: </span>
@@ -2605,7 +2628,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <>
               <input ref={(el) => setFieldRef(path, 'title', el)} type="text" placeholder="Titel" value={block.props.title || ''} onChange={e => updateNestedBlock(path, { title: e.target.value })} className="input-field-small field-input-full" style={{ marginBottom: 8 }} />
               <div ref={(el) => setFieldRef(path, 'content', el)} className="field-quill-wrapper">
-                <SmartRichTextEditor mode={richTextEditorMode} value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+                <SmartRichTextEditor mode={richTextEditorMode} label="Inhalt" value={block.props.content || ''} onChange={(val) => updateNestedBlock(path, { content: val })} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
               </div>
             </>
           )}
@@ -2682,7 +2705,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           pageId={page && page.id}
           pageName={title}
           onClose={() => setShowRevisions(false)}
-          onRestored={() => setShowRevisions(false)}
+          onRestored={() => {
+            setShowRevisions(false);
+            // Wiederhergestellten Stand in den Editor holen — sonst würde das
+            // nächste (Auto-)Speichern den alten Editor-Stand zurückschreiben.
+            onReloadFromServer?.();
+          }}
           showToast={showToast}
         />
       )}
@@ -4059,7 +4087,7 @@ function PageDataFieldInput({ varName, inputType, options, label, value, onChang
       <div className="field-item field-item-textarea">
         <label className="field-label-xs">{label}</label>
         <div className="field-quill-wrapper">
-          <SmartRichTextEditor mode={richTextEditorMode} value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
+          <SmartRichTextEditor mode={richTextEditorMode} label={label} value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
         </div>
       </div>
     );
@@ -4251,5 +4279,95 @@ function AccessGroupsPanel({
         </div>
       )}
     </div>
+  );
+}
+
+// Sortierung/Filter eines Kanal-Blocks (lib/blogPostQuery.js). Template-Felder
+// zum Sortieren kommen aus den vorhandenen Beiträgen des Kanals.
+function ChannelQueryFields({ channel, props, onChange }) {
+  const [fieldNames, setFieldNames] = useState([]);
+  useEffect(() => {
+    if (!channel?.id) { setFieldNames([]); return undefined; }
+    let cancelled = false;
+    fetch(`/api/blog/posts?channelId=${encodeURIComponent(channel.id)}&limit=1`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancelled) setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [channel?.id]);
+
+  if (!channel) return null;
+  const stop = e => e.stopPropagation();
+  const sortField = props.sortField || '';
+  const builtinLabel = (BUILTIN_SORT_FIELDS.find(f => f.value === channel.sortField) || {}).label;
+  const channelDefault = channel.sortField
+    ? `${builtinLabel || channel.sortField}, ${channel.sortDir === 'asc' ? 'aufsteigend' : 'absteigend'}`
+    : 'Veröffentlichungsdatum, neueste zuerst';
+
+  return (
+    <>
+      <div className="blog-channel-editor__field">
+        <label className="block-field-label">Sortierung</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <select className="block-template-select" value={sortField} onClick={stop} onChange={e => onChange({ sortField: e.target.value })}>
+            <option value="">Standard des Kanals ({channelDefault})</option>
+            {BUILTIN_SORT_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            {fieldNames.length > 0 && (
+              <optgroup label="Template-Felder">
+                {fieldNames.map(n => <option key={n} value={n}>{n}</option>)}
+              </optgroup>
+            )}
+            {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !fieldNames.includes(sortField) && <option value={sortField}>{sortField}</option>}
+          </select>
+          {sortField && (
+            <select className="block-template-select" value={props.sortDir || 'desc'} onClick={stop} onChange={e => onChange({ sortDir: e.target.value })} style={{ width: 'auto' }}>
+              <option value="asc">aufsteigend (A→Z, früheste zuerst)</option>
+              <option value="desc">absteigend (Z→A, neueste zuerst)</option>
+            </select>
+          )}
+        </div>
+      </div>
+      <div className="blog-channel-editor__field">
+        <label className="block-field-label">Zeitraum</label>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <select className="block-template-select" value={props.dateFilter || ''} onClick={stop} onChange={e => onChange({ dateFilter: e.target.value })} style={{ width: 'auto' }}>
+            <option value="">Alle Beiträge</option>
+            <option value="upcoming">Nur kommende (Datum ab heute)</option>
+            <option value="past">Nur vergangene (Datum vor heute)</option>
+          </select>
+          {props.dateFilter && (
+            <input
+              type="text"
+              className="input-field-small"
+              list={`channel-fields-${channel.id}`}
+              placeholder={sortField || 'Datumsfeld, z. B. Ende,Beginn'}
+              value={props.dateFields || ''}
+              onClick={stop}
+              onChange={e => onChange({ dateFields: e.target.value })}
+              style={{ width: 200 }}
+              title="Datumsfeld(er), kommagetrennt — das erste nicht-leere zählt (z. B. „Ende,Beginn“: eintägige Termine ohne Ende zählen mit ihrem Beginn)"
+            />
+          )}
+          <datalist id={`channel-fields-${channel.id}`}>
+            {fieldNames.map(n => <option key={n} value={n} />)}
+          </datalist>
+        </div>
+        {props.dateFilter && !props.dateFields && !sortField && (
+          <p className="blog-channel-editor__hint">Bitte ein Datumsfeld angeben (z. B. <code>Ende,Beginn</code>).</p>
+        )}
+      </div>
+      <div className="blog-channel-editor__field">
+        <label className="block-field-label">Archiv</label>
+        <select className="block-template-select" value={props.archive || ''} onClick={stop} onChange={e => onChange({ archive: e.target.value })} style={{ width: 'auto' }}>
+          <option value="">Archivierte ausblenden</option>
+          <option value="only">Nur archivierte (Archiv-Seite)</option>
+          <option value="include">Alle, auch archivierte</option>
+        </select>
+      </div>
+      <div className="blog-channel-editor__field">
+        <label className="block-field-label">Text, wenn nichts gefunden wird</label>
+        <input type="text" className="input-field-small field-input-full" placeholder="z. B. Zurzeit keine Termine." value={props.emptyText || ''} onClick={stop} onChange={e => onChange({ emptyText: e.target.value })} />
+      </div>
+    </>
   );
 }

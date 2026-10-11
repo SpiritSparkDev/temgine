@@ -687,6 +687,9 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                       : <Grid size={12} className="tce-item-icon" aria-hidden="true" />
                     }
                     <span className="tce-item-name">{t.name}</span>
+                    {t.isUsed === false && (
+                      <span className="tce-unused-dot" title="Von keiner Seite/keinem Blog-Kanal verwendet" aria-hidden="true" />
+                    )}
                     {canReorder && (
                       <span className="tce-item-order-btns" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -1255,6 +1258,9 @@ function PageFieldTemplatesPanel({ showToast, onSaved }) {
               >
                 <Grid size={13} className="tce-item-icon" aria-hidden="true" />
                 <span className="tce-item-name">{t.name}</span>
+                {t.isUsed === false && (
+                  <span className="tce-unused-dot" title="Von keiner Seite verwendet" aria-hidden="true" />
+                )}
                 <button
                   className="tce-item-delete"
                   onClick={(e) => { e.stopPropagation(); handleDelete(t); }}

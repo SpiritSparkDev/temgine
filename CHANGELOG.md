@@ -5,6 +5,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.41.0] - 2026-10-11
+
+### Added
+- Template-Manager: Templates, die aktuell von keiner Seite und keinem Blog-Kanal referenziert werden, sind jetzt mit einem orangenen Punkt markiert (Block-/Seiten-Templates in der Hauptliste sowie Seiten-Datenfelder-Vorlagen). Die Prüfung durchsucht `page.template` und alle Block-Templates im `blocks`-Baum jeder Seite (unabhängig vom Veröffentlichungsstatus) sowie die vier Template-Felder jedes Blog-Kanals.
+- **Tests:** `__tests__/api/page-concurrency.test.js` spielt die Abläufe mit zwei Personen gegen eine In-Memory-DB durch (veralteter Baum, Konflikt auf derselben Seite, parallele Arbeit an verschiedenen Seiten, verschachtelte Seiten, Revisionen).
+- **Kanäle sortieren und filtern (Frontend und Backend):** Beiträge lassen sich nach Veröffentlichungs-/Erstellungsdatum, Titel oder **beliebigen Template-Feldern** (z. B. „Beginn“) sortieren; Datumswerte (JJJJ-MM-TT) werden als Datum, Zahlen numerisch, Texte deutsch-alphabetisch verglichen, leere Werte stehen am Ende (`lib/blogPostQuery.js`). Zeitraum-Filter „nur kommende“ / „nur vergangene“ über eine Feldliste (z. B. `Ende,Beginn` – das erste nicht-leere Feld zählt). Jeder Kanal hat eine **Standard-Sortierung** (Kanal-Einstellungen), Kanal-Blöcke können sie überschreiben (Sortierung, Richtung, Zeitraum, Archiv, Text bei leerer Liste).
+- **Archiv für Beiträge:** Neues Feld `BlogPost.archived` (Migration `20261011180000_blog_sort_and_archive`, außerdem `BlogChannel.sortField`/`sortDir`). Archivierte Beiträge bleiben per URL erreichbar, erscheinen aber nicht mehr in Kanal-Listen – außer mit Archiv „nur archivierte“ (Archiv-Seite) oder „alle“. In der Beitragsliste per Knopf **Archivieren / Zurückholen**, Filter „Ohne Archiv / Nur Archiv / Alle“ und Badge.
+- **Öffentliche Kanal-API:** `GET /api/blog/public/<kanal>` versteht `sort`, `dir`, `upcoming`, `past`, `archive`.
+- **Kanal-Listen direkt in Templates:** Jedes Element mit `class="blog-channel-block"` und `data-channel` wird gefüllt – nicht nur Kanal-Blöcke, sondern auch fest in Template-HTML geschriebene Platzhalter (z. B. eine Seitenleiste „Kommende Veranstaltungen“): `data-template`, `data-limit`, `data-sort`, `data-dir`, `data-upcoming`, `data-past`, `data-archive`, `data-empty`.
+- **Datumsteile in Kanal-Templates:** Zu jedem Datumsfeld zusätzlich `<Feld>_tag`, `<Feld>_monat` („Okt“), `<Feld>_jahr`, `<Feld>_datum` („28.10.2026“) – in Listen und auf der Beitragsseite.
+- **Große Ansicht für Textfelder:** Knopf „⤢ Groß“ in der Werkzeugleiste jedes Rich-Text-Feldes (Markdown und WYSIWYG) öffnet das Feld bildschirmfüllend (Esc oder „Schließen“).
+- **Anleitung „Links richtig setzen“** (`help/links.md`): interne Seiten, externe Adressen, Dateien, E-Mail, Telefon, Sprungmarken, Button-Link-Felder, häufige Fehler. Erreichbar über den neuen „?“-Knopf in jedem Textfeld und in der Dokumentation; die Link-Abfrage nennt Beispiele.
+- **Tests:** `__tests__/blogPostQuery.test.js`, `__tests__/pageAccess.test.js`; `__tests__/smartRichTextEditor.test.js` deckt große Ansicht und Link-Hilfe ab.
+- **Skript `scripts/blocks-to-channel.js`:** wandelt Download-Blöcke einer Seite (auch einzelne Link-Zeilen in Text-Blöcken) in Kanal-Beiträge um (Titel ohne Datum, Datum aus „(TT.MM.JJJJ)“ ins Datumsfeld, Datei ins Dateifeld), legt den Kanal bei Bedarf mit Standard-Sortierung nach Datum an und ersetzt die Blöcke durch einen Kanal-Block. Probelauf ohne `--apply`, idempotent, Revision vorab; Tests in `__tests__/blocksToChannel.test.js`.
+
+### Changed
+- **Aufbewahrung von Versionen:** Standard 30 statt 7 Tage (Einstellung `revisionRetentionDays` bleibt maßgeblich).
+
+### Fixed
+- **Verlorene Änderungen bei gleichzeitiger Arbeit im Backend:** Bisher schickte jedes Speichern im Seiten-Editor (auch das Autosave) den kompletten Seitenbaum aus dem eigenen Browser, und der Server übernahm ihn ungeprüft. Ein Admin-Tab mit älterem Stand überschrieb so die Änderungen anderer an *anderen* Seiten und löschte zwischenzeitlich angelegte Seiten. Jetzt speichert der Editor nur noch die eine Seite (`PUT /api/pages`, auch für verschachtelte Seiten). Jede Seite trägt einen Stempel `data._savedAt`/`data._savedBy`; hat jemand anderes genau diese Seite inzwischen gespeichert, lehnt der Server ab (409 `PAGE_CONFLICT`) und der Editor zeigt einen Hinweis mit „Neuere Version laden“ oder „Meine Version trotzdem speichern“. Gleichzeitiges Arbeiten an verschiedenen Seiten bleibt konfliktfrei.
+- **Strukturelle Baum-Speicherungen** (Drag & Drop, Anlegen/Löschen, Block verschieben) senden die Version des geladenen Baums (`X-Pages-Version`); ist der Baum veraltet, wird nichts geschrieben (409 `PAGES_TREE_CONFLICT`) und die Seitenliste neu geladen. Schreibzugriffe auf Seiten laufen serialisiert (`lib/pageConcurrency.js`).
+- **Änderungsverlauf vollständig:** Revisionen aus Baum-Speicherungen enthielten weder `data` (Template-Felder) noch `template` und ließen sich für Template-Seiten nicht sinnvoll wiederherstellen. Jetzt immer vollständig, mit Autor (`createdBy`), und nur noch für tatsächlich geänderte Seiten statt bei jedem Speichern für alle.
+- **Verlauf für Unterseiten:** Verschachtelte Seiten zeigen ihre Stände (aus den Revisionen der Elternseite) und lassen sich einzeln wiederherstellen, ohne Geschwister-Seiten zurückzusetzen.
+- **`/api/pages/revisions` ohne Anmeldung erreichbar:** Auflisten, Anlegen, Wiederherstellen und Löschen von Versionen verlangen jetzt Login und passende Rolle (`PAGES_VIEW`/`PAGES_EDIT`/`PAGES_DELETE`).
+- **Passwort-Schutz verschachtelter Seiten** ging bei jeder Baum-Speicherung verloren (der Hash wird nie an den Client ausgeliefert); er wird jetzt aus der DB übernommen.
+- **Wiederherstellen im Editor:** Nach dem Wiederherstellen einer Version lädt der Editor den neuen Stand, statt ihn beim nächsten Autosave mit dem alten Editor-Inhalt zu überschreiben.
+- **Ansicht springt beim Klick in ein Textfeld:** Jeder Klick in einen Block wählte ihn neu aus, scrollte ihn an den oberen Rand und setzte den Fokus auf sein *erstes* Feld (meist „Sprungmarke“) – das angeklickte Feld verlor den Fokus. Auswahl per Klick scrollt und fokussiert jetzt nicht mehr; Navigation über Übersicht/Vorschau weiterhin schon.
+- **Kind-Container ließen sich kaum auswählen:** Der Klick stieg zu allen Eltern-Blöcken auf, ausgewählt war am Ende immer der äußerste Block. Jetzt wählt sich nur der innerste angeklickte Block aus.
+- **Kanal-Listen mit Limit zeigten die falschen Beiträge:** sortiert wurde fest nach `publishedAt` absteigend – bei Terminen also die am weitesten entfernten zuerst. Siehe Sortierung/Filter oben.
+- **Beitragsliste im Backend** lud höchstens 100 Beiträge.
+- **Mitglieder-Seiten waren nur im Browser geschützt:** `GET /api/pages` lieferte Inhalte von Seiten mit Zugangsgruppen (und von passwortgeschützten Seiten „ohne Konto“) an jeden aus – die Sperre griff nur in `pages/[...slug].js`. Jetzt filtert der Server (`lib/pageAccess.js`): Nicht berechtigte Besucher bekommen geschützte Seiten nur noch mit Titel, Slug und Navigationsdaten (`blocks` leer, `accessRestricted: true`), damit Menü und Umleitung zum Mitglieder-Login weiter funktionieren. Mitglieder sehen Seiten ihrer Gruppen bzw. `*`, Passwort-Seiten erst nach dem Entsperren (signiertes Cookie), Backend-Nutzer alles. Antworten sind `Cache-Control: private, no-store`.
+- **Entwürfe öffentlich abrufbar:** `?includeDrafts=true` lieferte unveröffentlichte Seiten an jeden; jetzt nur noch an angemeldete Backend-Nutzer (die Startseite bleibt wie bisher immer erreichbar). Verschachtelte Entwürfe werden für alle anderen ebenfalls entfernt; `X-Pages-Version` gibt es nur für den vollständigen Admin-Baum.
+- **`POST /api/pages/publish` ohne Anmeldung:** Jeder konnte Seiten veröffentlichen, zurückziehen oder planen. Jetzt nur mit Rolle `PAGES_WORKFLOW_PUBLISH`; Audit-Einträge mit Benutzer.
+- **`GET /api/debug/render` ohne Anmeldung:** renderte jede Seite inkl. Entwürfen und Mitglieder-Seiten; jetzt nur für Backend-Nutzer.
+- **Titel von Kanal-Beiträgen wurden als Markdown gerendert:** „4. Newsletter“ wurde zu einer nummerierten Liste. Titel werden jetzt in Listen und auf der Beitragsseite als Text ausgegeben.
+
+---
+
 ## [0.40.0] - 2026-10-09
 
 ### Added

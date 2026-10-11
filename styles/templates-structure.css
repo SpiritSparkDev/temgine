@@ -1639,6 +1639,14 @@
   font-family: 'Consolas', 'SFMono-Regular', monospace;
 }
 
+.tce-unused-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  flex-shrink: 0;
+}
+
 .tce-item-delete {
   display: none;
   align-items: center;

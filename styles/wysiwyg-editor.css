@@ -67,3 +67,10 @@
   color: var(--text-tertiary);
   pointer-events: none;
 }
+
+/* Große Ansicht (SmartRichTextEditor): Schreibfläche füllt das Overlay */
+.wte-expanded .wte-content {
+  min-height: 100%;
+  max-height: none;
+  font-size: 1rem;
+}

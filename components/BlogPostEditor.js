@@ -218,6 +218,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   <div className="blog-editor-card__body" style={{ padding: '12px 14px' }}>
                     <SmartRichTextEditor
                       mode={richTextEditorMode}
+                      label="Inhalt"
                       value={body}
                       onChange={setBody}
                       toolbar={['bold', 'italic', 'strike', 'h1', 'h2', 'h3', 'ol', 'ul', 'blockquote', 'code', 'link', 'image', 'clear']}

@@ -10,6 +10,8 @@
  *   readOnly    {boolean}  disable editing
  *   placeholder {string}
  *   toolbar     {string[]} subset of buttons to show (default: all unterstützten)
+ *   toolbarExtra {ReactNode} am Ende der Werkzeugleiste (z. B. „Groß“-Knopf)
+ *   expanded    {boolean}  füllt die Höhe des Elternelements (große Ansicht)
  */
 import React, { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -27,6 +29,8 @@ export default function WysiwygRichTextEditor({
   readOnly = false,
   placeholder = '',
   toolbar = ALL_TOOLBAR,
+  toolbarExtra = null,
+  expanded = false,
 }) {
   const show = (key) => toolbar.includes(key);
 
@@ -67,7 +71,7 @@ export default function WysiwygRichTextEditor({
   }, [readOnly, editor]);
 
   return (
-    <div style={wrapStyle}>
+    <div style={expanded ? { ...wrapStyle, flex: 1, minHeight: 0, border: 'none', borderRadius: 0 } : wrapStyle}>
       {!readOnly && editor && (
         <div style={toolbarStyle}>
           {show('bold') && (
@@ -98,7 +102,7 @@ export default function WysiwygRichTextEditor({
               type="button"
               title="Link einfügen"
               onClick={() => {
-                const url = window.prompt('URL:');
+                const url = window.prompt('Adresse des Links – z. B. /seite, https://…, mailto:name@…, /uploads/datei.pdf (Hilfe: „?“-Knopf)');
                 if (url) editor.chain().focus().setLink({ href: url }).run();
               }}
               style={{ ...btnStyle, ...(editor.isActive('link') ? btnActiveStyle : {}) }}
@@ -108,10 +112,11 @@ export default function WysiwygRichTextEditor({
           {show('clear') && (
             <button type="button" title="Leeren" onClick={() => editor.chain().focus().clearContent().run()} style={btnStyle}>✕</button>
           )}
+          {toolbarExtra && <span style={{ marginLeft: 'auto' }}>{toolbarExtra}</span>}
         </div>
       )}
 
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className={expanded ? 'wte-expanded' : undefined} style={expanded ? { flex: 1, minHeight: 0, overflowY: 'auto' } : undefined} />
     </div>
   );
 }

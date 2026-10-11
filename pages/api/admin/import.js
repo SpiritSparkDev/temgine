@@ -311,6 +311,8 @@ async function importBlog(blogChannels = [], blogPosts = [], strategy = 'merge')
           templateSimplePreview: ch.templateSimplePreview || null,
           templateArchiveEntry: ch.templateArchiveEntry || null,
           templateReading: ch.templateReading || null,
+          sortField: ch.sortField || null,
+          sortDir: ch.sortDir || null,
         },
         update: {
           name: ch.name || slug,
@@ -319,6 +321,8 @@ async function importBlog(blogChannels = [], blogPosts = [], strategy = 'merge')
           templateSimplePreview: ch.templateSimplePreview || null,
           templateArchiveEntry: ch.templateArchiveEntry || null,
           templateReading: ch.templateReading || null,
+          sortField: ch.sortField || null,
+          sortDir: ch.sortDir || null,
         },
       })
       if (ch.id) channelIdMap.set(String(ch.id), saved.id)
@@ -351,6 +355,7 @@ async function importBlog(blogChannels = [], blogPosts = [], strategy = 'merge')
           publishAt: post.publishAt ? new Date(post.publishAt) : null,
           publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
           templateData: post.templateData || null,
+          archived: Boolean(post.archived),
         },
         update: {
           title: post.title || slug,
@@ -362,6 +367,7 @@ async function importBlog(blogChannels = [], blogPosts = [], strategy = 'merge')
           publishAt: post.publishAt ? new Date(post.publishAt) : null,
           publishedAt: post.publishedAt ? new Date(post.publishedAt) : null,
           templateData: post.templateData || null,
+          archived: Boolean(post.archived),
         },
       })
       result.importedPosts++

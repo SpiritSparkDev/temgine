@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import PageTreeEditor from './PageTreeEditor';
 import PageEditor from './PageEditor';
 import GlobalPagesView from './GlobalPagesView';
@@ -23,12 +23,66 @@ export default function PagesView({
   editingPage, 
   setEditingPage, 
   handleUpdatePages,
+  handleSavePage,
   editorDirty = false,
   setEditorDirty = () => {},
   userRole,
   onRefreshPages,
 }) {
   const [toast, setToast] = useState(null);
+  // Stand (data._savedAt), auf dem die Bearbeitung im Editor beruht. Wird nur
+  // beim Öffnen einer Seite und nach dem eigenen erfolgreichen Speichern
+  // gesetzt — nie beim Neuladen des Baums, sonst würde eine fremde Änderung
+  // stillschweigend als Grundlage übernommen und beim Speichern überschrieben.
+  const editorBaseRef = useRef({ id: null, savedAt: null });
+  const [saveConflict, setSaveConflict] = useState(null); // { savedAt, savedBy, page }
+  const [editorKey, setEditorKey] = useState(0);
+  if ((editingPage?.id ?? null) !== editorBaseRef.current.id) {
+    editorBaseRef.current = { id: editingPage?.id ?? null, savedAt: editingPage?.data?._savedAt || null };
+    if (saveConflict) setSaveConflict(null);
+  }
+
+  const findPageById = (nodes, targetId) => {
+    for (const node of nodes || []) {
+      if (node.id === targetId) return node;
+      const found = findPageById(node.children || [], targetId);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  // Lädt die gerade bearbeitete Seite frisch vom Server in den Editor
+  // (verwirft lokale, ungespeicherte Änderungen).
+  const reloadEditingPage = async () => {
+    if (!editingPage) return;
+    const list = onRefreshPages ? await onRefreshPages() : pages;
+    const fresh = findPageById(list || [], editingPage.id);
+    setSaveConflict(null);
+    setEditorDirty(false);
+    if (!fresh) {
+      setEditingPage(null);
+      showToast('Diese Seite existiert nicht mehr.', 'error');
+      return;
+    }
+    editorBaseRef.current = { id: fresh.id, savedAt: fresh.data?._savedAt || null };
+    setEditingPage(fresh);
+    setEditorKey(k => k + 1);
+  };
+
+  const overwriteAfterConflict = async () => {
+    if (!saveConflict) return;
+    const result = await handleSavePage(saveConflict.page, saveConflict.savedAt);
+    if (result.ok) {
+      editorBaseRef.current.savedAt = result.savedAt;
+      setSaveConflict(null);
+      setEditorDirty(false);
+      showToast('Deine Version wurde gespeichert. Die vorherige ist im Änderungsverlauf erhalten.', 'success');
+    } else if (result.conflict) {
+      setSaveConflict({ ...result.conflict, page: saveConflict.page });
+    } else {
+      showToast('Speichern fehlgeschlagen: ' + result.error, 'error');
+    }
+  };
   const [pagesTab, setPagesTab] = useState('pages'); // 'pages', 'global' or 'maintenance'
   const [maintenanceTab, setMaintenanceTab] = useState('404');
   const [maintenanceContent, setMaintenanceContent] = useState({
@@ -200,6 +254,14 @@ export default function PagesView({
 
       const updated = applyTransfer(pages);
       const saved = await handleUpdatePages(updated);
+      // Beim Verschieben wurde die geöffnete Seite selbst mitgespeichert —
+      // deren neuen Stand als Grundlage übernehmen, sonst meldet das nächste
+      // Speichern im Editor einen Konflikt mit der eigenen Aktion.
+      if (saved && mode === 'move' && sourcePageId && sourcePageId === editorBaseRef.current.id && onRefreshPages) {
+        const list = await onRefreshPages();
+        const fresh = findPageById(list || [], sourcePageId);
+        if (fresh) editorBaseRef.current.savedAt = fresh.data?._savedAt || null;
+      }
       return Boolean(saved);
     } catch (e) {
       console.error('Fehler beim Übertragen des Blocks:', e);
@@ -244,9 +306,28 @@ export default function PagesView({
 
       {pagesTab === 'global' && <GlobalPagesView showToast={showToast} />}
 
+      {pagesTab === 'pages' && editingPage && saveConflict && (
+        <div role="alert" style={{ margin: '0 1rem 1rem', padding: '0.85rem 1rem', border: '1px solid #f59e0b', background: '#fffbeb', color: '#78350f', borderRadius: '6px', fontSize: '0.9rem' }}>
+          <strong>Nicht gespeichert:</strong> Diese Seite wurde inzwischen
+          {saveConflict.savedBy ? ` von ${saveConflict.savedBy}` : ' von jemand anderem'}
+          {saveConflict.savedAt ? ` (${new Date(saveConflict.savedAt).toLocaleString('de-DE')})` : ''} gespeichert.
+          {' '}Damit nichts verloren geht, wurden deine Änderungen nicht automatisch darübergeschrieben.
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+            <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={reloadEditingPage}>
+              Neuere Version laden (meine Änderungen verwerfen)
+            </button>
+            <button type="button" className="pe-tb-btn pe-tb-btn-ghost" onClick={overwriteAfterConflict}>
+              Meine Version trotzdem speichern
+            </button>
+          </div>
+        </div>
+      )}
+
       {pagesTab === 'pages' && editingPage ? (
         <PageEditor 
+          key={`${editingPage.id}:${editorKey}`}
           page={editingPage} 
+          onReloadFromServer={reloadEditingPage}
           templates={templateList}
           allPages={pages}
           userRole={userRole}
@@ -267,24 +348,20 @@ export default function PagesView({
                 return false;
               }
 
-              const updatePageInTree = (nodes) =>
-                nodes.map(n =>
-                  n.id && n.id === updatedPage.id
-                    // PageEditor only ever edits this one page's own fields — it
-                    // doesn't manage the page tree, so its (possibly stale)
-                    // updatedPage.children must never overwrite the live tree's
-                    // children (e.g. a block another editor action just moved
-                    // into a nested child page).
-                    ? { ...n, ...updatedPage, children: n.children }
-                    : { ...n, children: updatePageInTree(n.children || []) }
-                );
-              const updated = updatePageInTree(pages);
-              const saved = await handleUpdatePages(updated);
-              
-              if (!saved) {
-                // Fehler wurde bereits durch handleUpdatePages angezeigt
+              // Nur diese eine Seite speichern — nie den ganzen Baum aus dem
+              // (womöglich veralteten) Stand dieses Browsers, sonst werden
+              // Änderungen anderer an anderen Seiten überschrieben.
+              const result = await handleSavePage(updatedPage, editorBaseRef.current.savedAt);
+              if (result.conflict) {
+                setSaveConflict({ ...result.conflict, page: updatedPage });
                 return false;
               }
+              if (!result.ok) {
+                showToast('Speichern fehlgeschlagen: ' + result.error, 'error');
+                return false;
+              }
+              editorBaseRef.current.savedAt = result.savedAt;
+              if (saveConflict) setSaveConflict(null);
 
               setEditorDirty(false);
               
@@ -308,7 +385,7 @@ export default function PagesView({
                   return '';
                 };
 
-                const fullPath = findPagePathById(updated, updatedPage.id);
+                const fullPath = findPagePathById(pages, updatedPage.id);
                 const pageUrl = `/${fullPath || updatedPage.slug}`;
                 let opened = false;
                 try {

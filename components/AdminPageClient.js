@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
@@ -34,6 +34,8 @@ export default function AdminPageClient() {
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
   const [pages, setPages] = useState([]);
+  // Version des zuletzt geladenen Seitenbaums (siehe lib/pageConcurrency.js).
+  const pagesVersionRef = useRef(null);
   const [editingPage, setEditingPage] = useState(null);
   const [editorDirty, setEditorDirty] = useState(false);
   const [view, setView] = useState('dashboard');
@@ -325,6 +327,7 @@ export default function AdminPageClient() {
         console.log('[admin] loading pages done', {
           count: Array.isArray(p) ? p.length : (p.pages || []).length,
         });
+        pagesVersionRef.current = pRes.headers.get('X-Pages-Version');
         if (isMounted) setPages(Array.isArray(p) ? p : (p.pages || []));
       } catch (e) { 
         console.error('[admin] Error loading pages:', e);
@@ -349,14 +352,25 @@ export default function AdminPageClient() {
     };
   }, []);
 
+  // Strukturelle Änderungen am Seitenbaum (Drag & Drop, Anlegen, Löschen, …)
+  // senden den ganzen Baum mitsamt der Version, mit der er geladen wurde. Hat
+  // inzwischen jemand anderes etwas geändert, lehnt der Server ab (409) — dann
+  // laden wir neu, statt dessen Änderungen zu überschreiben.
   async function handleUpdatePages(updated) {
     setPages(updated);
     try {
       const response = await fetch('/api/pages', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: { 'Content-Type': 'application/json', 'X-Pages-Version': pagesVersionRef.current || '' }, 
         body: JSON.stringify(updated) 
       });
+      if (response.status === 409) {
+        let message = 'Der Seitenbaum wurde inzwischen geändert. Bitte die Aktion wiederholen.';
+        try { message = (await response.json()).error || message; } catch (e) {}
+        await loadPagesFromApi();
+        showToast(message, 'error');
+        return false;
+      }
       if (!response.ok) {
         let detail = '';
         try {
@@ -374,6 +388,7 @@ export default function AdminPageClient() {
         const statusInfo = `HTTP ${response.status}`;
         throw new Error([statusInfo, detail, hint].filter(Boolean).join(' - '));
       }
+      pagesVersionRef.current = response.headers.get('X-Pages-Version') || pagesVersionRef.current;
       // Reload from API to confirm server state (fixes delete reappearance + order persistence)
       await loadPagesFromApi();
       return true;
@@ -381,6 +396,33 @@ export default function AdminPageClient() {
       console.error('Fehler beim Speichern:', error);
       showToast('Speichern fehlgeschlagen: ' + (error.message || 'Unbekannter Fehler'), 'error');
       return false;
+    }
+  }
+
+  // Speichert genau eine Seite aus dem Seiten-Editor (PUT /api/pages), ohne den
+  // restlichen Baum mitzuschicken. `expectedSavedAt` ist der Stand, auf dem
+  // die Bearbeitung beruht. Ergebnis: { ok, page, savedAt } bzw.
+  // { ok: false, conflict: { savedAt, savedBy } } oder { ok: false, error }.
+  async function handleSavePage(updatedPage, expectedSavedAt) {
+    try {
+      const response = await fetch('/api/pages', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page: updatedPage, expectedSavedAt: expectedSavedAt || null }),
+      });
+      let payload = null;
+      try { payload = await response.json(); } catch (e) {}
+      if (response.status === 409 && payload && payload.code === 'PAGE_CONFLICT') {
+        return { ok: false, conflict: payload.details || {} };
+      }
+      if (!response.ok) {
+        return { ok: false, error: (payload && (payload.error || payload.message)) || `HTTP ${response.status}` };
+      }
+      // Baum neu laden — bringt auch Änderungen anderer an anderen Seiten mit.
+      loadPagesFromApi();
+      return { ok: true, page: payload.page, savedAt: payload.savedAt || null };
+    } catch (error) {
+      return { ok: false, error: error.message || 'Unbekannter Fehler' };
     }
   }
 
@@ -397,6 +439,7 @@ export default function AdminPageClient() {
       });
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
+      pagesVersionRef.current = res.headers.get('X-Pages-Version');
       const list = Array.isArray(data) ? data : (data.pages || []);
       console.log('[admin] loadPagesFromApi parsed', {
         count: list.length,
@@ -824,6 +867,7 @@ export default function AdminPageClient() {
               editingPage={editingPage}
               setEditingPage={setEditingPage}
               handleUpdatePages={handleUpdatePages}
+              handleSavePage={handleSavePage}
               editorDirty={editorDirty}
               setEditorDirty={setEditorDirty}
               userRole={

@@ -3,6 +3,7 @@ import { Plus, Trash2, Search, ChevronLeft, FileText, Rss } from '../lib/muiIcon
 import BlogPostEditor from './BlogPostEditor';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
+import { applyPostQuery, BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
 
 const STATUS_LABELS = {
   DRAFT: 'Entwurf',
@@ -26,7 +27,11 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('createdDesc');
+  // '' = Standard des Kanals, sonst "<feld>:<asc|desc>" oder 'status'
+  const [sortBy, setSortBy] = useState('');
+  const [archiveFilter, setArchiveFilter] = useState('exclude');
+  const [timeFilter, setTimeFilter] = useState('');
+  const [fieldNames, setFieldNames] = useState([]);
   const [editingPost, setEditingPost] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState(null);
@@ -38,13 +43,14 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
   async function loadPosts() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ channelId: channel.id, limit: '100' });
+      const params = new URLSearchParams({ channelId: channel.id, limit: '5000', archive: 'include' });
       if (statusFilter) params.set('status', statusFilter);
       const res = await fetch(`/api/blog/posts?${params}`);
       if (res.ok) {
         const data = await res.json();
         setPosts(data.posts || []);
         setTotal(data.total || 0);
+        setFieldNames(Array.isArray(data.fieldNames) ? data.fieldNames : []);
       } else {
         showToast('Fehler beim Laden der Beiträge', 'error');
       }
@@ -72,6 +78,18 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
     return true;
   }
 
+  async function handleToggleArchive(post) {
+    const res = await fetch(`/api/blog/posts/${post.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: !post.archived }),
+    });
+    if (res.ok) {
+      showToast(post.archived ? 'Beitrag aus dem Archiv geholt' : 'Beitrag archiviert', 'success');
+      setPosts(prev => prev.map(p => (p.id === post.id ? { ...p, archived: !post.archived } : p)));
+    } else {
+      showToast('Fehler beim Archivieren', 'error');
+    }
+  }
+
   async function handleDeletePost(post) {
     const res = await fetch(`/api/blog/posts/${post.id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -83,35 +101,30 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
     setConfirmDelete(null);
   }
 
-  const filtered = posts.filter(p =>
-    !searchQuery || p.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Datumsfeld für „kommende/vergangene“: das gewählte Sortierfeld, sonst
+  // das des Kanals, sonst das Veröffentlichungsdatum.
+  const [sortFieldSel, sortDirSel] = sortBy && sortBy !== 'status' ? sortBy.split(':') : [];
+  const timeField = sortFieldSel || channel.sortField || 'publishedAt';
 
   const filteredAndSorted = useMemo(() => {
-    const list = [...filtered];
-    const statusRank = { DRAFT: 0, REVIEW: 1, APPROVED: 2, SCHEDULED: 3, PUBLISHED: 4 };
-
-    switch (sortBy) {
-      case 'createdAsc':
-        list.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-        break;
-      case 'titleAsc':
-        list.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'de', { sensitivity: 'base' }));
-        break;
-      case 'titleDesc':
-        list.sort((a, b) => String(b.title || '').localeCompare(String(a.title || ''), 'de', { sensitivity: 'base' }));
-        break;
-      case 'status':
-        list.sort((a, b) => (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99));
-        break;
-      case 'createdDesc':
-      default:
-        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        break;
+    const q = searchQuery.trim().toLowerCase();
+    const searched = posts.filter(p => !q || String(p.title || '').toLowerCase().includes(q));
+    const query = {
+      sort: sortFieldSel || channel.sortField || 'createdAt',
+      dir: sortDirSel || (sortFieldSel ? 'desc' : (channel.sortField ? (channel.sortDir || 'desc') : 'desc')),
+      archive: archiveFilter,
+      ...(timeFilter === 'upcoming' ? { upcoming: timeField } : {}),
+      ...(timeFilter === 'past' ? { past: timeField } : {}),
+    };
+    const list = applyPostQuery(searched, query);
+    if (sortBy === 'status') {
+      const statusRank = { DRAFT: 0, REVIEW: 1, APPROVED: 2, SCHEDULED: 3, PUBLISHED: 4 };
+      list.sort((a, b) => (statusRank[a.status] ?? 99) - (statusRank[b.status] ?? 99));
     }
-
     return list;
-  }, [filtered, sortBy]);
+  }, [posts, searchQuery, sortBy, sortFieldSel, sortDirSel, archiveFilter, timeFilter, timeField, channel.sortField, channel.sortDir]);
+
+  const archivedCount = posts.filter(p => p.archived).length;
 
   if (editingPost !== null) {
     const readingTpl = templates.find(t => t.name === channel.templateReading);
@@ -179,12 +192,46 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           className="blog-filter-select"
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
+          title="Sortierung"
         >
-          <option value="createdDesc">Neueste zuerst</option>
-          <option value="createdAsc">Älteste zuerst</option>
-          <option value="titleAsc">Titel A-Z</option>
-          <option value="titleDesc">Titel Z-A</option>
+          <option value="">{channel.sortField ? `Standard des Kanals (${channel.sortField})` : 'Neueste zuerst'}</option>
+          {BUILTIN_SORT_FIELDS.map(f => (
+            <React.Fragment key={f.value}>
+              <option value={`${f.value}:desc`}>{f.label} ↓</option>
+              <option value={`${f.value}:asc`}>{f.label} ↑</option>
+            </React.Fragment>
+          ))}
+          {fieldNames.length > 0 && (
+            <optgroup label="Template-Felder">
+              {fieldNames.map(n => (
+                <React.Fragment key={n}>
+                  <option value={`${n}:asc`}>{n} ↑</option>
+                  <option value={`${n}:desc`}>{n} ↓</option>
+                </React.Fragment>
+              ))}
+            </optgroup>
+          )}
           <option value="status">Status</option>
+        </select>
+        <select
+          className="blog-filter-select"
+          value={timeFilter}
+          onChange={e => setTimeFilter(e.target.value)}
+          title={`Zeitraum nach Feld „${timeField}“`}
+        >
+          <option value="">Alle Zeiträume</option>
+          <option value="upcoming">Kommende ({timeField} ab heute)</option>
+          <option value="past">Vergangene ({timeField} vor heute)</option>
+        </select>
+        <select
+          className="blog-filter-select"
+          value={archiveFilter}
+          onChange={e => setArchiveFilter(e.target.value)}
+          title="Archiv"
+        >
+          <option value="exclude">Ohne Archiv</option>
+          <option value="only">Nur Archiv ({archivedCount})</option>
+          <option value="include">Alle inkl. Archiv</option>
         </select>
         <select
           className="blog-filter-select"
@@ -218,24 +265,24 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           <div className="blog-posts-empty">
             <FileText size={48} />
             <strong style={{ fontSize: 15, color: 'var(--text-primary)' }}>
-              {searchQuery ? 'Keine Treffer' : 'Noch keine Beiträge'}
+              {searchQuery || posts.length > 0 ? 'Keine Treffer' : 'Noch keine Beiträge'}
             </strong>
-            <p>{searchQuery ? `Keine Beiträge für „${searchQuery}" gefunden.` : 'Erstelle deinen ersten Beitrag.'}</p>
-            {!searchQuery && (
+            <p>{searchQuery ? `Keine Beiträge für „${searchQuery}" gefunden.` : posts.length > 0 ? 'Kein Beitrag passt zu den gewählten Filtern.' : 'Erstelle deinen ersten Beitrag.'}</p>
+            {!searchQuery && posts.length === 0 && (
               <button className="btn-modern" onClick={() => setEditingPost('new')}>
                 <Plus size={14} /> Ersten Beitrag erstellen
               </button>
             )}
           </div>
         ) : (
-          filteredAndSorted.map(post => <PostRow key={post.id} post={post} channel={channel} onOpen={() => setEditingPost(post)} onDelete={e => { e.stopPropagation(); setConfirmDelete(post); }} />)
+          filteredAndSorted.map(post => <PostRow key={post.id} post={post} channel={channel} onOpen={() => setEditingPost(post)} onToggleArchive={e => { e.stopPropagation(); handleToggleArchive(post); }} onDelete={e => { e.stopPropagation(); setConfirmDelete(post); }} />)
         )}
       </div>
     </div>
   );
 }
 
-function PostRow({ post, channel, onOpen, onDelete }) {
+function PostRow({ post, channel, onOpen, onToggleArchive, onDelete }) {
   const sc = STATUS_COLORS[post.status] || STATUS_COLORS.DRAFT;
   const publishDate = post.publishedAt
     ? new Date(post.publishedAt).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -284,6 +331,19 @@ function PostRow({ post, channel, onOpen, onDelete }) {
         >
           {STATUS_LABELS[post.status]}
         </span>
+        {post.archived && (
+          <span className="blog-status-badge" style={{ background: 'rgba(100,116,139,.15)', color: '#64748b', border: '1px solid rgba(100,116,139,.3)' }}>
+            Archiv
+          </span>
+        )}
+        <button
+          className="icon-btn-small"
+          title={post.archived ? 'Aus dem Archiv holen (wieder in Listen anzeigen)' : 'Ins Archiv legen (bleibt per Link erreichbar, erscheint nicht mehr in Listen)'}
+          onClick={onToggleArchive}
+          style={{ fontSize: 12, padding: '0 6px', width: 'auto' }}
+        >
+          {post.archived ? 'Zurückholen' : 'Archivieren'}
+        </button>
         <button
           className="icon-btn-small"
           title="Löschen"

@@ -34,6 +34,7 @@ function makeRes() {
   r.status = jest.fn().mockReturnValue(r);
   r.json   = jest.fn().mockReturnValue(r);
   r.end    = jest.fn().mockReturnValue(r);
+  r.setHeader = jest.fn();
   return r;
 }
 
@@ -119,6 +120,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
 
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'home', title: 'Startseite' },
         { slug: 'about', title: 'Über uns' },
@@ -134,6 +137,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     mockPrisma.page.upsert.mockResolvedValue(basePage);
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'home', title: 'Home' },
         { title: 'Kein Slug — wird übersprungen' },
@@ -148,6 +153,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     mockPrisma.page.upsert.mockResolvedValue(basePage);
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'page-a', title: 'A' },
         { slug: 'page-b', title: 'B' },
@@ -164,6 +171,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 bei doppeltem Slug zwischen zwei Top-Level-Seiten — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'about', title: 'Über uns A' },
         { slug: 'about', title: 'Über uns B' },
@@ -182,6 +191,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 bei doppeltem Slug in verschachtelten Kindseiten (gleicher Slug an zwei Stellen im Baum) — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'kuenstler',
@@ -208,6 +219,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('200 bei gleichem Slug unter ZWEI UNTERSCHIEDLICHEN Elternseiten — keine echte URL-Kollision', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'team-a',
@@ -234,6 +247,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 wenn dieselbe Seiten-id mehrfach im Baum auftaucht (z. B. Kopie statt Verschieben) — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'kuenstler',

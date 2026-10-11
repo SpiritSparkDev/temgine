@@ -175,6 +175,35 @@ Pro Datei verfügbar: `name`, `slug`, `url`, `path`, `ext`, `size` (Bytes),
 `{{#picgine:galerie}}…{{/picgine:galerie}}` bindet eine Picgine-Galerie ein.
 Ausführlich beschrieben in der Anleitung **Picgine-Galerien**.
 
+## Kanal-Beiträge in einem Template: `blog-channel-block`
+
+Ein Element mit `class="blog-channel-block"` und `data-channel` wird beim
+Anzeigen der Seite mit Beiträgen eines Blog-/News-Kanals gefüllt – jeder
+Beitrag mit dem angegebenen Kanal-Template gerendert. So lässt sich z. B. eine
+Seitenleiste „Kommende Veranstaltungen“ fest in ein Template schreiben:
+
+```html
+<ul class="blog-channel-block" data-channel="event" data-template="Termin Seitenleiste"
+    data-limit="4" data-sort="Beginn" data-dir="asc" data-upcoming="Ende,Beginn"
+    data-empty="Zurzeit sind keine Termine eingetragen."></ul>
+```
+
+| Attribut | Bedeutung |
+|---|---|
+| `data-channel` | Slug des Kanals (Pflicht) |
+| `data-template` | Template für einen Beitrag; ohne Angabe das Master-Template des Kanals |
+| `data-limit` | Anzahl Beiträge (Standard 6, höchstens 100) |
+| `data-sort` / `data-dir` | Sortierfeld (`publishedAt`, `createdAt`, `title` oder ein Template-Feld wie `Beginn`) und `asc`/`desc`; ohne Angabe die Standard-Sortierung des Kanals |
+| `data-upcoming` / `data-past` | Nur Beiträge, deren Datum ab heute bzw. vor heute liegt; Feldliste, das erste nicht-leere Feld zählt |
+| `data-archive` | `exclude` (Standard), `only` (Archiv-Seite) oder `include` |
+| `data-empty` | Text, wenn nichts gefunden wird |
+
+Im Beitrags-Template stehen alle Felder des Beitrags (`title`, `excerpt`,
+`postUrl`, eigene Felder …) zur Verfügung, zu jedem Datumsfeld außerdem
+`{{Feld_tag}}` („28“), `{{Feld_monat}}` („Okt“), `{{Feld_jahr}}` und
+`{{Feld_datum}}` („28.10.2026“). Dieselben Optionen gibt es im Seiten-Editor
+beim Kanal-Block.
+
 ## Systemvariablen (überall verfügbar)
 
 | Variable | Inhalt |

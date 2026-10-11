@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { name, slug, description, templateDetailPreview, templateSimplePreview, templateArchiveEntry, templateReading } = req.body;
+      const { name, slug, description, templateDetailPreview, templateSimplePreview, templateArchiveEntry, templateReading, sortField, sortDir } = req.body;
 
       if (!name || !slug) {
         return res.status(400).json({ error: 'Name und Slug sind erforderlich' });
@@ -33,7 +33,7 @@ export default async function handler(req, res) {
       }
 
       const channel = await prisma.blogChannel.create({
-        data: { name, slug, description: description || null, templateDetailPreview: templateDetailPreview || null, templateSimplePreview: templateSimplePreview || null, templateArchiveEntry: templateArchiveEntry || null, templateReading: templateReading || null },
+        data: { name, slug, description: description || null, templateDetailPreview: templateDetailPreview || null, templateSimplePreview: templateSimplePreview || null, templateArchiveEntry: templateArchiveEntry || null, templateReading: templateReading || null, sortField: sortField ? String(sortField).trim() || null : null, sortDir: sortDir === 'asc' || sortDir === 'desc' ? sortDir : null },
       });
       return res.status(201).json(channel);
     }

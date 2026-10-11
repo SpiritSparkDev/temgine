@@ -125,7 +125,7 @@ export default function SettingsView({ showToast }) {
   };
 
   const handleSaveRetention = () => {
-    const n = parseInt(val('revisionRetentionDays', '7'), 10);
+    const n = parseInt(val('revisionRetentionDays', '30'), 10);
     if (isNaN(n) || n < 0) {
       showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
       return;
@@ -321,11 +321,11 @@ export default function SettingsView({ showToast }) {
 
             <Card
               title="Versionierung"
-              description="Wie lange alte Seitenversionen gespeichert bleiben. Ältere Versionen werden beim nächsten Speichern gelöscht. 0 = keine Aufbewahrung. Standard: 7 Tage; auch durch Wiederherstellung entstandene Versionen unterliegen der Frist."
+              description="Wie lange alte Seitenversionen gespeichert bleiben. Ältere Versionen werden beim nächsten Speichern gelöscht. 0 = keine Aufbewahrung. Standard: 30 Tage; auch durch Wiederherstellung entstandene Versionen unterliegen der Frist."
             >
               <Row label="Aufbewahrungsdauer (Tage)">
                 <div className="st-inline">
-                  <input type="number" min="0" className="st-input st-input-narrow" value={val('revisionRetentionDays', '7')} onChange={setVal('revisionRetentionDays')} />
+                  <input type="number" min="0" className="st-input st-input-narrow" value={val('revisionRetentionDays', '30')} onChange={setVal('revisionRetentionDays')} />
                   <SaveButton onClick={handleSaveRetention} saving={saving === 'retention'} />
                 </div>
               </Row>

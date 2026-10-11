@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import { renderTemplate } from '../lib/templateEngine'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydrateBlogChannels, hydratePage, useRerender } from '../lib/renderPipeline'
+import { withDateParts } from '../lib/blogPostQuery'
 import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
 
@@ -191,11 +192,11 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             if (tRes.ok) {
               const tData = await tRes.json()
               postHtml = renderTemplate(tData.code, {
-                ...post,
+                ...withDateParts(post),
                 channel,
                 channelUrl: `/${channel.slug}`,
                 postUrl: `/${channel.slug}/${post.slug}`,
-              })
+              }, { title: post.title }) // Titel als Text, nicht als Markdown (siehe hydrateBlogChannels)
             }
           }
           if (!postHtml) {
