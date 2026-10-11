@@ -8,18 +8,33 @@
  * - Optionally saves message to DB (controlled by Setting contactSaveToDb)
  */
 
+import Mustache from 'mustache';
 import { verifySolution } from 'altcha-lib/v1';
 import { rateLimit } from '../../lib/rateLimit';
 import { sendMail } from '../../lib/email';
 import { prisma } from '../../lib/prisma';
 import { ALTCHA_HMAC_KEY } from '../../lib/altcha';
+import { getTemplateByName } from '../../lib/templateStore';
+import { getContactEmailTemplate } from '../../lib/contactEmailTemplateStore';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 
 const META_FIELD_KEYS = new Set([
   'altcha', 'captcha', 'hcaptcha', 'g-recaptcha-response',
-  'recaptcha', 'csrf', 'csrfToken', '_csrf', '_method',
+  'recaptcha', 'csrf', 'csrfToken', '_csrf', '_method', '_cfTemplate',
 ]);
+
+// Rendert eine Admin-Email-Vorlage mit den (schon sanitisierten) Formularfeldern
+// als Mustache-Kontext — bei Syntaxfehlern in der Vorlage lieber auf den
+// generischen Text zurückfallen als den Versand ganz scheitern zu lassen.
+function renderEmailTemplatePart(tpl, context, fallback) {
+  if (!tpl) return fallback;
+  try {
+    return Mustache.render(String(tpl), context);
+  } catch (_e) {
+    return fallback;
+  }
+}
 
 const NAME_ALIASES = ['name', 'fullName', 'fullname', 'full_name'];
 const EMAIL_ALIASES = ['email', 'mail', 'e-mail', 'emailAddress', 'email_address'];
@@ -191,14 +206,40 @@ export default async function handler(req, res) {
   // Send email
   if (contactMailTo) {
     try {
-      const subjectLine = subject
+      const genericSubject = subject
         ? `${subjectPrefix ? subjectPrefix + ' ' : ''}${subject}`
         : `${subjectPrefix || 'Neue Kontaktanfrage von'} ${name}`;
+      const genericText = `Name: ${name}\nE-Mail: ${email}\n\n${message}`;
+      const genericHtml = `<p><strong>Name:</strong> ${name}<br><strong>E-Mail:</strong> ${email}</p><p>${message.replace(/\n/g, '<br>')}</p>`;
+
+      // Welches Kontaktformular-Template wurde abgesendet? (vom Renderer als
+      // verstecktes Feld eingefügt, siehe lib/templateEngine.js) — wenn dafür
+      // eine eigene Email-Vorlage hinterlegt ist, ersetzt sie Betreff/Text.
+      let subjectLine = genericSubject;
+      let textBody = genericText;
+      let htmlBody = genericHtml;
+      const cfTemplateName = typeof body._cfTemplate === 'string' ? body._cfTemplate.trim() : '';
+      if (cfTemplateName) {
+        const form = getTemplateByName(cfTemplateName);
+        if (form && form.category === 'contact') {
+          const emailTpl = getContactEmailTemplate(form.name);
+          if (emailTpl.subject || emailTpl.body) {
+            const mustacheContext = Object.fromEntries(formFields.map((f) => [f.key, f.value]));
+            subjectLine = renderEmailTemplatePart(emailTpl.subject, mustacheContext, genericSubject);
+            textBody = renderEmailTemplatePart(emailTpl.body, mustacheContext, genericText);
+            htmlBody = `<p>${textBody.replace(/\n/g, '<br>')}</p>`;
+          }
+        }
+      }
+
       await sendMail({
         to: contactMailTo,
-        subject: subjectLine,
-        text: `Name: ${name}\nE-Mail: ${email}\n\n${message}`,
-        html: `<p><strong>Name:</strong> ${name}<br><strong>E-Mail:</strong> ${email}</p><p>${message.replace(/\n/g, '<br>')}</p>`,
+        // Formularfelder dürfen Zeilenumbrüche enthalten — im Betreff würde
+        // das sonst als Header-Injection durchschlagen, egal ob Standard-
+        // oder individuelle Vorlage.
+        subject: subjectLine.replace(/[\r\n]+/g, ' ').trim(),
+        text: textBody,
+        html: htmlBody,
       });
       results.emailSent = true;
     } catch (e) {

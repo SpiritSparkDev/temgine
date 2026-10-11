@@ -1,6 +1,7 @@
 import { listTemplates, getTemplateByName, saveTemplate, deleteTemplateByName } from '../../../lib/templateStore'
 import { validatePreviewSubset } from '../../../lib/blogTemplateWorkflow'
 import { getUsedTemplateNames } from '../../../lib/templateUsage'
+import { deleteContactEmailTemplate } from '../../../lib/contactEmailTemplateStore'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -108,10 +109,14 @@ export default async function handler(req, res) {
         const [status, resp] = errorResponse(400, 'Name erforderlich', 'VALIDATION_ERROR', { missing: ['name'] });
         return res.status(status).json(resp);
       }
+      const existingForDelete = getTemplateByName(String(name))
       const deleted = deleteTemplateByName(String(name))
       if (!deleted) {
         const [status, resp] = errorResponse(404, 'Template nicht gefunden', 'TEMPLATE_NOT_FOUND');
         return res.status(status).json(resp);
+      }
+      if (existingForDelete?.category === 'contact') {
+        deleteContactEmailTemplate(existingForDelete.name)
       }
       return res.status(200).json({ ok: true })
     }

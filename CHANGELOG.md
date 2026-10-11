@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.42.0] - 2026-10-11
+
+### Added
+- Kontaktformulare: neuer Tab „E-Mail-Vorlage" pro Formular (neben dem bisherigen „Formular"-Tab) für Betreff und Text der Benachrichtigungs-Mail, mit Mustache-Platzhaltern wie `{{feldname}}`. Eine rechte Sidebar listet dabei automatisch alle Felder auf, die das Formular per `name="..."`-Attribut tatsächlich abfragt.
+- Der Formular-Versand (`/api/contact`) nutzt diese individuelle Vorlage jetzt tatsächlich: das Rendering markiert jedes ausgegebene Kontaktformular unsichtbar mit seinem Template-Namen (`lib/templateEngine.js`), damit die passende Vorlage beim Absenden gefunden wird. Ohne eigene Vorlage bleibt es bei der bisherigen generischen Benachrichtigungs-Mail. Bereits live stehende Seiten mit Kontaktformularen benötigen dafür einmalig „Live rendern", damit das neue Markierungsfeld in die ausgelieferte Seite übernommen wird.
+
+---
+
 ## [0.41.1] - 2026-10-11
 
 ### Fixed

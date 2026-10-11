@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Mail, ChevronRight, Sparkles } from '../lib/muiIcons';
+import { Plus, Trash2, Edit2, Check, X, Mail, ChevronRight, Sparkles, BookOpen } from '../lib/muiIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
+import { extractContactFormFields } from '../lib/contactFormFields';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -165,12 +166,20 @@ export default function ContactFormTemplatesView({ showToast }) {
   const [editing, setEditing] = useState(null); // { name, isNew }
   const [editName, setEditName] = useState('');
   const [editCode, setEditCode] = useState('');
+  const [editorTab, setEditorTab] = useState('form'); // 'form' | 'email'
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
   const [pendingPresetCss, setPendingPresetCss] = useState(null);
   const [pendingPresetLabel, setPendingPresetLabel] = useState('');
   const [showCssDialog, setShowCssDialog] = useState(false);
+
+  // Platzhalter, die dieses Formular tatsächlich abfragt — aus den
+  // name="..."-Attributen im Formular-Tab, damit die E-Mail-Vorlage keine
+  // Felder vergisst (und keine erfindet, die es gar nicht gibt).
+  const detectedFields = useMemo(() => extractContactFormFields(editCode), [editCode]);
 
   const loadList = useCallback(() => {
     setIsLoading(true);
@@ -191,6 +200,9 @@ export default function ContactFormTemplatesView({ showToast }) {
     setEditing({ isNew: true });
     setEditName('');
     setEditCode(BLANK_CODE);
+    setEditorTab('form');
+    setEmailSubject('');
+    setEmailBody('');
     setShowPresets(false);
   }
 
@@ -198,6 +210,9 @@ export default function ContactFormTemplatesView({ showToast }) {
     setEditing({ isNew: true });
     setEditName(preset.label);
     setEditCode(preset.code);
+    setEditorTab('form');
+    setEmailSubject('');
+    setEmailBody('');
     setShowPresets(false);
     if (preset.css) {
       setPendingPresetCss(preset.css);
@@ -237,12 +252,19 @@ export default function ContactFormTemplatesView({ showToast }) {
 
   function handleEdit(item) {
     setIsLoading(true);
-    fetch(`/api/templates?name=${encodeURIComponent(item.name)}`)
-      .then(r => r.json())
-      .then(data => {
+    setEditorTab('form');
+    Promise.all([
+      fetch(`/api/templates?name=${encodeURIComponent(item.name)}`).then(r => r.json()),
+      fetch(`/api/contact-forms/email-template?name=${encodeURIComponent(item.name)}`)
+        .then(r => r.ok ? r.json() : { subject: '', body: '' })
+        .catch(() => ({ subject: '', body: '' })),
+    ])
+      .then(([data, emailTpl]) => {
         setEditing({ name: data.name });
         setEditName(data.name);
         setEditCode(data.code);
+        setEmailSubject(emailTpl.subject || '');
+        setEmailBody(emailTpl.body || '');
       })
       .catch(err => showToast('Fehler beim Laden: ' + err.message, 'error'))
       .finally(() => setIsLoading(false));
@@ -252,6 +274,8 @@ export default function ContactFormTemplatesView({ showToast }) {
     setEditing(null);
     setEditName('');
     setEditCode('');
+    setEmailSubject('');
+    setEmailBody('');
   }
 
   async function handleSave() {
@@ -280,6 +304,21 @@ export default function ContactFormTemplatesView({ showToast }) {
         throw new Error(err.error || 'Unbekannter Fehler');
       }
       const saved = await res.json();
+
+      const emailRes = await fetch('/api/contact-forms/email-template', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: saved.name,
+          previousName: (!isNew && editing.name !== saved.name) ? editing.name : undefined,
+          subject: emailSubject,
+          body: emailBody,
+        }),
+      }).catch(() => null);
+      if (!emailRes || !emailRes.ok) {
+        showToast('Formular gespeichert, aber E-Mail-Vorlage konnte nicht gespeichert werden', 'error');
+      }
+
       showToast(`Kontaktformular "${editName.trim()}" gespeichert`, 'success');
       loadList();
       setEditing({ name: saved.name });
@@ -358,6 +397,7 @@ export default function ContactFormTemplatesView({ showToast }) {
 
         {/* ── Right: Editor panel ─────────────────────────────────────────── */}
         {editing ? (
+          <>
           <div className="nav-editor-panel">
             <div className="nav-editor-header">
               <input
@@ -377,18 +417,76 @@ export default function ContactFormTemplatesView({ showToast }) {
               </div>
             </div>
 
-            <div className="nav-editor-code" style={{ height: '60vh' }}>
-              <div className="nav-panel-label">HTML / Mustache-Template</div>
-              <div className="nav-monaco-wrap">
-                <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
-              </div>
+            <div style={{ display: 'flex', gap: '0.25rem', borderBottom: '2px solid var(--border-color)', padding: '0 1rem' }}>
+              <button style={editorTab === 'form' ? tabActive : tabBase} onClick={() => setEditorTab('form')}>Formular</button>
+              <button style={editorTab === 'email' ? tabActive : tabBase} onClick={() => setEditorTab('email')}>E-Mail-Vorlage</button>
             </div>
 
-            <div className="nav-placeholder-ref">
-              Sendet an <code>/api/contact</code>, per <code>/api/contact/challenge</code> gegen Spam per ALTCHA geschützt ·
-              wird über den Block-Template-Dropdown im Seiten-Editor auf einer Seite eingesetzt.
-            </div>
+            {editorTab === 'form' ? (
+              <>
+                <div className="nav-editor-code" style={{ height: '60vh' }}>
+                  <div className="nav-panel-label">HTML / Mustache-Template</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                  </div>
+                </div>
+
+                <div className="nav-placeholder-ref">
+                  Sendet an <code>/api/contact</code>, per <code>/api/contact/challenge</code> gegen Spam per ALTCHA geschützt ·
+                  wird über den Block-Template-Dropdown im Seiten-Editor auf einer Seite eingesetzt.
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <Field label="Betreff">
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={emailSubject}
+                    onChange={e => setEmailSubject(e.target.value)}
+                    placeholder="z. B. Neue Anfrage von {{name}}"
+                  />
+                </Field>
+                <Field label="Text">
+                  <textarea
+                    style={{ ...inputStyle, minHeight: '320px', resize: 'vertical', fontFamily: "'Consolas', 'SFMono-Regular', monospace", lineHeight: 1.5 }}
+                    value={emailBody}
+                    onChange={e => setEmailBody(e.target.value)}
+                    placeholder={'z. B.\nNeue Nachricht von {{name}} ({{email}}):\n\n{{nachricht}}'}
+                  />
+                </Field>
+                <p className="nav-placeholder-ref" style={{ margin: 0 }}>
+                  Wird beim Absenden dieses Formulars anstelle der Standard-Benachrichtigung verschickt · leer lassen,
+                  um bei der Standard-Mail (Einstellungen → SMTP-Einstellungen) zu bleiben.
+                </p>
+              </div>
+            )}
           </div>
+
+          {editorTab === 'email' && (
+            <aside className="pfv-help-panel">
+              <div className="pfv-help-heading"><BookOpen size={14} aria-hidden="true" /> Platzhalter aus dem Formular</div>
+              {detectedFields.length === 0 ? (
+                <p className="pfv-detected-empty">
+                  Keine benannten Felder im Formular-Tab gefunden. Ergänze z. B. <code>name="nachricht"</code> an einem Feld.
+                </p>
+              ) : (
+                <table className="pfv-detected-table"><tbody>
+                  {detectedFields.map(f => (
+                    <tr key={f.name}>
+                      <td><code>{`{{${f.name}}}`}</code></td>
+                      <td>{f.label}</td>
+                    </tr>
+                  ))}
+                </tbody></table>
+              )}
+              <p>
+                Diese Namen stammen aus den <code>name="..."</code>-Attributen im Formular-Tab — exakt das, was ein
+                Besucher abschickt. Im Betreff und Text links per <code>{'{{feldname}}'}</code> einsetzbar.
+              </p>
+            </aside>
+          )}
+          </>
         ) : (
           <div className="nav-editor-panel nav-editor-empty">
             <Mail size={40} strokeWidth={1} />
