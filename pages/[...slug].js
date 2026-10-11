@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderTemplate } from '../lib/templateEngine'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
-import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydrateBlogChannels, hydratePage, useRerender } from '../lib/renderPipeline'
+import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydratePage, useRerender } from '../lib/renderPipeline'
 import { withDateParts } from '../lib/blogPostQuery'
 import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -359,7 +359,6 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     const containerId = page?.data?.wrapperId || 'page-html-output'
     const container = document.getElementById(containerId)
     runInlineScripts(container)
-    hydrateBlogChannels(container)
     hydratePage(container, rerender)
   }, [html])
 

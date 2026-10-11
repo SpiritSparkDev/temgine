@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.41.1] - 2026-10-11
+
+### Fixed
+- **Kanal-Listen auf der Startseite blieben leer:** Die Startseite (`pages/index.js`) befüllte Kanal-Platzhalter nicht – nur Unterseiten taten das. `hydrateBlogChannels` läuft jetzt in `hydratePage` und damit auf allen Seiten (z. B. „Kommende Veranstaltungen“ in der Seitenleiste).
+
+---
+
 ## [0.41.0] - 2026-10-11
 
 ### Added
