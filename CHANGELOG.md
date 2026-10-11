@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.42.1] - 2026-10-11
+
+### Fixed
+- Kontaktformular-Markierung (`_cfTemplate`, siehe 0.42.0) wurde doppelt eingefügt, wenn das Formular-Template per `{{{inner}}}` in ein umschließendes Wrapper-Block-Template eingebettet ist — der Browser schickte dadurch beim Absenden ein Array statt eines einzelnen Namens, `/api/contact` fand darüber keine Vorlage mehr und fiel auf die Standard-Benachrichtigung zurück, obwohl eine individuelle E-Mail-Vorlage hinterlegt war. Die Markierung wird jetzt nur noch einmal gesetzt (am innersten Formular-Template, das die `<form>`-Tags tatsächlich ausgibt).
+
+---
+
 ## [0.42.0] - 2026-10-11
 
 ### Added
