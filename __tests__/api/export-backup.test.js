@@ -29,6 +29,10 @@ jest.mock('../../lib/uploadFolder', () => ({ listFolderItemsRecursive: jest.fn()
 jest.mock('../../lib/navTreeHelpers', () => ({ findRawPageNodeById: jest.fn() }));
 jest.mock('../../lib/globalVariables', () => ({ buildGlobalContext: jest.fn() }));
 
+jest.mock('../../lib/externFiles', () => ({
+  loadExternFiles: jest.fn((kind) => (kind === 'js' ? [{ filename: 'tnt.js', content: 'console.log(1)' }] : [])),
+}));
+
 const handler = require('../../pages/api/admin/export').default;
 
 function makeRes() {
@@ -87,5 +91,27 @@ describe('GET /api/admin/export (plain JSON)', () => {
     expect(backup.blogPosts).toHaveLength(1);
     expect(backup.pages).toEqual([]);
     expect(backup.snippets).toEqual([]);
+  });
+});
+
+describe('GET /api/admin/export — JavaScript-Dateien', () => {
+  test('default export includes the JS-Manager files', async () => {
+    const res = makeRes();
+    await handler(makeReq(), res);
+    const backup = getSentBackup(res);
+
+    expect(backup.metadata.filesIncluded).toContain('js');
+    expect(backup.js).toEqual([{ filename: 'tnt.js', content: 'console.log(1)' }]);
+    expect(backup.metadata.itemCounts.jsFiles).toBe(1);
+  });
+
+  test('categories without js exclude JS files and JS config', async () => {
+    const res = makeRes();
+    await handler(makeReq({ categories: 'css' }), res);
+    const backup = getSentBackup(res);
+
+    expect(backup.js).toEqual([]);
+    expect(backup.jsConfig).toBeNull();
+    expect(backup.metadata.itemCounts.jsFiles).toBe(0);
   });
 });

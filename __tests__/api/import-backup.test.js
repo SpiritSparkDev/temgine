@@ -65,6 +65,13 @@ jest.mock('fs', () => ({
   writeFileSync: jest.fn(),
 }));
 
+// CSS/JS-Manager-Dateien: echtes mergeExternConfig, Datei-Import nur beobachten
+const mockImportExternFiles = jest.fn().mockReturnValue({ imported: 0, errors: [], writtenFiles: [] });
+jest.mock('../../lib/externFiles', () => ({
+  ...jest.requireActual('../../lib/externFiles'),
+  importExternFiles: (...args) => mockImportExternFiles(...args),
+}));
+
 const handler = require('../../pages/api/admin/import').default;
 
 function makeRes() {
@@ -82,6 +89,7 @@ function makeReq(body, strategy = 'merge') {
 beforeEach(() => {
   jest.clearAllMocks();
   mockRequireAuth.mockResolvedValue({ authorized: true, user: { id: 'admin-1', role: 'ADMIN' } });
+  mockImportExternFiles.mockReturnValue({ imported: 0, errors: [], writtenFiles: [] });
   mockPrisma.blogChannel.upsert.mockImplementation(({ create }) => Promise.resolve({ id: `new-${create.slug}`, slug: create.slug }));
 });
 
@@ -193,6 +201,41 @@ describe('POST /api/admin/import — "Ersetzen" only wipes categories the backup
     expect(mockPrisma.snippet.deleteMany).not.toHaveBeenCalled();
     expect(mockPrisma.blogChannel.deleteMany).not.toHaveBeenCalled();
     expect(mockPrisma.blogPost.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/admin/import — JavaScript-Dateien (JS-Manager)', () => {
+  const jsCalls = () => mockImportExternFiles.mock.calls.filter(([kind]) => kind === 'js');
+
+  test('imports JS files and the JS config (incl. Consent-Kategorien)', async () => {
+    mockImportExternFiles.mockImplementation((kind, files) => ({ imported: files.length, errors: [], writtenFiles: files.map((f) => f.filename) }));
+    const fs = require('fs');
+    const body = {
+      metadata: { filesIncluded: ['js'] },
+      js: [{ filename: 'tnt.js', content: 'console.log(1)' }],
+      jsConfig: { disabled: [], categories: { 'extern_js/tnt.js': 'necessary' } },
+    };
+    const res = makeRes();
+    await handler(makeReq(body, 'replace'), res);
+
+    expect(jsCalls()).toEqual([['js', body.js, 'replace']]);
+    expect(res.json.mock.calls[0][0].importStats.js).toBe(1);
+    const configWrite = fs.writeFileSync.mock.calls.find(([file]) => String(file).endsWith('js-config.json'));
+    expect(JSON.parse(configWrite[1]).categories).toEqual({ 'extern_js/tnt.js': 'necessary' });
+  });
+
+  test('legacy backup without filesIncluded never wipes existing JS on "replace"', async () => {
+    const res = makeRes();
+    await handler(makeReq({ pages: [], snippets: [] }, 'replace'), res);
+
+    expect(jsCalls()).toEqual([['js', [], 'merge']]);
+  });
+
+  test('backup whose filesIncluded lacks "js" never wipes existing JS on "replace"', async () => {
+    const res = makeRes();
+    await handler(makeReq({ metadata: { filesIncluded: ['css'] }, css: [] }, 'replace'), res);
+
+    expect(jsCalls()).toEqual([['js', [], 'merge']]);
   });
 });
 

@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.44.0] - 2026-10-12
+
+### Added
+- **Projekttransfer: neue Kategorie „JavaScript-Dateien"** – Export und Import nehmen jetzt auch die Dateien des JS-Managers (`public/extern_js`) mit, samt Reihenfolge (`.order.json`), Aktivierungsstatus und Cookie-Kategorie je Script (`data/js-config.json`, im Backup als `js` und `jsConfig`, im Transfer-ZIP zusätzlich als Ordner `js/`). Bisher fehlten eigene Scripts nach einem Umzug komplett, oder sie liefen ohne ihre Kategorie erst nach Cookie-Zustimmung.
+- Ältere Backups bleiben sicher: Beim „Ersetzen" werden vorhandene Scripts nur gelöscht, wenn das Backup ausdrücklich JavaScript enthält (`filesIncluded` mit `js`). Backups ohne Kategorienliste würden sonst alle Scripts entfernen.
+- Der Import-Dialog nennt die enthaltenen Scripts mit Namen und weist darauf hin, dass sie nach dem Import auf der Website ausgeführt werden.
+- **Tests:** `__tests__/externFiles.test.js` (Reihenfolge, Merge/Ersetzen, Dateinamen, Zusammenführen der Konfiguration) sowie JS-Fälle in `export-backup.test.js`, `import-backup.test.js` und `backupCategories.test.js`.
+
+### Changed
+- CSS- und JS-Dateien für Export und Import laufen über ein gemeinsames Modul (`lib/externFiles.js`) statt über doppelte Logik in `export.js`/`import.js`. Das Verhalten für CSS ist unverändert.
+- Beim Import im Modus „Zusammenführen" werden Cookie-Kategorien pro Script zusammengeführt (importierte Einträge gewinnen), statt die bestehenden Kategorien komplett zu ersetzen.
+
+---
+
 ## [0.43.0] - 2026-10-12
 
 ### Added

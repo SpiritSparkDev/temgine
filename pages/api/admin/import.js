@@ -5,6 +5,7 @@ import { listTemplates, saveTemplate, deleteTemplateByName } from '../../../lib/
 import { listNavigations, saveNavigation, deleteNavigation } from '../../../lib/navigationStore'
 import { listFooters, saveFooter, deleteFooter } from '../../../lib/footerStore'
 import { MAINTENANCE_PAGES, saveMaintenanceField } from '../../../lib/maintenanceStore'
+import { importExternFiles, mergeExternConfig } from '../../../lib/externFiles'
 import fs from 'fs'
 import path from 'path'
 
@@ -19,88 +20,13 @@ export const config = {
   },
 }
 
-function normalizeCssFilename(input, fallback = 'style.css') {
-  const raw = String(input || '').trim();
-  const base = path.basename(raw || fallback).replace(/[^A-Za-z0-9._-]/g, '_');
-  const withExt = base.toLowerCase().endsWith('.css') ? base : `${base}.css`;
-  const finalName = withExt === '.css' ? fallback : withExt;
-  return finalName;
+// CSS- und JS-Dateien des CSS-/JS-Managers: gemeinsame Logik in lib/externFiles.js
+async function importCSSFiles(cssFiles = [], strategy = 'merge') {
+  return importExternFiles('css', cssFiles, strategy)
 }
 
-async function importCSSFiles(cssFiles = [], strategy = 'merge') {
-  const cssDir = path.join(process.cwd(), 'public', 'extern_css')
-  if (!fs.existsSync(cssDir)) fs.mkdirSync(cssDir, { recursive: true })
-
-  const result = {
-    imported: 0,
-    errors: [],
-    writtenFiles: []
-  }
-
-  // If replace strategy: delete all existing CSS files
-  if (strategy === 'replace') {
-    try {
-      const allFiles = fs.readdirSync(cssDir).filter(f => f.endsWith('.css'))
-      for (const file of allFiles) {
-        fs.unlinkSync(path.join(cssDir, file))
-      }
-      // Also delete .order.json
-      const orderPath = path.join(cssDir, '.order.json')
-      if (fs.existsSync(orderPath)) fs.unlinkSync(orderPath)
-    } catch (e) {
-      console.warn('Failed to delete old CSS files:', e.message)
-      result.errors.push(`Vorhandene CSS-Dateien konnten nicht vollständig gelöscht werden: ${e.message}`)
-    }
-  }
-
-  // Write new CSS files
-  const newFilenames = []
-  const usedNames = new Set()
-  for (const file of cssFiles) {
-    const rawName = file?.filename || file?.name || file?.file || ''
-    let filename = normalizeCssFilename(rawName, 'style.css')
-    if (usedNames.has(filename)) {
-      const stem = filename.replace(/\.css$/i, '')
-      let i = 2
-      while (usedNames.has(`${stem}-${i}.css`)) i++
-      filename = `${stem}-${i}.css`
-    }
-    usedNames.add(filename)
-    const content = file.content || ''
-    const filePath = path.join(cssDir, filename)
-    if (!path.resolve(filePath).startsWith(path.resolve(cssDir))) {
-      result.errors.push(`Ungültiger CSS-Dateiname übersprungen: ${rawName || '(leer)'}`)
-      continue
-    }
-    try {
-      fs.writeFileSync(filePath, content, 'utf-8')
-      newFilenames.push(filename)
-      result.imported++
-      result.writtenFiles.push(filename)
-    } catch (e) {
-      console.warn(`Failed to write CSS file ${filename}:`, e.message)
-      result.errors.push(`CSS-Datei "${filename}" konnte nicht geschrieben werden: ${e.message}`)
-    }
-  }
-
-  // Update .order.json — merge with existing order so non-imported files keep their position
-  if (newFilenames.length > 0) {
-    try {
-      const orderPath = path.join(cssDir, '.order.json')
-      let existingOrder = []
-      if (strategy === 'merge' && fs.existsSync(orderPath)) {
-        try { existingOrder = JSON.parse(fs.readFileSync(orderPath, 'utf-8')).order || [] } catch (e) {}
-      }
-      // Append new filenames that aren't already in the order
-      const merged = [...existingOrder, ...newFilenames.filter(f => !existingOrder.includes(f))]
-      fs.writeFileSync(orderPath, JSON.stringify({ order: merged }, null, 2), 'utf-8')
-    } catch (e) {
-      console.warn('Failed to write .order.json:', e.message)
-      result.errors.push(`CSS-Reihenfolge (.order.json) konnte nicht aktualisiert werden: ${e.message}`)
-    }
-  }
-
-  return result
+async function importJSFiles(jsFiles = [], strategy = 'merge') {
+  return importExternFiles('js', jsFiles, strategy)
 }
 
 function importJsonConfig(filename, data, strategy = 'merge') {
@@ -112,12 +38,9 @@ function importJsonConfig(filename, data, strategy = 'merge') {
 
     if (strategy === 'merge' && fs.existsSync(filePath)) {
       // Merge: combine disabled arrays, keeping unique entries
+      // Merge: disabled als Vereinigung, categories (JS-Consent) pro Datei
       const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-      const merged = Array.from(new Set([
-        ...(Array.isArray(existing.disabled) ? existing.disabled : []),
-        ...(Array.isArray(data.disabled) ? data.disabled : [])
-      ]))
-      fs.writeFileSync(filePath, JSON.stringify({ ...existing, ...data, disabled: merged }, null, 2), 'utf-8')
+      fs.writeFileSync(filePath, JSON.stringify(mergeExternConfig(existing, data), null, 2), 'utf-8')
     } else {
       // Replace: write as-is
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
@@ -544,7 +467,7 @@ export default async function handler(req, res) {
     }
 
     const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], blogChannels: body.blogChannels || [], blogPosts: body.blogPosts || [], css: body.css || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
+    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], blogChannels: body.blogChannels || [], blogPosts: body.blogPosts || [], css: body.css || [], js: body.js || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
 
     const templates = Array.isArray(backup.templates) ? backup.templates : []
     const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
@@ -552,6 +475,7 @@ export default async function handler(req, res) {
     const blogChannels = Array.isArray(backup.blogChannels) ? backup.blogChannels : []
     const blogPosts = Array.isArray(backup.blogPosts) ? backup.blogPosts : []
     const css = Array.isArray(backup.css) ? backup.css : []
+    const js = Array.isArray(backup.js) ? backup.js : []
     const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
     const globalVariables = Array.isArray(backup.globalVariables) ? backup.globalVariables : []
     const footers = Array.isArray(backup.footers) ? backup.footers : []
@@ -559,6 +483,7 @@ export default async function handler(req, res) {
     const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
     const uploadedFiles = Array.isArray(backup.uploadedFiles) ? backup.uploadedFiles : []
     const cssConfig = backup.cssConfig || null
+    const jsConfig = backup.jsConfig || null
     const fontsConfig = backup.fontsConfig || null
 
     // Backups now let the admin pick exactly which categories to include (see
@@ -577,8 +502,12 @@ export default async function handler(req, res) {
     const pagesStrategy = strategyFor('pages')
     const snippetsStrategy = strategyFor('snippets')
     const blogStrategy = strategyFor('blog')
+    // JS gibt es erst seit 0.44.0 im Backup. Ältere Backups ohne filesIncluded würden
+    // über strategyFor() bei "Ersetzen" sonst alle vorhandenen Scripts löschen —
+    // daher hier nur ersetzen, wenn das Backup JS ausdrücklich mitbringt.
+    const jsStrategy = (filesIncluded && filesIncluded.has('js')) ? strategy : 'merge'
 
-    let importStats = { templates: 0, snippets: 0, pages: 0, blogChannels: 0, blogPosts: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
+    let importStats = { templates: 0, snippets: 0, pages: 0, blogChannels: 0, blogPosts: 0, css: 0, js: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
 
     // Handle replace strategy for database records
     if (strategy === 'replace') {
@@ -710,6 +639,15 @@ export default async function handler(req, res) {
       importStats.errors.push(`CSS import failed: ${e.message}`)
     }
 
+    // Import JS files (JS-Manager)
+    try {
+      const jsResult = await importJSFiles(js, jsStrategy)
+      importStats.js = jsResult.imported
+      if (jsResult.errors.length > 0) importStats.errors.push(...jsResult.errors)
+    } catch (e) {
+      importStats.errors.push(`JS import failed: ${e.message}`)
+    }
+
     // Import navigations
     try {
       const navResult = await importNavigations(navigations, strategyFor('navigations'))
@@ -776,6 +714,15 @@ export default async function handler(req, res) {
       }
     }
 
+    // Restore JS enabled/disabled + Consent-Kategorien
+    if (jsConfig) {
+      try {
+        importJsonConfig('js-config.json', jsConfig, jsStrategy)
+      } catch (e) {
+        importStats.errors.push(`JS-Config import failed: ${e.message}`)
+      }
+    }
+
     // Restore Fonts enabled/disabled config
     if (fontsConfig) {
       try {
@@ -789,7 +736,7 @@ export default async function handler(req, res) {
       ok: true,
       strategy,
       importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.blogChannels} blog channels, ${importStats.blogPosts} blog posts, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.blogChannels} blog channels, ${importStats.blogPosts} blog posts, ${importStats.css} CSS files, ${importStats.js} JS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
     })
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)

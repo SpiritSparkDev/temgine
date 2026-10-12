@@ -15,6 +15,10 @@ describe('BACKUP_CATEGORIES', () => {
   test('includes the new blog category', () => {
     expect(BACKUP_CATEGORY_KEYS).toContain('blog');
   });
+
+  test('includes the JavaScript category (JS-Manager, since 0.44.0)', () => {
+    expect(BACKUP_CATEGORY_KEYS).toContain('js');
+  });
 });
 
 describe('parseBackupCategories', () => {

@@ -304,15 +304,20 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         blogChannels: data.blogChannels?.length || 0,
         blogPosts: data.blogPosts?.length || 0,
         cssFiles: data.css?.length || 0,
+        jsFiles: data.js?.length || 0,
         navigations: data.navigations?.length || 0,
         globalVariables: data.globalVariables?.length || 0,
         footers: data.footers?.length || 0,
         uploadedFiles: data.uploadedFiles?.length || 0,
         cssConfig: data.cssConfig ? 1 : 0,
+        jsConfig: data.jsConfig ? 1 : 0,
         fontsConfig: data.fontsConfig ? 1 : 0
       }
 
       const filesIncluded = Array.isArray(data.metadata?.filesIncluded) ? data.metadata.filesIncluded : null
+      // Importiertes JavaScript läuft danach auf der Website — Dateinamen ausdrücklich nennen
+      const jsNames = Array.isArray(data.js) ? data.js.map((f) => f?.filename).filter(Boolean) : []
+      const jsCount = itemCounts.jsFiles ?? jsNames.length
       const includedLabel = filesIncluded
         ? BACKUP_CATEGORIES.filter((c) => filesIncluded.includes(c.key)).map((c) => c.label).join(', ')
         : null
@@ -323,11 +328,13 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 • ${itemCounts.pages} Seiten
 • ${itemCounts.blogChannels || 0} Blog-Channels, ${itemCounts.blogPosts || 0} Blog-Beiträge
 • ${itemCounts.cssFiles} CSS-Dateien
+• ${jsCount || 0} JavaScript-Dateien${jsNames.length ? ` (${jsNames.join(', ')}) – werden nach dem Import auf der Website ausgeführt` : ''}
 • ${itemCounts.navigations} Navigationen
 • ${itemCounts.globalVariables} Globale Variablen
 • ${itemCounts.footers} Footer
 • ${itemCounts.uploadedFiles} Upload-Dateien
 • CSS-Aktivierungsstatus: ${itemCounts.cssConfig ? 'enthalten' : 'nicht enthalten'}
+• JS-Aktivierungsstatus & Cookie-Kategorien: ${itemCounts.jsConfig ? 'enthalten' : 'nicht enthalten'}
 • Font-Aktivierungsstatus: ${itemCounts.fontsConfig ? 'enthalten' : 'nicht enthalten'}
 
 ${restoreStrategy === 'replace' ? (
