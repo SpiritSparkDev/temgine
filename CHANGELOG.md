@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.44.1] - 2026-10-12
+
+### Fixed
+- **Import großer Projekttransfer-ZIPs** (z. B. mit Videos in den Uploads) brach mit einem Fehler zur String-Länge ab. Der Browser las bisher jede Upload-Datei als Base64 in einen einzigen JSON-String, der dann an `/api/admin/import` ging – ab einigen hundert MB scheiterte das an der maximalen String-Länge von Browser bzw. Node. Jetzt schickt der Browser die ZIP-Datei unverändert an den neuen Endpunkt `/api/admin/import-zip`, der sie serverseitig entpackt und die Upload-Dateien einzeln als Binärdaten schreibt (Obergrenze 2 GB). Der Bestätigungsdialog liest aus der ZIP nur noch das Manifest. JSON-Backups laufen unverändert über `/api/admin/import`.
+
+### Changed
+- Die Importlogik liegt jetzt in `runImport()` (`pages/api/admin/import.js`) und wird von JSON- und ZIP-Import gemeinsam genutzt. Upload-Dateien können als Base64/Text oder als Binärdaten (`getBuffer()`) übergeben werden.
+- **Tests:** `__tests__/api/import-zip.test.js` neu (Entpacken, Binärdaten, Strategie, Fehlerfälle, Größenlimit), dazu ein Binärdaten-Fall in `import-backup.test.js`.
+
+---
+
 ## [0.44.0] - 2026-10-12
 
 ### Added

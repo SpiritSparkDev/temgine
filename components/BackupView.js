@@ -246,6 +246,10 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   }
 
   // Import backup from file
+  // Liest aus einer Projekttransfer-ZIP nur das Manifest (für den Bestätigungsdialog)
+  // und zählt die Upload-Dateien. Die Dateien selbst entpackt erst der Server
+  // (/api/admin/import-zip) – früher landeten sie hier als Base64 in einem einzigen
+  // JSON-String, was bei großen Uploads (z. B. Videos) an der String-Länge scheiterte.
   const readZipBackup = async (file) => {
     const zip = await JSZip.loadAsync(await file.arrayBuffer())
     const jsonEntries = Object.keys(zip.files).filter(name => name.toLowerCase().endsWith('.json'))
@@ -257,32 +261,9 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       throw new Error('Static Site ZIPs können nicht importiert werden')
     }
 
-    const entries = Object.values(zip.files)
-    const uploadFiles = []
-    const uploadFonts = []
-
-    for (const entry of entries) {
-      if (!entry || entry.dir) continue
-      const name = String(entry.name || '')
-      if (name.startsWith('uploads-fonts/')) {
-        const relPath = name.replace(/^uploads-fonts\//, '')
-        const fileContent = await entry.async('base64')
-        uploadFonts.push({ path: relPath, encoding: 'base64', content: fileContent })
-      }
-      if (name.startsWith('uploads/')) {
-        const relPath = name.replace(/^uploads\//, '')
-        const fileContent = await entry.async('base64')
-        uploadFiles.push({ path: relPath, encoding: 'base64', content: fileContent })
-      }
-    }
-
-    if (uploadFonts.length > 0) {
-      data.uploadFonts = uploadFonts
-    }
-    if (uploadFiles.length > 0) {
-      data.uploadedFiles = uploadFiles
-    }
-
+    const files = Object.values(zip.files).filter((entry) => entry && !entry.dir)
+    data.uploadedFilesCount = files.filter((entry) => String(entry.name).startsWith('uploads/')).length
+    data.uploadFontsCount = files.filter((entry) => String(entry.name).startsWith('uploads-fonts/')).length
     return data
   }
 
@@ -292,7 +273,8 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
 
     setImporting(true)
     try {
-      const data = file.name.toLowerCase().endsWith('.zip')
+      const isZip = file.name.toLowerCase().endsWith('.zip')
+      const data = isZip
         ? await readZipBackup(file)
         : JSON.parse(await file.text())
 
@@ -308,7 +290,7 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
         navigations: data.navigations?.length || 0,
         globalVariables: data.globalVariables?.length || 0,
         footers: data.footers?.length || 0,
-        uploadedFiles: data.uploadedFiles?.length || 0,
+        uploadedFiles: data.uploadedFilesCount ?? data.uploadedFiles?.length ?? 0,
         cssConfig: data.cssConfig ? 1 : 0,
         jsConfig: data.jsConfig ? 1 : 0,
         fontsConfig: data.fontsConfig ? 1 : 0
@@ -354,10 +336,13 @@ ${restoreStrategy === 'replace' ? (
             status: 'running'
           })
           try {
-            const responseText = await xhrRequest(`/api/admin/import?strategy=${restoreStrategy}`, {
+            // ZIP: Datei unverändert an den Server, der sie selbst entpackt.
+            // JSON: wie bisher als JSON-Body.
+            const responseText = await xhrRequest(
+              isZip ? `/api/admin/import-zip?strategy=${restoreStrategy}` : `/api/admin/import?strategy=${restoreStrategy}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data),
+              headers: { 'Content-Type': isZip ? 'application/zip' : 'application/json' },
+              body: isZip ? file : JSON.stringify(data),
               onUploadProgress: (percent) => setProgressModal(m => m && { ...m, percent }),
               onProcessing: () => setProgressModal(m => m && { ...m, percent: null, subtitle: 'Wird verarbeitet…' })
             })

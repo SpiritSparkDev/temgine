@@ -204,6 +204,26 @@ describe('POST /api/admin/import — "Ersetzen" only wipes categories the backup
   });
 });
 
+describe('runImport — Upload-Dateien als Binärdaten (ZIP-Import)', () => {
+  test('writes getBuffer() content as-is, alongside classic base64 items', async () => {
+    const fs = require('fs');
+    const { runImport } = require('../../pages/api/admin/import');
+    const video = Buffer.from([0x00, 0x01, 0xfe, 0xff]);
+    const result = await runImport({
+      metadata: { filesIncluded: ['uploadedFiles'] },
+      uploadedFiles: [
+        { path: 'tnt/video/teaser.mp4', getBuffer: async () => video },
+        { path: 'img/logo.txt', encoding: 'base64', content: Buffer.from('hallo').toString('base64') },
+      ],
+    }, 'merge');
+
+    expect(result.importStats.uploadedFiles).toBe(2);
+    const written = (suffix) => fs.writeFileSync.mock.calls.find(([file]) => String(file).endsWith(suffix))[1];
+    expect(Buffer.compare(written('teaser.mp4'), video)).toBe(0);
+    expect(written('logo.txt').toString()).toBe('hallo');
+  });
+});
+
 describe('POST /api/admin/import — JavaScript-Dateien (JS-Manager)', () => {
   const jsCalls = () => mockImportExternFiles.mock.calls.filter(([kind]) => kind === 'js');
 
