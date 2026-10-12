@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.44.2] - 2026-10-12
+
+### Fixed
+- **Zufällig fehlschlagende Tests** (`appExternJs`, `wysiwygRichTextEditor`, je nach Verteilung auch andere React-Tests): jsdom kennt kein `setImmediate`. Lud ein Test Next-Serverinterna, merkte sich Next `undefined` als originales `setImmediate` und patchte das Node-Modul `timers`, das sich alle Testdateien eines Jest-Workers teilen – jeder spätere React-Test im selben Worker stürzte dann in `act()` mit „Cannot read properties of undefined (reading 'apply')" ab. Neue `jest.setup.js` (`setupFiles` in `jest.config.cjs`) gibt jsdom das echte `setImmediate`/`clearImmediate` aus Node.
+- **Tests:** `__tests__/jestSetup.test.js` prüft genau diesen Fall (schlägt ohne den Fix deterministisch fehl).
+
+---
+
 ## [0.44.1] - 2026-10-12
 
 ### Fixed
