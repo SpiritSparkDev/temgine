@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.44.3] - 2026-10-12
+
+### Fixed
+- **Seitenbaum speichern:** Neue, noch nie gespeicherte Top-Level-Seiten mit gleich benannten Unterseiten (z. B. „Team A › lydia" und „Team B › lydia") wurden mit „Slug mehrfach unter derselben übergeordneten Seite" abgelehnt. `walkAll` (`lib/pageTreeRepair.js`) bildete den Eltern-Schlüssel aus der id der Top-Level-Seite – ohne id wurde daraus für alle neuen Seiten `undefined::…`. Jetzt zählt ihre Position im Baum. Betrifft auch das Reparatur-Werkzeug.
+- **Testsuite wieder vollständig grün.** `page-save` und `pages-slots` ließen sich seit 0.41.0 nicht mehr laden: `sanitize-html` hängt an `htmlparser2` ab Version 12 (nur ESM), `lib/auth` und `lib/pageAccess` laden über `next-auth` das reine ESM-Paket `jose` – beides kann Jest (CommonJS) nicht laden. Beide Tests ersetzen diese Module jetzt wie die übrigen API-Tests. `templates` braucht seit 0.41.0 die Datenbank (`lib/templateUsage.js`) und bekommt dafür eine Prisma-Attrappe. Dabei kam der Seitenbaum-Fehler oben ans Licht.
+- **Tests:** `__tests__/pageTreeRepair.test.js` neu (Kollisionen nur unter derselben Elternseite, auch ohne ids).
+
+---
+
 ## [0.44.2] - 2026-10-12
 
 ### Fixed
