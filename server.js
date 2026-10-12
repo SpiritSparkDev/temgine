@@ -116,9 +116,38 @@ function getContentType(filePath) {
     '.xml': 'application/xml; charset=utf-8',
     '.html': 'text/html; charset=utf-8',
     '.map': 'application/json; charset=utf-8',
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogv': 'video/ogg',
+    '.mov': 'video/quicktime',
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.wav': 'audio/wav',
+    '.avif': 'image/avif',
   };
 
   return typeMap[ext] || 'application/octet-stream';
+}
+
+// Wertet einen einzelnen "Range: bytes=start-end"-Header aus (auch "start-" und
+// "-suffix"). Liefert { start, end } oder null bei fehlendem/mehrteiligem Header,
+// bzw. 'invalid', wenn der Bereich außerhalb der Datei liegt.
+function parseByteRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || '').trim());
+  if (!match || (match[1] === '' && match[2] === '')) return null;
+  let start;
+  let end;
+  if (match[1] === '') {
+    start = Math.max(0, size - Number(match[2]));
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+  if (start > end || start >= size) return 'invalid';
+  return { start, end };
 }
 
 function servePublicStaticAsset(req, res) {
@@ -133,7 +162,8 @@ function servePublicStaticAsset(req, res) {
 
   try {
     const assetPath = resolvePublicAssetPath(rawUrl);
-    if (!fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
+    const stat = fs.existsSync(assetPath) ? fs.statSync(assetPath) : null;
+    if (!stat || !stat.isFile()) {
       res.statusCode = 404;
       res.end('Not Found');
       return true;
@@ -141,6 +171,28 @@ function servePublicStaticAsset(req, res) {
 
     res.setHeader('Content-Type', getContentType(assetPath));
     res.setHeader('Cache-Control', 'public, max-age=3600, immutable');
+    // Byte-Ranges: Safari/iOS spielen Video/Audio nur ab, wenn der Server 206-Teilantworten liefert.
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    const isHead = String(req.method || 'GET').toUpperCase() === 'HEAD';
+    const range = parseByteRange(req.headers && req.headers.range, stat.size);
+    if (range === 'invalid') {
+      res.statusCode = 416;
+      res.setHeader('Content-Range', `bytes */${stat.size}`);
+      res.end();
+      return true;
+    }
+    if (range) {
+      res.statusCode = 206;
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${stat.size}`);
+      res.setHeader('Content-Length', range.end - range.start + 1);
+      if (isHead) { res.end(); return true; }
+      fs.createReadStream(assetPath, { start: range.start, end: range.end }).pipe(res);
+      return true;
+    }
+
+    res.setHeader('Content-Length', stat.size);
+    if (isHead) { res.end(); return true; }
     fs.createReadStream(assetPath).pipe(res);
     return true;
   } catch (_e) {
@@ -154,6 +206,7 @@ module.exports = {
   isPublicStaticAssetPath,
   resolvePublicAssetPath,
   getContentType,
+  parseByteRange,
   servePublicStaticAsset,
 };
 

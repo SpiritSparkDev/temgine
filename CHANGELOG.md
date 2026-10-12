@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.43.0] - 2026-10-12
+
+### Added
+- Statische Auslieferung (`server.js`): Byte-Range-Anfragen werden unterstützt (`206 Partial Content`, `Accept-Ranges`, `Content-Range`, `416` bei ungültigem Bereich, `HEAD` ohne Body). Safari/iOS spielen Videos aus `/uploads` sonst nicht ab.
+- Statische Auslieferung: eigene Content-Types für Video und Audio (`.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`, `.mp3`, `.m4a`, `.ogg`, `.wav`) sowie `.avif`. Bisher gingen diese Dateien als `application/octet-stream` raus, was Browser zusammen mit `X-Content-Type-Options: nosniff` in Produktion als Video blockieren.
+- **Tests:** `__tests__/publicStaticAsset.test.js` prüft die neuen Content-Types und das Auswerten von Range-Headern (`parseByteRange`).
+
+### Changed
+- `/api/css` und `/api/js` hängen an `href` die Änderungszeit der Datei als `?v=…` an (`lib/assetVersion.js`). `/extern_css` und `/extern_js` werden mit `max-age=3600, immutable` ausgeliefert – ohne Versions-Parameter sahen Besucher Änderungen an Stylesheets/Scripts bis zu eine Stunde lang nicht. CSS- und JS-Manager zeigen die Adresse weiterhin ohne Parameter an.
+
+---
+
 ## [0.42.1] - 2026-10-11
 
 ### Fixed

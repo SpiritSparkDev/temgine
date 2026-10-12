@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { versionedHref } from '../../lib/assetVersion';
 import formidable from 'formidable';
 import { requireAuth } from '../../lib/auth';
 
@@ -84,7 +85,7 @@ function buildOrderedExternFiles(disabled, categories) {
     id: `extern_js/${name}`,
     name,
     source: 'extern_js',
-    href: `/extern_js/${name}`,
+    href: versionedHref(`/extern_js/${name}`, path.join(JS_DIR, name)),
     enabled: !disabled.has(`extern_js/${name}`),
     category: categories[`extern_js/${name}`] || null,
   }));
