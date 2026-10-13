@@ -714,7 +714,13 @@
 
 .block-fields-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* War früher repeat(3, 1fr) — passend für den damals breiten, festen
+     Inspektor. Seit dem Umbau auf die permanente Split-Vorschau (siehe
+     lib/useSplitPaneRatio.js) ist das Felder-Panel standardmäßig nur noch
+     ~25% der Breite und kann bis auf 15% verstellt werden — drei starre
+     Spalten quetschten Text-Inputs dort auf wenige Pixel zusammen. Fällt
+     jetzt automatisch auf 2 bzw. 1 Spalte zurück, je nach verfügbarem Platz. */
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -743,7 +749,7 @@
 
 .field-group-inner {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 6px;
 }
 

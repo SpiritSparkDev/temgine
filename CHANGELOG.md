@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.49.1] - 2026-10-13
+
+### Fixed
+- `.block-fields-grid`/`.field-group-inner` im Seiten-Editor erzwangen eine feste Spaltenzahl (3 bzw. 2) — passend für den früheren, breiten festen Inspektor. Seit dem Umbau auf die permanente Split-Vorschau ist das Felder-Panel standardmäßig nur noch ~25% der Breite (und bis auf 15% verstellbar), wodurch Text-Inputs dort auf wenige Pixel zusammengequetscht wurden. Fällt jetzt per `repeat(auto-fit, minmax(120px, 1fr))` automatisch auf so viele Spalten zurück, wie tatsächlich Platz ist.
+
+---
+
 ## [0.49.0] - 2026-10-13
 
 ### Added
