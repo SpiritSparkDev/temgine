@@ -1,10 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal } from '../lib/muiIcons';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
 import { formatFieldLabel, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import SeoPanel from './SeoPanel';
+import { renderTemplate } from '../lib/templateEngine';
+import { withDateParts } from '../lib/blogPostQuery';
+import { loadGlobalVars } from '../lib/renderPipeline';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
@@ -21,6 +26,16 @@ const slugify = (v) =>
     .replace(/-+/g, '-');
 
 export default function BlogPostEditor({ post, channelSlug, channelName, onSave, onBack, readingTemplateCode }) {
+  // Content-Editor nimmt den ganzen Bildschirm ein, Vorschau+Felder im
+  // permanenten Split — siehe lib/useContentEditorFullscreen.js /
+  // lib/useSplitPaneRatio.js (gleiches Muster wie PageEditor.js).
+  useContentEditorFullscreen();
+  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('blog-split-ratio', 75);
+  const [rightPanelTab, setRightPanelTab] = useState('felder');
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [enabledCssFiles, setEnabledCssFiles] = useState([]);
+  const [globalVars, setGlobalVars] = useState({});
+
   const richTextEditorMode = useRichTextEditorMode();
   const [title, setTitle]           = useState(post?.title ?? '');
   const [slug, setSlug]             = useState(post?.slug ?? '');
@@ -74,6 +89,55 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
   function setRepeaterRows(sectionName, rows) {
     setTemplateData(prev => ({ ...prev, [sectionName]: rows }));
   }
+
+  // Aktivierte CSS-Dateien und globale Variablen für die Live-Vorschau — wie
+  // in PageEditor.js (siehe dort buildSplitPreviewHtml) einmalig geladen.
+  useEffect(() => {
+    fetch('/api/css')
+      .then(r => r.json())
+      .then(data => setEnabledCssFiles((data.files || []).filter(f => f.enabled !== false)))
+      .catch(() => {});
+    loadGlobalVars().then(setGlobalVars);
+  }, []);
+
+  // Rendert das Lese-Template mit denselben Daten wie die öffentliche Beitragsseite
+  // (siehe pages/[...slug].js) — inkl. {{global.x}}, damit die Vorschau Render-Parität
+  // zur echten Seite hat. Eigene Felder (templateData) überschreiben Basis-Felder
+  // gleichen Namens, genau wie /api/blog/public/.../... es für den Live-Betrieb tut.
+  function buildPreviewHtml() {
+    try {
+      if (!readingTemplateCode) {
+        return '<!DOCTYPE html><html><body><p style="padding:16px;color:#888;font-family:sans-serif">Kein Lese-Template für diesen Kanal hinterlegt.</p></body></html>';
+      }
+      const mergedPost = {
+        ...(post || {}),
+        title, slug, excerpt, body, coverImage, author, status,
+        publishAt: publishAt || null,
+        ...templateData,
+      };
+      const rendered = renderTemplate(readingTemplateCode, {
+        ...withDateParts(mergedPost),
+        channel: { slug: channelSlug, name: channelName },
+        channelUrl: `/${channelSlug}`,
+        postUrl: `/${channelSlug}/${slug || 'beitrag'}`,
+        global: globalVars,
+      }, { title }); // Titel als Text, nicht als Markdown (siehe hydrateBlogChannels)
+
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title || 'Vorschau'}</title>\n${cssLinkTags}</head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildPreviewHtml (Blog) failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewHtml(buildPreviewHtml()), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, slug, excerpt, body, coverImage, author, status, publishAt, templateData, readingTemplateCode, enabledCssFiles, globalVars, channelSlug, channelName]);
 
   function validate() {
     const errs = {};
@@ -143,8 +207,37 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
       {/* Editor body */}
       <div className="blog-editor-body">
         <form id="blog-post-form" onSubmit={handleSubmit}>
-          <div className="blog-editor-layout">
+          <div
+            ref={workspaceRef}
+            className="page-editor-workspace workspace-split"
+            style={{ '--pe-split-left': `${splitRatio}%` }}
+          >
+            <div className="page-editor-right-tabs">
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'felder' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('felder')}
+              >
+                Felder
+              </button>
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'beitrag' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('beitrag')}
+              >
+                Beitrag
+              </button>
+            </div>
+            <div
+              className="page-split-divider"
+              onMouseDown={startSplitDrag}
+              onTouchStart={startSplitDrag}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Breite von Vorschau und Feldern verstellen"
+            />
 
+            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'felder' ? 'none' : undefined }}>
             {/* ── Main column ── */}
             <div className="blog-editor-main">
 
@@ -274,7 +367,9 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                 );
               })}
             </div>
+            </div>
 
+            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'beitrag' ? 'none' : undefined }}>
             {/* ── Sidebar ── */}
             <div className="blog-editor-sidebar">
 
@@ -370,7 +465,25 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                 slug={channelSlug ? `${channelSlug}/${slug}` : slug}
               />
             </div>
+            </div>
 
+            <div className="page-split-preview">
+              <div className="page-split-preview-head">
+                <span className="page-split-preview-label">Live-Vorschau</span>
+                <button
+                  type="button"
+                  className="btn-modern-small hollow"
+                  onClick={() => setPreviewHtml(buildPreviewHtml())}
+                  title="Vorschau aktualisieren"
+                >↻</button>
+              </div>
+              <iframe
+                srcDoc={previewHtml}
+                sandbox="allow-scripts allow-same-origin"
+                className="page-split-preview-iframe"
+                title="Beitrags-Vorschau"
+              />
+            </div>
           </div>
         </form>
       </div>

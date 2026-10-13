@@ -1,8 +1,11 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import PageTreeEditor from './PageTreeEditor';
 import PageEditor from './PageEditor';
 import GlobalPagesView from './GlobalPagesView';
 import Toast from './Toast';
+import { renderTemplate } from '../lib/templateEngine';
+import { loadGlobalVars } from '../lib/renderPipeline';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
 
 const pagesTabButtonStyle = (active) => ({
   padding: '0.5rem 1.25rem',
@@ -84,6 +87,14 @@ export default function PagesView({
     }
   };
   const [pagesTab, setPagesTab] = useState('pages'); // 'pages', 'global' or 'maintenance'
+  // Wartungsseiten sind ein Content-Editor wie Page-/BlogPostEditor — nimmt
+  // den ganzen Bildschirm nur ein, solange dieser Tab aktiv ist (siehe
+  // lib/useContentEditorFullscreen.js).
+  useContentEditorFullscreen(pagesTab === 'maintenance');
+  const [maintenanceGlobalVars, setMaintenanceGlobalVars] = useState({});
+  useEffect(() => {
+    if (pagesTab === 'maintenance') loadGlobalVars().then(setMaintenanceGlobalVars);
+  }, [pagesTab]);
   const [maintenanceTab, setMaintenanceTab] = useState('404');
   const [maintenanceContent, setMaintenanceContent] = useState({
     '404': { html: '', css: '', js: '' },
@@ -183,7 +194,12 @@ export default function PagesView({
   };
 
   const buildMaintenancePreviewDoc = (entry) => {
-    const html = String(entry?.html || '').trim() || '<div style="padding:32px;text-align:center;color:#666;">Keine HTML-Inhalte hinterlegt</div>';
+    const rawHtml = String(entry?.html || '').trim();
+    // Render-Parität zur echten Wartungsseite (siehe pages/[...slug].js
+    // buildMaintenanceHtml): {{global.<key>}} wird dort genauso eingesetzt.
+    const html = rawHtml
+      ? renderTemplate(rawHtml, { global: maintenanceGlobalVars })
+      : '<div style="padding:32px;text-align:center;color:#666;">Keine HTML-Inhalte hinterlegt</div>';
     const css = String(entry?.css || '');
     const js = String(entry?.js || '');
 

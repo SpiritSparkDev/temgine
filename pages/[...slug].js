@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderTemplate } from '../lib/templateEngine'
 import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
-import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydratePage, useRerender } from '../lib/renderPipeline'
+import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydratePage, useRerender, loadGlobalVars } from '../lib/renderPipeline'
 import { withDateParts } from '../lib/blogPostQuery'
 import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -79,16 +79,6 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
       return await settingsRes.json()
     } catch (_) {
       return null
-    }
-  }
-
-  const loadGlobalVars = async () => {
-    try {
-      const res = await fetch(`/api/global-variables?active=true&_t=${Date.now()}`)
-      if (!res.ok) return {}
-      return await res.json()
-    } catch (_) {
-      return {}
     }
   }
 
@@ -191,11 +181,15 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
             const tRes = await fetch(`/api/templates?name=${encodeURIComponent(templateName)}`)
             if (tRes.ok) {
               const tData = await tRes.json()
+              // global.* ist laut help/templates.md "überall verfügbar" — auch im
+              // Beitrags-Template, nicht nur in Seiten-Blöcken (siehe loadGlobalVars).
+              const globalVars = await loadGlobalVars()
               postHtml = renderTemplate(tData.code, {
                 ...withDateParts(post),
                 channel,
                 channelUrl: `/${channel.slug}`,
                 postUrl: `/${channel.slug}/${post.slug}`,
+                global: globalVars,
               }, { title: post.title }) // Titel als Text, nicht als Markdown (siehe hydrateBlogChannels)
             }
           }

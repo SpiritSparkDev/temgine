@@ -1,10 +1,13 @@
 # Templates in Temgine
 
 Ein Template ist HTML mit Platzhaltern in doppelten geschweiften Klammern
-(Mustache-Syntax). Aus den Platzhaltern erzeugt der Editor automatisch die
-Eingabefelder: Steht `{{titel}}` im Template, gibt es im Seiten-Editor ein Feld
-„Titel“. Diese Anleitung erklärt die Platzhalter, die Feldtypen und die
-Bedingungen – jeweils mit Beispiel.
+(Mustache-Syntax). Aus den Platzhaltern erzeugt der jeweilige Content-Editor
+automatisch die Eingabefelder: Steht `{{titel}}` im Template, gibt es ein Feld
+„Titel“. **Content-Editor** nennen wir jede Eingabemaske, die auf diese Weise
+aus einem Template entsteht — z. B. die Block-Felder im Seiten-Editor, die
+Beitrags-Felder im Blog/News-Editor oder die Felder von Navigationen, Footer
+und Widgets. Diese Anleitung erklärt die Platzhalter, die Feldtypen und die
+Bedingungen – jeweils mit Beispiel, gültig für alle Content-Editoren.
 
 ## Variablen
 

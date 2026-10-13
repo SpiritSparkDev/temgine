@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectSectionKeys, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectSectionKeys, navPlaceholderSlug, buildNavPlaceholderKeys, widgetPlaceholderSlug, buildWidgetPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -359,5 +359,134 @@ describe('{{feld:select(...)}}', () => {
     const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Box', props: { align: 'center', Items: [{ Pos: 'unten' }] } }] }, tpl, {});
     expect(html).toContain('<div class="center"><i class="unten"></i></div>');
     expect(html).not.toContain('select');
+  });
+});
+
+describe('widgetPlaceholderSlug', () => {
+  it('slugifies like navPlaceholderSlug but falls back to "widget", not "navigation"', () => {
+    expect(widgetPlaceholderSlug('Sidebar CTA')).toBe('sidebar-cta');
+    expect(widgetPlaceholderSlug('')).toBe('widget');
+    expect(widgetPlaceholderSlug(undefined)).toBe('widget');
+  });
+});
+
+describe('buildWidgetPlaceholderKeys', () => {
+  it('assigns unique slugs, appending -2/-3 on name collisions (deterministic by name then id)', () => {
+    const keys = buildWidgetPlaceholderKeys([
+      { id: 'w1', name: 'CTA' },
+      { id: 'w2', name: 'CTA' },
+      { id: 'w3', name: 'CTA' },
+    ]);
+    expect(Object.values(keys).sort()).toEqual(['cta', 'cta-2', 'cta-3']);
+  });
+});
+
+describe('renderPage {{{widget.<name>}}} placeholder (direkt im Template-Code, zusätzlich zum global-page-Block)', () => {
+  const globalPages = { byId: { w1: { name: 'Sidebar CTA', code: '<aside>Hallo</aside>' } } };
+
+  it('löst {{{widget.<slug>}}} in einem Block-Template auf', () => {
+    const tpl = { Seite: '<main>{{{widget.sidebar-cta}}}</main>' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, { globalPages });
+    expect(html).toContain('<main><aside>Hallo</aside></main>');
+  });
+
+  it('löst den Platzhalter auch in Navigationen und im Footer auf', () => {
+    const page = { title: 'T', slug: 't', blocks: [] };
+    const navigations = { main: { code: '{{{widget.sidebar-cta}}}' } };
+    const footer = { code: '{{{widget.sidebar-cta}}}' };
+    const html = renderPage(page, {}, { globalPages, navigations, footer });
+    // Einmal aus dem Footer, einmal aus {{{nav:main}}} (wird automatisch vorangestellt)
+    expect(html.match(/<aside>Hallo<\/aside>/g)).toHaveLength(2);
+  });
+
+  it('ein Widget bekommt keinen eigenen widget-Kontext (keine Selbst-/Querverweis-Rekursion)', () => {
+    const selfReferencing = { byId: { w1: { name: 'A', code: '<a>{{{widget.a}}}</a>' } } };
+    const tpl = { Seite: '{{{widget.a}}}' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, { globalPages: selfReferencing });
+    // {{{widget.a}}} innerhalb des Widget-Codes bleibt unaufgelöst (kein widget-Key im Kontext)
+    expect(html).toContain('<a></a>');
+  });
+
+  it('ohne globalPages bleibt der Platzhalter leer statt zu crashen (backward compatible default)', () => {
+    const tpl = { Seite: '<main>{{{widget.sidebar-cta}}}</main>' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, {});
+    expect(html).toContain('<main></main>');
+  });
+});
+
+// Regression: Navigationen/Footer/Widgets wurden bis 0.46.x direkt per rohem
+// Mustache.render() gerendert statt über renderTemplate() wie Block-Templates
+// — dadurch funktionierten {{#if:…}}/{{#each:…}}/{{feld:typ}} dort nicht.
+describe('{{#if:…}} und {{#each:…}} funktionieren in Navigationen, Footer und Widgets (nicht nur in Blöcken)', () => {
+  it('{{#if:…}} in einer Navigation', () => {
+    const navigations = { main: { code: '{{#if:zeigeHinweis}}<p>Hinweis</p>{{/if:zeigeHinweis}}', data: { zeigeHinweis: true } } };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [] }, {}, { navigations });
+    expect(html).toContain('<p>Hinweis</p>');
+  });
+
+  it('{{#each:…}} im Footer', () => {
+    const footer = { code: '{{#each:Links}}<a>{{label}}</a>{{/each:Links}}', data: { Links: [{ label: 'Impressum' }, { label: 'Datenschutz' }] } };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [] }, {}, { footer });
+    expect(html).toContain('<a>Impressum</a><a>Datenschutz</a>');
+  });
+
+  it('{{#if:…}} in einem Widget', () => {
+    const globalPages = { byId: { w1: { code: '{{#if:aktiv}}<b>An</b>{{/if:aktiv}}' } } };
+    const page = { title: 'T', slug: 't', blocks: [{ type: 'global-page', props: { globalPageId: 'w1' } }] };
+    const html = renderPage(page, {}, { globalPages, globalVars: {} });
+    // Das global-page-Widget selbst bekommt keine Block-Props — "aktiv" ist hier leer/false, prüft nur, dass die #if-Syntax überhaupt ausgewertet (nicht wörtlich ausgegeben) wird.
+    expect(html).not.toContain('{{#if:aktiv}}');
+  });
+});
+
+describe('renderPage instrumentPaths (Editor-Split-Vorschau: data-temgine-block Wrapper)', () => {
+  const tpl = {
+    Wrapper: '<section>{{titel}}<div class="inner">{{{inner}}}</div></section>',
+    Karte: '{{#each:Punkte}}<li>{{label}}</li>{{/each:Punkte}}',
+  };
+  const nestedPage = {
+    title: 'T', slug: 't',
+    blocks: [{
+      template: 'Wrapper', props: { titel: 'Außen' },
+      children: [{
+        template: 'Karte', props: { Punkte: [{ label: 'A' }] },
+        children: [{ template: 'Karte', props: { Punkte: [{ label: 'B' }] } }],
+      }],
+    }],
+  };
+
+  it('ohne instrumentPaths erscheint kein data-temgine-block Attribut (Produktions-Rendering unverändert)', () => {
+    const html = renderPage(nestedPage, tpl, {});
+    expect(html).not.toContain('data-temgine-block');
+  });
+
+  it('mit instrumentPaths:true bekommt jeder Block — auch 2 Ebenen tief verschachtelt — seinen Pfad', () => {
+    const html = renderPage(nestedPage, tpl, { instrumentPaths: true });
+    expect(html).toContain('data-temgine-block="0"');
+    expect(html).toContain('data-temgine-block="0.0"');
+    expect(html).toContain('data-temgine-block="0.0.0"');
+  });
+
+  it('der Inhalt (inkl. Repeater in verschachtelten Blöcken) bleibt bei instrumentPaths:true vollständig erhalten', () => {
+    const plain = renderPage(nestedPage, tpl, {});
+    const instrumented = renderPage(nestedPage, tpl, { instrumentPaths: true });
+    // Gleicher Textinhalt in beiden Modi — instrumentPaths fügt nur Wrapper-Divs hinzu, ändert nichts am Inhalt.
+    const textOnly = (html) => html.replace(/<[^>]+>/g, '');
+    expect(textOnly(instrumented)).toBe(textOnly(plain));
+    // "Karte" hat kein {{{inner}}} im Template, daher wird block-children vor
+    // dem schließenden Tag des einzigen Wurzelelements eingefügt (bestehendes
+    // Verhalten, siehe renderPage) — B (ohne eigene Kinder) bleibt unverändert.
+    expect(instrumented).toContain('<li>A<div class="block-children">');
+    expect(instrumented).toContain('<li>B</li>');
+  });
+
+  it('ein fehlendes Template bekommt im instrumentierten Modus ebenfalls einen Pfad-Wrapper', () => {
+    const html = renderPage(
+      { title: 'T', slug: 't', blocks: [{ template: 'DoesNotExist', props: {} }] },
+      {},
+      { instrumentPaths: true }
+    );
+    expect(html).toContain('data-temgine-block="0"');
+    expect(html).toContain('Missing template: DoesNotExist');
   });
 });

@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Columns, Copy, GitCompare } from '../lib/muiIcons';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Copy, GitCompare } from '../lib/muiIcons';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractEditorSections } from '../lib/templateParser';
-import { renderPage, renderTemplate } from '../lib/templateEngine';
+import { renderTemplate } from '../lib/templateEngine';
+import { loadPageData, renderPageHtml } from '../lib/renderPipeline';
+import { findRawPageNodeById } from '../lib/navTreeHelpers';
 import Toast from './Toast';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
@@ -55,6 +59,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const richTextEditorMode = useRichTextEditorMode();
+  useContentEditorFullscreen();
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -98,7 +103,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-datafields', 'outline-access', 'outline-seo', 'outline-workflow']));
   const [showAnchorsModal, setShowAnchorsModal] = useState(false);
-  const [showAdvancedModal, setShowAdvancedModal] = useState(false);
   const [selectedFieldKey, setSelectedFieldKey] = useState('');
   const [scrollTick, setScrollTick] = useState(0); // erzwingt Scroll/Fokus auch bei erneutem Klick auf dieselbe Stelle
   const [outlineVisibleOnly, setOutlineVisibleOnly] = useState(false);
@@ -121,8 +125,17 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [sectionToggles, setSectionToggles] = useState({}); // `${blockPath}|${label}` -> bool (Override des Default)
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
-  const [splitPreview, setSplitPreview] = useState(false);
+  // Content-Editoren starten im Split-Modus (Vorschau + Felder nebeneinander,
+  // ganzer Bildschirm) — kein separater "aus"-Zustand mehr, siehe useContentEditorFullscreen.
+  const [splitPreview, setSplitPreview] = useState(true);
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
+  // Rechtes Panel: "Felder" (Block-Editor-Canvas) oder "Seite" (bisheriger,
+  // separat ausgelagerter Block-Inspektor) — als Tabs statt zweier Panels.
+  const [rightPanelTab, setRightPanelTab] = useState('felder');
+  // Breite der Live-Vorschau links in Prozent, per Ziehen am Trenner verstellbar
+  // und je Gerät gemerkt (Default 75/25 wie gewünscht) — gemeinsamer Hook,
+  // siehe lib/useSplitPaneRatio.js (auch von BlogPostEditor.js etc. genutzt).
+  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('pe-split-ratio', 75);
   const [expandedField, setExpandedField] = useState(null); // { varName, label, value, inputType, blockPath }
   const [blogChannels, setBlogChannels] = useState([]);
   const [blogTemplates, setBlogTemplates] = useState([]);
@@ -140,6 +153,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const autosaveInFlightRef = useRef(false);
   const splitPreviewIframeRef = useRef(null);
   const splitPreviewTimerRef = useRef(null);
+  // Zählt hoch bei jedem buildSplitPreviewHtml()-Aufruf, damit ein verspätet
+  // auflösender älterer Request kein neueres Ergebnis mehr überschreiben kann.
+  const splitPreviewRequestIdRef = useRef(0);
   // Refs for keyboard shortcuts (always point to latest handlers)
   const handleSaveRef = useRef(null);
   const handleSaveAndCloseRef = useRef(null);
@@ -489,7 +505,27 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }
   };
 
-
+  // Feld-Fokus in der Felder-Liste → selectedFieldKey setzen, damit die
+  // Split-Vorschau genau dieses Feld hervorhebt statt nur den ganzen Block
+  // (siehe interactScript in buildSplitPreviewHtml für die Gegenrichtung:
+  // Klick in der Vorschau wählt bereits per findFieldForPreviewClick ein Feld).
+  useEffect(() => {
+    function handleFocusIn(e) {
+      for (const [key, node] of Object.entries(fieldNodeRefs.current)) {
+        if (node === e.target) {
+          const blockPath = key.split('::')[0];
+          if (blockPath && blockPath !== selectedBlockPath) {
+            selectedByClickRef.current = true;
+            setSelectedBlockPath(blockPath);
+          }
+          setSelectedFieldKey(prev => (prev === key ? prev : key));
+          return;
+        }
+      }
+    }
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, [selectedBlockPath]);
 
   useEffect(() => {
     const loadTemplateCodes = async () => {
@@ -678,22 +714,48 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (!splitPreview) return;
     if (splitPreviewTimerRef.current) clearTimeout(splitPreviewTimerRef.current);
     splitPreviewTimerRef.current = setTimeout(() => {
-      setSplitPreviewHtml(buildSplitPreviewHtml());
+      const requestId = ++splitPreviewRequestIdRef.current;
+      buildSplitPreviewHtml().then((html) => {
+        if (splitPreviewRequestIdRef.current === requestId) setSplitPreviewHtml(html);
+      });
     }, 600);
     return () => clearTimeout(splitPreviewTimerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [splitPreview, blocks, templateCodes, enabledCssFiles]);
 
-  // Highlight selected block in split preview when selectedBlockPath changes
+  // Aktueller Wert eines Felds (inkl. Repeater-Zeilen "key.index.sub") für
+  // die feinkörnige Hervorhebung in der Split-Vorschau — siehe Effekt unten.
+  function resolveFieldPreviewValue(block, varName) {
+    if (!block || !block.props || !varName) return '';
+    const repeaterMatch = /^(.+)\.(\d+)\.([^.]+)$/.exec(varName);
+    if (repeaterMatch) {
+      const [, key, idxStr, sub] = repeaterMatch;
+      const row = Array.isArray(block.props[key]) ? block.props[key][Number(idxStr)] : null;
+      return (row && row[sub]) || '';
+    }
+    return block.props[varName] || '';
+  }
+
+  // Hervorhebung in der Split-Vorschau, wenn selectedBlockPath/selectedFieldKey
+  // sich ändern: mit Feld (selectedFieldKey gehört zum aktuellen Block) wird nur
+  // das konkrete Feld hervorgehoben (temgine-highlight-field, Werteabgleich im
+  // interactScript — selbe Heuristik-Idee wie lib/previewFieldMatch.js, nur in
+  // umgekehrter Richtung), sonst der ganze Block wie bisher.
   useEffect(() => {
     if (!splitPreview || !splitPreviewIframeRef.current) return;
     try {
+      const [fieldBlockPath, fieldVarName] = selectedFieldKey ? selectedFieldKey.split('::') : [];
+      const fieldValue = (fieldVarName && fieldBlockPath === selectedBlockPath)
+        ? resolveFieldPreviewValue(getBlockAtPath(selectedBlockPath), fieldVarName)
+        : '';
       splitPreviewIframeRef.current.contentWindow?.postMessage(
-        { type: 'temgine-highlight-block', blockPath: selectedBlockPath },
+        fieldValue
+          ? { type: 'temgine-highlight-field', blockPath: selectedBlockPath, value: fieldValue }
+          : { type: 'temgine-highlight-block', blockPath: selectedBlockPath },
         '*'
       );
     } catch (_) {}
-  }, [selectedBlockPath, splitPreview]);
+  }, [selectedBlockPath, selectedFieldKey, splitPreview]);
 
   // Prüfe ob Variable einen URL-Bezug hat
   const isUrlVariable = (varName) => {
@@ -1374,32 +1436,105 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }
   }
 
-  function buildSplitPreviewHtml() {
+  async function buildSplitPreviewHtml() {
     try {
       const cssLinkTags = enabledCssFiles
         .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
         .join('\n');
 
-      const renderPreviewBlock = (block, path) => {
-        const code = block.template ? templateCodes[block.template] : null;
-        if (!code) {
-          return `<div data-temgine-block="${path}" class="temgine-block-wrap temgine-block-empty">(Block ${path.split('.').map(n => Number(n) + 1).join('.')}: kein Template)</div>`;
-        }
-        const inner = (block.children || []).map((c, ci) => renderPreviewBlock(c, `${path}.${ci}`)).join('\n');
-        const rendered = renderTemplate(code, { ...(block.props || {}), inner });
-        // Kinder ohne {{inner}}-Platzhalter im Template hinten anhängen (wie die Seiten-Ausgabe)
-        const withChildren = inner && !/\{\{\{?\s*inner\s*\}?\}\}/.test(code) ? `${rendered}\n${inner}` : rendered;
-        return `<div data-temgine-block="${path}" class="temgine-block-wrap">${withChildren}</div>`;
+      const currentPage = {
+        id: page?.id,
+        title,
+        slug,
+        blocks: blocks || [],
+        data: pageData || {},
+        isHomepage,
       };
-      const blockParts = (blocks || []).map((block, i) => renderPreviewBlock(block, String(i))).join('\n');
+      const rawMatch = findRawPageNodeById(allPages, page?.id);
+      const currentPath = isHomepage ? null : (rawMatch ? rawMatch.parentPath : null);
+      const loadedData = await loadPageData(currentPage, allPages, { currentPath });
+      const blockParts = renderPageHtml(currentPage, { ...loadedData, instrumentPaths: true }, {
+        isChild: !!currentPath && currentPath.split('/').length > 1,
+      });
 
       const interactScript = `<script>
 (function() {
   var currentHighlight = null;
+  // Setzt auf das zuletzt hervorgehobene Element zurück (Block ODER einzelnes
+  // Feld-Element — beide laufen über dieselbe currentHighlight-Referenz, damit
+  // ein Wechsel von Feld- auf Block-Hervorhebung sauber aufräumt).
   function clearHighlight() {
-    document.querySelectorAll('.temgine-block-wrap').forEach(function(el) {
-      el.style.outline = '2px solid transparent';
-    });
+    if (currentHighlight) {
+      currentHighlight.style.outline = '2px solid transparent';
+      currentHighlight.style.backgroundColor = '';
+    }
+    currentHighlight = null;
+  }
+  // Normalisiert Text für den Feld-Abgleich: HTML-Tags raus, grobe
+  // Markdown-Zeichen raus (** _ \` # > -), [text](url) → text, Whitespace
+  // vereinheitlicht — Heuristik, kein echter Markdown-Parser (siehe
+  // lib/previewFieldMatch.js für die Gegenrichtung).
+  function normField(v) {
+    return String(v || '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\\[([^\\]]*)\\]\\([^)]*\\)/g, '$1')
+      .replace(/[*_\`#>-]/g, ' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
+  }
+  // Wickelt einen bloßen Textknoten (z. B. {{{feld}}} ohne eigenes
+  // HTML-Tag drumherum — Mustache gibt dann reinen Text zwischen den
+  // Nachbar-Elementen aus) in ein <span>, damit er ein Outline bekommen
+  // kann (CSS kann keinen Textknoten direkt hervorheben).
+  function wrapTextNode(node) {
+    var span = document.createElement('span');
+    node.parentNode.insertBefore(span, node);
+    span.appendChild(node);
+    return span;
+  }
+  // Findet das kleinste (spezifischste) Element bzw. den kleinsten Textknoten
+  // innerhalb eines Block-Containers, dessen Inhalt zum Feldwert passt — für
+  // Bild-/Link-Felder zuerst exakter src/href-Abgleich, sonst Text (exakt,
+  // dann Teilstring ab 4 Zeichen). Ein Element gewinnt bei gleicher Länge vor
+  // einem bloßen Textknoten (wird zuerst geprüft).
+  function findFieldElement(container, rawValue) {
+    if (!rawValue) return null;
+    // Nur Inhalt des Blocks selbst, nicht das Innere verschachtelter Kind-Blöcke
+    // (die haben ihren eigenen data-temgine-block-Wrapper im selben Subtree).
+    var ownScope = function(el) { return el.closest('[data-temgine-block]') === container; };
+    var imgs = container.querySelectorAll('img[src]');
+    for (var i = 0; i < imgs.length; i++) {
+      if (imgs[i].getAttribute('src') === rawValue && ownScope(imgs[i])) return imgs[i];
+    }
+    var links = container.querySelectorAll('a[href]');
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].getAttribute('href') === rawValue && ownScope(links[i])) return links[i];
+    }
+    var target = normField(rawValue);
+    if (!target) return null;
+    var isMatch = function(t) { return (t === target) || (target.length >= 4 && (target.indexOf(t) !== -1 || t.indexOf(target) !== -1)); };
+
+    var best = null, bestLen = Infinity, bestIsText = false;
+    var all = container.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (!ownScope(el)) continue;
+      var t = normField(el.textContent);
+      if (!t || !isMatch(t)) continue;
+      if (t.length < bestLen) { best = el; bestLen = t.length; bestIsText = false; }
+    }
+
+    var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (!node.parentElement || !ownScope(node.parentElement)) continue;
+      var nt = normField(node.nodeValue);
+      if (!nt || !isMatch(nt)) continue;
+      if (nt.length < bestLen) { best = node; bestLen = nt.length; bestIsText = true; }
+    }
+
+    if (!best) return null;
+    return bestIsText ? wrapTextNode(best) : best;
   }
   document.querySelectorAll('[data-temgine-block]').forEach(function(el) {
     el.style.cursor = 'pointer';
@@ -1435,7 +1570,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'temgine-highlight-block') {
       clearHighlight();
-      currentHighlight = null;
       var target = document.querySelector('[data-temgine-block="' + e.data.blockPath + '"]');
       if (target) {
         currentHighlight = target;
@@ -1443,11 +1577,23 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }
+    if (e.data && e.data.type === 'temgine-highlight-field') {
+      clearHighlight();
+      var container = document.querySelector('[data-temgine-block="' + e.data.blockPath + '"]');
+      if (container) {
+        var fieldEl = findFieldElement(container, e.data.value);
+        var toHighlight = fieldEl || container;
+        currentHighlight = toHighlight;
+        toHighlight.style.outline = '2px solid rgba(234,88,12,0.9)';
+        if (fieldEl) toHighlight.style.backgroundColor = 'rgba(234,88,12,0.12)';
+        toHighlight.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
   });
 })();
 <\/script>`;
 
-      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vorschau</title>\n${cssLinkTags}\n<style>.temgine-block-empty{padding:16px;border:1px dashed #666;color:#888;font-family:sans-serif;font-size:0.8rem;margin:4px 0}</style></head><body>${blockParts}${interactScript}</body></html>`;
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vorschau</title>\n${cssLinkTags}</head><body>${blockParts}${interactScript}</body></html>`;
     } catch (e) {
       console.error('buildSplitPreviewHtml failed:', e);
       return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
@@ -1471,23 +1617,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     });
   }
 
-  function buildPreviewHtml() {
+  async function buildPreviewHtml() {
     try {
-      // Build a block templates map from the loaded template codes (BLOCK type only)
-      const blockTemplatesMap = {};
-      const templateObjs2 = Array.isArray(templates) ? templates : [];
-      templateObjs2.forEach(t => {
-        if (String(t.type || '').toUpperCase() === 'BLOCK' && t.name && templateCodes[t.name]) {
-          blockTemplatesMap[t.name] = templateCodes[t.name];
-        }
-      });
-
-      // Also include all loaded codes as fallback (some pages use type===undefined templates)
-      Object.entries(templateCodes || {}).forEach(([name, code]) => {
-        if (!blockTemplatesMap[name]) blockTemplatesMap[name] = code;
-      });
-
       const currentPage = {
+        id: page?.id,
         title,
         slug,
         blocks: blocks || [],
@@ -1495,11 +1628,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         isHomepage,
       };
 
-      const rendered = renderPage(
-        currentPage,
-        blockTemplatesMap,
-        {}
-      );
+      const rawMatch = findRawPageNodeById(allPages, page?.id);
+      const currentPath = isHomepage ? null : (rawMatch ? rawMatch.parentPath : null);
+      const loadedData = await loadPageData(currentPage, allPages, { currentPath });
+      const rendered = renderPageHtml(currentPage, loadedData, {
+        isChild: !!currentPath && currentPath.split('/').length > 1,
+      });
 
       const cssLinkTags = enabledCssFiles
         .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
@@ -1514,7 +1648,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   function handleTogglePreview() {
     if (!showPreview) {
-      setPreviewHtml(buildPreviewHtml());
+      buildPreviewHtml().then(setPreviewHtml);
     }
     setShowPreview(p => !p);
   }
@@ -2567,31 +2701,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </button>
             <button
               type="button"
-              className={`pe-tb-btn${splitPreview ? ' pe-tb-btn-active' : ''}`}
-              onClick={() => {
-                const next = !splitPreview;
-                setSplitPreview(next);
-                if (next) setSplitPreviewHtml(buildSplitPreviewHtml());
-              }}
-              title="Editor und Vorschau nebeneinander (interaktiv)"
-            >
-              <Columns size={14} /> Split
-            </button>
-            <button
-              type="button"
               className="pe-tb-btn"
               onClick={() => setShowRevisions(true)}
               title="Versionsverlauf anzeigen"
             >
               <History size={14} /> Verlauf
-            </button>
-            <button
-              type="button"
-              className="pe-tb-btn"
-              onClick={() => setShowAdvancedModal(true)}
-              title="Erweiterte Seiten-Optionen (Wrapper, Navigations-Bild)"
-            >
-              🧩 Erweitert{(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
             </button>
             <div className="pe-toolbar-sep" />
             <button
@@ -2627,7 +2741,48 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
 
-        <div className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}>
+        <div
+          ref={workspaceRef}
+          className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}
+          style={splitPreview ? { '--pe-split-left': `${splitRatio}%` } : undefined}
+        >
+          {splitPreview && (
+            <div className="page-editor-right-tabs">
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'felder' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('felder')}
+              >
+                Felder
+              </button>
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'seite' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('seite')}
+              >
+                Seite
+              </button>
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'erweitert' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('erweitert')}
+                title="Erweiterte Seiten-Optionen (Wrapper, Navigations-Bild)"
+              >
+                Erweitert{(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
+              </button>
+            </div>
+          )}
+          {splitPreview && (
+            <div
+              className="page-split-divider"
+              onMouseDown={startSplitDrag}
+              onTouchStart={startSplitDrag}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Breite von Vorschau und Feldern verstellen"
+            />
+          )}
+          <div className={splitPreview ? 'page-editor-right-tab-content' : undefined} style={{ display: splitPreview && rightPanelTab !== 'felder' ? 'none' : undefined }}>
           {redirectType !== 'none' ? (
             // Weiterleitungs-Seite: keine Blöcke, stattdessen Ziel-URL/Target konfigurieren
             <div className="page-editor-canvas" title={devTitle('Weiterleitungs-Konfiguration')}>
@@ -2760,6 +2915,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               </div>
             </div>
           )}
+          </div>
 
           {splitPreview && (
             <div className="page-split-preview">
@@ -2768,7 +2924,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <button
                   type="button"
                   className="btn-modern-small hollow"
-                  onClick={() => setSplitPreviewHtml(buildSplitPreviewHtml())}
+                  onClick={() => {
+                    const requestId = ++splitPreviewRequestIdRef.current;
+                    buildSplitPreviewHtml().then((html) => {
+                      if (splitPreviewRequestIdRef.current === requestId) setSplitPreviewHtml(html);
+                    });
+                  }}
                   title="Vorschau aktualisieren"
                 >↻</button>
               </div>
@@ -2782,8 +2943,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </div>
           )}
 
-          {typeof window !== 'undefined' && document.getElementById('page-editor-inspector-portal') ? createPortal(
-          <aside className="page-editor-inspector" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
+          {splitPreview && rightPanelTab === 'seite' && (
+          <aside className="page-editor-inspector page-editor-right-tab-content" title={devTitle('Bereich: Block-Inspektor fuer Metadaten und Aktionen')}>
             {(() => {
               const toggleSection = (id) => setCollapsedSections(prev => {
                 const next = new Set(prev);
@@ -3050,54 +3211,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     )}
                   </div>
 
-                  {showAdvancedModal && (
-                    <div className="file-modal-overlay" onClick={() => setShowAdvancedModal(false)}>
-                      <div className="file-modal inspector-modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="file-modal-header">
-                          <h3 className="file-modal-title">Erweiterte Optionen</h3>
-                          <button onClick={() => setShowAdvancedModal(false)} className="file-modal-close-btn" aria-label="Schließen">×</button>
-                        </div>
-                        <div className="page-editor-outline-settings">
-                          <label className="field-label-xs">Wrapper-Klasse</label>
-                          <input
-                            type="text"
-                            value={pageData.wrapperClass || ''}
-                            onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
-                            placeholder="z.B. page-home dark-theme"
-                            className="input-field-small"
-                            aria-label="CSS-Klasse für den Seiten-Wrapper"
-                          />
-                          <label className="field-label-xs">Wrapper-ID</label>
-                          <input
-                            type="text"
-                            value={pageData.wrapperId || ''}
-                            onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
-                            placeholder="z.B. main-page"
-                            className="input-field-small"
-                            aria-label="ID für den Seiten-Wrapper"
-                          />
-                          <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
-                          <div className="field-url-row">
-                            <input
-                              type="text"
-                              value={pageData.navImage || ''}
-                              onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
-                              placeholder="Bild-URL"
-                              className="input-field-small field-input-full"
-                              aria-label="Navigations-Bild für diese Seite"
-                            />
-                            <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
-                          </div>
-                          {pageData.navImage && (
-                            <div className="field-image-thumb-row">
-                              <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
-                            </div>
-                          )}
-                          <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {showAnchorsModal && (
                     <div className="file-modal-overlay" onClick={() => setShowAnchorsModal(false)}>
@@ -3294,7 +3407,50 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               );
             })()}
           </aside>
-          , document.getElementById('page-editor-inspector-portal')) : null}
+          )}
+
+          {splitPreview && rightPanelTab === 'erweitert' && (
+          <aside className="page-editor-inspector page-editor-right-tab-content" title={devTitle('Bereich: Erweiterte Seiten-Optionen (Wrapper, Navigations-Bild)')}>
+            <div className="page-editor-outline-settings">
+              <label className="field-label-xs">Wrapper-Klasse</label>
+              <input
+                type="text"
+                value={pageData.wrapperClass || ''}
+                onChange={e => setPageData(d => ({ ...d, wrapperClass: e.target.value }))}
+                placeholder="z.B. page-home dark-theme"
+                className="input-field-small"
+                aria-label="CSS-Klasse für den Seiten-Wrapper"
+              />
+              <label className="field-label-xs">Wrapper-ID</label>
+              <input
+                type="text"
+                value={pageData.wrapperId || ''}
+                onChange={e => setPageData(d => ({ ...d, wrapperId: e.target.value }))}
+                placeholder="z.B. main-page"
+                className="input-field-small"
+                aria-label="ID für den Seiten-Wrapper"
+              />
+              <label className="field-label-xs" style={{marginTop:'10px'}}>Navigations-Bild</label>
+              <div className="field-url-row">
+                <input
+                  type="text"
+                  value={pageData.navImage || ''}
+                  onChange={e => setPageData(d => ({ ...d, navImage: e.target.value }))}
+                  placeholder="Bild-URL"
+                  className="input-field-small field-input-full"
+                  aria-label="Navigations-Bild für diese Seite"
+                />
+                <button type="button" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} className="btn-modern-small" title={devTitle('Navigations-Bild auswaehlen')} aria-label="Navigations-Bild auswaehlen">📁 Bild</button>
+              </div>
+              {pageData.navImage && (
+                <div className="field-image-thumb-row">
+                  <img src={pageData.navImage} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => setPageData(d => ({ ...d, navImage: url })))} />
+                </div>
+              )}
+              <p className="blog-channel-editor__hint">Verfügbar in Seitennavigationen als <code>{'{{data.navImage}}'}</code> pro Seite in <code>{'{{#pages}}'}</code>.</p>
+            </div>
+          </aside>
+          )}
         </div>
       </div>
 
@@ -3318,7 +3474,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <button
                   type="button"
                   className="btn-modern-small hollow"
-                  onClick={() => setPreviewHtml(buildPreviewHtml())}
+                  onClick={() => buildPreviewHtml().then(setPreviewHtml)}
                   title="Vorschau aktualisieren"
                 >
                   ↻ Aktualisieren

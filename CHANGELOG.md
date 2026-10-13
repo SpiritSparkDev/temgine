@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.47.0] - 2026-10-13
+
+### Added
+- Der Blog/News-Beitragseditor, der Navigation/Footer/Widget-Editor und die Wartungsseiten (im Wartungsseiten-Tab) nutzen jetzt denselben Vollbild-Rahmen mit permanenter, in der Breite verstellbarer Live-Vorschau wie der Seiten-Editor (`lib/useContentEditorFullscreen.js`, `lib/useSplitPaneRatio.js`, gemeinsam genutzt). Die Vorschauen rendern dabei mit echter Render-Parität zur Live-Seite: Blog-Vorschau nutzt denselben Daten-Kontext wie die veröffentlichte Beitragsseite, Navigation/Footer/Widget-Vorschau nutzt je nach Rolle den echten Seitenbaum bzw. globale Variablen, Wartungsseiten-Vorschau rendert `{{global.x}}` wie die echte 404/503/Ladebildschirm-Seite.
+- „Erweitert" (Wrapper-Klasse/-ID, Navigations-Bild) im Seiten-Editor ist jetzt ein eigener Tab neben „Felder"/„Seite" statt eines separaten Modals.
+- Die Live-Vorschau im Seiten-Editor hebt beim Fokussieren eines einzelnen Felds jetzt genau dieses Feld hervor statt immer den ganzen Block — funktioniert für jede Art, ein Feld zu fokussieren (Klick, Tab-Taste), auch für Felder ohne eigenes HTML-Tag im Template (wird dafür zur Hervorhebung dynamisch in ein `<span>` gewickelt).
+
+### Fixed
+- Blog-Lese-Templates bekamen beim Rendern der echten, veröffentlichten Beitragsseite keine globalen Variablen übergeben — `{{global.x}}` blieb dort leer, obwohl `help/templates.md` es als überall verfügbar dokumentiert. Betraf nur die echte Seite (`pages/[...slug].js`), nicht die Editor-Vorschau.
+- Klick in der Split-Vorschau des Seiten-Editors, um zum passenden Feld zu springen: traf bei ungenauen Klicks (z. B. im Zeilenabstand zwischen zwei Feldern) oft gar kein Feld und sprang dann nur zum ganzen Block. Die Zuordnung berücksichtigt jetzt auch diesen Fall und wählt unter mehreren infrage kommenden Feldern das eindeutigste.
+
+---
+
 ## [0.46.1] - 2026-10-13
 
 ### Fixed

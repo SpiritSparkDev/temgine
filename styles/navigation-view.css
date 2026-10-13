@@ -262,6 +262,31 @@
   cursor: not-allowed;
 }
 
+/* ── Center: resizable Vorschau + Editor (siehe page-editor.css für die
+   geteilten .page-editor-workspace/.page-split-* Klassen, hier ohne die
+   Tab-Leiste von Page-/BlogPostEditor, da es nur einen Editor-Bereich
+   gibt) ───────────────────────────────────────────────────────────────── */
+
+.admin-scope .nav-main-split.workspace-split {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  grid-template-areas: "preview divider content";
+  grid-template-rows: 1fr;
+  align-items: stretch;
+}
+
+/* .nav-editor-panel braucht (anders als die frei fließende
+   .page-editor-canvas) eine feste Höhe für den Monaco-Editor
+   (.nav-monaco-wrap { flex: 1 }) — darum hier Flex-Spalte mit voller Höhe
+   statt des sonst natürlich fließenden Inhalts. */
+.admin-scope .nav-main-split .page-editor-right-tab-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 /* ── Right: editor panel ──────────────────────────────────────────────────── */
 
 .admin-scope .nav-editor-panel {

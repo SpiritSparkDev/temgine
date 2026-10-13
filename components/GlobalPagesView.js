@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar, Copy } from '../lib/muiIcons';
-import { navPlaceholderSlug, buildWidgetPlaceholderKeys, widgetPlaceholderSlug } from '../lib/templateEngine';
+import { navPlaceholderSlug, buildWidgetPlaceholderKeys, widgetPlaceholderSlug, renderTemplate } from '../lib/templateEngine';
+import { loadGlobalVars } from '../lib/renderPipeline';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -419,12 +422,37 @@ const ROLE_TABS = [
 // immer aktiv (als Baustein platziert, kein Aktivierungskonzept).
 const EXCLUSIVE_ACTIVE_ROLES = ['MAIN', 'FOOTER'];
 
+// Seitenbaum für die Live-Vorschau von MAIN-/PAGE-Navigationen — vereinfachte
+// Variante von loadNavigations()' buildNestedPages in lib/renderPipeline.js
+// (ohne isCurrent, ohne Anker: hier wird kein konkreter Seitenaufruf
+// vorgeführt, sondern die reale Seitenstruktur zum Prüfen von {{#pages}}/
+// {{#children}}/verschachtelten Unterseiten während des Bearbeitens).
+function buildPreviewPagesTree(nodes, parentPath = '') {
+  return (nodes || [])
+    .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
+    .map(n => {
+      const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
+      const children = buildPreviewPagesTree(n.children || [], slug);
+      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, data: n.data || {} };
+    });
+}
+
 /**
  * Verwaltet alle "globalen Seitenkomponenten" — Footer, Hauptnavigation und
  * Seitennavigation — in einer Oberfläche (lib/globalPageStore.js). Ersetzt
  * die vormals getrennten Komponenten NavigationView.js und FooterView.js.
  */
 export default function GlobalPagesView({ showToast }) {
+  // Diese Ansicht IST der Content-Editor für globale Seiten (Navigation,
+  // Footer, Widget) — nimmt wie Page-/BlogPostEditor den ganzen Bildschirm
+  // ein, siehe lib/useContentEditorFullscreen.js.
+  useContentEditorFullscreen();
+  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('nav-split-ratio', 75);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [enabledCssFiles, setEnabledCssFiles] = useState([]);
+  const [globalVars, setGlobalVars] = useState({});
+  const [pagesTree, setPagesTree] = useState([]);
+
   const [role, setRole] = useState('MAIN');
   const [list, setList] = useState([]);
   const [editing, setEditing] = useState(null); // { id?, name, role, code, isNew }
@@ -483,6 +511,20 @@ export default function GlobalPagesView({ showToast }) {
     loadList();
     loadOrCreateNavigationCss();
   }, [loadList, loadOrCreateNavigationCss]);
+
+  // Aktivierte CSS-Dateien, globale Variablen und der Seitenbaum für die
+  // Live-Vorschau — wie in PageEditor.js/BlogPostEditor.js einmalig geladen.
+  useEffect(() => {
+    fetch('/api/css')
+      .then(r => r.json())
+      .then(data => setEnabledCssFiles((data.files || []).filter(f => f.enabled !== false)))
+      .catch(() => {});
+    loadGlobalVars().then(setGlobalVars);
+    fetch(`/api/pages?_t=${Date.now()}`)
+      .then(r => r.json())
+      .then(data => setPagesTree(Array.isArray(data) ? buildPreviewPagesTree(data) : []))
+      .catch(() => {});
+  }, []);
 
   async function handleSaveNavigationCss() {
     setIsSavingNavigationCss(true);
@@ -641,6 +683,35 @@ export default function GlobalPagesView({ showToast }) {
     setShowPresets(false);
   }
 
+  // Rendert den bearbeiteten Code mit genau den Daten, die laut Dokumentation
+  // (help/templates.md, Dokumentations-Panel rechts) für die jeweilige Rolle
+  // zur Verfügung stehen: MAIN/PAGE bekommen den echten Seitenbaum
+  // ({{#pages}}/{{#children}}), FOOTER/WIDGET nur {{global.<key>}}.
+  function buildPreviewHtml() {
+    try {
+      if (!editing || !editCode.trim()) {
+        return '<!DOCTYPE html><html><body><p style="padding:16px;color:#888;font-family:sans-serif">Kein Code zum Anzeigen.</p></body></html>';
+      }
+      const context = (role === 'FOOTER' || role === 'WIDGET')
+        ? { global: globalVars }
+        : { pages: pagesTree, anchors: [], customAnchors: [], childPages: pagesTree };
+      const rendered = renderTemplate(editCode, context);
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n${cssLinkTags}</head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildPreviewHtml (GlobalPages) failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewHtml(buildPreviewHtml()), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, editCode, role, globalVars, pagesTree, enabledCssFiles]);
+
   const currentPresets = PRESETS[role] || [];
 
   return (
@@ -739,7 +810,21 @@ export default function GlobalPagesView({ showToast }) {
           )}
         </div>
 
-        {/* ── Right: Editor panel ─────────────────────────────────────────── */}
+        {/* ── Center: resizable Vorschau + Editor ──────────────────────────── */}
+        <div
+          ref={workspaceRef}
+          className="page-editor-workspace workspace-split nav-main-split"
+          style={{ '--pe-split-left': `${splitRatio}%` }}
+        >
+          <div
+            className="page-split-divider"
+            onMouseDown={startSplitDrag}
+            onTouchStart={startSplitDrag}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Breite von Vorschau und Editor verstellen"
+          />
+          <div className="page-editor-right-tab-content">
         {editing ? (
           <div className="nav-editor-panel">
             <div className="nav-editor-header">
@@ -904,6 +989,26 @@ export default function GlobalPagesView({ showToast }) {
             )}
           </div>
         )}
+          </div>
+
+          <div className="page-split-preview">
+            <div className="page-split-preview-head">
+              <span className="page-split-preview-label">Live-Vorschau</span>
+              <button
+                type="button"
+                className="btn-modern-small hollow"
+                onClick={() => setPreviewHtml(buildPreviewHtml())}
+                title="Vorschau aktualisieren"
+              >↻</button>
+            </div>
+            <iframe
+              srcDoc={previewHtml}
+              sandbox="allow-scripts allow-same-origin"
+              className="page-split-preview-iframe"
+              title="Vorschau"
+            />
+          </div>
+        </div>
 
         {/* ── Right: Docs panel ────────────────────────────────────────────── */}
         {showDocs && (

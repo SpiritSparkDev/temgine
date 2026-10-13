@@ -2294,11 +2294,20 @@
   background: #fff;
 }
 
-/* ── Split-Vorschau Layout ───────────────────────────────────────── */
+/* ── Split-Vorschau Layout ───────────────────────────────────────────────
+   Permanenter Vollbild-Zustand des Content-Editors: links die Live-Vorschau
+   (standardmäßig 75%, per --pe-split-left verstellbar, siehe startSplitDrag
+   in PageEditor.js), rechts ein Tab-Bereich ("Felder" / "Seite") statt des
+   früheren, separat ausgelagerten Inspector-Panels. */
 .page-editor-workspace.workspace-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: var(--pe-split-left, 75%) 6px 1fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "preview divider tabs"
+    "preview divider content";
+  column-gap: 0;
+  row-gap: 8px;
   align-items: start;
 }
 
@@ -2306,7 +2315,56 @@
   min-width: 0;
 }
 
+.page-editor-right-tabs {
+  grid-area: tabs;
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.page-editor-right-tab-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.page-editor-right-tab-btn:hover {
+  color: var(--text-primary);
+}
+
+.page-editor-right-tab-btn.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.page-editor-right-tab-content {
+  grid-area: content;
+  min-width: 0;
+}
+
+.page-split-divider {
+  grid-area: divider;
+  align-self: stretch;
+  cursor: col-resize;
+  background: var(--border-color);
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.page-split-divider:hover,
+.page-split-divider:active {
+  background: var(--accent-primary);
+}
+
 .page-split-preview {
+  grid-area: preview;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color);

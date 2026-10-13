@@ -185,3 +185,47 @@ describe(':select(...) annotation', () => {
     ]);
   });
 });
+
+// Regression: {{{inner}}} (Kindblock-Inhalt) wurde bis 0.4x fälschlich als
+// normales Texteingabefeld "Inner" angezeigt, weil nur global.* von der
+// Feldliste ausgeschlossen war — page.*/data.*/widget.* und der literale
+// Name "inner" fehlten. Direkt verursacht durch verschachtelte Blöcke
+// (siehe CHANGELOG), daher eigene Suite statt nur ein weiterer Testfall.
+describe('reservierte Systemvariablen werden nicht als editierbare Felder gelistet', () => {
+  test('{{{inner}}} (Kindblock-Inhalt) erscheint nicht in extractTypedVariables', () => {
+    const code = '<section><h2>{{titel}}</h2><div>{{{inner}}}</div></section>';
+    expect(extractTypedVariables(code)).toEqual([{ varName: 'titel', explicitType: null, group: null }]);
+  });
+
+  test('page.title / page.slug / page.data.X erscheinen nicht', () => {
+    const code = '<p>{{page.title}} — {{page.slug}} — {{page.data.untertitel}}</p><p>{{eigenesFeld}}</p>';
+    expect(extractTypedVariables(code)).toEqual([{ varName: 'eigenesFeld', explicitType: null, group: null }]);
+  });
+
+  test('data.X (Seiten-Datenfeld-Alias) erscheint nicht', () => {
+    const code = '<p>{{data.untertitel}}</p><p>{{eigenesFeld}}</p>';
+    expect(extractTypedVariables(code)).toEqual([{ varName: 'eigenesFeld', explicitType: null, group: null }]);
+  });
+
+  test('widget.<name> erscheint nicht', () => {
+    const code = '<aside>{{{widget.sidebar-cta}}}</aside><p>{{eigenesFeld}}</p>';
+    expect(extractTypedVariables(code)).toEqual([{ varName: 'eigenesFeld', explicitType: null, group: null }]);
+  });
+
+  test('ein echtes Feld, das nur "page"/"data"/"inner" im Namen enthält (ohne Punkt-Präfix), bleibt erhalten', () => {
+    // Guard gegen zu breites Prefix-Matching: nur "page." / "data." / "widget." / exakt "inner" sind reserviert.
+    const code = '<p>{{pageTitle}}</p><p>{{dataSource}}</p><p>{{innerText}}</p>';
+    expect(extractTypedVariables(code)).toEqual([
+      { varName: 'pageTitle', explicitType: null, group: null },
+      { varName: 'dataSource', explicitType: null, group: null },
+      { varName: 'innerText', explicitType: null, group: null },
+    ]);
+  });
+
+  test('reservierte Namen in Repeater-Unterfeldern werden ebenfalls ausgeschlossen', () => {
+    const code = '{{#each:Karten}}<h3>{{titel}}</h3>{{{inner}}}{{{widget.footer-cta}}}{{/each:Karten}}';
+    expect(extractRepeaterBlocks(code)).toEqual([
+      { sectionName: 'Karten', subFields: [{ name: 'titel', type: 'text' }] },
+    ]);
+  });
+});
