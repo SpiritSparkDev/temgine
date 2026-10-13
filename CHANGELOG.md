@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.46.1] - 2026-10-13
+
+### Fixed
+- Navigationen, Footer und Widgets wurden bisher direkt per `Mustache.render()` gerendert statt über `renderTemplate()` wie Block-Templates — dadurch funktionierten `{{#if:feld}}`/`{{^if:feld}}` (bedingte Abschnitte), `{{#each:name}}` (Wiederholungen) und `{{feld:typ}}`-Typannotationen dort nicht, obwohl sie in der UI identisch aussehen wie bei Blöcken. Alle Content-Editoren (Block-Props, Navigationen, Footer, Widgets) laufen jetzt durch denselben Renderer und unterstützen dieselbe Syntax. Nebeneffekt: ein fehlerhaftes Nav-/Footer-/Widget-Template zeigt jetzt wie bei Blöcken eine sichtbare Fehlermeldung statt leer zu bleiben.
+- Doku in „Globale Seiten" (Footer/Navigationen/Widgets) entsprechend ergänzt.
+
+---
+
 ## [0.46.0] - 2026-10-13
 
 ### Added

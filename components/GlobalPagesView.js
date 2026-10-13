@@ -878,11 +878,14 @@ export default function GlobalPagesView({ showToast }) {
                 <Sidebar size={40} strokeWidth={1} />
                 <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
                 <p className="nav-editor-empty-hint">
-                  Widgets brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite als
-                  eigener Block platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"), beliebig oft
-                  und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie Sidebars,
-                  Info- oder CTA-Boxen. Nur <code>{`{{global.<key>}}`}</code> steht zur Verfügung — keine
-                  seitenbaum-spezifischen Daten wie bei Navigationen.
+                  Widgets brauchen keine Aktivierung — sie werden entweder direkt per
+                  <code>{`{{{widget.<name>}}}`}</code> im Code eines Templates eingesetzt, oder als eigener
+                  Block in einer Seite platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"),
+                  beliebig oft und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie
+                  Sidebars, Info- oder CTA-Boxen. Als Daten steht nur <code>{`{{global.<key>}}`}</code> zur
+                  Verfügung (keine seitenbaum-spezifischen Daten wie bei Navigationen) — <code>{`{{#if:…}}`}</code>,
+                  <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> funktionieren wie in
+                  Block-Templates.
                 </p>
               </>
             ) : (
@@ -923,7 +926,9 @@ export default function GlobalPagesView({ showToast }) {
                   </p>
                   <p>
                     Im Code stehen globale Variablen über <code>{`{{global.<key>}}`}</code> zur Verfügung
-                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen".
+                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen". Wie bei
+                    Block-Templates funktionieren auch <code>{`{{#if:…}}`}</code>, <code>{`{{#each:…}}`}</code>
+                    und <code>{`{{feld:typ}}`}</code>.
                   </p>
                 </div>
               ) : isWidget ? (
@@ -961,6 +966,11 @@ export default function GlobalPagesView({ showToast }) {
                       anderen Widgets (kein verschachteltes <code>{`{{{widget.<name>}}}`}</code> innerhalb
                       eines Widgets).
                     </p>
+                    <p>
+                      Wie bei Block-Templates werden auch hier <code>{`{{#if:…}}`}</code>/<code>{`{{^if:…}}`}</code>
+                      (bedingte Abschnitte), <code>{`{{#each:…}}`}</code> (Wiederholungen) und
+                      <code>{`{{feld:typ}}`}</code>-Typannotationen ausgewertet.
+                    </p>
                   </div>
                 </>
               ) : (
@@ -976,6 +986,10 @@ export default function GlobalPagesView({ showToast }) {
                       Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
                       können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
                       selben Template auftauchen.
+                    </p>
+                    <p>
+                      Wie bei Block-Templates werden auch hier <code>{`{{#if:…}}`}</code>/<code>{`{{^if:…}}`}</code>,
+                      <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> ausgewertet.
                     </p>
                   </div>
 
