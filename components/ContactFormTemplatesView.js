@@ -457,7 +457,8 @@ export default function ContactFormTemplatesView({ showToast }) {
                 </Field>
                 <p className="nav-placeholder-ref" style={{ margin: 0 }}>
                   Wird beim Absenden dieses Formulars anstelle der Standard-Benachrichtigung verschickt · leer lassen,
-                  um bei der Standard-Mail (Einstellungen → SMTP-Einstellungen) zu bleiben.
+                  um bei der Standard-Mail (Einstellungen → SMTP-Einstellungen) zu bleiben · beginnt der Text mit einem
+                  HTML-Tag (z. B. <code>&lt;div&gt;</code>), wird er 1:1 als HTML-Mail verschickt, sonst als einfacher Text.
                 </p>
               </div>
             )}

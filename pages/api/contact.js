@@ -36,6 +36,12 @@ function renderEmailTemplatePart(tpl, context, fallback) {
   }
 }
 
+// Die Admin-Vorlage ist entweder reiner Text (dann wird sie für den HTML-Teil
+// noch \n → <br> gewandelt) oder schon fertiges HTML — am öffnenden Tag erkannt,
+// damit beides im selben "Text"-Feld funktioniert.
+const looksLikeHtml = (str) => /<[a-z][\s\S]*>/i.test(String(str || ''));
+const stripHtmlTags = (str) => String(str || '').replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n').trim();
+
 const NAME_ALIASES = ['name', 'fullName', 'fullname', 'full_name'];
 const EMAIL_ALIASES = ['email', 'mail', 'e-mail', 'emailAddress', 'email_address'];
 const SUBJECT_ALIASES = ['subject', 'betreff'];
@@ -226,8 +232,14 @@ export default async function handler(req, res) {
           if (emailTpl.subject || emailTpl.body) {
             const mustacheContext = Object.fromEntries(formFields.map((f) => [f.key, f.value]));
             subjectLine = renderEmailTemplatePart(emailTpl.subject, mustacheContext, genericSubject);
-            textBody = renderEmailTemplatePart(emailTpl.body, mustacheContext, genericText);
-            htmlBody = `<p>${textBody.replace(/\n/g, '<br>')}</p>`;
+            const renderedBody = renderEmailTemplatePart(emailTpl.body, mustacheContext, genericText);
+            if (looksLikeHtml(emailTpl.body)) {
+              htmlBody = renderedBody;
+              textBody = stripHtmlTags(renderedBody);
+            } else {
+              textBody = renderedBody;
+              htmlBody = `<p>${renderedBody.replace(/\n/g, '<br>')}</p>`;
+            }
           }
         }
       }

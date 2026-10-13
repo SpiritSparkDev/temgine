@@ -9,6 +9,7 @@ import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
+import { formatFieldLabel as formatLabel, SelectOptions, isCheckedValue, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import dynamic from 'next/dynamic';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -467,16 +468,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       }
     });
   }, [selectedFieldKey, scrollTick]);
-
-  /** Converts camelCase / kebab-case / snake_case field names into readable labels.
-   *  e.g. "linkesPanel" → "Linkes Panel", "externerLinkText" → "Externer Link Text" */
-  const formatLabel = (name) => {
-    if (!name) return '';
-    return name
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-  };
 
   const makeFieldKey = (path, varName) => `${path}::${varName}`;
 
@@ -2287,216 +2278,24 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               {(templateRepeatersByName[block.template] || []).map(({ sectionName, subFields }) => {
                 const rows = Array.isArray(block.props[sectionName]) ? block.props[sectionName] : [];
                 const rowKey = `${path}|${sectionName}`;
-                const collapsedRows = collapsedRepeaterRows[rowKey] || [];
-                const isOpen = (i) => !collapsedRows.includes(i);
-                const resetRows = () => setCollapsedRepeaterRows(prev => ({ ...prev, [rowKey]: [] }));
-                const toggleRow = (i) => setCollapsedRepeaterRows(prev => {
-                  const cur = prev[rowKey] || [];
-                  return { ...prev, [rowKey]: cur.includes(i) ? cur.filter(x => x !== i) : [...cur, i] };
-                });
-                // Fügt den neuen (leeren) Eintrag genau an Position `at` ein
-                const addRow = (at = rows.length) => {
-                  const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
-                  updateNestedBlock(path, { [sectionName]: [...rows.slice(0, at), emptyRow, ...rows.slice(at)] });
-                  setCollapsedRepeaterRows(prev => ({ ...prev, [rowKey]: (prev[rowKey] || []).map(i => (i >= at ? i + 1 : i)) }));
-                };
-                const itemLabel = sectionName === 'each' ? 'Eintrag' : formatLabel(sectionName);
-                const addButton = (at) => (
-                  <button type="button" onClick={() => addRow(at)} className="btn-modern-small repeater-add-btn" title={`Eintrag hier in ${sectionName} einfügen`}>
-                    <Plus size={12} /> {itemLabel} hinzufügen
-                  </button>
-                );
                 return (
-                  <div key={sectionName} className="field-item field-item-repeater">
-                    <div className="field-repeater-header">
-                      <label className="field-label-xs field-repeater-label">{formatLabel(sectionName)}</label>
-                    </div>
-                    <div className="repeater-rows">
-                      {rows.map((row, rowIdx) => (
-                        <React.Fragment key={rowIdx}>
-                        {addButton(rowIdx)}
-                        <div className="repeater-row">
-                          <div className="repeater-row-header">
-                            <button type="button" className="repeater-row-toggle" aria-expanded={isOpen(rowIdx)} onClick={() => toggleRow(rowIdx)}>
-                              {isOpen(rowIdx) ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                              <span className="repeater-row-num">{itemLabel} {rowIdx + 1}</span>
-                              {!isOpen(rowIdx) && (() => {
-                                const sum = subFields.filter(sf => sf.type !== 'image' && sf.type !== 'url' && sf.type !== 'checkbox' && sf.type !== 'select').map(sf => stripTags(String(row[sf.name] ?? '')).trim()).find(Boolean);
-                                return <span className="repeater-row-summary">{sum ? (sum.length > 60 ? `${sum.slice(0, 60)}…` : sum) : '(leer)'}</span>;
-                              })()}
-                            </button>
-                            <div className="repeater-row-actions">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (rowIdx === 0) return;
-                                  const next = [...rows];
-                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
-                                  updateNestedBlock(path, { [sectionName]: next });
-                                  resetRows();
-                                }}
-                                className="repeater-row-move"
-                                disabled={rowIdx === 0}
-                                title="Nach oben verschieben"
-                              ><ChevronUp size={13} /></button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (rowIdx === rows.length - 1) return;
-                                  const next = [...rows];
-                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
-                                  updateNestedBlock(path, { [sectionName]: next });
-                                  resetRows();
-                                }}
-                                className="repeater-row-move"
-                                disabled={rowIdx === rows.length - 1}
-                                title="Nach unten verschieben"
-                              ><ChevronDown size={13} /></button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const copy = { ...row };
-                                  const next = [...rows.slice(0, rowIdx + 1), copy, ...rows.slice(rowIdx + 1)];
-                                  updateNestedBlock(path, { [sectionName]: next });
-                                  resetRows();
-                                }}
-                                className="repeater-row-duplicate"
-                                title={`Eintrag ${rowIdx + 1} duplizieren`}
-                                aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} duplizieren`}
-                              >⧉ Duplizieren</button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const next = rows.filter((_, i) => i !== rowIdx);
-                                  updateNestedBlock(path, { [sectionName]: next });
-                                  resetRows();
-                                }}
-                                className="repeater-row-delete"
-                                title={`Eintrag ${rowIdx + 1} entfernen`}
-                                aria-label={`Eintrag ${rowIdx + 1} aus ${sectionName} entfernen`}
-                              >✕</button>
-                            </div>
-                          </div>
-                          {isOpen(rowIdx) && <div className="repeater-row-fields">
-                            {subFields.map(sf => {
-                              const sfVal = row[sf.name] !== undefined ? row[sf.name] : '';
-                              if (sf.type === 'select' && sf.options) {
-                                return (
-                                  <div key={sf.name} className="repeater-subfield">
-                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <select
-                                      ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
-                                      value={sfVal || ''}
-                                      onChange={e => {
-                                        const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                        updateNestedBlock(path, { [sectionName]: next });
-                                      }}
-                                      className="input-field-small field-input-full"
-                                    >
-                                      <SelectOptions options={sf.options} value={sfVal} />
-                                    </select>
-                                  </div>
-                                );
-                              }
-                              if (sf.type === 'checkbox') {
-                                return (
-                                  <div key={sf.name} className="repeater-subfield">
-                                    <label className="field-label-xs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                                      <input
-                                        ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
-                                        type="checkbox"
-                                        checked={isCheckedValue(sfVal)}
-                                        onChange={e => {
-                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.checked ? true : '' } : r);
-                                          updateNestedBlock(path, { [sectionName]: next });
-                                        }}
-                                      />
-                                      {formatLabel(sf.name)}
-                                    </label>
-                                  </div>
-                                );
-                              }
-                              if (sf.type === 'textarea') {
-                                return (
-                                  <div key={sf.name} className="repeater-subfield repeater-subfield-wide">
-                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <div ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)} className="field-quill-wrapper">
-                                      <SmartRichTextEditor
-                                        mode={richTextEditorMode}
-                                        label={formatLabel(sf.name)}
-                                        value={sfVal}
-                                        onChange={val => {
-                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: val } : r);
-                                          updateNestedBlock(path, { [sectionName]: next });
-                                        }}
-                                        toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']}
-                                      />
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              if (sf.type === 'image' || sf.type === 'url') {
-                                return (
-                                  <div key={sf.name} className="repeater-subfield">
-                                    <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                    <div className="field-url-row">
-                                      <input
-                                        ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
-                                        type="text"
-                                        placeholder={sf.name}
-                                        value={sfVal}
-                                        onChange={e => {
-                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                          updateNestedBlock(path, { [sectionName]: next });
-                                        }}
-                                        className="input-field-small field-input-full"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => openFileModal((url) => {
-                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: url } : r);
-                                          updateNestedBlock(path, { [sectionName]: next });
-                                        })}
-                                        className="btn-modern-small"
-                                        title={`Datei für ${sf.name} auswählen`}
-                                        aria-label={`Datei für ${sf.name} auswählen`}
-                                      >📁</button>
-                                    </div>
-                                    {sf.type === 'image' && sfVal && (
-                                      <div className="field-image-thumb-row">
-                                        <img src={sfVal} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => {
-                                          const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: url } : r);
-                                          updateNestedBlock(path, { [sectionName]: next });
-                                        })} />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                              return (
-                                <div key={sf.name} className="repeater-subfield">
-                                  <label className="field-label-xs">{formatLabel(sf.name)}</label>
-                                  <input
-                                    ref={(el) => setFieldRef(path, `${sectionName}.${rowIdx}.${sf.name}`, el)}
-                                    type={sf.type === 'number' ? 'number' : 'text'}
-                                    placeholder={sf.name}
-                                    value={sfVal}
-                                    onChange={e => {
-                                      const next = rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r);
-                                      updateNestedBlock(path, { [sectionName]: next });
-                                    }}
-                                    className="input-field-small field-input-full"
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>}
-                        </div>
-                        </React.Fragment>
-                      ))}
-                      {addButton(rows.length)}
-                    </div>
-                  </div>
+                  <RepeaterSectionEditor
+                    key={sectionName}
+                    sectionName={sectionName}
+                    subFields={subFields}
+                    rows={rows}
+                    onRowsChange={(next) => updateNestedBlock(path, { [sectionName]: next })}
+                    richTextEditorMode={richTextEditorMode}
+                    openFileModal={openFileModal}
+                    devTitle={devTitle}
+                    getFieldRef={(rowIdx, name) => (el) => setFieldRef(path, `${sectionName}.${rowIdx}.${name}`, el)}
+                    collapsedRows={collapsedRepeaterRows[rowKey] || []}
+                    onCollapsedRowsChange={(updater) => setCollapsedRepeaterRows(prev => {
+                      const cur = prev[rowKey] || [];
+                      const next = typeof updater === 'function' ? updater(cur) : updater;
+                      return { ...prev, [rowKey]: next };
+                    })}
+                  />
                 );
               })}
 
@@ -3197,7 +2996,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                           return (
                             <div className="page-fields-editor">
                               {fields.map(({ varName, explicitType, options }) => (
-                                <PageDataFieldInput
+                                <SimpleFieldInput
                                   key={varName}
                                   varName={varName}
                                   options={options}
@@ -3207,6 +3006,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                                   onChange={(val) => setPageData(d => ({ ...d, [varName]: val }))}
                                   openFileModal={openFileModal}
                                   devTitle={devTitle}
+                                  richTextEditorMode={richTextEditorMode}
                                 />
                               ))}
                             </div>
@@ -4042,138 +3842,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// Checkbox-Felder ({{feld:checkbox}}) speichern true bzw. '' (Mustache: leer = aus);
-// "true"/"1" aus älteren Texteingaben gelten ebenfalls als angehakt.
-function isCheckedValue(v) {
-  return v === true || v === 'true' || v === 1 || v === '1';
-}
-
-// <option>-Liste für {{feld:select(…)}}; ein bereits gespeicherter Wert, der nicht
-// (mehr) in der Liste steht, bleibt als eigener Eintrag erhalten statt still zu verschwinden.
-function SelectOptions({ options, value }) {
-  const known = options.some(o => o.value === value);
-  return (
-    <>
-      <option value="">-- Bitte wählen --</option>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      {value && !known && <option value={value}>{value}</option>}
-    </>
-  );
-}
-
-// Renders one input for a page-level {{data.X}} field, declared by a
-// PAGE_FIELDS template and edited under Einstellungen → Seiten-Datenfelder.
-// Mirrors the per-type input rendering already used for block props, but
-// writes to pageData[varName] via the injected onChange instead of a block
-// path — page fields have no nested-path/group/repeater support (v1 scope).
-function PageDataFieldInput({ varName, inputType, options, label, value, onChange, openFileModal, devTitle }) {
-  const richTextEditorMode = useRichTextEditorMode();
-  if (inputType === 'select' && options) {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <select value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full">
-          <SelectOptions options={options} value={value} />
-        </select>
-      </div>
-    );
-  }
-  if (inputType === 'textarea') {
-    return (
-      <div className="field-item field-item-textarea">
-        <label className="field-label-xs">{label}</label>
-        <div className="field-quill-wrapper">
-          <SmartRichTextEditor mode={richTextEditorMode} label={label} value={value || ''} onChange={onChange} toolbar={['bold', 'italic', 'ol', 'ul', 'link', 'clear', 'preview']} />
-        </div>
-      </div>
-    );
-  }
-
-  if (inputType === 'array') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <textarea
-          placeholder="Ein Wert pro Zeile"
-          value={Array.isArray(value) ? value.join('\n') : ''}
-          onChange={e => onChange(e.target.value.split('\n').filter(v => v.trim()))}
-          rows={2}
-          className="input-field-small field-input-full field-array-textarea"
-        />
-      </div>
-    );
-  }
-
-  if (inputType === 'image') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <div className="field-url-row">
-          <input type="text" placeholder="Bild-URL" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
-          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small" title={devTitle(`Bild fuer Feld ${label} auswaehlen`)} aria-label={`Bild fuer Feld ${label} auswaehlen`}>📁 Bild</button>
-        </div>
-        {value && (
-          <div className="field-image-thumb-row">
-            <img src={value} alt="" className="field-image-thumb" onClick={() => openFileModal((url) => onChange(url))} />
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (inputType === 'date') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
-      </div>
-    );
-  }
-
-  if (inputType === 'checkbox') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={isCheckedValue(value)} onChange={e => onChange(e.target.checked ? true : '')} />
-          {label}
-        </label>
-      </div>
-    );
-  }
-
-  if (inputType === 'color') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <div className="field-url-row">
-          <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000'} onChange={e => onChange(e.target.value)} className="input-field-small" />
-          <input type="text" value={value || ''} onChange={e => onChange(e.target.value)} placeholder="#rrggbb" className="input-field-small field-input-full" />
-        </div>
-      </div>
-    );
-  }
-
-  if (inputType === 'url') {
-    return (
-      <div className="field-item">
-        <label className="field-label-xs">{label}</label>
-        <div className="field-url-row">
-          <input type="text" placeholder="URL oder Dateipfad" value={value || ''} onChange={e => onChange(e.target.value)} className="input-field-small field-input-full" />
-          <button type="button" onClick={() => openFileModal((url) => onChange(url))} className="btn-modern-small field-input-full" title={devTitle(`Datei fuer Feld ${label} auswaehlen`)} aria-label={`Datei fuer Feld ${label} auswaehlen`}>📁 Datei</button>
-        </div>
-      </div>
-    );
-  }
-
-  const numberOrText = inputType === 'number' ? 'number' : 'text';
-  return (
-    <div className="field-item">
-      <label className="field-label-xs">{label}</label>
-      <input type={numberOrText} value={value ?? ''} onChange={e => onChange(numberOrText === 'number' ? e.target.valueAsNumber : e.target.value)} className="input-field-small field-input-full" />
     </div>
   );
 }

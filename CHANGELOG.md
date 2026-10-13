@@ -5,6 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.44.0] - 2026-10-13
+
+### Changed
+- Die Eingabemasken für Template-Felder (Block-Props im Seiten-Editor, Beitrags-Template-Felder im Blog/News-Editor) nutzen jetzt eine gemeinsame Komponente (`components/TemplateFieldEditors.js`) statt zweier unabhängig gewachsener Implementierungen. Das behebt mehrere Unklarheiten im Blog-Editor: Feld-Labels wurden dort bisher roh als `{{Feldname}}` angezeigt statt lesbar formatiert, camelCase-Feldnamen wurden nicht in Wörter getrennt, und Repeater-Einträge ("Artikel" u. ä.) quetschten alle Unterfelder — auch Textareas — in gleich schmale Spalten nebeneinander statt Textfelder über die volle Breite laufen zu lassen. Der Blog-Editor bekommt dabei auch das bereits im Seiten-Editor vorhandene Auf-/Zuklappen, Verschieben und Duplizieren von Repeater-Einträgen.
+
+## [0.43.0] - 2026-10-11
+
+### Added
+- Kontaktformular-E-Mail-Vorlage: das „Text"-Feld erkennt jetzt automatisch, ob es mit einem HTML-Tag beginnt, und verschickt den Inhalt dann 1:1 als HTML-Mail (statt wie bisher immer nur als einfacher Text mit `\n` → `<br>`-Umwandlung) — der Klartext-Teil der E-Mail wird dafür automatisch durch Entfernen der Tags erzeugt. Reiner Text funktioniert weiterhin unverändert.
+
+---
+
 ## [0.42.1] - 2026-10-11
 
 ### Fixed
