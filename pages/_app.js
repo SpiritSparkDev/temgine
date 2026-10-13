@@ -15,6 +15,7 @@ import '../styles/navigation-view.css'
 import '../styles/wysiwyg-editor.css'
 import '../styles/blog-view.css'
 import '../styles/cookie-consent-view.css'
+import '../styles/changelog.css'
 import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';

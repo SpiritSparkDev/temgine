@@ -16,6 +16,7 @@ import FileManagerView from './FileManagerView';
 import BackupView from './BackupView';
 import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
+import ChangelogPopup from './ChangelogPopup';
 import ErrorBoundary from './ErrorBoundary';
 import ContactFormTemplatesView from './ContactFormTemplatesView';
 import CookieConsentView from './CookieConsentView';
@@ -584,11 +585,12 @@ export default function AdminPageClient() {
       <Head>
         <title>Temgine CMS Admin</title>
       </Head>
+      <ChangelogPopup />
       {toast && (
-        <Toast 
-          message={toast.message} 
-          type={toast.type} 
-          onClose={() => setToast(null)} 
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
       {confirmDialog && (

@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.48.0] - 2026-10-13
+
+### Added
+- „Was ist neu"-Fenster im Admin-Bereich: öffnet sich automatisch, sobald die ausgelieferte Version gegenüber der zuletzt im Browser gesehenen einen Minor- oder Major-Sprung macht (reine Patch-Releases lösen es nicht aus), zeigt die Neuerungen in einfacher, nicht-technischer Sprache und lässt sich per Klick außerhalb, Escape oder Schließen-Button beenden. Merkt sich den zuletzt gesehenen Stand pro Browser in `localStorage`. Inhalte getrennt von diesem CHANGELOG gepflegt in `lib/userChangelog.js` (bewusst nutzerfreundlich formuliert statt wie hier an der Code-Historie orientiert). Vergleichslogik in `lib/changelogGate.js` (mit Tests).
+
+---
+
 ## [0.47.0] - 2026-10-13
 
 ### Added
