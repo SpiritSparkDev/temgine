@@ -5,10 +5,22 @@ import { listTemplates, saveTemplate, deleteTemplateByName } from '../../../lib/
 import { listNavigations, saveNavigation, deleteNavigation } from '../../../lib/navigationStore'
 import { listFooters, saveFooter, deleteFooter } from '../../../lib/footerStore'
 import { MAINTENANCE_PAGES, saveMaintenanceField } from '../../../lib/maintenanceStore'
+import { importExternFiles, mergeExternConfig } from '../../../lib/externFiles'
 import fs from 'fs'
 import path from 'path'
 
 const VALID_NAV_TYPES = new Set(['MAIN', 'PAGE'])
+
+// Inhalt einer Upload-Datei aus dem Backup: beim ZIP-Import (pages/api/admin/
+// import-zip.js) als getBuffer() direkt aus dem Archiv, beim JSON-Import als
+// Base64- bzw. UTF-8-Text.
+async function readItemContent(item) {
+  if (item && typeof item.getBuffer === 'function') return item.getBuffer()
+  if (item && Buffer.isBuffer(item.buffer)) return item.buffer
+  return item?.encoding === 'base64'
+    ? Buffer.from(String(item?.content || ''), 'base64')
+    : Buffer.from(String(item?.content || ''), 'utf-8')
+}
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
 
 export const config = {
@@ -19,88 +31,13 @@ export const config = {
   },
 }
 
-function normalizeCssFilename(input, fallback = 'style.css') {
-  const raw = String(input || '').trim();
-  const base = path.basename(raw || fallback).replace(/[^A-Za-z0-9._-]/g, '_');
-  const withExt = base.toLowerCase().endsWith('.css') ? base : `${base}.css`;
-  const finalName = withExt === '.css' ? fallback : withExt;
-  return finalName;
+// CSS- und JS-Dateien des CSS-/JS-Managers: gemeinsame Logik in lib/externFiles.js
+async function importCSSFiles(cssFiles = [], strategy = 'merge') {
+  return importExternFiles('css', cssFiles, strategy)
 }
 
-async function importCSSFiles(cssFiles = [], strategy = 'merge') {
-  const cssDir = path.join(process.cwd(), 'public', 'extern_css')
-  if (!fs.existsSync(cssDir)) fs.mkdirSync(cssDir, { recursive: true })
-
-  const result = {
-    imported: 0,
-    errors: [],
-    writtenFiles: []
-  }
-
-  // If replace strategy: delete all existing CSS files
-  if (strategy === 'replace') {
-    try {
-      const allFiles = fs.readdirSync(cssDir).filter(f => f.endsWith('.css'))
-      for (const file of allFiles) {
-        fs.unlinkSync(path.join(cssDir, file))
-      }
-      // Also delete .order.json
-      const orderPath = path.join(cssDir, '.order.json')
-      if (fs.existsSync(orderPath)) fs.unlinkSync(orderPath)
-    } catch (e) {
-      console.warn('Failed to delete old CSS files:', e.message)
-      result.errors.push(`Vorhandene CSS-Dateien konnten nicht vollständig gelöscht werden: ${e.message}`)
-    }
-  }
-
-  // Write new CSS files
-  const newFilenames = []
-  const usedNames = new Set()
-  for (const file of cssFiles) {
-    const rawName = file?.filename || file?.name || file?.file || ''
-    let filename = normalizeCssFilename(rawName, 'style.css')
-    if (usedNames.has(filename)) {
-      const stem = filename.replace(/\.css$/i, '')
-      let i = 2
-      while (usedNames.has(`${stem}-${i}.css`)) i++
-      filename = `${stem}-${i}.css`
-    }
-    usedNames.add(filename)
-    const content = file.content || ''
-    const filePath = path.join(cssDir, filename)
-    if (!path.resolve(filePath).startsWith(path.resolve(cssDir))) {
-      result.errors.push(`Ungültiger CSS-Dateiname übersprungen: ${rawName || '(leer)'}`)
-      continue
-    }
-    try {
-      fs.writeFileSync(filePath, content, 'utf-8')
-      newFilenames.push(filename)
-      result.imported++
-      result.writtenFiles.push(filename)
-    } catch (e) {
-      console.warn(`Failed to write CSS file ${filename}:`, e.message)
-      result.errors.push(`CSS-Datei "${filename}" konnte nicht geschrieben werden: ${e.message}`)
-    }
-  }
-
-  // Update .order.json — merge with existing order so non-imported files keep their position
-  if (newFilenames.length > 0) {
-    try {
-      const orderPath = path.join(cssDir, '.order.json')
-      let existingOrder = []
-      if (strategy === 'merge' && fs.existsSync(orderPath)) {
-        try { existingOrder = JSON.parse(fs.readFileSync(orderPath, 'utf-8')).order || [] } catch (e) {}
-      }
-      // Append new filenames that aren't already in the order
-      const merged = [...existingOrder, ...newFilenames.filter(f => !existingOrder.includes(f))]
-      fs.writeFileSync(orderPath, JSON.stringify({ order: merged }, null, 2), 'utf-8')
-    } catch (e) {
-      console.warn('Failed to write .order.json:', e.message)
-      result.errors.push(`CSS-Reihenfolge (.order.json) konnte nicht aktualisiert werden: ${e.message}`)
-    }
-  }
-
-  return result
+async function importJSFiles(jsFiles = [], strategy = 'merge') {
+  return importExternFiles('js', jsFiles, strategy)
 }
 
 function importJsonConfig(filename, data, strategy = 'merge') {
@@ -112,12 +49,9 @@ function importJsonConfig(filename, data, strategy = 'merge') {
 
     if (strategy === 'merge' && fs.existsSync(filePath)) {
       // Merge: combine disabled arrays, keeping unique entries
+      // Merge: disabled als Vereinigung, categories (JS-Consent) pro Datei
       const existing = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-      const merged = Array.from(new Set([
-        ...(Array.isArray(existing.disabled) ? existing.disabled : []),
-        ...(Array.isArray(data.disabled) ? data.disabled : [])
-      ]))
-      fs.writeFileSync(filePath, JSON.stringify({ ...existing, ...data, disabled: merged }, null, 2), 'utf-8')
+      fs.writeFileSync(filePath, JSON.stringify(mergeExternConfig(existing, data), null, 2), 'utf-8')
     } else {
       // Replace: write as-is
       fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
@@ -428,7 +362,7 @@ function sanitizeUploadRelativePath(input) {
   return norm.split('/').map(seg => seg.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
 }
 
-function importUploadedFiles(uploadedFiles = [], strategy = 'merge') {
+async function importUploadedFiles(uploadedFiles = [], strategy = 'merge') {
   const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
   const result = { imported: 0, errors: [] }
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
@@ -465,10 +399,7 @@ function importUploadedFiles(uploadedFiles = [], strategy = 'merge') {
     try {
       const dir = path.dirname(abs)
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      const raw = item?.encoding === 'base64'
-        ? Buffer.from(String(item.content || ''), 'base64')
-        : Buffer.from(String(item.content || ''), 'utf-8')
-      fs.writeFileSync(abs, raw)
+      fs.writeFileSync(abs, await readItemContent(item))
       result.imported++
     } catch (e) {
       result.errors.push(`Upload-Datei "${rel}" konnte nicht geschrieben werden: ${e.message}`)
@@ -478,7 +409,7 @@ function importUploadedFiles(uploadedFiles = [], strategy = 'merge') {
   return result
 }
 
-function importUploadFonts(uploadFonts = [], strategy = 'merge') {
+async function importUploadFonts(uploadFonts = [], strategy = 'merge') {
   const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
   const result = { imported: 0, errors: [] }
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
@@ -518,10 +449,7 @@ function importUploadFonts(uploadFonts = [], strategy = 'merge') {
     try {
       const dir = path.dirname(abs)
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-      const raw = item?.encoding === 'base64'
-        ? Buffer.from(String(item.content || ''), 'base64')
-        : Buffer.from(String(item.content || ''), 'utf-8')
-      fs.writeFileSync(abs, raw)
+      fs.writeFileSync(abs, await readItemContent(item))
       result.imported++
     } catch (e) {
       result.errors.push(`Upload-Font "${rel}" konnte nicht geschrieben werden: ${e.message}`)
@@ -529,6 +457,282 @@ function importUploadFonts(uploadFonts = [], strategy = 'merge') {
   }
 
   return result
+}
+
+// Spielt ein Backup ein (auth und strategy prüft der Aufrufer). Gemeinsam für
+// den JSON-Import (unten) und den ZIP-Import (pages/api/admin/import-zip.js).
+export async function runImport(body = {}, strategy = 'merge') {
+  const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], blogChannels: body.blogChannels || [], blogPosts: body.blogPosts || [], css: body.css || [], js: body.js || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
+
+  const templates = Array.isArray(backup.templates) ? backup.templates : []
+  const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
+  const pages = Array.isArray(backup.pages) ? backup.pages : []
+  const blogChannels = Array.isArray(backup.blogChannels) ? backup.blogChannels : []
+  const blogPosts = Array.isArray(backup.blogPosts) ? backup.blogPosts : []
+  const css = Array.isArray(backup.css) ? backup.css : []
+  const js = Array.isArray(backup.js) ? backup.js : []
+  const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
+  const globalVariables = Array.isArray(backup.globalVariables) ? backup.globalVariables : []
+  const footers = Array.isArray(backup.footers) ? backup.footers : []
+  const maintenance = (backup.maintenance && typeof backup.maintenance === 'object') ? backup.maintenance : {}
+  const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
+  const uploadedFiles = Array.isArray(backup.uploadedFiles) ? backup.uploadedFiles : []
+  const cssConfig = backup.cssConfig || null
+  const jsConfig = backup.jsConfig || null
+  const fontsConfig = backup.fontsConfig || null
+
+  // Backups now let the admin pick exactly which categories to include (see
+  // lib/backupCategories.js) — e.g. a backup with "Seiten" unchecked has
+  // pages: []. Without this, a "replace" restore from that file would read
+  // "no pages in the backup" as "delete every existing page", silently
+  // destroying data the backup never claimed to touch. `filesIncluded` is
+  // the export's own truthful list of what it actually bundled; a category
+  // missing from it is forced to "merge" (i.e. a no-op against an empty
+  // array) regardless of the strategy the user picked. Old exports/
+  // hand-built JSON without this field fall back to today's behavior
+  // (every category follows `strategy`).
+  const filesIncluded = Array.isArray(backup?.metadata?.filesIncluded) ? new Set(backup.metadata.filesIncluded) : null
+  const strategyFor = (category) => (!filesIncluded || filesIncluded.has(category)) ? strategy : 'merge'
+  const templatesStrategy = strategyFor('templates')
+  const pagesStrategy = strategyFor('pages')
+  const snippetsStrategy = strategyFor('snippets')
+  const blogStrategy = strategyFor('blog')
+  // JS gibt es erst seit 0.44.0 im Backup. Ältere Backups ohne filesIncluded würden
+  // über strategyFor() bei "Ersetzen" sonst alle vorhandenen Scripts löschen —
+  // daher hier nur ersetzen, wenn das Backup JS ausdrücklich mitbringt.
+  const jsStrategy = (filesIncluded && filesIncluded.has('js')) ? strategy : 'merge'
+
+  let importStats = { templates: 0, snippets: 0, pages: 0, blogChannels: 0, blogPosts: 0, css: 0, js: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
+
+  // Handle replace strategy for database records
+  if (strategy === 'replace') {
+    try {
+      if (templatesStrategy === 'replace') {
+        for (const t of listTemplates()) deleteTemplateByName(t.name)
+      }
+      if (snippetsStrategy === 'replace') {
+        await prisma.snippet.deleteMany({})
+      }
+      if (pagesStrategy === 'replace') {
+        await prisma.page.deleteMany({})
+      }
+    } catch (e) {
+      console.warn('Failed to delete existing records in replace mode:', e.message)
+    }
+  }
+
+  // Import templates (file-based, not DB rows — see lib/templateStore.js)
+  for (const t of templates) {
+    if (!t.name) continue
+    try {
+      saveTemplate({
+        name: t.name,
+        code: t.code || '',
+        type: t.type || 'BLOCK',
+        blogRole: t.blogRole || null,
+        masterTemplateName: t.masterTemplateName || null,
+        category: t.category || null
+      })
+      importStats.templates++
+    } catch (e) {
+      importStats.errors.push(`Template "${t.name}": ${e.message}`)
+    }
+  }
+
+  // Import snippets (preserve metadata)
+  const snippetKeys = []
+  for (const s of snippets) {
+    const label = String(s.label || s.key || '').trim()
+    if (!label) continue
+    try {
+      const key = label
+      snippetKeys.push(key)
+      let value = String(s.snippet || '')
+      if (s.type || s.handler || s.key) {
+        value = JSON.stringify({
+          key: s.key || '',
+          snippet: s.snippet || '',
+          type: s.type || 'free',
+          handler: s.handler || ''
+        })
+      }
+      try { value = sanitizeRecursive(value) } catch (e) {}
+      await prisma.snippet.upsert({
+        where: { key },
+        create: { key, value },
+        update: { value }
+      })
+      importStats.snippets++
+    } catch (e) {
+      importStats.errors.push(`Snippet "${label}": ${e.message}`)
+    }
+  }
+
+  // In replace mode, delete snippets not in backup
+  if (strategy === 'replace' && snippetKeys.length > 0) {
+    try {
+      await prisma.snippet.deleteMany({ where: { key: { notIn: snippetKeys } } })
+    } catch (e) {
+      console.warn('Failed to cleanup snippets in replace mode:', e.message)
+    }
+  }
+
+  // Import pages (simple upsert by slug)
+  for (const p of pages) {
+    if (!p.slug) continue
+    try {
+      const slug = String(p.slug)
+      const data = sanitizeRecursive(p.data || {})
+      await prisma.page.upsert({
+        where: { slug },
+        create: {
+          slug,
+          title: p.title || slug,
+          blocks: p.blocks || [],
+          data,
+          children: p.children || [],
+          template: p.template || null,
+          status: p.status || 'DRAFT',
+          publishAt: p.publishAt ? new Date(p.publishAt) : null,
+          isHomepage: p.isHomepage || false
+        },
+        update: {
+          title: p.title || slug,
+          blocks: p.blocks || [],
+          data,
+          children: p.children || [],
+          template: p.template,
+          status: p.status || 'DRAFT',
+          publishAt: p.publishAt ? new Date(p.publishAt) : null,
+          isHomepage: p.isHomepage || false
+        }
+      })
+      importStats.pages++
+    } catch (e) {
+      importStats.errors.push(`Page "${p.slug}": ${e.message}`)
+    }
+  }
+
+  // Import blog channels & posts
+  try {
+    const blogResult = await importBlog(blogChannels, blogPosts, blogStrategy)
+    importStats.blogChannels = blogResult.importedChannels
+    importStats.blogPosts = blogResult.importedPosts
+    if (blogResult.errors.length > 0) importStats.errors.push(...blogResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Blog-Import fehlgeschlagen: ${e.message}`)
+  }
+
+  // Import CSS files
+  try {
+    const cssResult = await importCSSFiles(css, strategyFor('css'))
+    importStats.css = cssResult.imported
+    if (cssResult.errors.length > 0) {
+      importStats.errors.push(...cssResult.errors)
+    }
+  } catch (e) {
+    importStats.errors.push(`CSS import failed: ${e.message}`)
+  }
+
+  // Import JS files (JS-Manager)
+  try {
+    const jsResult = await importJSFiles(js, jsStrategy)
+    importStats.js = jsResult.imported
+    if (jsResult.errors.length > 0) importStats.errors.push(...jsResult.errors)
+  } catch (e) {
+    importStats.errors.push(`JS import failed: ${e.message}`)
+  }
+
+  // Import navigations
+  try {
+    const navResult = await importNavigations(navigations, strategyFor('navigations'))
+    importStats.navigations = navResult.imported
+    if (navResult.errors.length > 0) importStats.errors.push(...navResult.errors)
+
+    const reconcileResult = await reconcilePageNavReferences(navResult.activeMainId)
+    importStats.fixedPageNavRefs = reconcileResult.fixed
+    if (reconcileResult.errors.length > 0) importStats.errors.push(...reconcileResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Navigations import failed: ${e.message}`)
+  }
+
+  // Import global variables
+  try {
+    const globalVarResult = await importGlobalVariables(globalVariables, strategyFor('globalVariables'))
+    importStats.globalVariables = globalVarResult.imported
+    if (globalVarResult.errors.length > 0) importStats.errors.push(...globalVarResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Globale Variablen import failed: ${e.message}`)
+  }
+
+  // Import footers
+  try {
+    const footerResult = await importFooters(footers, strategyFor('footers'))
+    importStats.footers = footerResult.imported
+    if (footerResult.errors.length > 0) importStats.errors.push(...footerResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Footer import failed: ${e.message}`)
+  }
+
+  // Import maintenance pages (404/503/no-homepage/loading)
+  try {
+    const maintenanceResult = await importMaintenance(maintenance)
+    importStats.maintenance = maintenanceResult.imported
+    if (maintenanceResult.errors.length > 0) importStats.errors.push(...maintenanceResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Maintenance import failed: ${e.message}`)
+  }
+
+  // Restore uploaded font files so @font-face URLs keep working after restore
+  try {
+    const uploadFontResult = await importUploadFonts(uploadFonts, strategyFor('uploadFonts'))
+    importStats.uploadFonts = uploadFontResult.imported
+    if (uploadFontResult.errors.length > 0) importStats.errors.push(...uploadFontResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Upload-Fonts import failed: ${e.message}`)
+  }
+
+  try {
+    const uploadFilesResult = await importUploadedFiles(uploadedFiles, strategyFor('uploadedFiles'))
+    importStats.uploadedFiles = uploadFilesResult.imported
+    if (uploadFilesResult.errors.length > 0) importStats.errors.push(...uploadFilesResult.errors)
+  } catch (e) {
+    importStats.errors.push(`Upload-Dateien import failed: ${e.message}`)
+  }
+
+  // Restore CSS enabled/disabled config
+  if (cssConfig) {
+    try {
+      importJsonConfig('css-config.json', cssConfig, strategy)
+    } catch (e) {
+      importStats.errors.push(`CSS-Config import failed: ${e.message}`)
+    }
+  }
+
+  // Restore JS enabled/disabled + Consent-Kategorien
+  if (jsConfig) {
+    try {
+      importJsonConfig('js-config.json', jsConfig, jsStrategy)
+    } catch (e) {
+      importStats.errors.push(`JS-Config import failed: ${e.message}`)
+    }
+  }
+
+  // Restore Fonts enabled/disabled config
+  if (fontsConfig) {
+    try {
+      importJsonConfig('fonts-config.json', fontsConfig, strategy)
+    } catch (e) {
+      importStats.errors.push(`Fonts-Config import failed: ${e.message}`)
+    }
+  }
+
+  return {
+    ok: true,
+    strategy,
+    importStats,
+    message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.blogChannels} blog channels, ${importStats.blogPosts} blog posts, ${importStats.css} CSS files, ${importStats.js} JS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
+  }
 }
 
 export default async function handler(req, res) {
@@ -543,254 +747,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid strategy. Use "merge" or "replace"' })
     }
 
-    const body = req.body || {}
-    const backup = body.metadata ? body : { templates: body.templates || [], snippets: body.snippets || [], pages: body.pages || [], blogChannels: body.blogChannels || [], blogPosts: body.blogPosts || [], css: body.css || [], navigations: body.navigations || [], globalVariables: body.globalVariables || [], footers: body.footers || [], maintenance: body.maintenance || {}, uploadFonts: body.uploadFonts || [], uploadedFiles: body.uploadedFiles || [] }
-
-    const templates = Array.isArray(backup.templates) ? backup.templates : []
-    const snippets = Array.isArray(backup.snippets) ? backup.snippets : []
-    const pages = Array.isArray(backup.pages) ? backup.pages : []
-    const blogChannels = Array.isArray(backup.blogChannels) ? backup.blogChannels : []
-    const blogPosts = Array.isArray(backup.blogPosts) ? backup.blogPosts : []
-    const css = Array.isArray(backup.css) ? backup.css : []
-    const navigations = Array.isArray(backup.navigations) ? backup.navigations : []
-    const globalVariables = Array.isArray(backup.globalVariables) ? backup.globalVariables : []
-    const footers = Array.isArray(backup.footers) ? backup.footers : []
-    const maintenance = (backup.maintenance && typeof backup.maintenance === 'object') ? backup.maintenance : {}
-    const uploadFonts = Array.isArray(backup.uploadFonts) ? backup.uploadFonts : []
-    const uploadedFiles = Array.isArray(backup.uploadedFiles) ? backup.uploadedFiles : []
-    const cssConfig = backup.cssConfig || null
-    const fontsConfig = backup.fontsConfig || null
-
-    // Backups now let the admin pick exactly which categories to include (see
-    // lib/backupCategories.js) — e.g. a backup with "Seiten" unchecked has
-    // pages: []. Without this, a "replace" restore from that file would read
-    // "no pages in the backup" as "delete every existing page", silently
-    // destroying data the backup never claimed to touch. `filesIncluded` is
-    // the export's own truthful list of what it actually bundled; a category
-    // missing from it is forced to "merge" (i.e. a no-op against an empty
-    // array) regardless of the strategy the user picked. Old exports/
-    // hand-built JSON without this field fall back to today's behavior
-    // (every category follows `strategy`).
-    const filesIncluded = Array.isArray(backup?.metadata?.filesIncluded) ? new Set(backup.metadata.filesIncluded) : null
-    const strategyFor = (category) => (!filesIncluded || filesIncluded.has(category)) ? strategy : 'merge'
-    const templatesStrategy = strategyFor('templates')
-    const pagesStrategy = strategyFor('pages')
-    const snippetsStrategy = strategyFor('snippets')
-    const blogStrategy = strategyFor('blog')
-
-    let importStats = { templates: 0, snippets: 0, pages: 0, blogChannels: 0, blogPosts: 0, css: 0, navigations: 0, globalVariables: 0, footers: 0, maintenance: 0, uploadFonts: 0, uploadedFiles: 0, fixedPageNavRefs: 0, errors: [] }
-
-    // Handle replace strategy for database records
-    if (strategy === 'replace') {
-      try {
-        if (templatesStrategy === 'replace') {
-          for (const t of listTemplates()) deleteTemplateByName(t.name)
-        }
-        if (snippetsStrategy === 'replace') {
-          await prisma.snippet.deleteMany({})
-        }
-        if (pagesStrategy === 'replace') {
-          await prisma.page.deleteMany({})
-        }
-      } catch (e) {
-        console.warn('Failed to delete existing records in replace mode:', e.message)
-      }
-    }
-
-    // Import templates (file-based, not DB rows — see lib/templateStore.js)
-    for (const t of templates) {
-      if (!t.name) continue
-      try {
-        saveTemplate({
-          name: t.name,
-          code: t.code || '',
-          type: t.type || 'BLOCK',
-          blogRole: t.blogRole || null,
-          masterTemplateName: t.masterTemplateName || null,
-          category: t.category || null
-        })
-        importStats.templates++
-      } catch (e) {
-        importStats.errors.push(`Template "${t.name}": ${e.message}`)
-      }
-    }
-
-    // Import snippets (preserve metadata)
-    const snippetKeys = []
-    for (const s of snippets) {
-      const label = String(s.label || s.key || '').trim()
-      if (!label) continue
-      try {
-        const key = label
-        snippetKeys.push(key)
-        let value = String(s.snippet || '')
-        if (s.type || s.handler || s.key) {
-          value = JSON.stringify({
-            key: s.key || '',
-            snippet: s.snippet || '',
-            type: s.type || 'free',
-            handler: s.handler || ''
-          })
-        }
-        try { value = sanitizeRecursive(value) } catch (e) {}
-        await prisma.snippet.upsert({
-          where: { key },
-          create: { key, value },
-          update: { value }
-        })
-        importStats.snippets++
-      } catch (e) {
-        importStats.errors.push(`Snippet "${label}": ${e.message}`)
-      }
-    }
-
-    // In replace mode, delete snippets not in backup
-    if (strategy === 'replace' && snippetKeys.length > 0) {
-      try {
-        await prisma.snippet.deleteMany({ where: { key: { notIn: snippetKeys } } })
-      } catch (e) {
-        console.warn('Failed to cleanup snippets in replace mode:', e.message)
-      }
-    }
-
-    // Import pages (simple upsert by slug)
-    for (const p of pages) {
-      if (!p.slug) continue
-      try {
-        const slug = String(p.slug)
-        const data = sanitizeRecursive(p.data || {})
-        await prisma.page.upsert({
-          where: { slug },
-          create: {
-            slug,
-            title: p.title || slug,
-            blocks: p.blocks || [],
-            data,
-            children: p.children || [],
-            template: p.template || null,
-            status: p.status || 'DRAFT',
-            publishAt: p.publishAt ? new Date(p.publishAt) : null,
-            isHomepage: p.isHomepage || false
-          },
-          update: {
-            title: p.title || slug,
-            blocks: p.blocks || [],
-            data,
-            children: p.children || [],
-            template: p.template,
-            status: p.status || 'DRAFT',
-            publishAt: p.publishAt ? new Date(p.publishAt) : null,
-            isHomepage: p.isHomepage || false
-          }
-        })
-        importStats.pages++
-      } catch (e) {
-        importStats.errors.push(`Page "${p.slug}": ${e.message}`)
-      }
-    }
-
-    // Import blog channels & posts
-    try {
-      const blogResult = await importBlog(blogChannels, blogPosts, blogStrategy)
-      importStats.blogChannels = blogResult.importedChannels
-      importStats.blogPosts = blogResult.importedPosts
-      if (blogResult.errors.length > 0) importStats.errors.push(...blogResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Blog-Import fehlgeschlagen: ${e.message}`)
-    }
-
-    // Import CSS files
-    try {
-      const cssResult = await importCSSFiles(css, strategyFor('css'))
-      importStats.css = cssResult.imported
-      if (cssResult.errors.length > 0) {
-        importStats.errors.push(...cssResult.errors)
-      }
-    } catch (e) {
-      importStats.errors.push(`CSS import failed: ${e.message}`)
-    }
-
-    // Import navigations
-    try {
-      const navResult = await importNavigations(navigations, strategyFor('navigations'))
-      importStats.navigations = navResult.imported
-      if (navResult.errors.length > 0) importStats.errors.push(...navResult.errors)
-
-      const reconcileResult = await reconcilePageNavReferences(navResult.activeMainId)
-      importStats.fixedPageNavRefs = reconcileResult.fixed
-      if (reconcileResult.errors.length > 0) importStats.errors.push(...reconcileResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Navigations import failed: ${e.message}`)
-    }
-
-    // Import global variables
-    try {
-      const globalVarResult = await importGlobalVariables(globalVariables, strategyFor('globalVariables'))
-      importStats.globalVariables = globalVarResult.imported
-      if (globalVarResult.errors.length > 0) importStats.errors.push(...globalVarResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Globale Variablen import failed: ${e.message}`)
-    }
-
-    // Import footers
-    try {
-      const footerResult = await importFooters(footers, strategyFor('footers'))
-      importStats.footers = footerResult.imported
-      if (footerResult.errors.length > 0) importStats.errors.push(...footerResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Footer import failed: ${e.message}`)
-    }
-
-    // Import maintenance pages (404/503/no-homepage/loading)
-    try {
-      const maintenanceResult = await importMaintenance(maintenance)
-      importStats.maintenance = maintenanceResult.imported
-      if (maintenanceResult.errors.length > 0) importStats.errors.push(...maintenanceResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Maintenance import failed: ${e.message}`)
-    }
-
-    // Restore uploaded font files so @font-face URLs keep working after restore
-    try {
-      const uploadFontResult = importUploadFonts(uploadFonts, strategyFor('uploadFonts'))
-      importStats.uploadFonts = uploadFontResult.imported
-      if (uploadFontResult.errors.length > 0) importStats.errors.push(...uploadFontResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Upload-Fonts import failed: ${e.message}`)
-    }
-
-    try {
-      const uploadFilesResult = importUploadedFiles(uploadedFiles, strategyFor('uploadedFiles'))
-      importStats.uploadedFiles = uploadFilesResult.imported
-      if (uploadFilesResult.errors.length > 0) importStats.errors.push(...uploadFilesResult.errors)
-    } catch (e) {
-      importStats.errors.push(`Upload-Dateien import failed: ${e.message}`)
-    }
-
-    // Restore CSS enabled/disabled config
-    if (cssConfig) {
-      try {
-        importJsonConfig('css-config.json', cssConfig, strategy)
-      } catch (e) {
-        importStats.errors.push(`CSS-Config import failed: ${e.message}`)
-      }
-    }
-
-    // Restore Fonts enabled/disabled config
-    if (fontsConfig) {
-      try {
-        importJsonConfig('fonts-config.json', fontsConfig, strategy)
-      } catch (e) {
-        importStats.errors.push(`Fonts-Config import failed: ${e.message}`)
-      }
-    }
-
-    return res.status(200).json({
-      ok: true,
-      strategy,
-      importStats,
-      message: `Import completed: ${importStats.templates} templates, ${importStats.snippets} snippets, ${importStats.pages} pages, ${importStats.blogChannels} blog channels, ${importStats.blogPosts} blog posts, ${importStats.css} CSS files, ${importStats.navigations} navigations, ${importStats.globalVariables} global variables, ${importStats.footers} footers, ${importStats.maintenance} maintenance pages, ${importStats.uploadFonts} upload fonts, ${importStats.uploadedFiles} upload files${importStats.fixedPageNavRefs > 0 ? `, ${importStats.fixedPageNavRefs} fixed page navigation refs` : ''}${importStats.errors.length > 0 ? ` (${importStats.errors.length} errors)` : ''}`
-    })
+    const result = await runImport(req.body || {}, strategy)
+    return res.status(200).json(result)
   } catch (e) {
     console.error('[/api/admin/import] Error:', e.message, e.stack)
     res.status(500).json({ error: 'Import failed', details: e.message })

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { versionedHref } from '../../lib/assetVersion';
 
 // For multipart parsing
 import formidable from 'formidable';
@@ -160,7 +161,7 @@ export default async function handler(req, res) {
           id: `extern_css/${name}`,
           name,
           source: 'extern_css',
-          href: `/extern_css/${name}`,
+          href: versionedHref(`/extern_css/${name}`, path.join(CSS_DIR, name)),
           enabled: !disabled.has(`extern_css/${name}`),
         }));
 

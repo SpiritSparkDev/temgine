@@ -5,15 +5,71 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.44.0] - 2026-10-13
+## [0.45.1] - 2026-10-13
 
 ### Changed
 - Die Eingabemasken für Template-Felder (Block-Props im Seiten-Editor, Beitrags-Template-Felder im Blog/News-Editor) nutzen jetzt eine gemeinsame Komponente (`components/TemplateFieldEditors.js`) statt zweier unabhängig gewachsener Implementierungen. Das behebt mehrere Unklarheiten im Blog-Editor: Feld-Labels wurden dort bisher roh als `{{Feldname}}` angezeigt statt lesbar formatiert, camelCase-Feldnamen wurden nicht in Wörter getrennt, und Repeater-Einträge ("Artikel" u. ä.) quetschten alle Unterfelder — auch Textareas — in gleich schmale Spalten nebeneinander statt Textfelder über die volle Breite laufen zu lassen. Der Blog-Editor bekommt dabei auch das bereits im Seiten-Editor vorhandene Auf-/Zuklappen, Verschieben und Duplizieren von Repeater-Einträgen.
 
-## [0.43.0] - 2026-10-11
+---
+
+## [0.45.0] - 2026-10-11
 
 ### Added
 - Kontaktformular-E-Mail-Vorlage: das „Text"-Feld erkennt jetzt automatisch, ob es mit einem HTML-Tag beginnt, und verschickt den Inhalt dann 1:1 als HTML-Mail (statt wie bisher immer nur als einfacher Text mit `\n` → `<br>`-Umwandlung) — der Klartext-Teil der E-Mail wird dafür automatisch durch Entfernen der Tags erzeugt. Reiner Text funktioniert weiterhin unverändert.
+
+---
+
+## [0.44.3] - 2026-10-12
+
+### Fixed
+- **Seitenbaum speichern:** Neue, noch nie gespeicherte Top-Level-Seiten mit gleich benannten Unterseiten (z. B. „Team A › lydia" und „Team B › lydia") wurden mit „Slug mehrfach unter derselben übergeordneten Seite" abgelehnt. `walkAll` (`lib/pageTreeRepair.js`) bildete den Eltern-Schlüssel aus der id der Top-Level-Seite – ohne id wurde daraus für alle neuen Seiten `undefined::…`. Jetzt zählt ihre Position im Baum. Betrifft auch das Reparatur-Werkzeug.
+- **Testsuite wieder vollständig grün.** `page-save` und `pages-slots` ließen sich seit 0.41.0 nicht mehr laden: `sanitize-html` hängt an `htmlparser2` ab Version 12 (nur ESM), `lib/auth` und `lib/pageAccess` laden über `next-auth` das reine ESM-Paket `jose` – beides kann Jest (CommonJS) nicht laden. Beide Tests ersetzen diese Module jetzt wie die übrigen API-Tests. `templates` braucht seit 0.41.0 die Datenbank (`lib/templateUsage.js`) und bekommt dafür eine Prisma-Attrappe. Dabei kam der Seitenbaum-Fehler oben ans Licht.
+- **Tests:** `__tests__/pageTreeRepair.test.js` neu (Kollisionen nur unter derselben Elternseite, auch ohne ids).
+
+---
+
+## [0.44.2] - 2026-10-12
+
+### Fixed
+- **Zufällig fehlschlagende Tests** (`appExternJs`, `wysiwygRichTextEditor`, je nach Verteilung auch andere React-Tests): jsdom kennt kein `setImmediate`. Lud ein Test Next-Serverinterna, merkte sich Next `undefined` als originales `setImmediate` und patchte das Node-Modul `timers`, das sich alle Testdateien eines Jest-Workers teilen – jeder spätere React-Test im selben Worker stürzte dann in `act()` mit „Cannot read properties of undefined (reading 'apply')" ab. Neue `jest.setup.js` (`setupFiles` in `jest.config.cjs`) gibt jsdom das echte `setImmediate`/`clearImmediate` aus Node.
+- **Tests:** `__tests__/jestSetup.test.js` prüft genau diesen Fall (schlägt ohne den Fix deterministisch fehl).
+
+---
+
+## [0.44.1] - 2026-10-12
+
+### Fixed
+- **Import großer Projekttransfer-ZIPs** (z. B. mit Videos in den Uploads) brach mit einem Fehler zur String-Länge ab. Der Browser las bisher jede Upload-Datei als Base64 in einen einzigen JSON-String, der dann an `/api/admin/import` ging – ab einigen hundert MB scheiterte das an der maximalen String-Länge von Browser bzw. Node. Jetzt schickt der Browser die ZIP-Datei unverändert an den neuen Endpunkt `/api/admin/import-zip`, der sie serverseitig entpackt und die Upload-Dateien einzeln als Binärdaten schreibt (Obergrenze 2 GB). Der Bestätigungsdialog liest aus der ZIP nur noch das Manifest. JSON-Backups laufen unverändert über `/api/admin/import`.
+
+### Changed
+- Die Importlogik liegt jetzt in `runImport()` (`pages/api/admin/import.js`) und wird von JSON- und ZIP-Import gemeinsam genutzt. Upload-Dateien können als Base64/Text oder als Binärdaten (`getBuffer()`) übergeben werden.
+- **Tests:** `__tests__/api/import-zip.test.js` neu (Entpacken, Binärdaten, Strategie, Fehlerfälle, Größenlimit), dazu ein Binärdaten-Fall in `import-backup.test.js`.
+
+---
+
+## [0.44.0] - 2026-10-12
+
+### Added
+- **Projekttransfer: neue Kategorie „JavaScript-Dateien"** – Export und Import nehmen jetzt auch die Dateien des JS-Managers (`public/extern_js`) mit, samt Reihenfolge (`.order.json`), Aktivierungsstatus und Cookie-Kategorie je Script (`data/js-config.json`, im Backup als `js` und `jsConfig`, im Transfer-ZIP zusätzlich als Ordner `js/`). Bisher fehlten eigene Scripts nach einem Umzug komplett, oder sie liefen ohne ihre Kategorie erst nach Cookie-Zustimmung.
+- Ältere Backups bleiben sicher: Beim „Ersetzen" werden vorhandene Scripts nur gelöscht, wenn das Backup ausdrücklich JavaScript enthält (`filesIncluded` mit `js`). Backups ohne Kategorienliste würden sonst alle Scripts entfernen.
+- Der Import-Dialog nennt die enthaltenen Scripts mit Namen und weist darauf hin, dass sie nach dem Import auf der Website ausgeführt werden.
+- **Tests:** `__tests__/externFiles.test.js` (Reihenfolge, Merge/Ersetzen, Dateinamen, Zusammenführen der Konfiguration) sowie JS-Fälle in `export-backup.test.js`, `import-backup.test.js` und `backupCategories.test.js`.
+
+### Changed
+- CSS- und JS-Dateien für Export und Import laufen über ein gemeinsames Modul (`lib/externFiles.js`) statt über doppelte Logik in `export.js`/`import.js`. Das Verhalten für CSS ist unverändert.
+- Beim Import im Modus „Zusammenführen" werden Cookie-Kategorien pro Script zusammengeführt (importierte Einträge gewinnen), statt die bestehenden Kategorien komplett zu ersetzen.
+
+---
+
+## [0.43.0] - 2026-10-12
+
+### Added
+- Statische Auslieferung (`server.js`): Byte-Range-Anfragen werden unterstützt (`206 Partial Content`, `Accept-Ranges`, `Content-Range`, `416` bei ungültigem Bereich, `HEAD` ohne Body). Safari/iOS spielen Videos aus `/uploads` sonst nicht ab.
+- Statische Auslieferung: eigene Content-Types für Video und Audio (`.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`, `.mp3`, `.m4a`, `.ogg`, `.wav`) sowie `.avif`. Bisher gingen diese Dateien als `application/octet-stream` raus, was Browser zusammen mit `X-Content-Type-Options: nosniff` in Produktion als Video blockieren.
+- **Tests:** `__tests__/publicStaticAsset.test.js` prüft die neuen Content-Types und das Auswerten von Range-Headern (`parseByteRange`).
+
+### Changed
+- `/api/css` und `/api/js` hängen an `href` die Änderungszeit der Datei als `?v=…` an (`lib/assetVersion.js`). `/extern_css` und `/extern_js` werden mit `max-age=3600, immutable` ausgeliefert – ohne Versions-Parameter sahen Besucher Änderungen an Stylesheets/Scripts bis zu eine Stunde lang nicht. CSS- und JS-Manager zeigen die Adresse weiterhin ohne Parameter an.
 
 ---
 
