@@ -693,3 +693,31 @@
 .admin-scope.dark-mode .nav-name-input {
   background: var(--bg-tertiary);
 }
+
+/* ── Kopierbares Platzhalter-Snippet (Widgets, analog zu .gv-key-chip in
+   GlobalVariablesView.js — dort per <style jsx> lokal, hier global, weil
+   GlobalPagesView.js kein <style jsx> nutzt) ──────────────────────────── */
+
+.admin-scope .gv-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-scope .gv-key-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}

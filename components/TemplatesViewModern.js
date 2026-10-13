@@ -858,6 +858,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                         <tr><td><code>{'{{global.key}}'}</code></td><td>Globale Variable</td></tr>
                         <tr><td><code>{'{{data.key}}'}</code></td><td>Seiten-Datenfeld</td></tr>
                         <tr><td><code>{'{{{nav:main}}}'}</code> <code>{'{{{nav:page}}}'}</code> <code>{'{{{nav:name}}}'}</code> <code>{'{{{nav:mobile}}}'}</code> <code>{'{{{nav:auto}}}'}</code></td><td>Navigationen (HTML) <DocLink doc="navigationen" /></td></tr>
+                        <tr><td><code>{'{{{widget.name}}}'}</code></td><td>Widget (HTML) — Name unter „Globale Seiten → Widgets", Snippet dort zum Kopieren</td></tr>
                       </tbody>
                     </table>
                   </div>

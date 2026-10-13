@@ -406,7 +406,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   for (const f of allFooters) allFootersById[f.id] = f
   const globalPages = { byId: {} }
   for (const w of listGlobalPages().filter((e) => e.role === 'WIDGET')) {
-    globalPages.byId[w.id] = { code: w.code }
+    globalPages.byId[w.id] = { code: w.code, name: w.name }
   }
   const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
   const globalVars = buildGlobalContext(globalVariableRows)

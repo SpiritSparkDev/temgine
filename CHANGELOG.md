@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.46.0] - 2026-10-13
+
+### Added
+- Widgets lassen sich jetzt zusätzlich zur bisherigen Block-Einbindung direkt im HTML-Code eines Templates per `{{{widget.<name>}}}` einsetzen (Block-, Navigations- und Footer-Templates). Der Platzhalter-Name wird aus dem Widget-Namen abgeleitet und bei Namensgleichheit automatisch eindeutig gemacht (`-2`, `-3`, …) — dieselbe Berechnung läuft im Editor (fürs Snippet) und beim Rendern (fürs Auflösen).
+- Die Widget-Liste unter „Globale Seiten → Widgets" zeigt pro Widget jetzt ein fertiges Kopier-Snippet wie bei globalen Variablen (Klick kopiert `{{{widget.name}}}` in die Zwischenablage), zusätzlich eine Live-Vorschau des Platzhalters im Editor-Panel beim Tippen des Namens. Die Referenz-Tabelle im Block-Template-Editor und die Widget-Doku wurden ergänzt.
+
+---
+
 ## [0.45.1] - 2026-10-13
 
 ### Changed

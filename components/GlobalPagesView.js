@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar } from '../lib/muiIcons';
-import { navPlaceholderSlug } from '../lib/templateEngine';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar, Copy } from '../lib/muiIcons';
+import { navPlaceholderSlug, buildWidgetPlaceholderKeys, widgetPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -513,6 +513,22 @@ export default function GlobalPagesView({ showToast }) {
   // Für den "Neue(n/s) <Noun> erstellen"-Titel — deutsche Artikel/Endungen je Rolle.
   const entityAccusativeSuffix = isFooter ? 'n' : isWidget ? 's' : '';
 
+  // Eindeutiger {{{widget.<slug>}}}-Platzhalter je Widget — exakt dieselbe
+  // Funktion wie beim Rendern (lib/templateEngine.js renderPage), damit das
+  // kopierte Snippet immer zu dem passt, was tatsächlich aufgelöst wird.
+  const widgetSlugById = useMemo(
+    () => (isWidget ? buildWidgetPlaceholderKeys(filteredList.map(w => ({ id: w.id, name: w.name }))) : {}),
+    [isWidget, filteredList]
+  );
+
+  function copyWidgetPlaceholder(slug) {
+    const text = `{{{widget.${slug}}}}`;
+    navigator.clipboard?.writeText(text).then(
+      () => showToast(`${text} kopiert`, 'success'),
+      () => showToast('Kopieren fehlgeschlagen', 'error')
+    );
+  }
+
   function handleNew() {
     const entry = { isNew: true, role };
     setEditing(entry);
@@ -679,6 +695,16 @@ export default function GlobalPagesView({ showToast }) {
                 >
                   <div className="nav-card-info">
                     <span className="nav-card-name">{item.name}</span>
+                    {isWidget && (
+                      <button
+                        type="button"
+                        className="gv-key-chip"
+                        onClick={(e) => { e.stopPropagation(); copyWidgetPlaceholder(widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)); }}
+                        title="Platzhalter kopieren"
+                      >
+                        <Copy size={10} /> {`{{{widget.${widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)}}}}`}
+                      </button>
+                    )}
                     {item.isResponsiveCombined && (
                       <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
                         Responsive Combo
@@ -815,7 +841,12 @@ export default function GlobalPagesView({ showToast }) {
               ) : isWidget ? (
                 <>
                   <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
-                  das Widget wird über einen eigenen Block im Seiten-Editor platziert (Template-Auswahl am
+                  {editName.trim() && (
+                    <>
+                      {' '}<code>{`{{{widget.${widgetPlaceholderSlug(editName)}}}}`}</code> fügt dieses Widget direkt im HTML-Code eines Templates ein ·
+                    </>
+                  )}
+                  {' '}oder über einen eigenen Block im Seiten-Editor platzieren (Template-Auswahl am
                   Block → „Widget: {editName.trim() || '…'}").
                 </>
               ) : (
@@ -909,11 +940,16 @@ export default function GlobalPagesView({ showToast }) {
                   </div>
 
                   <div className="nav-docs-group">
-                    <div className="nav-docs-heading">Einbinden im Seiten-Editor</div>
-                    <p>
-                      An einem Block die Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das
-                      gewünschte Widget wählen — der Block zeigt dann live den Widget-Inhalt.
-                    </p>
+                    <div className="nav-docs-heading">Zwei Wege, ein Widget einzubinden</div>
+                    <ol className="nav-docs-list">
+                      <li><strong>Direkt im Template-Code</strong> — Platzhalter
+                        <code>{`{{{widget.<name>}}}`}</code> per Hand schreiben oder das fertige Snippet
+                        per Klick auf die Kachel in der Liste links kopieren. Funktioniert in jedem Block-,
+                        Navigations- und Footer-Template.</li>
+                      <li><strong>Widget-Block</strong> — im Seiten-Editor an einem Block die
+                        Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das gewünschte Widget
+                        wählen — der Block zeigt dann live den Widget-Inhalt.</li>
+                    </ol>
                   </div>
 
                   <div className="nav-docs-group">
@@ -921,7 +957,9 @@ export default function GlobalPagesView({ showToast }) {
                     <p>
                       Nur <code>{`{{global.<key>}}`}</code> (globale Variablen, z. B. Firmenname, Logo)
                       steht zur Verfügung — keine seitenbaum-spezifischen Daten wie <code>pages</code>,
-                      <code>anchors</code> oder <code>childPages</code> bei Navigationen.
+                      <code>anchors</code> oder <code>childPages</code> bei Navigationen, und auch keine
+                      anderen Widgets (kein verschachteltes <code>{`{{{widget.<name>}}}`}</code> innerhalb
+                      eines Widgets).
                     </p>
                   </div>
                 </>
