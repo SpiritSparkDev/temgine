@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.49.0] - 2026-10-13
+
+### Added
+- Klick auf einen Link in der Split-Vorschau des Seiten-Editors (z. B. in einer gerenderten Navigation): verlässt die Vorschau nicht mehr wirklich (das hätte sie in der iframe zu einer völlig unabhängigen echten Seite navigieren lassen) — führt der Link auf eine bekannte Seite dieser Site, wechselt der Editor stattdessen direkt zu deren Bearbeitung (mit demselben "ungespeicherte Änderungen?"-Hinweis wie beim Zurück-Button), sonst bleibt der Klick einfach wirkungslos.
+
+### Fixed
+- Die Split-Vorschau im Seiten-Editor baut ihr iframe bei jeder Änderung komplett neu auf (debounced) — dabei sprang die Scroll-Position bisher jedes Mal an den Anfang zurück. Wird jetzt vor dem Neuaufbau gemerkt und danach wiederhergestellt.
+- `styles/global.css` definierte einige Farb- und Layout-Variablen (`--primary-color`, `--background-color`, `--text-color`, ...) in einem unscoped `:root`-Block — dadurch galten sie nicht nur im Admin-Bereich, sondern sickerten auch auf die öffentliche Website durch. Definiert gleichnamige Variablen dort in `extern_css`, konnte je nach Ladereihenfolge (statisches Admin-CSS-Bundle vs. dynamisch nachgeladenes extern_css) zufällig die eine oder die andere Definition gewinnen. Jetzt auf `.admin-scope, .auth-page` beschränkt — die einzigen tatsächlichen Verbraucher dieser Variablen.
+
+---
+
 ## [0.48.0] - 2026-10-13
 
 ### Added

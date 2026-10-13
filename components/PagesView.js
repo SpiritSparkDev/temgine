@@ -445,6 +445,14 @@ export default function PagesView({
             setEditorDirty(false);
             setEditingPage(null);
           }}
+          onNavigateToPage={(targetPage) => {
+            if (editorDirty) {
+              const confirmed = window.confirm('Du hast ungespeicherte Aenderungen. Wirklich zu der verlinkten Seite wechseln, ohne zu speichern?');
+              if (!confirmed) return;
+            }
+            setEditorDirty(false);
+            setEditingPage(targetPage);
+          }}
         />
       ) : pagesTab === 'pages' ? (
         <PageTreeEditor 

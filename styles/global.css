@@ -7,7 +7,16 @@
     font-display: swap;
 }
 
-:root {
+/* Bewusst NICHT auf :root (= überall, auch auf öffentlichen Seiten) —
+   sonst kollidieren diese generischen Namen (--primary-color,
+   --background-color, ...) mit gleichnamigen Variablen, die Website-
+   Betreiber in ihren eigenen extern_css-Dateien definieren, und je nach
+   Ladereihenfolge (statisches Admin-CSS-Bundle vs. dynamisch per fetch
+   nachgeladenes extern_css) gewinnt scheinbar zufällig die eine oder die
+   andere Definition. .admin-scope/.auth-page sind die einzigen echten
+   Verbraucher dieser Variablen (siehe buttons.css, page-tree.css, auth.css).
+*/
+.admin-scope, .auth-page {
     --primary-color: #c25208;
     --secondary-color: #c2b5a5;
     --danger-color: #c0392b;

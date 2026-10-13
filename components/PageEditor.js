@@ -4,7 +4,7 @@ import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, C
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractEditorSections } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
 import { loadPageData, renderPageHtml } from '../lib/renderPipeline';
-import { findRawPageNodeById } from '../lib/navTreeHelpers';
+import { findRawPageNodeById, findRawPageNodeByPath } from '../lib/navTreeHelpers';
 import Toast from './Toast';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
@@ -25,7 +25,7 @@ import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
 import { BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
 
-export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage, onReloadFromServer }) {
+export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage, onReloadFromServer, onNavigateToPage }) {
   const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
   const CHANNEL_TEMPLATE_LABEL_PREFIX = 'Kanal: ';
 
@@ -152,6 +152,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const autosaveTimerRef = useRef(null);
   const autosaveInFlightRef = useRef(false);
   const splitPreviewIframeRef = useRef(null);
+  // Scroll-Position der Vorschau vor dem automatischen Neuaufbau (jede
+  // Änderung ersetzt srcDoc komplett, siehe buildSplitPreviewHtml — ohne
+  // das hier würde die Vorschau bei jeder Autosave-/Tipp-Pause an den
+  // Anfang zurückspringen) — wird nach dem Laden des neuen srcDoc wieder
+  // angewendet (siehe iframe onLoad unten).
+  const splitPreviewScrollRef = useRef(0);
   const splitPreviewTimerRef = useRef(null);
   // Zählt hoch bei jedem buildSplitPreviewHtml()-Aufruf, damit ein verspätet
   // auflösender älterer Request kein neueres Ergebnis mehr überschreiben kann.
@@ -655,9 +661,44 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       .catch(() => {});
   }, []);
 
+  // Löst einen in der Vorschau geklickten Link (z. B. aus einer gerenderten
+  // Navigation) auf eine Seite im Seitenbaum auf — externe URLs, Anker,
+  // mailto/tel usw. ergeben bewusst null (siehe handleMessage unten: der
+  // Link bleibt dann einfach wirkungslos, statt den Editor zu wechseln).
+  function resolvePreviewLinkHref(href) {
+    if (!href) return null;
+    let path = String(href);
+    if (/^([a-z][a-z0-9+.-]*:)?\/\//i.test(path) || /^(mailto|tel|javascript):/i.test(path)) return null;
+    const hashIdx = path.indexOf('#');
+    if (hashIdx !== -1) path = path.slice(0, hashIdx);
+    const queryIdx = path.indexOf('?');
+    if (queryIdx !== -1) path = path.slice(0, queryIdx);
+    path = path.replace(/^\/+|\/+$/g, '');
+    if (!path) {
+      const findHome = (nodes) => {
+        for (const n of nodes || []) {
+          if (n.isHomepage) return n;
+          const found = findHome(n.children || []);
+          if (found) return found;
+        }
+        return null;
+      };
+      return findHome(allPages);
+    }
+    const match = findRawPageNodeByPath(allPages, path);
+    return match ? match.node : null;
+  }
+
   // postMessage listener: click in split preview → select block in editor
   useEffect(() => {
     const handleMessage = (e) => {
+      if (e.data?.type === 'temgine-nav-link-click') {
+        const targetPage = resolvePreviewLinkHref(e.data.href);
+        if (targetPage && targetPage.id && targetPage.id !== page?.id) {
+          onNavigateToPage?.(targetPage);
+        }
+        return;
+      }
       if (e.data?.type === 'temgine-block-click') {
         const path = String(e.data.blockPath);
         setSelectedBlockPath(path);
@@ -682,7 +723,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocks]);
+  }, [blocks, allPages, page?.id, onNavigateToPage]);
 
   // Escape key closes preview overlay
   useEffect(() => {
@@ -714,6 +755,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (!splitPreview) return;
     if (splitPreviewTimerRef.current) clearTimeout(splitPreviewTimerRef.current);
     splitPreviewTimerRef.current = setTimeout(() => {
+      try {
+        splitPreviewScrollRef.current = splitPreviewIframeRef.current?.contentWindow?.scrollY || 0;
+      } catch (_e) {}
       const requestId = ++splitPreviewRequestIdRef.current;
       buildSplitPreviewHtml().then((html) => {
         if (splitPreviewRequestIdRef.current === requestId) setSplitPreviewHtml(html);
@@ -1536,6 +1580,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (!best) return null;
     return bestIsText ? wrapTextNode(best) : best;
   }
+  // Links in der Vorschau (Navigation, aber auch Links in normalem Inhalt)
+  // dürfen die Vorschau niemals wirklich verlassen — Capture-Phase, damit
+  // das vor den Block-Klick-Listenern unten greift (stopPropagation hält
+  // die Block-Auswahl dann bewusst davon ab, zusätzlich mitzufeuern). Führt
+  // der Link auf eine bekannte Seite dieser Site, wechselt der Editor
+  // dorthin (siehe temgine-nav-link-click-Handler im Elternfenster),
+  // ansonsten bleibt der Klick einfach wirkungslos.
+  document.addEventListener('click', function(e) {
+    var link = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!link) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.parent.postMessage({ type: 'temgine-nav-link-click', href: link.getAttribute('href') || '' }, '*');
+  }, true);
   document.querySelectorAll('[data-temgine-block]').forEach(function(el) {
     el.style.cursor = 'pointer';
     el.style.outline = '2px solid transparent';
@@ -2939,6 +2997,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 sandbox="allow-scripts allow-same-origin"
                 className="page-split-preview-iframe"
                 title="Split-Vorschau"
+                onLoad={() => {
+                  try {
+                    splitPreviewIframeRef.current?.contentWindow?.scrollTo(0, splitPreviewScrollRef.current);
+                  } catch (_e) {}
+                }}
               />
             </div>
           )}
