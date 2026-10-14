@@ -52,6 +52,7 @@ export default function ShopProductsView({ showToast }) {
         <button className="btn btn-primary" onClick={() => setEditing(null)}>Neues Produkt</button>
       </div>
       {products === null ? <p>Lade…</p> : products.length === 0 ? <p>Noch keine Produkte.</p> : (
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr><th align="left">Titel</th><th align="left">Kategorie</th><th align="left">Formate / Preise</th><th align="left">Bestand</th><th align="left">Aktiv</th></tr>
@@ -68,6 +69,7 @@ export default function ShopProductsView({ showToast }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

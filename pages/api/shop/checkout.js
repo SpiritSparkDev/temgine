@@ -12,6 +12,15 @@ import { loadShippingConfig } from '../../../lib/shop/shippingConfig'
 import { priceOrder, ShopPricingError } from '../../../lib/shop/pricing'
 import { validateCheckoutInput, sanitizeItems, formatReference, normalizePrefix } from '../../../lib/shop/checkout'
 
+/** NEXTAUTH_URL (absolut, http/https, ohne Pfad) hat Vorrang vor dem Host-Header, der von außen gesetzt sein kann. */
+export function shopBaseUrl(req) {
+  try {
+    const u = new URL(process.env.NEXTAUTH_URL || '')
+    if ((u.protocol === 'https:' || u.protocol === 'http:') && u.pathname === '/' && !u.search && !u.hash) return u.origin
+  } catch {}
+  return resolveBaseUrl(req)
+}
+
 const limiter = rateLimit({ windowMs: 15 * 60_000, max: 10 })
 
 export const config = { api: { bodyParser: { sizeLimit: '32kb' } } }
@@ -122,7 +131,7 @@ export default async function handler(req, res) {
       })
     })
 
-    const base = resolveBaseUrl(req)
+    const base = shopBaseUrl(req)
     let payment
     try {
       payment = await startPayment({

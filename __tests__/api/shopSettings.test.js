@@ -119,6 +119,7 @@ describe('/api/settings with shop_ keys', () => {
       { key: 'shop_stripe_webhook_secret', value: 'whsec_SECRET' },
       { key: 'shop_paypal_client_secret', value: 'pp_SECRET' },
       { key: 'shop_paypal_webhook_id', value: 'WH-SECRET' },
+      { key: 'shop_notify_email', value: 'SECRET@example.com' },
     ]);
     const res = makeRes();
     await settings({ method: 'GET' }, res);
@@ -126,6 +127,8 @@ describe('/api/settings with shop_ keys', () => {
     expect(JSON.stringify(body)).not.toMatch(/SECRET/);
     expect(body.shop_sumup_api_key_set).toBe(true);
     expect(body.shop_stripe_webhook_secret_set).toBe(true);
+    expect(body.shop_notify_email_set).toBe(true);
+    expect(body.shop_notify_email).toBeUndefined();
     expect(body.shop_enabled).toBe('true');
     expect(body.shop_sumup_merchant_code).toBe('MCODE');
   });

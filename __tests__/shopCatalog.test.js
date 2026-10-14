@@ -110,7 +110,8 @@ describe('isOrderable', () => {
     expect(isOrderable(fmt({ stock: 0 }))).toBe(false);
     expect(isOrderable(fmt({ priceCents: null }))).toBe(false);
     expect(isOrderable(fmt({ taxRateBp: null }))).toBe(false);
-    expect(isOrderable(fmt({ priceCents: 0 }))).toBe(true);
+    expect(isOrderable(fmt({ priceCents: 0 }))).toBe(false);
+    expect(validateProductInput(input({ formats: [fmt({ priceCents: 0 })] })).errors).toEqual([]);
     expect(isOrderable(fmt({ taxRateBp: 0 }))).toBe(true);
   });
 });

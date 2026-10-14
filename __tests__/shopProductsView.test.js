@@ -71,3 +71,12 @@ describe('ShopAdminView', () => {
     await waitFor(() => expect(screen.getByText('Noch keine Produkte.')).toBeTruthy());
   });
 });
+
+describe('ShopProductsView layout', () => {
+  it('wraps the table in a scroll container', async () => {
+    global.fetch = jest.fn(() => res(200, { products: [mk(1)] }));
+    const { container } = render(<ShopProductsView showToast={() => {}} />);
+    await waitFor(() => expect(screen.getByText('Produkt 1')).toBeTruthy());
+    expect(container.querySelector('table').parentElement.style.overflowX).toBe('auto');
+  });
+});

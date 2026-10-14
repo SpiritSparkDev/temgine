@@ -97,7 +97,7 @@ export default function ShopPaymentsView({ showToast }) {
             );
           })}
           <p>Webhook-URL (beim Anbieter eintragen): <code>{webhookUrl(origin, id)}</code></p>
-          {(errors[id] || []).length > 0 && <ul role="alert">{errors[id].map((m) => <li key={m}>{m}</li>)}</ul>}
+          {(errors[id] || []).length > 0 && <ul role="alert">{errors[id].map((m, i) => <li key={`${i}-${m}`}>{m}</li>)}</ul>}
           {results[id] && <p role="status">{results[id].ok ? 'OK: ' : 'Fehler: '}{results[id].text}</p>}
           <button className="btn" disabled={busy === id} onClick={() => test(id)}>Verbindung testen</button>{' '}
           <button className="btn btn-primary" disabled={busy === id} onClick={() => save(id)}>Speichern</button>

@@ -61,3 +61,40 @@ describe('ShopOrdersView', () => {
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Kaputt', 'error'));
   });
 });
+
+describe('ShopOrdersView reconcile and layout', () => {
+  it('wraps the table in a scroll container', async () => {
+    global.fetch = jest.fn(() => res(200, list()));
+    const { container } = render(<ShopOrdersView showToast={() => {}} />);
+    await screen.findByText('ORD-2026-000001');
+    expect(container.querySelector('table').parentElement.style.overflowX).toBe('auto');
+  });
+
+  it('reconciles open payments: disabled while running, toast, list reloads', async () => {
+    const toast = jest.fn();
+    let finish;
+    global.fetch = jest.fn((url) => (url === '/api/shop/orders/reconcile'
+      ? new Promise((r) => { finish = r; })
+      : res(200, list())));
+    render(<ShopOrdersView showToast={toast} />);
+    await screen.findByText('ORD-2026-000001');
+    const btn = screen.getByText('Offene Zahlungen abgleichen');
+    fireEvent.click(btn);
+    await waitFor(() => expect(btn.disabled).toBe(true));
+    expect(global.fetch.mock.calls.find(([u]) => u === '/api/shop/orders/reconcile')[1].method).toBe('POST');
+    const before = urls().filter((u) => u.startsWith('/api/shop/orders?')).length;
+    finish(await res(200, { checked: 3, paid: 2, failed: 1, pending: 0 }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Geprüft: 3, bezahlt: 2, fehlgeschlagen: 1'));
+    await waitFor(() => expect(urls().filter((u) => u.startsWith('/api/shop/orders?')).length).toBe(before + 1));
+    expect(btn.disabled).toBe(false);
+  });
+
+  it('shows an error toast when reconcile fails', async () => {
+    const toast = jest.fn();
+    global.fetch = jest.fn((url) => (url === '/api/shop/orders/reconcile' ? res(500, { error: 'Nope' }) : res(200, list())));
+    render(<ShopOrdersView showToast={toast} />);
+    await screen.findByText('ORD-2026-000001');
+    fireEvent.click(screen.getByText('Offene Zahlungen abgleichen'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Nope', 'error'));
+  });
+});

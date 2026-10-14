@@ -114,3 +114,27 @@ test('output is escaped and shows no personal data', async () => {
   expect(root.textContent).not.toContain('a@b.de');
   expect(root.textContent).not.toContain('Max');
 });
+
+test('re-hydrating the same container stops the previous poll', async () => {
+  replies = [resp(200, ord('PENDING'))];
+  const root = setup();
+  await flush();
+  const block = root.querySelector('.shop-block');
+  jest.spyOn(order.timers, 'clear');
+  delete block.dataset.shopHydrated;
+  hydrateShop(root);
+  await flush();
+  expect(order.timers.clear).toHaveBeenCalledWith(1);
+});
+
+test('poll stops when the container left the document', async () => {
+  replies = [resp(200, ord('PENDING'))];
+  const root = setup();
+  await flush();
+  root.remove();
+  const calls = fetch.mock.calls.length;
+  ticks[0].fn();
+  await flush();
+  expect(fetch).toHaveBeenCalledTimes(calls);
+  expect(ticks).toHaveLength(1);
+});

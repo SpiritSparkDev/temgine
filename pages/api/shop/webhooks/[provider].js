@@ -1,11 +1,18 @@
 import { isShopEnabled, loadShopSettings } from '../../../../lib/shop/config'
 import { getProvider } from '../../../../lib/shop/providers'
+import { rateLimit } from '../../../../lib/rateLimit'
 import { syncPayment } from '../../../../lib/shop/payments'
 
 // Rohbody wird selbst gelesen (Signaturprüfung braucht die unveränderten Bytes)
 export const config = { api: { bodyParser: false } }
 
 export const MAX_BODY_BYTES = 256 * 1024
+
+const limiter = rateLimit({
+  windowMs: 60_000,
+  max: 300,
+  keyFn: (req) => `shop-webhook:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+})
 
 class TooLarge extends Error {}
 
@@ -39,6 +46,12 @@ export default async function handler(req, res) {
     if (!driver) return res.status(404).json({ error: 'Nicht gefunden', code: 'NOT_FOUND' })
     if (req.method !== 'POST') return res.status(405).json({ error: 'Methode nicht erlaubt', code: 'METHOD_NOT_ALLOWED' })
 
+    const { ok, retryAfter } = limiter.check(req)
+    if (!ok) {
+      res.setHeader('Retry-After', retryAfter)
+      return res.status(429).json({ error: 'Zu viele Anfragen', code: 'RATE_LIMIT_EXCEEDED', retryAfter })
+    }
+
     const declared = Number(req.headers?.['content-length'])
     if (declared > MAX_BODY_BYTES) return res.status(413).json({ error: 'Anfrage zu groß', code: 'PAYLOAD_TOO_LARGE' })
     let rawBody
@@ -56,7 +69,7 @@ export default async function handler(req, res) {
       if (e && e.message === 'invalid signature') return res.status(400).json({ error: 'Ungültige Signatur', code: 'INVALID_SIGNATURE' })
       throw e
     }
-    if (parsed && parsed.externalId) await syncPayment({ provider: providerId, externalId: parsed.externalId })
+    if (parsed && parsed.externalId) await syncPayment({ provider: providerId, externalId: parsed.externalId }, { strict: true })
     return res.status(200).json({ received: true })
   } catch (e) {
     console.error('[/api/shop/webhooks Error]', e.message)

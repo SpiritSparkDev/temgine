@@ -219,6 +219,25 @@ describe('payment provider', () => {
     expect(arg.order.items).toHaveLength(1);
   });
 
+  test('NEXTAUTH_URL (valid absolute origin) wins over the Host header; invalid values fall back', async () => {
+    const old = process.env.NEXTAUTH_URL;
+    try {
+      process.env.NEXTAUTH_URL = 'https://shop.example.org';
+      await call(body());
+      expect(startPayment.mock.calls[0][0].urls.webhookUrl).toBe('https://shop.example.org/api/shop/webhooks/sumup');
+      expect(startPayment.mock.calls[0][0].urls.cancelUrl).toBe('https://shop.example.org/kasse');
+      for (const bad of ['shop.example.org', 'https://shop.example.org/sub', 'ftp://x.de']) {
+        process.env.NEXTAUTH_URL = bad;
+        startPayment.mockClear();
+        await call(body());
+        expect(startPayment.mock.calls[0][0].urls.webhookUrl).not.toContain('shop.example.org/sub');
+        expect(startPayment.mock.calls[0][0].urls.webhookUrl).not.toMatch(/^ftp/);
+      }
+    } finally {
+      if (old === undefined) delete process.env.NEXTAUTH_URL; else process.env.NEXTAUTH_URL = old;
+    }
+  });
+
   test('several providers: provider is required and must be available', async () => {
     listAvailableProviders.mockReturnValue([{ id: 'sumup', label: 'SumUp' }, { id: 'stripe', label: 'Stripe' }]);
     let res = await call(body());

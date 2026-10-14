@@ -10,6 +10,8 @@ export default function ShopOrdersView({ showToast }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [reconciling, setReconciling] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const t = setTimeout(() => { setQ(input); setPage(1); }, 300);
@@ -30,7 +32,22 @@ export default function ShopOrdersView({ showToast }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [status, q, page, openId, showToast]);
+  }, [status, q, page, openId, showToast, reloadKey]);
+
+  const reconcile = async () => {
+    setReconciling(true);
+    try {
+      const res = await fetch('/api/shop/orders/reconcile', { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Abgleich fehlgeschlagen');
+      showToast(`Geprüft: ${d.checked}, bezahlt: ${d.paid}, fehlgeschlagen: ${d.failed}`);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      showToast(e.message || 'Abgleich fehlgeschlagen', 'error');
+    } finally {
+      setReconciling(false);
+    }
+  };
 
   if (openId) return <ShopOrderDetail id={openId} onBack={() => setOpenId(null)} showToast={showToast} />;
 
@@ -42,9 +59,11 @@ export default function ShopOrdersView({ showToast }) {
           {STATUS_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
         <input type="search" aria-label="Suche" placeholder="Bestellnummer oder E-Mail" value={input} onChange={(e) => setInput(e.target.value)} />
+        <button className="btn" disabled={reconciling} onClick={reconcile}>Offene Zahlungen abgleichen</button>
       </div>
       {data && orders.length === 0 && <p>Keine Bestellungen gefunden.</p>}
       {orders.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ textAlign: 'left' }}><th>Bestellnummer</th><th>Datum</th><th>Status</th><th>E-Mail</th><th>Summe</th></tr>
@@ -61,6 +80,7 @@ export default function ShopOrdersView({ showToast }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
       {data && data.pages > 1 && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>

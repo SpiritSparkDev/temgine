@@ -73,3 +73,12 @@ describe('ShopOrderDetail', () => {
     expect(back).toHaveBeenCalled();
   });
 });
+
+describe('ShopOrderDetail layout', () => {
+  it('wraps the items table in a scroll container', async () => {
+    global.fetch = jest.fn(() => res(200, { order: order('PAID') }));
+    const { container } = render(<ShopOrderDetail id="o1" onBack={() => {}} showToast={() => {}} />);
+    await screen.findByText('Bestellung ORD-2026-000001');
+    expect(container.querySelector('table').parentElement.style.overflowX).toBe('auto');
+  });
+});

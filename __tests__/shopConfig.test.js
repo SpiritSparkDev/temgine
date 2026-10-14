@@ -18,10 +18,10 @@ const { getShopStatus, isShopEnabled, setShopEnabled } = require('../lib/shop/co
 beforeEach(() => jest.clearAllMocks());
 
 describe('lib/shop/keys', () => {
-  test('all keys share the shop_ prefix and secrets are a subset of the provider credentials', () => {
+  test('all keys share the shop_ prefix; secrets are provider credentials plus the notify address', () => {
     const all = Object.values(keys.SHOP_PROVIDERS).flatMap((p) => p.requiredKeys);
     for (const k of [...all, ...keys.SHOP_SECRET_KEYS, keys.SHOP_ENABLED_KEY]) expect(k.startsWith(keys.SHOP_KEY_PREFIX)).toBe(true);
-    for (const k of keys.SHOP_SECRET_KEYS) expect(all).toContain(k);
+    for (const k of keys.SHOP_SECRET_KEYS) expect([...all, keys.SHOP_NOTIFY_EMAIL_KEY]).toContain(k);
   });
 
   test('each provider has its own enable switch and the three providers are SumUp, Stripe, PayPal', () => {
@@ -33,6 +33,7 @@ describe('lib/shop/keys', () => {
     for (const k of ['shop_sumup_api_key', 'shop_stripe_secret_key', 'shop_stripe_webhook_secret', 'shop_paypal_client_secret']) {
       expect(keys.SHOP_SECRET_KEYS).toContain(k);
     }
+    expect(keys.SHOP_SECRET_KEYS).toContain('shop_notify_email');
     expect(keys.SHOP_SECRET_KEYS).not.toContain('shop_sumup_merchant_code');
     expect(keys.SHOP_SECRET_KEYS).not.toContain('shop_paypal_client_id');
   });

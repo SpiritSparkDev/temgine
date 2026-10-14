@@ -34,3 +34,13 @@ test('findProductForRoute: 404 cases and hit', async () => {
   mockPrisma.shopProduct.findFirst.mockResolvedValue(product);
   expect(await findProductForRoute('x')).toBe(product);
 });
+
+test('digital formats are InStock regardless of stock; physical 0 stays OutOfStock', () => {
+  const p = { ...product, formats: [
+    { sku: 'D', priceCents: 990, taxRateBp: 700, stock: 0, digital: true },
+    { sku: 'P', priceCents: 990, taxRateBp: 700, stock: 0, digital: false },
+  ] };
+  const offers = buildProductMeta({ product: p, routePath: '/shop/x', baseUrl: 'https://e.com' }).jsonLd[0].offers;
+  expect(offers[0].availability).toBe('https://schema.org/InStock');
+  expect(offers[1].availability).toBe('https://schema.org/OutOfStock');
+});

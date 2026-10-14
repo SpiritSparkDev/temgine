@@ -58,3 +58,10 @@ test('shipping mentions link to /versand-zahlung', () => {
   expect(renderProductDetail({ title: 'A', formats: [{ sku: 'x', label: 'L', priceCents: 100, orderable: true }] })).toContain('href="/versand-zahlung"');
   for (const tpl of [CART_TEMPLATE, CHECKOUT_TEMPLATE, SUMMARY_TEMPLATE]) expect(tpl).toContain('href="/versand-zahlung"');
 });
+
+test('product card shows VAT/shipping note without nested link', () => {
+  const html = renderProductList({ products: [{ title: 'T', slug: 't', fromPriceCents: 2490 }], categories: [] });
+  expect(html).toContain('ab 24,90 € <small>inkl. MwSt. zzgl. Versand</small>');
+  const card = html.slice(html.indexOf('<article'), html.indexOf('</article>'));
+  expect(card.match(/<a /g)).toHaveLength(1);
+});

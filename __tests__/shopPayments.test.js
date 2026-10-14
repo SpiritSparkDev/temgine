@@ -5,7 +5,7 @@
 
 jest.disableAutomock()
 
-const db = { orders: [], payments: [], items: [], formats: [], movements: [] }
+const db = { orders: [], payments: [], items: [], formats: [], movements: [], products: [] }
 const mockPrisma = {}
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../lib/shop/config', () => ({ loadShopSettings: jest.fn(async () => ({})) }))
@@ -22,6 +22,7 @@ const match = (row, where) => Object.entries(where).every(([k, v]) => {
   if (v && typeof v === 'object' && !(v instanceof Date)) {
     if ('gte' in v) return row[k] !== null && row[k] >= v.gte
     if ('not' in v) return row[k] !== v.not
+    if ('in' in v) return v.in.includes(row[k])
     return false
   }
   return row[k] === v
@@ -50,6 +51,9 @@ Object.assign(mockPrisma, {
     },
     count: async ({ where }) => db.payments.filter((p) => match(p, where)).length,
   },
+  shopProduct: {
+    update: async ({ where, data }) => { const p = db.products.find((x) => x.id === where.id); Object.assign(p, data); return p },
+  },
   shopOrderItem: { findMany: async ({ where }) => db.items.filter((i) => i.orderId === where.orderId) },
   shopFormat: {
     findUnique: async ({ where }) => db.formats.find((f) => f.id === where.id) || null,
@@ -76,14 +80,15 @@ Object.assign(mockPrisma, {
 const remote = (o = {}) => ({ status: 'PAID', amountCents: 2400, currency: 'EUR', reference: 'ORD-2026-000001', ...o })
 
 beforeEach(() => {
-  db.orders = [{ id: 'o1', reference: 'ORD-2026-000001', status: 'PENDING', totalCents: 2400, currency: 'EUR', email: 'a@b.de' }]
+  db.orders = [{ id: 'o1', reference: 'ORD-2026-000001', status: 'PENDING', totalCents: 2400, currency: 'EUR', email: 'a@b.de', createdAt: new Date() }]
   db.payments = [{ id: 'p1', orderId: 'o1', provider: 'SUMUP', externalId: 'x1', status: 'PENDING', amountCents: 2400, currency: 'EUR' }]
   db.items = [
     { orderId: 'o1', formatId: 'f1', sku: 'A', qty: 2, digital: false },
     { orderId: 'o1', formatId: 'f2', sku: 'PDF', qty: 1, digital: true },
     { orderId: 'o1', formatId: 'f3', sku: 'INF', qty: 5, digital: false },
   ]
-  db.formats = [{ id: 'f1', stock: 10 }, { id: 'f2', stock: 7 }, { id: 'f3', stock: null }]
+  db.formats = [{ id: 'f1', stock: 10, productId: 'pr1' }, { id: 'f2', stock: 7, productId: 'pr1' }, { id: 'f3', stock: null, productId: 'pr1' }]
+  db.products = [{ id: 'pr1', updatedAt: new Date(0) }]
   db.movements = []
   afterPaid.length = 0
   mockDriver.fetchPayment.mockReset().mockResolvedValue(remote())
@@ -174,6 +179,11 @@ describe('syncPayment: bezahlt', () => {
     expect(msg).toContain('SKU A')
   })
 
+  test('Abbuchung setzt updatedAt des Produkts neu (Admin-Konflikterkennung)', async () => {
+    await sync()
+    expect(db.products[0].updatedAt.getTime()).toBeGreaterThan(0)
+  })
+
   test('Bestand exakt 0 bleibt 0', async () => {
     db.formats[0].stock = 0
     await sync()
@@ -182,7 +192,7 @@ describe('syncPayment: bezahlt', () => {
 
   test('Fehler in einem Schritt blockieren Hooks und weitere Positionen nicht', async () => {
     db.items.unshift({ orderId: 'o1', formatId: 'bad', sku: 'BAD', qty: 1, digital: false })
-    db.formats.push({ id: 'bad', stock: 3 })
+    db.formats.push({ id: 'bad', stock: 3, productId: 'pr1' })
     const orig = mockPrisma.shopStockMovement.createMany
     mockPrisma.shopStockMovement.createMany = jest.fn(async (a) => {
       if (a.data[0].sku === 'BAD') throw new Error('db down')
@@ -214,6 +224,13 @@ describe('syncPayment: Fehler, Abbruch, Sonderfälle', () => {
     expect(db.payments[0].status).toBe('PENDING')
   })
 
+  test('strict: Anbieterfehler wird weitergeworfen, nichts geändert', async () => {
+    mockDriver.fetchPayment.mockRejectedValue(new Error('timeout'))
+    await expect(syncPayment({ provider: 'sumup', externalId: 'x1' }, { strict: true })).rejects.toThrow('timeout')
+    expect(db.orders[0].status).toBe('PENDING')
+    expect(db.payments[0].status).toBe('PENDING')
+  })
+
   test.each(['FAILED', 'CANCELLED'])('%s: Zahlung %s, Bestellung FAILED, keine Abbuchung', async (s) => {
     mockDriver.fetchPayment.mockResolvedValue(remote({ status: s }))
     expect(await sync()).toBe('FAILED')
@@ -237,7 +254,8 @@ describe('syncPayment: Fehler, Abbruch, Sonderfälle', () => {
     expect(db.payments[0].status).toBe('PENDING')
   })
 
-  test('stornierte oder fehlgeschlagene Bestellung wird von einem späteren PAID nicht wiederbelebt', async () => {
+  test('stornierte oder (alte) fehlgeschlagene Bestellung wird von einem späteren PAID nicht wiederbelebt', async () => {
+    db.orders[0].createdAt = new Date(Date.now() - 49 * 3600_000)
     for (const s of ['CANCELLED', 'FAILED']) {
       db.orders[0].status = s
       expect(await sync()).toBe(s)
@@ -268,6 +286,49 @@ describe('syncPayment: Fehler, Abbruch, Sonderfälle', () => {
   test('markOrderPaid: nur der erste Aufruf gewinnt', async () => {
     expect(await markOrderPaid('o1')).toBe(true)
     expect(await markOrderPaid('o1')).toBe(false)
+  })
+})
+
+describe('syncPayment: späte Zahlung nach FAILED', () => {
+  const hours = (h) => new Date(Date.now() - h * 3600_000)
+  const failed = (h = 1, ps = 'FAILED') => { db.orders[0].status = 'FAILED'; db.orders[0].createdAt = hours(h); db.payments[0].status = ps }
+
+  test.each(['FAILED', 'CANCELLED', 'PENDING'])('Zahlung %s, Anbieter meldet PAID: FAILED -> PAID, Hook einmalig', async (ps) => {
+    failed(1, ps)
+    const hook = jest.fn()
+    afterPaid.push(hook)
+    expect(await sync()).toBe('PAID')
+    expect(await sync()).toBe('PAID')
+    expect(db.orders[0].status).toBe('PAID')
+    expect(db.payments[0].status).toBe('PAID')
+    expect(stock('f1')).toBe(8)
+    expect(hook).toHaveBeenCalledTimes(1)
+    expect(mockDriver.fetchPayment).toHaveBeenCalledTimes(1)
+  })
+
+  test('Anbieter meldet weiter FAILED: Bestellung bleibt FAILED', async () => {
+    failed()
+    mockDriver.fetchPayment.mockResolvedValue(remote({ status: 'FAILED' }))
+    expect(await sync()).toBe('FAILED')
+    expect(db.orders[0].status).toBe('FAILED')
+  })
+
+  test('PAID mit falschem Betrag belebt nicht', async () => {
+    failed()
+    mockDriver.fetchPayment.mockResolvedValue(remote({ amountCents: 1 }))
+    expect(await sync()).toBe('FAILED')
+    expect(db.orders[0].status).toBe('FAILED')
+  })
+
+  test('älter als 48 h: kein Abruf', async () => {
+    failed(49)
+    expect(await sync()).toBe('FAILED')
+    expect(mockDriver.fetchPayment).not.toHaveBeenCalled()
+  })
+
+  test('markOrderPaid akzeptiert FAILED', async () => {
+    db.orders[0].status = 'FAILED'
+    expect(await markOrderPaid('o1')).toBe(true)
   })
 })
 

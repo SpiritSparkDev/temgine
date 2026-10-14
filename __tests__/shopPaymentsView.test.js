@@ -75,3 +75,18 @@ describe('ShopPaymentsView', () => {
     await screen.findByText('Nein');
   });
 });
+
+describe('ShopPaymentsView error list', () => {
+  it('renders duplicate error messages without key collisions', async () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = jest.fn((url, o) => (o?.method === 'PUT'
+      ? res(422, { details: { errors: ['Fehler', 'Fehler'] } })
+      : res(200, data)));
+    render(<ShopPaymentsView showToast={() => {}} />);
+    await screen.findByLabelText('API-Key');
+    fireEvent.click(screen.getAllByText('Speichern')[0]);
+    await waitFor(() => expect(screen.getAllByText('Fehler')).toHaveLength(2));
+    expect(spy.mock.calls.some((c) => String(c[0]).includes('same key'))).toBe(false);
+    spy.mockRestore();
+  });
+});

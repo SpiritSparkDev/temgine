@@ -234,3 +234,151 @@ test.each([
   expect(root.querySelector('form').hidden).toBe(false);
   expect(root.querySelector('[data-shop-submit]').disabled).toBe(false);
 });
+
+// ---- Review-Fixes: a11y, SDK, Redirect, Race, Selektor ----
+
+test('a11y: required fields carry aria-required; error span linked via aria-describedby and cleared; focus on first error', async () => {
+  const root = setup();
+  await flush();
+  ['email', 'billing.name', 'billing.street', 'billing.zip', 'billing.city', 'billing.country', 'acceptTerms'].forEach((n) => {
+    const el = root.querySelector(`[name="${n}"]`);
+    expect(el.required).toBe(true);
+    expect(el.getAttribute('aria-required')).toBe('true');
+  });
+  expect(root.querySelector('[name="shipping.name"]').required).toBe(false);
+  expect(root.querySelector('form').hasAttribute('novalidate')).toBe(true);
+  expect(root.querySelector('[data-shop-formerror]').getAttribute('role')).toBe('alert');
+  checkoutResp = () => resp(422, { code: 'VALIDATION_ERROR', details: { fields: { 'billing.zip': 'PLZ ungültig', email: 'E-Mail ungültig' } } });
+  submit(root);
+  await flush();
+  const email = root.querySelector('[name="email"]');
+  expect(email.getAttribute('aria-describedby')).toBe(root.querySelector('[data-error-for="email"]').id);
+  expect(document.activeElement).toBe(email);
+  checkoutResp = () => resp(422, { code: 'VALIDATION_ERROR', details: { fields: { 'billing.zip': 'PLZ ungültig' } } });
+  submit(root);
+  await flush();
+  expect(email.hasAttribute('aria-describedby')).toBe(false);
+  expect(document.activeElement).toBe(root.querySelector('[name="billing.zip"]'));
+  root.querySelector('[data-shop-diff]').click();
+  expect(root.querySelector('[name="shipping.city"]').required).toBe(true);
+});
+
+test('server error without field focuses the form error', async () => {
+  const root = setup();
+  await flush();
+  checkoutResp = () => resp(502, { code: 'PAYMENT_UNAVAILABLE' });
+  submit(root);
+  await flush();
+  expect(document.activeElement).toBe(root.querySelector('[data-shop-formerror]'));
+});
+
+test('field key with quote does not crash and does not trigger the send-failure message', async () => {
+  const root = setup();
+  await flush();
+  checkoutResp = () => resp(422, { code: 'VALIDATION_ERROR', details: { fields: { 'x"]y': 'Komisch' } } });
+  submit(root);
+  await flush();
+  const fe = root.querySelector('[data-shop-formerror]');
+  expect(fe.textContent).toBe('Komisch');
+  expect(fe.textContent).not.toContain('nicht gesendet');
+});
+
+test.each([
+  ['javascript:alert(1)'], ['http://evil.example/x'], ['not a url'], [undefined],
+])('redirect to %s is refused', async (url) => {
+  const { nav } = require('../lib/shop/client/checkoutView');
+  const go = jest.spyOn(nav, 'go').mockImplementation(() => {});
+  checkoutResp = created({ provider: 'paypal', client: { type: 'redirect', url } });
+  const root = setup();
+  await flush();
+  fillAll(root);
+  submit(root);
+  await flush();
+  expect(go).not.toHaveBeenCalled();
+  expect(root.querySelector('[data-shop-formerror]').textContent).toBe('Die Zahlung konnte nicht gestartet werden.');
+  expect(root.querySelector('form').hidden).toBe(false);
+  go.mockRestore();
+});
+
+test('redirect to http://localhost is allowed', async () => {
+  const { nav } = require('../lib/shop/client/checkoutView');
+  const go = jest.spyOn(nav, 'go').mockImplementation(() => {});
+  checkoutResp = created({ provider: 'paypal', client: { type: 'redirect', url: 'http://localhost:3000/pay' } });
+  const root = setup();
+  await flush();
+  fillAll(root);
+  submit(root);
+  await flush();
+  expect(go).toHaveBeenCalledWith('http://localhost:3000/pay');
+  go.mockRestore();
+});
+
+test('stale country-change response is discarded', async () => {
+  const pending = [];
+  cartResp = () => new Promise((r) => pending.push(r));
+  const root = setup();
+  await flush();
+  const sel = root.querySelector('[name="billing.country"]');
+  sel.value = 'US';
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  await flush();
+  expect(pending).toHaveLength(2);
+  pending[1](await resp(200, priced({ totalCents: 3490 })));
+  await flush();
+  pending[0](await resp(200, priced({ totalCents: 2990 })));
+  await flush();
+  expect(root.querySelector('[data-shop-summary]').textContent).toContain('34,90 €');
+  expect(root.querySelector('[data-shop-summary]').textContent).not.toContain('29,90 €');
+});
+
+describe('SDK loading', () => {
+  const flushP = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
+  afterEach(() => jest.useRealTimers());
+
+  test('stale script without window.SumUpCard is replaced', async () => {
+    const stale = document.createElement('script');
+    stale.setAttribute('data-shop-sdk', '1');
+    document.head.appendChild(stale);
+    checkoutResp = created(widget);
+    const root = setup();
+    await flush();
+    fillAll(root);
+    submit(root);
+    await flush();
+    expect(sdkScripts()).toHaveLength(1);
+    expect(sdkScripts()[0]).not.toBe(stale);
+  });
+
+  test('15 s timeout shows message with retry; retry creates a fresh script', async () => {
+    checkoutResp = created(widget);
+    const root = setup();
+    await flush();
+    fillAll(root);
+    jest.useFakeTimers();
+    submit(root);
+    await flushP();
+    expect(sdkScripts()).toHaveLength(1);
+    jest.advanceTimersByTime(15000);
+    await flushP();
+    expect(sdkScripts()).toHaveLength(0);
+    expect(root.querySelector('[data-shop-payerror]').textContent).toContain('Zeitüberschreitung');
+    const retry = root.querySelector('[data-shop-retry]');
+    expect(retry.hidden).toBe(false);
+    retry.click();
+    await flushP();
+    expect(sdkScripts()).toHaveLength(1);
+    expect(retry.hidden).toBe(true);
+  });
+
+  test('load event without SumUpCard rejects instead of hanging', async () => {
+    checkoutResp = created(widget);
+    const root = setup();
+    await flush();
+    fillAll(root);
+    submit(root);
+    await flush();
+    sdkScripts()[0].dispatchEvent(new Event('load'));
+    await flush();
+    expect(root.querySelector('[data-shop-retry]').hidden).toBe(false);
+  });
+});

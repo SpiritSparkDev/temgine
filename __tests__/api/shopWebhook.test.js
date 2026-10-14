@@ -47,7 +47,7 @@ test('reads the raw body unchanged (multiple chunks) and passes headers and sett
   const res = await call(['{"a":', ' 1}'], { headers: { 'x-sig': 's' } })
   expect(res.status).toHaveBeenCalledWith(200)
   expect(mockDriver.parseWebhook).toHaveBeenCalledWith({ rawBody: '{"a": 1}', headers: { 'x-sig': 's' }, settings: { s: 1 } })
-  expect(syncPayment).toHaveBeenCalledWith({ provider: 'sumup', externalId: 'x1' })
+  expect(syncPayment).toHaveBeenCalledWith({ provider: 'sumup', externalId: 'x1' }, { strict: true })
 })
 
 test('add-on off = 404, nothing parsed', async () => {
@@ -104,6 +104,14 @@ test('temporary errors = 500 so the provider retries', async () => {
   mockDriver.parseWebhook.mockRejectedValue(new Error('other'))
   expect((await call(['{}'])).status).toHaveBeenCalledWith(500)
 })
+
+test('rate limit per IP = 429', async () => {
+  const headers = { 'x-forwarded-for': '203.0.113.9' }
+  let last
+  for (let i = 0; i < 301; i++) last = await call(['{}'], { headers })
+  expect(last.status).toHaveBeenCalledWith(429)
+  expect((await call(['{}'], { headers: { 'x-forwarded-for': '203.0.113.10' } })).status).toHaveBeenCalledWith(200)
+}, 30000)
 
 test('responses are no-store and leak nothing', async () => {
   const res = await call(['{}'])

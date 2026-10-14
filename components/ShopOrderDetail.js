@@ -68,6 +68,7 @@ export default function ShopOrderDetail({ id, onBack, showToast }) {
       {confirm && <ConfirmDialog message={`Bestellung ${order.reference} als versendet markieren? Der Kunde erhält eine Versandmail.`} onConfirm={ship} onCancel={() => setConfirm(false)} />}
 
       <h4>Positionen</h4>
+      <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead><tr style={{ textAlign: 'left' }}><th>Artikel</th><th>Menge</th><th>Einzelpreis</th><th>Summe</th></tr></thead>
         <tbody>
@@ -81,6 +82,7 @@ export default function ShopOrderDetail({ id, onBack, showToast }) {
           ))}
         </tbody>
       </table>
+      </div>
       <div>Zwischensumme: {formatCents(order.subtotalCents)}</div>
       <div>Versand: {formatCents(order.shippingCents)}</div>
       <div><strong>Gesamt: {formatCents(order.totalCents)}</strong></div>
