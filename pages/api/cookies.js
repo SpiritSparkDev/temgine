@@ -8,13 +8,25 @@ import {
   DEFAULT_BANNER_CSS,
   DEFAULT_BANNER_JS,
 } from '../../lib/cookieConsentStore';
-import { NECESSARY_BASELINE } from '../../lib/cookieCatalog';
+import { NECESSARY_BASELINE, getShopNecessaryServices } from '../../lib/cookieCatalog';
+import { isShopEnabled, loadShopSettings } from '../../lib/shop/config';
+import { listAvailableProviders } from '../../lib/shop/providers';
+
+// Shop-Add-on aktiv: Warenkorb-Speicher und verfügbare Zahlungsdienstleister als notwendig auflisten.
+async function shopServices() {
+  try {
+    if (!(await isShopEnabled())) return [];
+    return getShopNecessaryServices(listAvailableProviders(await loadShopSettings()).map((p) => p.id));
+  } catch (_e) {
+    return [];
+  }
+}
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
-      services: [...NECESSARY_BASELINE, ...getServices()],
+      services: [...NECESSARY_BASELINE, ...(await shopServices()), ...getServices()],
       banner: getBannerContent(),
       bannerDefaults: { html: DEFAULT_BANNER_HTML, css: DEFAULT_BANNER_CSS, js: DEFAULT_BANNER_JS },
     });

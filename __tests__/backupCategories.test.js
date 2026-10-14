@@ -44,3 +44,9 @@ describe('parseBackupCategories', () => {
     expect(result.size).toBe(BACKUP_CATEGORY_KEYS.length);
   });
 });
+
+describe('shop category', () => {
+  test('is a selectable database category', () => {
+    expect(BACKUP_CATEGORIES.find((c) => c.key === 'shop')).toMatchObject({ group: 'Datenbank' });
+  });
+});

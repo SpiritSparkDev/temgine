@@ -52,3 +52,9 @@ test('renderPage emits shop containers', () => {
   expect(out).toContain('<div class="shop-block" data-shop="order"></div>');
   expect(out).toContain('data-shop="product" data-slug="a&quot;b"');
 });
+
+test('shipping mentions link to /versand-zahlung', () => {
+  const { CART_TEMPLATE, CHECKOUT_TEMPLATE, SUMMARY_TEMPLATE } = require('../lib/shop/templates');
+  expect(renderProductDetail({ title: 'A', formats: [{ sku: 'x', label: 'L', priceCents: 100, orderable: true }] })).toContain('href="/versand-zahlung"');
+  for (const tpl of [CART_TEMPLATE, CHECKOUT_TEMPLATE, SUMMARY_TEMPLATE]) expect(tpl).toContain('href="/versand-zahlung"');
+});

@@ -1,7 +1,8 @@
 import { prisma } from '../../../lib/prisma'
 import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 import { logAudit } from '../../../lib/audit'
-import { getShopStatus, setShopEnabled } from '../../../lib/shop/config'
+import { getShopStatus, setShopEnabled, isShopEnabled } from '../../../lib/shop/config'
+import { ensureShopPages } from '../../../lib/shop/pages'
 import { SHOP_NOTIFY_EMAIL_KEY, SHOP_ORDER_PREFIX_KEY } from '../../../lib/shop/keys'
 import { normalizePrefix } from '../../../lib/shop/checkout'
 
@@ -31,7 +32,18 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      const { enabled, notifyEmail, orderPrefix } = req.body || {}
+      const { enabled, notifyEmail, orderPrefix, ensurePages } = req.body || {}
+      if (ensurePages !== undefined) {
+        if (ensurePages !== true) {
+          return res.status(400).json({ error: 'ensurePages muss true sein', code: 'VALIDATION_ERROR' })
+        }
+        if (!(await isShopEnabled())) {
+          return res.status(403).json({ error: 'Add-on Shop nicht aktiviert', code: 'ADDON_DISABLED' })
+        }
+        const created = await ensureShopPages()
+        await logAudit({ action: 'shop.pages.ensure', resource: 'shop', resourceId: created.join(','), userId: auth.user.id, details: { created } })
+        return res.status(200).json({ ...(await readStatus()), created })
+      }
       if (enabled !== undefined && typeof enabled !== 'boolean') {
         return res.status(400).json({ error: 'enabled (true/false) erforderlich', code: 'VALIDATION_ERROR' })
       }

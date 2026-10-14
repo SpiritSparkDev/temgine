@@ -13,6 +13,7 @@ import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
 import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
 import { BACKUP_CATEGORY_KEYS, parseBackupCategories } from '../../../lib/backupCategories'
+import { exportShopData } from '../../../lib/shop/backup'
 
 const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
 const FONT_EXTS = new Set(['.ttf', '.woff', '.woff2', '.otf', '.eot'])
@@ -822,6 +823,7 @@ export default async function handler(req, res) {
       prisma.blogPost.findMany({ orderBy: { createdAt: 'asc' } }),
     ])
 
+    const shop = inc('shop') ? await exportShopData() : null
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
     const shouldBuildStaticSite = wantStaticSite
     // Static-site export always needs its own fonts regardless of the chosen
@@ -864,6 +866,8 @@ export default async function handler(req, res) {
         cssFiles: inc('css') ? css.length : 0,
         navigations: inc('navigations') ? navigations.length : 0,
         globalVariables: inc('globalVariables') ? globalVariables.length : 0,
+        shopProducts: shop ? shop.products.length : 0,
+        shopOrders: shop ? shop.orders.length : 0,
         footers: inc('footers') ? footers.length : 0,
         maintenancePages: inc('maintenance') ? Object.keys(maintenance).length : 0,
         uploadFonts: uploadFonts.length,
@@ -888,6 +892,7 @@ export default async function handler(req, res) {
         css: inc('css') ? css : [],
         navigations: inc('navigations') ? navigations : [],
         globalVariables: inc('globalVariables') ? globalVariables : [],
+        shop,
         footers: inc('footers') ? footers : [],
         maintenance: inc('maintenance') ? maintenance : {},
         // Path only — actual bytes live under uploads-fonts/ in this zip. Restoring
@@ -1124,6 +1129,7 @@ export default async function handler(req, res) {
       css: inc('css') ? css : [],
       navigations: inc('navigations') ? navigations : [],
       globalVariables: inc('globalVariables') ? globalVariables : [],
+      shop,
       footers: inc('footers') ? footers : [],
       maintenance: inc('maintenance') ? maintenance : {},
       uploadFonts: inc('uploadFonts') ? uploadFonts : [],

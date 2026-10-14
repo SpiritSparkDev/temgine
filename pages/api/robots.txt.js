@@ -1,4 +1,6 @@
 import { prisma } from '../../lib/prisma';
+import { isShopEnabled } from '../../lib/shop/config';
+import { SHOP_NOINDEX_SLUGS } from '../../lib/shop/seoRules';
 
 /**
  * API endpoint for robots.txt
@@ -39,9 +41,10 @@ export default async function handler(req, res) {
     .split(/\r?\n|,/)
     .map((p) => p.trim())
     .filter(Boolean);
+  const shopPaths = (await isShopEnabled().catch(() => false)) ? SHOP_NOINDEX_SLUGS.map((s) => `/${s}`) : [];
   const disallowPaths = indexingDisabled
     ? ['/']
-    : Array.from(new Set([...envDisallowPaths, ...extraDisallowPaths]));
+    : Array.from(new Set([...envDisallowPaths, ...extraDisallowPaths, ...shopPaths]));
 
   const crawlDelay = process.env.ROBOTS_CRAWL_DELAY || '1';
   const requestRate = process.env.ROBOTS_REQUEST_RATE; // e.g., "10/1m"

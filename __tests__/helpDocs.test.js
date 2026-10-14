@@ -14,6 +14,12 @@ describe('helpDocs', () => {
     expect(readHelpDoc('gibt-es-nicht')).toBeNull();
   });
 
+  it('liefert die Shop-Hilfe mit Webhook-URLs und Ereignissen', () => {
+    expect(listHelpDocs().find(d => d.name === 'shop')).toEqual({ name: 'shop', title: 'Online-Shop (Add-on)' });
+    const md = readHelpDoc('shop');
+    ['/api/shop/webhooks/sumup', '/api/shop/webhooks/stripe', '/api/shop/webhooks/paypal', 'checkout.session.async_payment_failed', 'PAYMENT.CAPTURE.DENIED', 'Zahlungspflichtig bestellen'].forEach(t => expect(md).toContain(t));
+  });
+
   it('jede Überschrift, zu der die Kurzreferenz springt, existiert', () => {
     const md = readHelpDoc('templates');
     ['## Variablen', '### Gruppen', '## Checkbox', '## Select (Dropdown)', '## Bedingungen', '## Wiederholungen', '## Dateien eines Ordners'].forEach(h => {

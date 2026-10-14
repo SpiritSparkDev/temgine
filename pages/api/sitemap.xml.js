@@ -1,4 +1,6 @@
 import { prisma } from '../../lib/prisma';
+import { isShopEnabled } from '../../lib/shop/config';
+import { isShopNoindexPath } from '../../lib/shop/seoRules';
 
 /**
  * API endpoint for dynamic sitemap generation
@@ -67,8 +69,12 @@ export default async function handler(req, res) {
 
     // Ein Pfad kann doppelt auftreten (z. B. Homepage-Slug + "/") — letzten
     // (zuverlässigeren, da explizit "/"-)Eintrag behalten.
+    const shopOn = await isShopEnabled().catch(() => false);
     const byPath = new Map();
-    for (const r of routes) byPath.set(r.routePath, r);
+    for (const r of routes) {
+      if (shopOn && isShopNoindexPath(r.routePath)) continue;
+      byPath.set(r.routePath, r);
+    }
 
     const sitemapItems = Array.from(byPath.values())
       .map((route) => {

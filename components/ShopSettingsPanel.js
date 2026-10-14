@@ -31,6 +31,15 @@ export default function ShopSettingsPanel({ showToast }) {
   };
 
   const toggle = (on) => put({ enabled: on });
+  const ensurePages = async () => {
+    const res = await fetch('/api/shop/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ensurePages: true }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) return showToast(d.error || 'Fehler beim Anlegen der Seiten', 'error');
+    showToast(d.created && d.created.length ? `Angelegt: ${d.created.join(', ')}` : 'Alle Seiten sind vorhanden');
+  };
   const saveOrderSettings = () => put({ notifyEmail: notifyEmail.trim(), orderPrefix: orderPrefix.trim() }, 'Shop-Einstellungen gespeichert');
 
   return (
@@ -66,7 +75,10 @@ export default function ShopSettingsPanel({ showToast }) {
               Präfix der Bestellnummer
               <input type="text" maxLength={8} value={orderPrefix} onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())} />
             </label>
-            <div><button className="btn btn-primary" onClick={saveOrderSettings}>Speichern</button></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" onClick={saveOrderSettings}>Speichern</button>
+              <button className="btn" onClick={ensurePages}>Shop-Seiten prüfen/anlegen</button>
+            </div>
           </div>
         )}
       </div>

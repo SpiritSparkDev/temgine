@@ -80,4 +80,22 @@ describe('ShopSettingsPanel', () => {
     fireEvent.click(screen.getByText('Speichern'));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Ungültige E-Mail', 'error'));
   });
+
+  it('ensures the shop pages via PUT and toasts the created slugs', async () => {
+    const toast = jest.fn();
+    global.fetch = jest.fn((url, opts) => (opts?.method === 'PUT' ? ok({ ...status(true), created: ['kasse', 'bestellung'] }) : ok(status(true))));
+    render(<ShopSettingsPanel showToast={toast} />);
+    fireEvent.click(await screen.findByText('Shop-Seiten prüfen/anlegen'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Angelegt: kasse, bestellung'));
+    const put = global.fetch.mock.calls.find(([, o]) => o?.method === 'PUT');
+    expect(JSON.parse(put[1].body)).toEqual({ ensurePages: true });
+  });
+
+  it('toasts that all pages exist when nothing was created', async () => {
+    const toast = jest.fn();
+    global.fetch = jest.fn((url, opts) => (opts?.method === 'PUT' ? ok({ ...status(true), created: [] }) : ok(status(true))));
+    render(<ShopSettingsPanel showToast={toast} />);
+    fireEvent.click(await screen.findByText('Shop-Seiten prüfen/anlegen'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Alle Seiten sind vorhanden'));
+  });
 });

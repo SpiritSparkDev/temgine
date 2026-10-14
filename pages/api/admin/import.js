@@ -5,6 +5,7 @@ import { listTemplates, saveTemplate, deleteTemplateByName } from '../../../lib/
 import { listNavigations, saveNavigation, deleteNavigation } from '../../../lib/navigationStore'
 import { listFooters, saveFooter, deleteFooter } from '../../../lib/footerStore'
 import { MAINTENANCE_PAGES, saveMaintenanceField } from '../../../lib/maintenanceStore'
+import { importShopData } from '../../../lib/shop/backup'
 import fs from 'fs'
 import path from 'path'
 
@@ -724,6 +725,17 @@ export default async function handler(req, res) {
       if (globalVarResult.errors.length > 0) importStats.errors.push(...globalVarResult.errors)
     } catch (e) {
       importStats.errors.push(`Globale Variablen import failed: ${e.message}`)
+    }
+
+    // Import shop data (products, orders, ...). Credentials are never part of a backup.
+    if (backup.shop && typeof backup.shop === 'object') {
+      try {
+        const shopResult = await importShopData(backup.shop, strategyFor('shop'))
+        importStats.shop = shopResult.imported
+        if (shopResult.errors.length > 0) importStats.errors.push(...shopResult.errors)
+      } catch (e) {
+        importStats.errors.push(`Shop import failed: ${e.message}`)
+      }
     }
 
     // Import footers

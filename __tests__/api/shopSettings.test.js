@@ -152,3 +152,28 @@ describe('/api/settings with shop_ keys', () => {
     expect(res.json).toHaveBeenCalledWith({ key: 'shop_stripe_secret_key', set: true });
   });
 });
+
+describe('/api/shop/settings ensurePages', () => {
+  const { ensureShopPages } = require('../../lib/shop/pages');
+
+  test('creates missing pages for an enabled add-on and returns the slugs', async () => {
+    mockPrisma.setting.findUnique.mockResolvedValue({ value: 'true' });
+    ensureShopPages.mockResolvedValueOnce(['kasse']);
+    const res = makeRes();
+    await shop({ method: 'PUT', body: { ensurePages: true } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0].created).toEqual(['kasse']);
+    expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'shop.pages.ensure' }));
+  });
+
+  test('rejects a non-boolean value and a disabled add-on', async () => {
+    let res = makeRes();
+    await shop({ method: 'PUT', body: { ensurePages: 'yes' } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    mockPrisma.setting.findUnique.mockResolvedValue({ value: 'false' });
+    res = makeRes();
+    await shop({ method: 'PUT', body: { ensurePages: true } }, res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(ensureShopPages).not.toHaveBeenCalled();
+  });
+});

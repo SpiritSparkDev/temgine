@@ -41,3 +41,20 @@ describe('cookieCatalog', () => {
     expect(findCatalogServiceForIframe('//www.youtube.com/embed/abc123')?.id).toBe('youtube');
   });
 });
+
+describe('shop services', () => {
+  const { getShopNecessaryServices, COOKIE_CATALOG } = require('../lib/cookieCatalog');
+
+  test('cart storage plus only the given providers, all necessary', () => {
+    const list = getShopNecessaryServices(['sumup', 'unknown']);
+    expect(list.map((s) => s.id)).toEqual(['temgine-shop-cart', 'shop-sumup']);
+    expect(list.every((s) => s.category === 'necessary')).toBe(true);
+    expect(list[0].cookies[0].name).toBe('temgine_shop_cart');
+  });
+
+  test('shop entries do not take part in script/iframe detection', () => {
+    const ids = COOKIE_CATALOG.map((s) => s.id);
+    expect(ids.some((i) => i.startsWith('shop-') || i === 'temgine-shop-cart')).toBe(false);
+    expect(findCatalogServiceForIframe('https://gateway.sumup.com/x')).toBeNull();
+  });
+});
