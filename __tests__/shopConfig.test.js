@@ -7,6 +7,8 @@ jest.disableAutomock();
 
 const mockPrisma = { setting: { findMany: jest.fn(), findUnique: jest.fn(), upsert: jest.fn() } };
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }));
+const mockEnsurePages = jest.fn().mockResolvedValue([]);
+jest.mock('../lib/shop/pages', () => ({ ensureShopPages: (...a) => mockEnsurePages(...a) }));
 
 const fs = require('fs');
 const path = require('path');
@@ -51,6 +53,18 @@ describe('lib/shop/config', () => {
     expect(mockPrisma.setting.upsert).toHaveBeenCalledWith({ where: { key: 'shop_enabled' }, update: { value: 'true' }, create: { key: 'shop_enabled', value: 'true' } });
     await setShopEnabled(false);
     expect(mockPrisma.setting.upsert.mock.calls[1][0].update.value).toBe('false');
+  });
+
+  test('enabling creates the shop pages, disabling does not, and a page error does not block enabling', async () => {
+    await setShopEnabled(true);
+    expect(mockEnsurePages).toHaveBeenCalledTimes(1);
+    await setShopEnabled(false);
+    expect(mockEnsurePages).toHaveBeenCalledTimes(1);
+    mockEnsurePages.mockRejectedValueOnce(new Error('db down'));
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    await expect(setShopEnabled(true)).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 
   test('getShopStatus reports flags per provider and never returns credential values', async () => {

@@ -6,6 +6,7 @@ import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import { hydrateShop } from '../lib/shop/client/hydrate'
 import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
@@ -459,6 +460,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     const containerId = homePage?.data?.wrapperId || 'page-html-output'
     const container = document.getElementById(containerId)
     hydrateConsentGatedEmbeds(container)
+    hydrateShop(container)
   }, [html])
 
   // Strip not-yet-consented embed srcs before React ever inserts the HTML.

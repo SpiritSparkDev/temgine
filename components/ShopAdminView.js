@@ -1,0 +1,33 @@
+import React, { useState } from 'react';
+import ShopProductsView from './ShopProductsView';
+
+const TABS = [
+  { id: 'products', label: 'Produkte' },
+  { id: 'orders', label: 'Bestellungen', soon: true },
+  { id: 'shipping', label: 'Versand & Steuer', soon: true },
+];
+
+/** Container des Shop-Add-ons im Admin. Bestellungen sowie Versand & Steuer folgen in späteren Phasen. */
+export default function ShopAdminView({ showToast }) {
+  const [tab, setTab] = useState('products');
+  return (
+    <div style={{ padding: 16 }}>
+      <div role="tablist" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            className={`btn ${tab === t.id ? 'btn-primary' : ''}`}
+            aria-selected={tab === t.id}
+            disabled={t.soon}
+            title={t.soon ? 'folgt' : undefined}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}{t.soon ? ' (folgt)' : ''}
+          </button>
+        ))}
+      </div>
+      {tab === 'products' && <ShopProductsView showToast={showToast} />}
+    </div>
+  );
+}

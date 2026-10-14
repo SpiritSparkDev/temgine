@@ -9,6 +9,7 @@ const mockPrisma = { setting: { findMany: jest.fn(), findUnique: jest.fn(), upse
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('../../lib/auth', () => ({ requireAuth: jest.fn(), PERMISSIONS: { SHOP_SETTINGS: ['ADMIN'] } }));
 jest.mock('../../lib/audit', () => ({ logAudit: jest.fn() }));
+jest.mock('../../lib/shop/pages', () => ({ ensureShopPages: jest.fn().mockResolvedValue([]) }));
 jest.mock('../../lib/maintenanceStore', () => ({ parseSettingKey: () => null, getAllMaintenanceAsSettings: () => ({}), saveMaintenanceField: jest.fn() }));
 
 const { requireAuth } = require('../../lib/auth');

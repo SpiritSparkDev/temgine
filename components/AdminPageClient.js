@@ -25,6 +25,8 @@ import BlogView from './BlogView';
 import ContactMessagesView from './ContactMessagesView';
 import MembersAdminView from './MembersAdminView';
 import MemberGroupsAdminView from './MemberGroupsAdminView';
+import ShopAdminView from './ShopAdminView';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 
 export default function AdminPageClient() {
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -41,6 +43,7 @@ export default function AdminPageClient() {
   const [builderSearch, setBuilderSearch] = useState('');
   const [settingsTab, setSettingsTab] = useState('users');
   const [adminLogo, setAdminLogo] = useState('/brand/light.png');
+  const [shopEnabled, setShopEnabled] = useState(false);
   const [showBuilderQuickSwitch, setShowBuilderQuickSwitch] = useState(false);
   const [membersTab, setMembersTab] = useState('members');
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
@@ -53,6 +56,11 @@ export default function AdminPageClient() {
     window.addEventListener('admin-logo-changed', loadLogo);
     return () => window.removeEventListener('admin-logo-changed', loadLogo);
   }, []);
+
+  // Shop-Menü nur bei aktivem Add-on; bei jedem Bereichswechsel neu prüfen (z. B. zurück aus den Einstellungen)
+  useEffect(() => {
+    fetch('/api/settings').then(r => (r.ok ? r.json() : null)).then(d => { if (d) setShopEnabled(d.shop_enabled === 'true'); }).catch(() => {});
+  }, [view]);
 
   useEffect(() => {
     if (view === 'users') {
@@ -106,7 +114,7 @@ export default function AdminPageClient() {
       const legacyBuilderMap = {
         templates: 'templates'
       };
-      const allowed = ['dashboard','pages','builder','files','css','js','contactForms','cookies','globalVariables','users','settings','backup'];
+      const allowed = ['dashboard','pages','builder','files','css','js','contactForms','cookies','globalVariables','users','settings','backup','shop'];
 
       if (saved && legacyBuilderMap[saved]) {
         setBuilderTab(legacyBuilderMap[saved]);
@@ -726,6 +734,7 @@ export default function AdminPageClient() {
               <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
               <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
               <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
+              {shopEnabled && <li><button className={`menu-item ${view==='shop'?'active':''}`} onClick={() => handleSelectView('shop')}><ShoppingCartIcon style={{ fontSize: 18 }} /> Shop</button></li>}
               <li><button className={`menu-item ${view==='contactForms'?'active':''}`} onClick={() => handleSelectView('contactForms')}><Mail size={18} /> Kontaktformulare</button></li>
               <li><button className={`menu-item ${view==='cookies'?'active':''}`} onClick={() => handleSelectView('cookies')}><Cookie size={18} /> Cookies</button></li>
               <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
@@ -847,6 +856,7 @@ export default function AdminPageClient() {
           {view === 'js' && <JSManagerViewModern showToast={showToast} />}
           {view === 'fonts' && <FontManagerView showToast={showToast} />}
           {view === 'blog' && <BlogView showToast={showToast} />}
+          {view === 'shop' && shopEnabled && <ShopAdminView showToast={showToast} />}
           {view === 'contact-messages' && <ContactMessagesView showToast={showToast} />}
           {view === 'members' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

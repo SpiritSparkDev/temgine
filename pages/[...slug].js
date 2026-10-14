@@ -7,9 +7,25 @@ import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
 import { hydrateContactForms } from '../lib/contactFormRuntime'
 import { hydratePicgine, loadPicgineContents } from '../lib/picgineRuntime'
 import { hydrateConsentGatedEmbeds, stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
+import { hydrateShop } from '../lib/shop/client/hydrate'
 import SeoHead from '../components/SeoHead'
 
 const defaultLoadingHtml = '<div style="padding: 20px;">Lädt...</div>'
+
+// /shop/<slug> ist keine CMS-Seite: synthetische Seite, aber nur bei veröffentlichter Seite "shop"
+// und aktivem Add-on (öffentliche API antwortet sonst mit 404).
+async function resolveShopProductPage(pages, productSlug) {
+  const shopPage = (pages || []).find((p) => p.slug === 'shop')
+  if (!shopPage || shopPage.status !== 'PUBLISHED') return null
+  try {
+    const res = await fetch(`/api/shop/public/products/${encodeURIComponent(productSlug)}`)
+    if (!res.ok) return null
+    const { product } = await res.json()
+    return { id: `shop-product-${productSlug}`, slug: productSlug, title: product?.title || 'Shop', status: 'PUBLISHED', data: {}, children: [], accessGroups: [], blocks: [{ type: 'shop-product', props: { slug: productSlug } }] }
+  } catch (_) {
+    return null
+  }
+}
 
 const applyMaintenanceAssets = (sourceHtml, cssCode, jsCode) => {
   const value = String(sourceHtml || '')
@@ -334,6 +350,8 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
 
       let foundPage = findPageByPath(pages, segments)
       if (!foundPage && segments.length === 0) foundPage = pages.find(p => p.isHomepage === true)
+      if (!foundPage && segments.length === 2 && segments[0] === 'shop') foundPage = await resolveShopProductPage(pages, segments[1])
+      if (cancelled) return
       if (!foundPage) {
         const maintenance404Html = await loadMaintenance404Html()
         const cssLinks = await loadActiveCssLinks()
@@ -416,7 +434,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         if (!Array.isArray(blocks)) return
         for (const block of blocks) {
           const tname = block.template || block.type
-          if (tname) templatesToLoad.add(tname)
+          if (tname && tname !== 'shop-products' && tname !== 'shop-product') templatesToLoad.add(tname)
           if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
         }
       }
@@ -727,6 +745,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     const containerId = page?.data?.wrapperId || 'page-html-output';
     const container = document.getElementById(containerId);
     hydrateConsentGatedEmbeds(container);
+    hydrateShop(container);
   }, [html]);
 
   const params = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null
@@ -839,7 +858,7 @@ export async function getServerSideProps(context) {
 
   let seoMeta = null
   try {
-    const { resolveSeoMetaForRoute, findBlogPostForRoute, buildBlogPostMeta } = await import('../lib/seo')
+    const { resolveSeoMetaForRoute, findBlogPostForRoute, buildBlogPostMeta, findProductForRoute, buildProductMeta } = await import('../lib/seo')
     const { getPageRedirect } = await import('../lib/pageRedirect')
     const { meta, found, settings, baseUrl, page } = await resolveSeoMetaForRoute(context.req, path, slug)
     seoMeta = meta
@@ -854,7 +873,15 @@ export async function getServerSideProps(context) {
       return { redirect: { destination: redirect.url, permanent: redirect.type === 'permanent' } }
     }
 
-    if (!found && slug.length === 2) {
+    if (!found && slug.length === 2 && slug[0] === 'shop') {
+      const product = await findProductForRoute(slug[1])
+      if (product) {
+        seoMeta = buildProductMeta({ product, routePath: path, baseUrl, settings })
+        resolvedFound = true
+      }
+    }
+
+    if (!found && !resolvedFound && slug.length === 2) {
       // Route matcht keine Page — evtl. ein Blog-Beitrag (/[channelSlug]/[postSlug]),
       // die eigene Tabellen statt des Page-Baums nutzen (siehe Blog-Routing weiter unten).
       const blogMatch = await findBlogPostForRoute(slug[0], slug[1])
