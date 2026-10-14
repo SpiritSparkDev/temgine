@@ -75,6 +75,39 @@ describe('/api/shop/settings', () => {
   });
 });
 
+describe('/api/shop/settings notifyEmail and orderPrefix', () => {
+  test('GET returns notifyEmail and a normalized orderPrefix (default ORD)', async () => {
+    let res = makeRes();
+    await shop({ method: 'GET' }, res);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ notifyEmail: '', orderPrefix: 'ORD' });
+    mockPrisma.setting.findMany.mockResolvedValue([{ key: 'shop_notify_email', value: 'v@example.com' }, { key: 'shop_order_prefix', value: 'pf' }]);
+    res = makeRes();
+    await shop({ method: 'GET' }, res);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ notifyEmail: 'v@example.com', orderPrefix: 'PF' });
+  });
+
+  test('PUT saves notifyEmail and normalized orderPrefix without enabled', async () => {
+    const res = makeRes();
+    await shop({ method: 'PUT', body: { notifyEmail: ' v@example.com ', orderPrefix: 'pf-1!' } }, res);
+    expect(mockPrisma.setting.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { key: 'shop_notify_email' }, create: { key: 'shop_notify_email', value: 'v@example.com' } }));
+    expect(mockPrisma.setting.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { key: 'shop_order_prefix' }, create: { key: 'shop_order_prefix', value: 'PF1' } }));
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test('PUT allows clearing notifyEmail and rejects invalid values', async () => {
+    let res = makeRes();
+    await shop({ method: 'PUT', body: { notifyEmail: '' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    mockPrisma.setting.upsert.mockClear();
+    for (const notifyEmail of ['kaputt', 'a@b.de\nBcc: c@d.de', 5, 'a@' + 'b'.repeat(200) + '.de']) {
+      res = makeRes();
+      await shop({ method: 'PUT', body: { notifyEmail } }, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+    }
+    expect(mockPrisma.setting.upsert).not.toHaveBeenCalled();
+  });
+});
+
 describe('/api/settings with shop_ keys', () => {
   test('GET never exposes shop credentials but still shows the public flags', async () => {
     mockPrisma.setting.findMany.mockResolvedValue([

@@ -66,7 +66,7 @@ describe('ShopAdminView', () => {
   it('shows products and disabled placeholder tabs', async () => {
     global.fetch = jest.fn(() => res(200, { products: [] }));
     render(<ShopAdminView showToast={() => {}} />);
-    expect(screen.getByText('Bestellungen (folgt)').closest('button').disabled).toBe(true);
+    expect(screen.getByText('Bestellungen').closest('button').disabled).toBe(false);
     expect(screen.getByText('Versand & Steuer').closest('button').disabled).toBe(false);
     await waitFor(() => expect(screen.getByText('Noch keine Produkte.')).toBeTruthy());
   });

@@ -3,24 +3,35 @@ import React, { useState, useEffect } from 'react';
 const PROVIDER_STATE = (p) => (p.enabled ? (p.configured ? 'aktiv' : 'aktiv, Zugangsdaten fehlen') : (p.configured ? 'bereit, nicht aktiviert' : 'nicht konfiguriert'));
 
 /**
- * Add-on "Online-Shop": Schalter und Überblick über die Zahlungsanbieter (SumUp, Stripe, PayPal).
- * Die Konfiguration der Anbieter folgt mit den jeweiligen Zahlungsarten. Zugangsdaten sind write-only.
+ * Add-on "Online-Shop": Schalter, Überblick über die Zahlungsanbieter (SumUp, Stripe, PayPal)
+ * sowie Benachrichtigungs-E-Mail und Präfix der Bestellnummer. Zugangsdaten sind write-only.
  */
 export default function ShopSettingsPanel({ showToast }) {
   const [status, setStatus] = useState(null);
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [orderPrefix, setOrderPrefix] = useState('');
+
+  const apply = (d) => {
+    setStatus(d);
+    setNotifyEmail(d.notifyEmail || '');
+    setOrderPrefix(d.orderPrefix || '');
+  };
 
   useEffect(() => {
-    fetch('/api/shop/settings').then((r) => r.json()).then((d) => { if (!d.error) setStatus(d); }).catch(() => {});
+    fetch('/api/shop/settings').then((r) => r.json()).then((d) => { if (!d.error) apply(d); }).catch(() => {});
   }, []);
 
-  const toggle = async (on) => {
+  const put = async (body, okMsg) => {
     const res = await fetch('/api/shop/settings', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: on }),
+      body: JSON.stringify(body),
     });
     const d = await res.json().catch(() => ({}));
-    if (res.ok) setStatus(d); else showToast(d.error || 'Fehler beim Speichern', 'error');
+    if (res.ok) { apply(d); if (okMsg) showToast(okMsg); } else showToast(d.error || 'Fehler beim Speichern', 'error');
   };
+
+  const toggle = (on) => put({ enabled: on });
+  const saveOrderSettings = () => put({ notifyEmail: notifyEmail.trim(), orderPrefix: orderPrefix.trim() }, 'Shop-Einstellungen gespeichert');
 
   return (
     <section className="st-card">
@@ -43,6 +54,20 @@ export default function ShopSettingsPanel({ showToast }) {
               </li>
             ))}
           </ul>
+        )}
+
+        {status?.enabled && (
+          <div style={{ display: 'grid', gap: 10, maxWidth: 560, marginTop: 16 }}>
+            <label style={{ display: 'grid', gap: 4 }}>
+              Benachrichtigungs-E-Mail (neue bezahlte Bestellungen)
+              <input type="email" value={notifyEmail} onChange={(e) => setNotifyEmail(e.target.value)} />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              Präfix der Bestellnummer
+              <input type="text" maxLength={8} value={orderPrefix} onChange={(e) => setOrderPrefix(e.target.value.toUpperCase())} />
+            </label>
+            <div><button className="btn btn-primary" onClick={saveOrderSettings}>Speichern</button></div>
+          </div>
         )}
       </div>
     </section>

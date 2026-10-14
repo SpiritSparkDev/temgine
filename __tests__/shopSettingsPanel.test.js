@@ -6,7 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ShopSettingsPanel from '../components/ShopSettingsPanel';
 
 const status = (enabled) => ({
-  enabled,
+  enabled, notifyEmail: 'shop@x.de', orderPrefix: 'PF',
   providers: {
     sumup: { label: 'SumUp', enabled: true, configured: true },
     stripe: { label: 'Stripe', enabled: false, configured: true },
@@ -54,5 +54,30 @@ describe('ShopSettingsPanel', () => {
     await waitFor(() => expect(screen.getByRole('checkbox').disabled).toBe(false));
     fireEvent.click(screen.getByRole('checkbox'));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Zugriff verweigert', 'error'));
+  });
+
+  it('shows notify email and prefix and saves them via PUT', async () => {
+    const toast = jest.fn();
+    global.fetch = jest.fn((url, opts) => ok(status(true)));
+    render(<ShopSettingsPanel showToast={toast} />);
+    const email = await screen.findByLabelText(/Benachrichtigungs-E-Mail/);
+    expect(email.value).toBe('shop@x.de');
+    fireEvent.change(email, { target: { value: 'neu@x.de' } });
+    fireEvent.change(screen.getByLabelText('Präfix der Bestellnummer'), { target: { value: 'ab1' } });
+    fireEvent.click(screen.getByText('Speichern'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Shop-Einstellungen gespeichert'));
+    const put = global.fetch.mock.calls.find(([, o]) => o?.method === 'PUT');
+    expect(JSON.parse(put[1].body)).toEqual({ notifyEmail: 'neu@x.de', orderPrefix: 'AB1' });
+  });
+
+  it('toasts a 4xx error of the order settings', async () => {
+    const toast = jest.fn();
+    global.fetch = jest.fn((url, opts) => (opts?.method === 'PUT'
+      ? Promise.resolve({ ok: false, status: 422, json: async () => ({ error: 'Ungültige E-Mail' }) })
+      : ok(status(true))));
+    render(<ShopSettingsPanel showToast={toast} />);
+    await screen.findByLabelText(/Benachrichtigungs-E-Mail/);
+    fireEvent.click(screen.getByText('Speichern'));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Ungültige E-Mail', 'error'));
   });
 });

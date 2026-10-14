@@ -1,9 +1,23 @@
+import { prisma } from '../../../lib/prisma'
 import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 import { logAudit } from '../../../lib/audit'
 import { getShopStatus, setShopEnabled } from '../../../lib/shop/config'
+import { SHOP_NOTIFY_EMAIL_KEY, SHOP_ORDER_PREFIX_KEY } from '../../../lib/shop/keys'
+import { normalizePrefix } from '../../../lib/shop/checkout'
+
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/
+
+async function readStatus() {
+  const status = await getShopStatus()
+  const rows = await prisma.setting.findMany({ where: { key: { in: [SHOP_NOTIFY_EMAIL_KEY, SHOP_ORDER_PREFIX_KEY] } } })
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]))
+  return { ...status, notifyEmail: map[SHOP_NOTIFY_EMAIL_KEY] || '', orderPrefix: normalizePrefix(map[SHOP_ORDER_PREFIX_KEY]) }
+}
+
+const save = (key, value) => prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } })
 
 /**
- * Shop-Add-on: Status lesen und Add-on ein-/ausschalten. Nur Admins.
+ * Shop-Add-on: Status lesen und Einstellungen speichern. Nur Admins.
  * Gibt nie Zugangsdaten zurück, nur Flags (aktiviert / konfiguriert).
  */
 export default async function handler(req, res) {
@@ -13,17 +27,43 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store')
 
     if (req.method === 'GET') {
-      return res.status(200).json(await getShopStatus())
+      return res.status(200).json(await readStatus())
     }
 
     if (req.method === 'PUT') {
-      const enabled = req.body?.enabled
-      if (typeof enabled !== 'boolean') {
+      const { enabled, notifyEmail, orderPrefix } = req.body || {}
+      if (enabled !== undefined && typeof enabled !== 'boolean') {
         return res.status(400).json({ error: 'enabled (true/false) erforderlich', code: 'VALIDATION_ERROR' })
       }
-      await setShopEnabled(enabled)
-      await logAudit({ action: 'shop.settings.update', resource: 'shop', resourceId: 'enabled', userId: auth.user.id, details: { enabled } })
-      return res.status(200).json(await getShopStatus())
+      if (enabled === undefined && notifyEmail === undefined && orderPrefix === undefined) {
+        return res.status(400).json({ error: 'enabled (true/false) erforderlich', code: 'VALIDATION_ERROR' })
+      }
+      let email
+      if (notifyEmail !== undefined) {
+        email = typeof notifyEmail === 'string' ? notifyEmail.trim() : null
+        if (email === null || email.length > 200 || (email !== '' && !EMAIL_RE.test(email))) {
+          return res.status(400).json({ error: 'Benachrichtigungs-E-Mail ungültig', code: 'VALIDATION_ERROR' })
+        }
+      }
+      if (orderPrefix !== undefined && typeof orderPrefix !== 'string') {
+        return res.status(400).json({ error: 'Präfix ungültig', code: 'VALIDATION_ERROR' })
+      }
+      const details = {}
+      if (enabled !== undefined) {
+        await setShopEnabled(enabled)
+        details.enabled = enabled
+      }
+      if (email !== undefined) {
+        await save(SHOP_NOTIFY_EMAIL_KEY, email)
+        details.notifyEmail = email
+      }
+      if (orderPrefix !== undefined) {
+        const prefix = normalizePrefix(orderPrefix)
+        await save(SHOP_ORDER_PREFIX_KEY, prefix)
+        details.orderPrefix = prefix
+      }
+      await logAudit({ action: 'shop.settings.update', resource: 'shop', resourceId: Object.keys(details).join(','), userId: auth.user.id, details })
+      return res.status(200).json(await readStatus())
     }
 
     return res.status(405).json({ error: 'Methode nicht erlaubt', code: 'METHOD_NOT_ALLOWED' })

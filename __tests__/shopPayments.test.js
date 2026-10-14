@@ -9,6 +9,7 @@ const db = { orders: [], payments: [], items: [], formats: [], movements: [] }
 const mockPrisma = {}
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../lib/shop/config', () => ({ loadShopSettings: jest.fn(async () => ({})) }))
+jest.mock('../lib/shop/orderMails', () => ({ sendPaidMails: jest.fn() }))
 const mockDriver = { createPayment: jest.fn(), fetchPayment: jest.fn() }
 jest.mock('../lib/shop/providers', () => ({
   getProvider: (id) => (id === 'sumup' ? mockDriver : null),
