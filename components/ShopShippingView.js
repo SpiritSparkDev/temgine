@@ -82,6 +82,13 @@ export default function ShopShippingView({ showToast }) {
 
       {errors.length > 0 && <ul role="alert" style={{ color: 'crimson' }}>{errors.map((e) => <li key={e}>{e}</li>)}</ul>}
 
+      <p>
+        <label htmlFor="shipping-free">Versandkostenfrei ab Warenwert (€, leer = aus){' '}
+          <input id="shipping-free" value={form.freeShipping} onChange={(e) => setForm((f) => ({ ...f, freeShipping: e.target.value }))} />
+        </label>
+        <br /><small>Vergleich mit der Zwischensumme nach Rabatt; gilt nur für Bestellungen mit physischen Artikeln.</small>
+      </p>
+
       <fieldset style={{ marginBottom: 16 }}>
         <legend>Länder</legend>
         {form.countries.map((c) => (
@@ -105,6 +112,7 @@ export default function ShopShippingView({ showToast }) {
         <fieldset key={z.key} role="group" aria-label={`Zone ${i + 1}`} style={{ marginBottom: 16 }}>
           <legend>Zone {i + 1}</legend>
           <label>Zonenname <input aria-label={`Zonenname ${i + 1}`} value={z.name} onChange={(e) => setZone(i, { name: e.target.value })} /></label>
+          <label style={{ marginLeft: 12 }}>MwSt. auf Versand (%, leer = keine Angabe) <input aria-label={`MwSt.-Satz Zone ${i + 1}`} style={{ width: 70 }} value={z.tax} onChange={(e) => setZone(i, { tax: e.target.value })} /></label>
           <div style={{ margin: '8px 0' }}>
             {form.countries.map((c) => (
               <label key={c.code} style={{ marginRight: 12, display: 'inline-block' }}>

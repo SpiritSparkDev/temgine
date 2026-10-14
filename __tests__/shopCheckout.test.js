@@ -110,3 +110,27 @@ describe('reference and prefix', () => {
     expect(normalizePrefix(null)).toBe('ORD');
   });
 });
+
+describe('pickLocale / loadPricingFormats', () => {
+  const { pickLocale, loadPricingFormats } = require('../lib/shop/checkout')
+  test('pickLocale: nur de|en, sonst Fallback', () => {
+    expect(pickLocale('EN')).toBe('en')
+    expect(pickLocale(' de ')).toBe('de')
+    expect(pickLocale('fr', 'en')).toBe('en')
+    expect(pickLocale(undefined)).toBe('de')
+    expect(pickLocale(5, 'en')).toBe('en')
+  })
+  test('lädt Bündel-Bestandteile ohne Aktiv-Filter nach, nur wenn nötig', async () => {
+    const findMany = jest.fn()
+      .mockResolvedValueOnce([{ sku: 'SET', bundleItems: [{ sku: 'A', qty: 1 }, { sku: 'SET2', qty: 1 }] }, { sku: 'SET2', bundleItems: null }])
+      .mockResolvedValueOnce([{ sku: 'A' }])
+    const out = await loadPricingFormats({ shopFormat: { findMany } }, ['SET', 'SET2', 'SET'])
+    expect(out.map((f) => f.sku)).toEqual(['SET', 'SET2', 'A'])
+    expect(findMany.mock.calls[0][0].where).toEqual({ sku: { in: ['SET', 'SET2'] }, product: { active: true } })
+    expect(findMany.mock.calls[1][0].where).toEqual({ sku: { in: ['A'] } })
+    const once = jest.fn().mockResolvedValue([{ sku: 'X', bundleItems: null }])
+    await loadPricingFormats({ shopFormat: { findMany: once } }, ['X'])
+    expect(once).toHaveBeenCalledTimes(1)
+    expect(await loadPricingFormats({ shopFormat: { findMany: once } }, [])).toEqual([])
+  })
+})

@@ -20,6 +20,9 @@ jest.mock('../../lib/shop/config', () => ({ isShopEnabled: jest.fn(), loadShopSe
 jest.mock('../../lib/shop/providers', () => ({ listAvailableProviders: jest.fn() }));
 jest.mock('../../lib/shop/payments', () => ({ startPayment: jest.fn() }));
 jest.mock('../../lib/shop/shippingConfig', () => ({ loadShippingConfig: jest.fn() }));
+jest.mock('../../lib/shop/coupons', () => ({ lookupCoupon: jest.fn() }));
+jest.mock('../../lib/shop/reservations', () => ({ reservedByOthers: jest.fn(), reserveStock: jest.fn(), releaseReservations: jest.fn() }));
+jest.mock('../../lib/shop/events', () => ({ logOrderEvent: jest.fn() }));
 jest.mock('../../lib/shop/pricing', () => {
   class ShopPricingError extends Error {
     constructor(code, message, details = {}) { super(message); this.code = code; this.details = details; }
@@ -33,6 +36,9 @@ const { listAvailableProviders } = require('../../lib/shop/providers');
 const { startPayment } = require('../../lib/shop/payments');
 const { loadShippingConfig } = require('../../lib/shop/shippingConfig');
 const { priceOrder, ShopPricingError } = require('../../lib/shop/pricing');
+const { lookupCoupon } = require('../../lib/shop/coupons');
+const { reservedByOthers, reserveStock, releaseReservations } = require('../../lib/shop/reservations');
+const { logOrderEvent } = require('../../lib/shop/events');
 const handler = require('../../pages/api/shop/checkout').default;
 
 let ipCounter = 0;
@@ -51,8 +57,8 @@ const call = async (b, method = 'POST') => {
   return res;
 };
 
-const line = { formatId: 'f1', sku: 'A', title: 'Buch', label: 'Hardcover', qty: 2, unitCents: 1000, lineCents: 2000, taxRateBp: 700, digital: false, weightG: 500 };
-const priced = { lines: [line], subtotalCents: 2000, taxBreakdown: { 700: 131 }, hasPhysical: true, shippingCents: 400, totalCents: 2400 };
+const line = { formatId: 'f1', sku: 'A', title: 'Buch', label: 'Hardcover', qty: 2, unitCents: 1000, lineCents: 2000, discountCents: 0, taxRateBp: 700, digital: false, weightG: 500, bundle: null };
+const priced = { lines: [line], subtotalCents: 2000, discountCents: 0, taxBreakdown: { 700: 131 }, hasPhysical: true, shippingCents: 400, shippingTaxBp: null, totalCents: 2400, coupon: null, currency: 'EUR' };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -66,6 +72,10 @@ beforeEach(() => {
   mockPrisma.setting.findUnique.mockResolvedValue(null);
   mockPrisma.shopFormat.findMany.mockResolvedValue([{ id: 'f1', sku: 'A' }]);
   priceOrder.mockReturnValue(priced);
+  lookupCoupon.mockResolvedValue(null);
+  reservedByOthers.mockResolvedValue(new Map());
+  reserveStock.mockResolvedValue([]);
+  releaseReservations.mockResolvedValue(1);
   mockTx.shopOrder.create.mockResolvedValue({ id: 'o1', number: 123 });
   mockTx.shopOrder.update.mockImplementation(async ({ data }) => ({ id: 'o1', totalCents: 2400, ...data }));
 });
@@ -129,7 +139,7 @@ test('creates order + items in a transaction from server prices; reference built
   expect(res.status).toHaveBeenCalledWith(201);
   const year = new Date().getUTCFullYear();
   const ref = `PF-${year}-000123`;
-  expect(res.json).toHaveBeenCalledWith({ reference: ref, totalCents: 2400, status: 'PENDING', payment: { provider: 'sumup', client: { type: 'widget', checkoutId: 'c1' } } });
+  expect(res.json).toHaveBeenCalledWith({ reference: ref, totalCents: 2400, status: 'PENDING', accessToken: expect.stringMatching(/^[0-9a-f]{48}$/), payment: { provider: 'sumup', client: { type: 'widget', checkoutId: 'c1' } } });
 
   expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
   // Client-Preise erreichen priceOrder nicht
@@ -139,7 +149,12 @@ test('creates order + items in a transaction from server prices; reference built
   expect(data.reference).toMatch(/^TMP-/);
   expect(data).toMatchObject({ email: 'a@b.de', subtotalCents: 2000, shippingCents: 400, totalCents: 2400, taxBreakdown: { 700: 131 }, acceptedWaiver: false, memberId: null });
   expect(data.acceptedTermsAt).toBeInstanceOf(Date);
-  expect(data.items.create).toEqual([{ formatId: 'f1', sku: 'A', title: 'Buch', label: 'Hardcover', qty: 2, unitCents: 1000, taxRateBp: 700, digital: false, weightG: 500 }]);
+  expect(data.items.create).toEqual([{ formatId: 'f1', sku: 'A', title: 'Buch', label: 'Hardcover', qty: 2, unitCents: 1000, taxRateBp: 700, digital: false, weightG: 500, discountCents: 0, bundleItems: undefined }]);
+  expect(data).toMatchObject({ couponCode: null, discountCents: 0, shippingTaxBp: null, currency: 'EUR', locale: 'de' });
+  expect(data.accessToken).toMatch(/^[0-9a-f]{48}$/);
+  expect(res.json.mock.calls[0][0].accessToken).toBe(data.accessToken);
+  expect(reserveStock).toHaveBeenCalledWith(mockTx, expect.objectContaining({ orderId: 'o1', lines: priced.lines }));
+  expect(logOrderEvent).toHaveBeenCalledWith('o1', 'CREATED', expect.any(String), { client: mockTx });
   expect(mockTx.shopOrder.update).toHaveBeenCalledWith({ where: { id: 'o1' }, data: { reference: ref } });
 });
 
@@ -214,7 +229,7 @@ describe('payment provider', () => {
     await call(body());
     const arg = startPayment.mock.calls[0][0];
     expect(arg.providerId).toBe('sumup');
-    expect(arg.urls.returnUrl).toMatch(/^https?:\/\/.+\/bestellung\?ref=ORD-\d{4}-000123$/);
+    expect(arg.urls.returnUrl).toMatch(/^https?:\/\/.+\/bestellung\?ref=ORD-\d{4}-000123&t=[0-9a-f]{48}$/);
     expect(arg.urls.webhookUrl).toMatch(/\/api\/shop\/webhooks\/sumup$/);
     expect(arg.order.items).toHaveLength(1);
   });
@@ -258,5 +273,45 @@ describe('payment provider', () => {
     expect(out.code).toBe('PAYMENT_UNAVAILABLE');
     expect(JSON.stringify(out)).not.toMatch(/secret-detail/);
     expect(mockPrisma.shopOrder.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', status: 'PENDING' }, data: { status: 'FAILED' } });
+    expect(releaseReservations).toHaveBeenCalledWith('o1');
+  });
+});
+
+describe('coupon, locale, reservations', () => {
+  test('coupon code from the body is looked up, priced and stored; reservations feed the pricing', async () => {
+    const row = { code: 'SOMMER', type: 'PERCENT', value: 1000 };
+    lookupCoupon.mockResolvedValue(row);
+    reservedByOthers.mockResolvedValue(new Map([['f1', 2]]));
+    priceOrder.mockReturnValue({
+      ...priced, discountCents: 200, totalCents: 2200, shippingTaxBp: 1900, coupon: { code: 'SOMMER', type: 'PERCENT', value: 1000 },
+      lines: [{ ...line, discountCents: 200, bundle: [{ formatId: 'c1', sku: 'C', title: 'T', label: 'L', qty: 1, digital: false, weightG: 5 }] }],
+    });
+    const res = await call(body({ coupon: 'sommer', discountCents: 99999, locale: 'en' }));
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(lookupCoupon).toHaveBeenCalledWith('sommer');
+    expect(reservedByOthers).toHaveBeenCalledWith(['f1'], {});
+    const arg = priceOrder.mock.calls[0][0];
+    expect(arg.coupon).toBe(row);
+    expect(arg.reserved.get('f1')).toBe(2);
+    expect(arg.currency).toBe('EUR');
+    expect(Object.keys(arg).sort()).toEqual(['country', 'coupon', 'currency', 'formats', 'items', 'reserved', 'shipping']);
+    const data = mockTx.shopOrder.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ couponCode: 'SOMMER', discountCents: 200, totalCents: 2200, shippingTaxBp: 1900, locale: 'en' });
+    expect(data.items.create[0]).toMatchObject({ discountCents: 200, bundleItems: [{ sku: 'C', qty: 1 }] });
+  });
+
+  test('invalid coupon: 422 with COUPON_* code and nothing stored', async () => {
+    lookupCoupon.mockRejectedValue(new ShopPricingError('COUPON_INVALID', 'Gutscheincode ist ungültig.', { code: 'XX' }));
+    const res = await call(body({ coupon: 'XX' }));
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ code: 'COUPON_INVALID', details: { code: 'XX' } });
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('locale falls back to the shop default; currency comes from the settings', async () => {
+    loadShopSettings.mockResolvedValue({ shop_default_locale: 'en', shop_currency: 'CHF' });
+    await call(body({ locale: 'fr' }));
+    expect(mockTx.shopOrder.create.mock.calls[0][0].data).toMatchObject({ locale: 'en', currency: 'CHF' });
+    expect(priceOrder.mock.calls[0][0].currency).toBe('CHF');
   });
 });

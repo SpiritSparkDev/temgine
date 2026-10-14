@@ -35,7 +35,7 @@ describe('ShopProductEditor', () => {
     expect(url).toBe('/api/shop/products/7');
     const body = JSON.parse(opts.body);
     expect(body).toMatchObject({ id: 7, updatedAt: product.updatedAt, title: 'Neu', images: product.images });
-    expect(body.formats[0]).toEqual({ id: 3, sku: 'B-HC', label: 'Hardcover', priceCents: 1950, taxRateBp: 700, weightG: 800, stock: null, digital: false, sortOrder: 0 });
+    expect(body.formats[0]).toEqual({ id: 3, sku: 'B-HC', label: 'Hardcover', priceCents: 1950, taxRateBp: 700, weightG: 800, stock: null, digital: false, priceTiers: [], bundleItems: [], sortOrder: 0 });
     expect(onSaved).toHaveBeenCalled();
   });
 
@@ -48,8 +48,8 @@ describe('ShopProductEditor', () => {
     fireEvent.change(sku, { target: { value: 'N-1' } });
     fireEvent.change(label, { target: { value: 'Std' } });
     fireEvent.click(screen.getByText('Speichern'));
-    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
-    const [url, opts] = global.fetch.mock.calls[0];
+    await waitFor(() => expect(global.fetch.mock.calls.some(([, o]) => o?.method === 'POST')).toBe(true));
+    const [url, opts] = global.fetch.mock.calls.find(([, o]) => o?.method === 'POST');
     expect(url).toBe('/api/shop/products');
     expect(opts.method).toBe('POST');
     const body = JSON.parse(opts.body);
@@ -61,7 +61,7 @@ describe('ShopProductEditor', () => {
     global.fetch = jest.fn();
     render(<ShopProductEditor product={null} showToast={() => {}} />);
     fireEvent.click(screen.getByText('Speichern'));
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(global.fetch.mock.calls.some(([, o]) => o?.method)).toBe(false);
     expect(screen.getByText('Titel ist erforderlich.')).toBeTruthy();
   });
 

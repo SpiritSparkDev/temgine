@@ -44,13 +44,19 @@ let keySeq = 0;
 const nextKey = () => `k${++keySeq}`;
 
 export function emptyFormat() {
-  return { key: nextKey(), id: undefined, sku: '', label: '', price: '', tax: '', weight: '', stock: '', digital: false };
+  return { key: nextKey(), id: undefined, sku: '', label: '', price: '', tax: '', weight: '', stock: '', digital: false, tiers: [], bundle: [] };
 }
+
+export const emptyTier = () => ({ key: nextKey(), minQty: '', price: '' });
+export const emptyBundleItem = () => ({ key: nextKey(), sku: '', qty: '1' });
+
+export const TRANSLATION_FIELDS = [['title', 'Titel', 150], ['subtitle', 'Untertitel', 120], ['shortText', 'Kurztext', 300], ['description', 'Beschreibung', 10000]];
+const emptyEn = () => ({ title: '', subtitle: '', shortText: '', description: '' });
 
 export function emptyForm() {
   return {
     id: undefined, updatedAt: undefined, slug: '', title: '', category: '', subtitle: '', shortText: '', description: '',
-    images: [], active: true, sortOrder: 0, formats: [emptyFormat()],
+    images: [], active: true, sortOrder: 0, formats: [emptyFormat()], related: [], en: emptyEn(),
   };
 }
 
@@ -63,7 +69,11 @@ export function productToForm(p) {
       key: nextKey(), id: f.id, sku: f.sku || '', label: f.label || '', price: centsToEuro(f.priceCents),
       tax: bpToPercent(f.taxRateBp), weight: f.weightG == null ? '' : String(f.weightG),
       stock: f.stock == null ? '' : String(f.stock), digital: !!f.digital,
+      tiers: (f.priceTiers || []).map((t) => ({ key: nextKey(), minQty: String(t.minQty), price: centsToEuro(t.priceCents) })),
+      bundle: (f.bundleItems || []).map((b) => ({ key: nextKey(), sku: b.sku || '', qty: String(b.qty) })),
     })),
+    related: [...(p.related || [])],
+    en: { ...emptyEn(), ...Object.fromEntries(Object.entries(p.translations?.en || {}).map(([k, v]) => [k, v || ''])) },
   };
 }
 
@@ -98,14 +108,56 @@ export function formToPayload(form) {
     if (Number.isNaN(weightG) || (weightG != null && weightG > 1000000)) errors.push(`${n}: Gewicht ungültig (ganze Gramm).`);
     const stock = parseIntOrNull(f.stock);
     if (Number.isNaN(stock) || (stock != null && stock > 1000000)) errors.push(`${n}: Bestand ungültig (ganze Zahl oder leer = unbegrenzt).`);
-    const out = { sku, label, priceCents, taxRateBp, weightG, stock, digital: !!f.digital, sortOrder: i };
+    const bundleItems = [];
+    const bseen = new Set();
+    (f.bundle || []).forEach((b, j) => {
+      const m = `${n}, Bestandteil ${j + 1}`;
+      const bsku = b.sku.trim();
+      const qty = parseIntOrNull(b.qty);
+      if (!SKU_RE.test(bsku)) errors.push(`${m}: SKU wählen.`);
+      else if (bsku === sku) errors.push(`${m}: Ein Bündel darf sich nicht selbst enthalten.`);
+      else if (bseen.has(bsku)) errors.push(`${m}: SKU „${bsku}“ kommt mehrfach vor.`);
+      bseen.add(bsku);
+      if (qty == null || Number.isNaN(qty) || qty < 1 || qty > 99) errors.push(`${m}: Menge muss eine ganze Zahl von 1 bis 99 sein.`);
+      bundleItems.push({ sku: bsku, qty });
+    });
+    if (bundleItems.length > 10) errors.push(`${n}: Höchstens 10 Bündel-Bestandteile.`);
+    const isBundle = bundleItems.length > 0;
+    if (isBundle && !(priceCents > 0 && taxRateBp != null)) errors.push(`${n}: Ein Bündel braucht Preis und MwSt.`);
+
+    const priceTiers = [];
+    let lastQty = 1;
+    (f.tiers || []).forEach((t, j) => {
+      const m = `${n}, Staffel ${j + 1}`;
+      const minQty = parseIntOrNull(t.minQty);
+      const price = parseEuroToCents(t.price);
+      if (minQty == null || Number.isNaN(minQty) || minQty < 2 || minQty > 99) errors.push(`${m}: Ab-Menge muss eine ganze Zahl von 2 bis 99 sein.`);
+      else if (minQty <= lastQty) errors.push(`${m}: Ab-Mengen müssen eindeutig und aufsteigend sein.`);
+      else lastQty = minQty;
+      if (price == null || Number.isNaN(price) || price <= 0) errors.push(`${m}: Preis ungültig (größer 0, z. B. 19,90).`);
+      else if (priceCents == null || Number.isNaN(priceCents)) errors.push(`${m}: Staffelpreise brauchen einen Basispreis.`);
+      else if (price >= priceCents) errors.push(`${m}: Staffelpreis muss kleiner als der Basispreis sein.`);
+      priceTiers.push({ minQty, priceCents: price });
+    });
+    if (priceTiers.length > 5) errors.push(`${n}: Höchstens 5 Staffelpreise.`);
+
+    const out = { sku, label, priceCents, taxRateBp, weightG: isBundle ? null : weightG, stock: isBundle ? null : stock, digital: isBundle ? false : !!f.digital, priceTiers, bundleItems, sortOrder: i };
     return f.id !== undefined ? { id: f.id, ...out } : out;
   });
   if (formats.length === 0) errors.push('Mindestens ein Format ist erforderlich.');
 
+  if (form.related.length > 6) errors.push('Höchstens 6 Empfehlungen.');
+  const en = {};
+  TRANSLATION_FIELDS.forEach(([k, label, max]) => {
+    const v = (form.en?.[k] || '').trim();
+    if (v.length > max) errors.push(`Übersetzung EN: ${label} darf höchstens ${max} Zeichen lang sein.`);
+    if (v) en[k] = v;
+  });
+
   const payload = {
     slug, title, category: form.category.trim(), subtitle: form.subtitle.trim(), shortText: form.shortText.trim(),
     description: form.description, images: form.images, active: !!form.active, sortOrder: form.sortOrder ?? 0, formats,
+    related: form.related, translations: Object.keys(en).length ? { en } : {},
   };
   if (form.id !== undefined) { payload.id = form.id; payload.updatedAt = form.updatedAt; }
   return { payload, errors };

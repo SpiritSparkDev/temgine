@@ -275,5 +275,10 @@ app.prepare().then(() => {
   }).listen(port, (err) => {
     if (err) throw err;
     console.log(`> Ready on port ${port}`);
+
+    if (process.env.SHOP_CRON_DISABLED !== 'true') {
+      process.env.SHOP_INTERNAL_CRON_TOKEN = crypto.randomBytes(24).toString('hex');
+      require('./lib/shopCronTimer').startShopCron({ port, token: process.env.SHOP_INTERNAL_CRON_TOKEN });
+    }
   });
 });

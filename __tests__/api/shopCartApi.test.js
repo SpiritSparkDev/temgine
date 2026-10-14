@@ -7,8 +7,11 @@ jest.disableAutomock()
 const mockPrisma = {
   setting: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   shopFormat: { findMany: jest.fn() },
+  shopCoupon: { findUnique: jest.fn() },
 }
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }))
+const mockReserved = jest.fn()
+jest.mock('../../lib/shop/reservations', () => ({ reservedByOthers: (...a) => mockReserved(...a) }))
 
 const cart = require('../../pages/api/shop/cart').default
 const config = require('../../pages/api/shop/public/config').default
@@ -33,6 +36,9 @@ const SHIPPING = {
 let shippingRow
 beforeEach(() => {
   jest.clearAllMocks()
+  mockPrisma.setting.findMany.mockResolvedValue([])
+  mockReserved.mockResolvedValue(new Map())
+  mockPrisma.shopCoupon.findUnique.mockResolvedValue(null)
   shippingRow = { value: JSON.stringify(SHIPPING) }
   mockPrisma.setting.findUnique.mockImplementation(async ({ where }) => (where.key === 'shop_enabled' ? { value: 'true' } : shippingRow))
   mockPrisma.shopFormat.findMany.mockImplementation(async ({ where }) => [HC, PDF].filter((f) => where.sku.in.includes(f.sku)))
@@ -147,12 +153,101 @@ describe('GET /api/shop/public/config', () => {
     const { res, status, body } = await get({}, config)
     expect(status).toBe(200)
     expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store')
-    expect(body).toEqual({ currency: 'EUR', countries: [{ code: 'DE', name: 'Deutschland' }, { code: 'AT', name: 'Österreich' }], paymentProviders: [] })
+    expect(body).toEqual({ currency: 'EUR', locale: 'de', freeShippingFromCents: null, countries: [{ code: 'DE', name: 'Deutschland' }, { code: 'AT', name: 'Österreich' }], paymentProviders: [] })
   })
   test('Standard bei fehlendem Setting; Add-on aus -> 404', async () => {
     shippingRow = null
     expect((await get({}, config)).body.countries.length).toBe(31)
     mockPrisma.setting.findUnique.mockResolvedValue({ value: 'false' })
     expect((await get({}, config)).status).toBe(404)
+  })
+})
+
+describe('GET /api/shop/cart v2', () => {
+  const COUPON = { id: 'c1', code: 'SOMMER', type: 'PERCENT', value: 1000, usedCount: 0, maxUses: null, minOrderCents: null, validFrom: null, validUntil: null, active: true }
+  const withShipping = (extra) => { shippingRow = { value: JSON.stringify({ ...SHIPPING, ...extra }) } }
+
+  test('Standardfelder: currency, discountCents 0, coupon null, freeShipping null', async () => {
+    const { body } = await get({ items: 'DS-HC:1', country: 'DE' })
+    expect(body).toMatchObject({ discountCents: 0, coupon: null, currency: 'EUR', freeShipping: null, shippingTaxBp: null })
+    expect(body.lines[0]).toMatchObject({ discountCents: 0, bundle: null })
+  })
+
+  test('gültiger Gutschein: Rabatt in Antwort, Summen konsistent, Code wird normalisiert', async () => {
+    mockPrisma.shopCoupon.findUnique.mockResolvedValue(COUPON)
+    const { body } = await get({ items: 'DS-HC:1', country: 'DE', coupon: ' sommer ' })
+    expect(mockPrisma.shopCoupon.findUnique).toHaveBeenCalledWith({ where: { code: 'SOMMER' } })
+    expect(body.discountCents).toBe(499)
+    expect(body.coupon).toEqual({ code: 'SOMMER', type: 'PERCENT', value: 1000 })
+    expect(body.lines[0].discountCents).toBe(499)
+    expect(body.totalCents).toBe(4990 - 499 + 400)
+    expect(body.taxBreakdown[700]).toBe(Math.round(((4990 - 499) * 700) / 10700))
+  })
+
+  test('unbekannter/ungültiger Gutschein -> 422 COUPON_*, details.code', async () => {
+    mockPrisma.shopCoupon.findUnique.mockResolvedValue(null)
+    let r = await get({ items: 'DS-HC:1', coupon: 'NOPE' })
+    expect(r.status).toBe(422)
+    expect(r.body).toMatchObject({ code: 'COUPON_INVALID', details: { code: 'NOPE' } })
+    mockPrisma.shopCoupon.findUnique.mockResolvedValue({ ...COUPON, validUntil: new Date(Date.now() - 1000) })
+    r = await get({ items: 'DS-HC:1', coupon: 'SOMMER' })
+    expect(r.status).toBe(422)
+    expect(r.body).toMatchObject({ code: 'COUPON_EXPIRED', details: { code: 'SOMMER' } })
+    mockPrisma.shopCoupon.findUnique.mockResolvedValue({ ...COUPON, minOrderCents: 999999 })
+    expect((await get({ items: 'DS-HC:1', coupon: 'SOMMER' })).body.code).toBe('COUPON_MIN_ORDER')
+  })
+
+  test('Versandkostenfrei: Grenze und Restbetrag nur bei physischem Warenkorb', async () => {
+    withShipping({ freeShippingFromCents: 6000 })
+    let r = await get({ items: 'DS-HC:1', country: 'DE' })
+    expect(r.body.freeShipping).toEqual({ fromCents: 6000, remainingCents: 1010 })
+    expect(r.body.shippingCents).toBe(400)
+    r = await get({ items: 'DS-HC:2', country: 'DE' })
+    expect(r.body.freeShipping).toEqual({ fromCents: 6000, remainingCents: 0 })
+    expect(r.body.shippingCents).toBe(0)
+    expect(r.body.totalCents).toBe(9980)
+    r = await get({ items: 'DS%20PDF:1', country: 'DE' })
+    expect(r.body.freeShipping).toBeNull()
+  })
+
+  test('Versand-MwSt. der Zone: shippingTaxBp und taxBreakdown', async () => {
+    withShipping({ zones: [{ id: 'DE', name: 'DE', countries: ['DE'], taxRateBp: 700, tiers: [{ maxG: 1000, priceCents: 400 }] }] })
+    const { body } = await get({ items: 'DS-HC:1', country: 'DE' })
+    expect(body.shippingTaxBp).toBe(700)
+    expect(body.taxBreakdown[700]).toBe(Math.round((4990 * 700) / 10700) + Math.round((400 * 700) / 10700))
+  })
+
+  test('Reservierungen anderer verringern den Bestand (excludeOrderId undefined)', async () => {
+    mockReserved.mockResolvedValue(new Map([['f1', 3]]))
+    const r = await get({ items: 'DS-HC:3' })
+    expect(r.status).toBe(422)
+    expect(r.body.code).toBe('STOCK_EXCEEDED')
+    expect(mockReserved).toHaveBeenCalledWith(['f1'], { excludeOrderId: undefined })
+    expect((await get({ items: 'DS-HC:2' })).status).toBe(200)
+  })
+
+  test('Bündel: Bestandteile werden nachgeladen und ohne Interna ausgegeben', async () => {
+    const SET = { id: 'f9', sku: 'SET', label: 'Set', priceCents: 5000, taxRateBp: 700, weightG: null, stock: null, digital: false, bundleItems: [{ sku: 'DS-HC', qty: 1 }], product }
+    mockPrisma.shopFormat.findMany.mockImplementation(async ({ where }) => [HC, PDF, SET].filter((f) => where.sku.in.includes(f.sku)))
+    const { status, body } = await get({ items: 'SET:1', country: 'DE' })
+    expect(status).toBe(200)
+    expect(mockPrisma.shopFormat.findMany).toHaveBeenCalledTimes(2)
+    expect(body.lines[0].bundle).toEqual([{ sku: 'DS-HC', title: 'Dark Space', label: 'Hardcover', qty: 1 }])
+    expect(JSON.stringify(body)).not.toMatch(/formatId|weightG/)
+    expect(body.shippingCents).toBe(400)
+  })
+
+  test('Währung aus den Einstellungen', async () => {
+    mockPrisma.setting.findMany.mockResolvedValue([{ key: 'shop_currency', value: 'CHF' }])
+    expect((await get({ items: 'DS-HC:1' })).body.currency).toBe('CHF')
+  })
+})
+
+describe('GET /api/shop/public/config v2', () => {
+  test('locale, currency, freeShippingFromCents', async () => {
+    mockPrisma.setting.findMany.mockResolvedValue([{ key: 'shop_currency', value: 'GBP' }, { key: 'shop_default_locale', value: 'en' }])
+    shippingRow = { value: JSON.stringify({ ...SHIPPING, freeShippingFromCents: 5000 }) }
+    const { body } = await get({}, config)
+    expect(body).toMatchObject({ currency: 'GBP', locale: 'en', freeShippingFromCents: 5000 })
   })
 })

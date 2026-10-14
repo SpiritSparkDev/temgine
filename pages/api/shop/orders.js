@@ -3,7 +3,7 @@ import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 import { requireShopEnabled } from '../../../lib/shop/guard'
 
 const PAGE_SIZE = 25
-const STATUSES = ['PENDING', 'PAID', 'SHIPPED', 'CANCELLED', 'FAILED']
+const STATUSES = ['PENDING', 'PAID', 'SHIPPED', 'CANCELLED', 'FAILED', 'REFUNDED']
 
 /** Shop-Bestellungen: GET Liste (ORDERS_VIEW) mit ?status=&q=&page=. */
 export default async function handler(req, res) {
@@ -23,6 +23,14 @@ export default async function handler(req, res) {
       if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Ungültiger Status', code: 'VALIDATION_ERROR' })
       where.status = status
     }
+    const day = (v, end) => {
+      if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null
+      const d = new Date(`${v}T${end ? '23:59:59.999' : '00:00:00.000'}`)
+      return Number.isNaN(d.getTime()) ? null : d
+    }
+    const from = day(req.query?.from, false)
+    const to = day(req.query?.to, true)
+    if (from || to) where.createdAt = { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) }
     const term = typeof q === 'string' ? q.trim().slice(0, 100) : ''
     if (term) where.OR = [{ reference: { contains: term } }, { email: { contains: term } }]
 
@@ -34,7 +42,7 @@ export default async function handler(req, res) {
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      select: { id: true, reference: true, status: true, email: true, totalCents: true, createdAt: true, paidAt: true },
+      select: { id: true, reference: true, status: true, email: true, totalCents: true, refundedCents: true, currency: true, createdAt: true, paidAt: true },
     })
     return res.status(200).json({ orders: rows, total, page, pages })
   } catch (e) {

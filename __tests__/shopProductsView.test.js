@@ -68,6 +68,7 @@ describe('ShopAdminView', () => {
     render(<ShopAdminView showToast={() => {}} />);
     expect(screen.getByText('Bestellungen').closest('button').disabled).toBe(false);
     expect(screen.getByText('Versand & Steuer').closest('button').disabled).toBe(false);
+    fireEvent.click(screen.getByText('Produkte'));
     await waitFor(() => expect(screen.getByText('Noch keine Produkte.')).toBeTruthy());
   });
 });

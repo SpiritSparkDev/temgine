@@ -40,10 +40,10 @@ describe('shopFormUtils', () => {
     const { payload, errors } = formToPayload(filled());
     expect(errors).toEqual([]);
     expect(payload).toEqual({
-      slug: '', title: 'Buch', category: '', subtitle: '', shortText: '', description: '', images: [], active: true, sortOrder: 0,
+      slug: '', title: 'Buch', category: '', subtitle: '', shortText: '', description: '', images: [], active: true, sortOrder: 0, related: [], translations: {},
       formats: [
-        { id: 5, sku: 'B-HC', label: 'Hardcover', priceCents: 2490, taxRateBp: 700, weightG: 800, stock: null, digital: false, sortOrder: 0 },
-        { sku: 'B-PDF', label: 'PDF', priceCents: null, taxRateBp: null, weightG: null, stock: 3, digital: true, sortOrder: 1 },
+        { id: 5, sku: 'B-HC', label: 'Hardcover', priceCents: 2490, taxRateBp: 700, weightG: 800, stock: null, digital: false, priceTiers: [], bundleItems: [], sortOrder: 0 },
+        { sku: 'B-PDF', label: 'PDF', priceCents: null, taxRateBp: null, weightG: null, stock: 3, digital: true, priceTiers: [], bundleItems: [], sortOrder: 1 },
       ],
     });
   });

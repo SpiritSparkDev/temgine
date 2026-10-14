@@ -10,7 +10,12 @@ import { resolveBaseUrl } from '../../../lib/seo'
 import { SHOP_ORDER_PREFIX_KEY } from '../../../lib/shop/keys'
 import { loadShippingConfig } from '../../../lib/shop/shippingConfig'
 import { priceOrder, ShopPricingError } from '../../../lib/shop/pricing'
-import { validateCheckoutInput, sanitizeItems, formatReference, normalizePrefix } from '../../../lib/shop/checkout'
+import { validateCheckoutInput, sanitizeItems, formatReference, normalizePrefix, pickLocale, loadPricingFormats } from '../../../lib/shop/checkout'
+import { lookupCoupon } from '../../../lib/shop/coupons'
+import { reservedByOthers, reserveStock, releaseReservations } from '../../../lib/shop/reservations'
+import { logOrderEvent } from '../../../lib/shop/events'
+import { randomToken } from '../../../lib/shop/tokens'
+import { shopCurrency, shopLocale } from '../../../lib/shop/settingsStore'
 
 /** NEXTAUTH_URL (absolut, http/https, ohne Pfad) hat Vorrang vor dem Host-Header, der von außen gesetzt sein kann. */
 export function shopBaseUrl(req) {
@@ -62,16 +67,16 @@ export default async function handler(req, res) {
       return res.status(422).json({ error: 'Eingabe ungültig', code: 'VALIDATION_ERROR', details: { fields: errors } })
     }
 
-    const formats = items.length
-      ? await prisma.shopFormat.findMany({
-          where: { sku: { in: items.map((i) => i.sku) }, product: { active: true } },
-          include: { product: { select: { title: true } } },
-        })
-      : []
-
+    // Preise, Rabatt und Versand rechnet allein der Server; vom Client kommen nur SKU, Menge und der Gutscheincode.
+    const currency = shopCurrency(settings)
+    const locale = pickLocale(body.locale, shopLocale(settings))
     let priced
+    let coupon = null
     try {
-      priced = priceOrder({ items, formats, shipping: shippingConfig, country: data.shipping.country })
+      const formats = items.length ? await loadPricingFormats(prisma, items.map((i) => i.sku)) : []
+      coupon = await lookupCoupon(body.coupon)
+      const reserved = await reservedByOthers(formats.map((f) => f.id), {})
+      priced = priceOrder({ items, formats, shipping: shippingConfig, country: data.shipping.country, coupon, reserved, currency })
     } catch (e) {
       if (e instanceof ShopPricingError) {
         return res.status(422).json({ error: e.message, code: e.code, details: e.details || {} })
@@ -102,6 +107,7 @@ export default async function handler(req, res) {
     const prefixRow = await prisma.setting.findUnique({ where: { key: SHOP_ORDER_PREFIX_KEY } })
     const prefix = normalizePrefix(prefixRow?.value)
     const now = new Date()
+    const accessToken = randomToken(24)
 
     const order = await prisma.$transaction(async (tx) => {
       const created = await tx.shopOrder.create({
@@ -112,7 +118,13 @@ export default async function handler(req, res) {
           shipping: data.shipping,
           subtotalCents: priced.subtotalCents,
           shippingCents: priced.shippingCents,
+          shippingTaxBp: priced.shippingTaxBp,
+          discountCents: priced.discountCents,
+          couponCode: priced.coupon?.code ?? null,
           totalCents: priced.totalCents,
+          currency,
+          locale,
+          accessToken,
           taxBreakdown: priced.taxBreakdown,
           acceptedTermsAt: now,
           acceptedWaiver: data.acceptWaiver,
@@ -121,35 +133,43 @@ export default async function handler(req, res) {
             create: priced.lines.map((l) => ({
               formatId: l.formatId, sku: l.sku, title: l.title, label: l.label, qty: l.qty,
               unitCents: l.unitCents, taxRateBp: l.taxRateBp, digital: l.digital, weightG: l.weightG ?? null,
+              discountCents: l.discountCents, bundleItems: l.bundle ?? undefined,
             })),
           },
         },
       })
-      return tx.shopOrder.update({
+      const finalOrder = await tx.shopOrder.update({
         where: { id: created.id },
         data: { reference: formatReference(prefix, now, created.number) },
       })
+      await reserveStock(tx, { orderId: created.id, lines: priced.lines, now })
+      await logOrderEvent(created.id, 'CREATED', `Bestellung ${finalOrder.reference} angelegt`, { client: tx })
+      return finalOrder
     })
 
     const base = shopBaseUrl(req)
     let payment
     try {
       payment = await startPayment({
-        order: { ...order, currency: order.currency || 'EUR', email: data.email, items: priced.lines },
+        order: { ...order, currency: order.currency || currency, email: data.email, items: priced.lines },
         providerId,
         urls: {
-          returnUrl: `${base}/bestellung?ref=${encodeURIComponent(order.reference)}`,
+          returnUrl: `${base}/bestellung?ref=${encodeURIComponent(order.reference)}&t=${accessToken}`,
           cancelUrl: `${base}/kasse`,
           webhookUrl: `${base}/api/shop/webhooks/${providerId}`,
         },
       })
     } catch (e) {
       console.error('[/api/shop/checkout] Zahlung konnte nicht gestartet werden:', order.reference, e.message)
-      await prisma.shopOrder.updateMany({ where: { id: order.id, status: 'PENDING' }, data: { status: 'FAILED' } }).catch(() => {})
+      const failed = await prisma.shopOrder.updateMany({ where: { id: order.id, status: 'PENDING' }, data: { status: 'FAILED' } }).catch(() => ({ count: 0 }))
+      if (failed.count) {
+        await releaseReservations(order.id).catch(() => {})
+        await logOrderEvent(order.id, 'FAILED', 'Zahlung konnte nicht gestartet werden')
+      }
       return res.status(502).json({ error: 'Die Zahlung konnte nicht gestartet werden. Bitte später erneut versuchen.', code: 'PAYMENT_UNAVAILABLE' })
     }
 
-    return res.status(201).json({ reference: order.reference, totalCents: order.totalCents, status: 'PENDING', payment })
+    return res.status(201).json({ reference: order.reference, totalCents: order.totalCents, status: 'PENDING', accessToken, payment })
   } catch (e) {
     console.error('[/api/shop/checkout Error]', e.message)
     return res.status(500).json({ error: 'Interner Serverfehler', code: 'INTERNAL_ERROR' })

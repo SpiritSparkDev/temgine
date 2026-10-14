@@ -2,7 +2,8 @@ import { prisma } from '../../../../lib/prisma'
 import { requireAuth, PERMISSIONS } from '../../../../lib/auth'
 import { logAudit } from '../../../../lib/audit'
 import { requireShopEnabled } from '../../../../lib/shop/guard'
-import { validateProductInput, toAdminProduct } from '../../../../lib/shop/catalog'
+import { notifyRestock } from '../../../../lib/shop/stockAlerts'
+import { validateProductInput, toAdminProduct, loadLookup } from '../../../../lib/shop/catalog'
 
 const include = { formats: { orderBy: { sortOrder: 'asc' } } }
 const iso = (d) => (d instanceof Date ? d.toISOString() : d)
@@ -25,13 +26,14 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PUT') {
-      const { errors, data } = validateProductInput(req.body)
+      const { errors, data } = validateProductInput(req.body, await loadLookup(prisma, req.body))
       if (!req.body?.updatedAt) errors.push('updatedAt ist erforderlich')
       if (errors.length) {
         return res.status(422).json({ error: 'Eingabe ungültig', code: 'VALIDATION_ERROR', details: { errors } })
       }
       const { formats, ...product } = data
 
+      const restocked = []
       try {
         const row = await prisma.$transaction(async (tx) => {
           const current = await tx.shopProduct.findUnique({ where: { id }, include: { formats: true } })
@@ -40,6 +42,10 @@ export default async function handler(req, res) {
 
           const known = new Set(current.formats.map((f) => f.id))
           if (formats.some((f) => f.id && !known.has(f.id))) throw { shop: 422 }
+          for (const f of formats) {
+            const prev = f.id && current.formats.find((x) => x.id === f.id)
+            if (prev && prev.stock !== null && prev.stock !== undefined && prev.stock <= 0 && f.stock > 0) restocked.push(f.id)
+          }
           const keep = new Set(formats.filter((f) => f.id).map((f) => f.id))
           const drop = current.formats.filter((f) => !keep.has(f.id)).map((f) => f.id)
           if (drop.length) await tx.shopFormat.deleteMany({ where: { id: { in: drop } } })
@@ -51,6 +57,13 @@ export default async function handler(req, res) {
           }
           return tx.shopProduct.findUnique({ where: { id }, include })
         })
+        if (restocked.length) {
+          try {
+            await notifyRestock(restocked)
+          } catch (err) {
+            console.error('[/api/shop/products/[id] notifyRestock]', err.message)
+          }
+        }
         await logAudit({ action: 'shop.product.update', resource: 'shop-product', resourceId: id, userId: auth.user.id, details: { slug: row.slug } })
         return res.status(200).json({ product: toAdminProduct(row) })
       } catch (e) {

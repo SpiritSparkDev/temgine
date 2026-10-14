@@ -10,13 +10,26 @@ const mockPrisma = {}
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../lib/shop/config', () => ({ loadShopSettings: jest.fn(async () => ({})) }))
 jest.mock('../lib/shop/orderMails', () => ({ sendPaidMails: jest.fn() }))
+jest.mock('../lib/shop/events', () => ({ logOrderEvent: jest.fn(async () => {}) }))
+jest.mock('../lib/shop/reservations', () => ({ consumeReservations: jest.fn(async () => 0), releaseReservations: jest.fn(async () => 0) }))
+jest.mock('../lib/shop/coupons', () => ({ recordCouponUse: jest.fn(async () => true) }))
+jest.mock('../lib/shop/invoice', () => ({ issueInvoice: jest.fn(async () => ({ number: 'RE-1' })) }))
+jest.mock('../lib/shop/downloads', () => ({ createDownloadTokens: jest.fn(async () => [{ fileId: 'd1' }]) }))
+jest.mock('../lib/shop/lowStock', () => ({ notifyLowStock: jest.fn(async () => 0) }))
 const mockDriver = { createPayment: jest.fn(), fetchPayment: jest.fn() }
 jest.mock('../lib/shop/providers', () => ({
   getProvider: (id) => (id === 'sumup' ? mockDriver : null),
   isProviderAvailable: (id) => id === 'sumup',
 }))
 
-const { startPayment, syncPayment, markOrderPaid, onOrderPaid, afterPaid } = require('../lib/shop/payments')
+const { startPayment, syncPayment, markOrderPaid, onOrderPaid, stockUnits, reconcileOpenPayments } = require('../lib/shop/payments')
+const { sendPaidMails } = require('../lib/shop/orderMails')
+const { logOrderEvent } = require('../lib/shop/events')
+const { consumeReservations, releaseReservations } = require('../lib/shop/reservations')
+const { recordCouponUse } = require('../lib/shop/coupons')
+const { issueInvoice } = require('../lib/shop/invoice')
+const { createDownloadTokens } = require('../lib/shop/downloads')
+const { notifyLowStock } = require('../lib/shop/lowStock')
 
 const match = (row, where) => Object.entries(where).every(([k, v]) => {
   if (v && typeof v === 'object' && !(v instanceof Date)) {
@@ -90,7 +103,8 @@ beforeEach(() => {
   db.formats = [{ id: 'f1', stock: 10, productId: 'pr1' }, { id: 'f2', stock: 7, productId: 'pr1' }, { id: 'f3', stock: null, productId: 'pr1' }]
   db.products = [{ id: 'pr1', updatedAt: new Date(0) }]
   db.movements = []
-  afterPaid.length = 0
+  jest.clearAllMocks()
+  sendPaidMails.mockReset()
   mockDriver.fetchPayment.mockReset().mockResolvedValue(remote())
   mockDriver.createPayment.mockReset()
   jest.spyOn(console, 'error').mockImplementation(() => {})
@@ -103,8 +117,7 @@ const stock = (id) => db.formats.find((f) => f.id === id).stock
 
 describe('syncPayment: bezahlt', () => {
   test('PAID mit passenden Daten: Bestellung PAID, Zahlung PAID, Bestand abgebucht, Hook einmal', async () => {
-    const hook = jest.fn()
-    afterPaid.push(hook)
+    const hook = sendPaidMails
     expect(await sync()).toBe('PAID')
     expect(db.orders[0].status).toBe('PAID')
     expect(db.orders[0].paidAt).toBeInstanceOf(Date)
@@ -124,8 +137,7 @@ describe('syncPayment: bezahlt', () => {
     ['falsche Referenz', { reference: 'ORD-2026-000999' }],
     ['fehlende Referenz', { reference: undefined }],
   ])('PAID mit %s bleibt PENDING, keine Abbuchung, kein Hook', async (_n, o) => {
-    const hook = jest.fn()
-    afterPaid.push(hook)
+    const hook = sendPaidMails
     mockDriver.fetchPayment.mockResolvedValue(remote(o))
     expect(await sync()).toBe('PENDING')
     expect(db.orders[0].status).toBe('PENDING')
@@ -143,8 +155,7 @@ describe('syncPayment: bezahlt', () => {
   })
 
   test('doppelter Aufruf nacheinander: genau einmal', async () => {
-    const hook = jest.fn()
-    afterPaid.push(hook)
+    const hook = sendPaidMails
     await sync()
     await sync()
     expect(stock('f1')).toBe(8)
@@ -154,8 +165,7 @@ describe('syncPayment: bezahlt', () => {
   })
 
   test('paralleler Aufruf (Webhook + Rückkehrseite): genau einmal', async () => {
-    const hook = jest.fn()
-    afterPaid.push(hook)
+    const hook = sendPaidMails
     const r = await Promise.all([sync(), sync(), sync(), sync()])
     expect(r).toEqual(['PAID', 'PAID', 'PAID', 'PAID'])
     expect(stock('f1')).toBe(8)
@@ -198,14 +208,13 @@ describe('syncPayment: bezahlt', () => {
       if (a.data[0].sku === 'BAD') throw new Error('db down')
       return orig(a)
     })
-    const bad = jest.fn(async () => { throw new Error('hook kaputt') })
-    const good = jest.fn()
-    afterPaid.push(bad, good)
+    sendPaidMails.mockRejectedValue(new Error('mail kaputt'))
     expect(await sync()).toBe('PAID')
     mockPrisma.shopStockMovement.createMany = orig
     expect(stock('f1')).toBe(8)
     expect(stock('bad')).toBe(3)
-    expect(good).toHaveBeenCalledTimes(1)
+    expect(sendPaidMails).toHaveBeenCalledTimes(1)
+    expect(logOrderEvent).toHaveBeenCalledWith('o1', 'MAIL_ERROR', expect.any(String))
   })
 
   test('gelöschtes Format (formatId null) wird übersprungen', async () => {
@@ -295,8 +304,7 @@ describe('syncPayment: späte Zahlung nach FAILED', () => {
 
   test.each(['FAILED', 'CANCELLED', 'PENDING'])('Zahlung %s, Anbieter meldet PAID: FAILED -> PAID, Hook einmalig', async (ps) => {
     failed(1, ps)
-    const hook = jest.fn()
-    afterPaid.push(hook)
+    const hook = sendPaidMails
     expect(await sync()).toBe('PAID')
     expect(await sync()).toBe('PAID')
     expect(db.orders[0].status).toBe('PAID')
@@ -358,5 +366,133 @@ describe('startPayment', () => {
     db.payments = []
     await expect(startPayment({ order, providerId: 'sumup', urls })).rejects.toThrow('boom')
     expect(db.payments).toHaveLength(0)
+  })
+})
+
+describe('onOrderPaid: Reihenfolge und Isolation (7.5)', () => {
+  const callOrder = []
+  const track = (name, mock, ret) => mock.mockImplementation(async () => { callOrder.push(name); return ret })
+
+  beforeEach(() => {
+    callOrder.length = 0
+    track('consume', consumeReservations, 0)
+    track('coupon', recordCouponUse, true)
+    track('invoice', issueInvoice, { number: 'RE-1' })
+    track('downloads', createDownloadTokens, [{ fileId: 'd1' }])
+    track('event', logOrderEvent, undefined)
+    track('lowstock', notifyLowStock, 0)
+    track('mails', sendPaidMails, undefined)
+    db.orders[0].couponCode = 'SOMMER'
+  })
+
+  test('feste Reihenfolge, Mails erhalten { downloads, invoice }, Niedrigbestand die changes', async () => {
+    await onOrderPaid(db.orders[0])
+    expect(callOrder).toEqual(['consume', 'coupon', 'invoice', 'downloads', 'event', 'lowstock', 'mails'])
+    expect(consumeReservations).toHaveBeenCalledWith('o1')
+    expect(recordCouponUse).toHaveBeenCalledWith('o1', 'SOMMER')
+    expect(logOrderEvent.mock.calls[0].slice(0, 2)).toEqual(['o1', 'PAID'])
+    expect(notifyLowStock).toHaveBeenCalledWith([{ formatId: 'f1', sku: 'A', before: 10, after: 8 }])
+    expect(sendPaidMails).toHaveBeenCalledWith(db.orders[0], { downloads: [{ fileId: 'd1' }], invoice: { number: 'RE-1' } })
+  })
+
+  test('ohne Gutschein kein recordCouponUse', async () => {
+    db.orders[0].couponCode = null
+    await onOrderPaid(db.orders[0])
+    expect(recordCouponUse).not.toHaveBeenCalled()
+  })
+
+  test('jeder Schritt einzeln isoliert: alle Fehler, trotzdem laufen die Mails', async () => {
+    for (const m of [consumeReservations, recordCouponUse, issueInvoice, createDownloadTokens, logOrderEvent, notifyLowStock]) {
+      m.mockImplementation(async () => { callOrder.push('x'); throw new Error('boom') })
+    }
+    await onOrderPaid(db.orders[0])
+    expect(stock('f1')).toBe(8)
+    expect(sendPaidMails).toHaveBeenCalledWith(db.orders[0], { downloads: [], invoice: null })
+    expect(callOrder.filter((c) => c === 'x')).toHaveLength(6)
+  })
+
+  test('Mailfehler wird als MAIL_ERROR protokolliert', async () => {
+    sendPaidMails.mockRejectedValue(new Error('smtp'))
+    await onOrderPaid(db.orders[0])
+    expect(logOrderEvent).toHaveBeenCalledWith('o1', 'MAIL_ERROR', expect.any(String))
+  })
+
+  test('Mehrfachaufruf: Bestand und Movement nur einmal, changes beim zweiten Mal leer', async () => {
+    await onOrderPaid(db.orders[0])
+    await onOrderPaid(db.orders[0])
+    expect(stock('f1')).toBe(8)
+    expect(notifyLowStock.mock.calls[1][0]).toEqual([])
+  })
+
+  test('Überverkauf meldet after 0 in changes', async () => {
+    db.formats[0].stock = 1
+    await onOrderPaid(db.orders[0])
+    expect(notifyLowStock).toHaveBeenCalledWith([{ formatId: 'f1', sku: 'A', before: 1, after: 0 }])
+  })
+
+  test('Bündel: Bestandteile mal Menge abgebucht, digital/unbegrenzt unberührt', async () => {
+    db.items = [{
+      orderId: 'o1', formatId: 'fb', sku: 'BUN', qty: 3, digital: false,
+      bundleItems: [
+        { formatId: 'f1', sku: 'A', qty: 2, digital: false },
+        { formatId: 'f2', sku: 'PDF', qty: 1, digital: true },
+        { formatId: 'f3', sku: 'INF', qty: 1, digital: false },
+      ],
+    }]
+    db.formats.push({ id: 'fb', stock: null, productId: 'pr1' })
+    await onOrderPaid(db.orders[0])
+    expect(stock('f1')).toBe(4)
+    expect(stock('f2')).toBe(7)
+    expect(stock('f3')).toBeNull()
+    expect(db.movements).toEqual([{ sku: 'A', delta: -6, reason: 'ORDER_PAID', orderId: 'o1' }])
+  })
+
+  test('Bestandteil mit gleicher SKU wie eine Einzelposition wird zusammengefasst (Unique-Schutz)', async () => {
+    db.items = [
+      { orderId: 'o1', formatId: 'f1', sku: 'A', qty: 1, digital: false },
+      { orderId: 'o1', formatId: 'fb', sku: 'BUN', qty: 2, digital: false, bundleItems: [{ formatId: 'f1', sku: 'A', qty: 1, digital: false }] },
+    ]
+    await onOrderPaid(db.orders[0])
+    expect(stock('f1')).toBe(7)
+    expect(db.movements).toEqual([{ sku: 'A', delta: -3, reason: 'ORDER_PAID', orderId: 'o1' }])
+  })
+
+  test('stockUnits: digital und ohne Format entfallen', () => {
+    expect(stockUnits([{ formatId: null, sku: 'X', qty: 1, digital: false }, { formatId: 'f', sku: 'D', qty: 1, digital: true }])).toEqual([])
+  })
+})
+
+describe('syncPayment: FAILED/CANCELLED gibt Reservierungen frei', () => {
+  test.each(['FAILED', 'CANCELLED'])('%s: releaseReservations und Ereignis genau einmal', async (s) => {
+    mockDriver.fetchPayment.mockResolvedValue(remote({ status: s }))
+    expect(await sync()).toBe('FAILED')
+    expect(releaseReservations).toHaveBeenCalledWith('o1')
+    expect(logOrderEvent).toHaveBeenCalledWith('o1', s, expect.any(String))
+    await sync()
+    expect(releaseReservations).toHaveBeenCalledTimes(1)
+  })
+
+  test('weitere Zahlung offen: keine Freigabe', async () => {
+    db.payments.push({ id: 'p2', orderId: 'o1', provider: 'SUMUP', externalId: 'x2', status: 'PENDING', amountCents: 2400, currency: 'EUR' })
+    mockDriver.fetchPayment.mockResolvedValue(remote({ status: 'FAILED' }))
+    await sync()
+    expect(releaseReservations).not.toHaveBeenCalled()
+  })
+})
+
+describe('reconcileOpenPayments', () => {
+  test('Abfrage (limit, Alter, FAILED-Fenster) und Zählung; unbekannte Zahlung zählt als pending', async () => {
+    mockPrisma.shopPayment.findMany = jest.fn(async () => [
+      { provider: 'SUMUP', externalId: 'x1' },
+      { provider: 'SUMUP', externalId: 'zz' },
+    ])
+    const now = new Date('2026-10-14T12:00:00Z')
+    const r = await reconcileOpenPayments({ limit: 7, now })
+    expect(r).toEqual({ checked: 2, paid: 1, failed: 0, pending: 1 })
+    const q = mockPrisma.shopPayment.findMany.mock.calls[0][0]
+    expect(q.take).toBe(7)
+    expect(q.where.createdAt.lt.getTime()).toBe(now.getTime() - 120000)
+    expect(q.where.OR[1].order.createdAt.gte.getTime()).toBe(now.getTime() - 48 * 3600_000)
+    expect(q.orderBy).toEqual({ createdAt: 'desc' })
   })
 })

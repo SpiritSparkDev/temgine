@@ -1,6 +1,6 @@
 import { prisma } from '../../../../lib/prisma'
 import { isShopEnabled } from '../../../../lib/shop/config'
-import { toPublicProduct } from '../../../../lib/shop/catalog'
+import { toPublicProduct, loadPublicContext, localeFromQuery } from '../../../../lib/shop/catalog'
 
 /** Öffentlich: aktive Produkte + Kategorien. GET /api/shop/public/products?category= */
 export default async function handler(req, res) {
@@ -15,7 +15,8 @@ export default async function handler(req, res) {
     })
     const categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'))
     const category = typeof req.query.category === 'string' ? req.query.category : ''
-    const products = (category ? rows.filter((r) => r.category === category) : rows).map(toPublicProduct)
+    const opts = { locale: localeFromQuery(req.query.lang), relatedRows: rows, ...(await loadPublicContext(prisma, rows)) }
+    const products = (category ? rows.filter((r) => r.category === category) : rows).map((r) => toPublicProduct(r, opts))
 
     res.setHeader('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=60')
     return res.status(200).json({ products, categories })

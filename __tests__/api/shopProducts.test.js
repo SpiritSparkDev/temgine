@@ -20,6 +20,8 @@ jest.mock('../../lib/auth', () => ({
   PERMISSIONS: { SHOP_PRODUCTS_VIEW: ['VIEW'], SHOP_PRODUCTS_EDIT: ['EDIT'] },
 }));
 jest.mock('../../lib/audit', () => ({ logAudit: jest.fn() }));
+jest.mock('../../lib/shop/reservations', () => ({ reservedByOthers: jest.fn().mockResolvedValue(new Map()) }));
+jest.mock('../../lib/shop/stockAlerts', () => ({ notifyRestock: jest.fn() }));
 
 const { requireAuth } = require('../../lib/auth');
 const { logAudit } = require('../../lib/audit');

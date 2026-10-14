@@ -8,9 +8,10 @@ import ShopShippingView from '../components/ShopShippingView';
 const cfg = {
   countries: { DE: 'Deutschland', AT: 'Österreich' },
   zones: [
-    { id: 'DE', name: 'Deutschland', countries: ['DE'], tiers: [{ maxG: 500, priceCents: 490 }] },
-    { id: 'EU', name: 'EU', countries: [], tiers: [] },
+    { id: 'DE', name: 'Deutschland', countries: ['DE'], taxRateBp: null, tiers: [{ maxG: 500, priceCents: 490 }] },
+    { id: 'EU', name: 'EU', countries: [], taxRateBp: 1900, tiers: [] },
   ],
+  freeShippingFromCents: null,
 };
 const res = (status, body) => Promise.resolve({ ok: status < 400, status, json: async () => body });
 const putCall = () => global.fetch.mock.calls.find(([, o]) => o?.method === 'PUT');
@@ -22,15 +23,18 @@ describe('ShopShippingView', () => {
     render(<ShopShippingView showToast={toast} />);
     await screen.findByDisplayValue('4,90');
     fireEvent.change(screen.getByLabelText('Zone 1 Stufe 1 Preis'), { target: { value: '5,5' } });
+    fireEvent.change(screen.getByLabelText('MwSt.-Satz Zone 1'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText(/Versandkostenfrei ab/), { target: { value: '50' } });
     fireEvent.click(screen.getByText('Speichern'));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Versandkonfiguration gespeichert'));
     const [url, opts] = putCall();
     expect(url).toBe('/api/shop/shipping');
     expect(JSON.parse(opts.body)).toEqual({
       countries: cfg.countries,
+      freeShippingFromCents: 5000,
       zones: [
-        { id: 'DE', name: 'Deutschland', countries: ['DE'], tiers: [{ maxG: 500, priceCents: 550 }] },
-        { id: 'EU', name: 'EU', countries: [], tiers: [] },
+        { id: 'DE', name: 'Deutschland', countries: ['DE'], taxRateBp: 700, tiers: [{ maxG: 500, priceCents: 550 }] },
+        { id: 'EU', name: 'EU', countries: [], taxRateBp: 1900, tiers: [] },
       ],
     });
   });
@@ -71,7 +75,8 @@ describe('ShopShippingView', () => {
     await waitFor(() => expect(putCall()).toBeTruthy());
     expect(JSON.parse(putCall()[1].body)).toEqual({
       countries: { DE: 'Deutschland', CH: 'Schweiz' },
-      zones: [{ id: 'EU', name: 'EU', countries: ['CH'], tiers: [{ maxG: 1000, priceCents: 1200 }] }],
+      freeShippingFromCents: null,
+      zones: [{ id: 'EU', name: 'EU', countries: ['CH'], taxRateBp: 1900, tiers: [{ maxG: 1000, priceCents: 1200 }] }],
     });
   });
 

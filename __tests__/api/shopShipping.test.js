@@ -22,7 +22,8 @@ function makeRes() {
 }
 const valid = () => ({
   countries: { DE: 'Deutschland' },
-  zones: [{ id: 'DE', name: 'Deutschland', countries: ['DE'], tiers: [{ maxG: 2000, priceCents: 490 }] }],
+  freeShippingFromCents: null,
+  zones: [{ id: 'DE', name: 'Deutschland', countries: ['DE'], taxRateBp: null, tiers: [{ maxG: 2000, priceCents: 490 }] }],
 })
 
 beforeEach(() => {
@@ -85,4 +86,21 @@ test('andere Methode -> 405', async () => {
   const res = makeRes()
   await handler({ method: 'DELETE' }, res)
   expect(res.status).toHaveBeenCalledWith(405)
+})
+
+test('PUT speichert Steuersatz je Zone und Versandkostenfrei-Grenze; ungültige Werte -> 422', async () => {
+  const body = { ...valid(), freeShippingFromCents: 5000 }
+  body.zones[0].taxRateBp = 1900
+  const res = makeRes()
+  await handler({ method: 'PUT', body }, res)
+  expect(res.status).toHaveBeenCalledWith(200)
+  expect(res.json.mock.calls[0][0]).toMatchObject({ freeShippingFromCents: 5000, zones: [{ taxRateBp: 1900 }] })
+  expect(JSON.parse(mockPrisma.setting.upsert.mock.calls[0][0].create.value).freeShippingFromCents).toBe(5000)
+
+  mockPrisma.setting.upsert.mockClear()
+  const bad = makeRes()
+  await handler({ method: 'PUT', body: { ...valid(), freeShippingFromCents: 0 } }, bad)
+  expect(bad.status).toHaveBeenCalledWith(422)
+  expect(bad.json.mock.calls[0][0].details.errors.join()).toMatch(/Versandkostenfrei/)
+  expect(mockPrisma.setting.upsert).not.toHaveBeenCalled()
 })

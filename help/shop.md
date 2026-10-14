@@ -134,6 +134,15 @@ Die Seite `bestellung` zeigt keine personenbezogenen Daten.
   Server-Log vermerkt und muss von Ihnen manuell geklärt werden.
 - Leerer Bestand bedeutet unbegrenzt.
 
+## Erweiterte Funktionen
+
+- **Rechnung:** Wird nach Zahlungseingang automatisch erstellt und der Bestätigungsmail angehängt. Trage dafür unter *Einstellungen → Shop* Name, Anschrift, Steuerangaben und Bankverbindung ein; fehlende Angaben erscheinen als Platzhalter im PDF.
+- **Erstatten:** Im Bestelldetail (nur Admin) Betrag und Grund angeben. Die Erstattung läuft über denselben Anbieter wie die Zahlung. Vor dem Livegang einmal mit einer Testzahlung ausprobieren.
+- **Gutscheine:** Tab *Gutscheine*; Gutscheine werden nicht gelöscht, sondern deaktiviert.
+- **Digitale Produkte:** Dateien am digitalen Format im Produkteditor hochladen (erst das Produkt speichern). Kunden erhalten nach Zahlung Links mit Ablauf und Download-Limit.
+- **Reservierung und Zeitplan:** Ein eingebauter Timer gibt abgelaufene Reservierungen frei, räumt unbezahlte Bestellungen auf und gleicht offene Zahlungen ab. Läuft die Seite serverlos, kann `POST /api/shop/cron` mit dem Header `x-shop-cron` regelmäßig extern aufgerufen werden.
+- **Rückgaben:** Kunden stellen Anfragen unter *rueckgabe*; die Bearbeitung erfolgt im Tab *Rückgaben*, die Erstattung selbst im Bestelldetail.
+
 ## Rechtliches (keine Rechtsberatung)
 
 Diese Anleitung ersetzt **keine Rechtsberatung**. Lassen Sie Texte und Abläufe

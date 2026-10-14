@@ -44,22 +44,22 @@ model UserInvitation {
 }
 
 model Page {
-  id             String               @id @default(cuid())
-  slug           String               @unique
-  title          String
-  blocks         Json                 @default("[]")
-  template       String?
-  data           Json                 @default("{}")
-  children       Json                 @default("[]")
-  revisions      PageRevision[]
-  workflowEvents PageWorkflowEvent[]
-  status         PageStatus           @default(DRAFT)
-  publishAt      DateTime?
-  isHomepage     Boolean              @default(false)
-  accessGroups   Json                 @default("[]")
+  id                 String              @id @default(cuid())
+  slug               String              @unique
+  title              String
+  blocks             Json                @default("[]")
+  template           String?
+  data               Json                @default("{}")
+  children           Json                @default("[]")
+  revisions          PageRevision[]
+  workflowEvents     PageWorkflowEvent[]
+  status             PageStatus          @default(DRAFT)
+  publishAt          DateTime?
+  isHomepage         Boolean             @default(false)
+  accessGroups       Json                @default("[]")
   accessPasswordHash String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 enum PageStatus {
@@ -133,37 +133,37 @@ model GlobalVariable {
 }
 
 model ContentType {
-  id        String         @id @default(cuid())
-  name      String
-  slug      String         @unique
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
   description String?
-  fields    ContentField[]
-  entries   ContentEntry[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  fields      ContentField[]
+  entries     ContentEntry[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 }
 
 model ContentField {
-  id          String   @id @default(cuid())
+  id            String      @id @default(cuid())
   contentTypeId String
-  contentType ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
-  name        String
-  key         String
-  type        String
-  options     Json?
-  required    Boolean  @default(false)
-  sortOrder    Int      @default(0)
+  contentType   ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+  name          String
+  key           String
+  type          String
+  options       Json?
+  required      Boolean     @default(false)
+  sortOrder     Int         @default(0)
 }
 
 model ContentEntry {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   contentTypeId String
   contentType   ContentType @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
-  data          Json     @default("{}")
+  data          Json        @default("{}")
   title         String?
-  sortOrder     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   @@index([contentTypeId])
   @@index([contentTypeId, sortOrder])
@@ -221,6 +221,7 @@ model Member {
   blocked        Boolean                 @default(false)
   groups         MemberGroupMembership[]
   shopOrders     ShopOrder[]
+  wishlist       ShopWishlistItem[]
   createdAt      DateTime                @default(now())
   updatedAt      DateTime                @updatedAt
 
@@ -311,6 +312,7 @@ enum ShopOrderStatus {
   SHIPPED
   CANCELLED
   FAILED
+  REFUNDED
 }
 
 enum ShopPaymentProvider {
@@ -327,39 +329,50 @@ enum ShopPaymentStatus {
 }
 
 model ShopProduct {
-  id          String       @id @default(cuid())
-  slug        String       @unique
-  title       String
-  category    String?
-  subtitle    String?
-  shortText   String?
-  description String?      @db.Text
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  title        String
+  category     String?
+  subtitle     String?
+  shortText    String?
+  description  String?            @db.Text
   /// Liste von Bild-URLs (z. B. "/uploads/shop/x.webp"); das erste Bild ist das Titelbild
-  images      Json         @default("[]")
-  active      Boolean      @default(false)
-  sortOrder   Int          @default(0)
-  formats     ShopFormat[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  images       Json               @default("[]")
+  /// Slugs verwandter Produkte ("Dazu passt")
+  related      Json               @default("[]")
+  /// Übersetzungen je Sprache: { en: { title, subtitle, shortText, description } }
+  translations Json               @default("{}")
+  wishlist     ShopWishlistItem[]
+  active       Boolean            @default(false)
+  sortOrder    Int                @default(0)
+  formats      ShopFormat[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@index([active, sortOrder])
 }
 
 model ShopFormat {
-  id         String          @id @default(cuid())
-  productId  String
-  product    ShopProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku        String          @unique
-  label      String
-  priceCents Int?
-  taxRateBp  Int?
-  weightG    Int?
-  stock      Int?
-  digital    Boolean         @default(false)
-  sortOrder  Int             @default(0)
-  items      ShopOrderItem[]
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id          String            @id @default(cuid())
+  productId   String
+  product     ShopProduct       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku         String            @unique
+  label       String
+  priceCents  Int?
+  taxRateBp   Int?
+  weightG     Int?
+  stock       Int?
+  digital     Boolean           @default(false)
+  /// Staffelpreise: [{ minQty, priceCents }]
+  priceTiers  Json?
+  /// Bündel: [{ sku, qty }]; leer = normales Format
+  bundleItems Json?
+  sortOrder   Int               @default(0)
+  items       ShopOrderItem[]
+  files       ShopDigitalFile[]
+  alerts      ShopStockAlert[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([productId, sortOrder])
 }
@@ -385,6 +398,23 @@ model ShopOrder {
   member          Member?             @relation(fields: [memberId], references: [id], onDelete: SetNull)
   paidAt          DateTime?
   shippedAt       DateTime?
+  cancelledAt     DateTime?
+  /// Geheimer Zugriffstoken für Bestellstatus, Downloads und Rechnung (Rückkehr-URL)
+  accessToken     String?             @unique
+  locale          String              @default("de")
+  couponCode      String?
+  discountCents   Int                 @default(0)
+  shippingTaxBp   Int?
+  trackingCarrier String?
+  trackingNumber  String?
+  trackingUrl     String?
+  refundedCents   Int                 @default(0)
+  invoice         ShopInvoice?
+  refunds         ShopRefund[]
+  events          ShopOrderEvent[]
+  reservations    ShopReservation[]
+  downloadTokens  ShopDownloadToken[]
+  returns         ShopReturnRequest[]
   items           ShopOrderItem[]
   payments        ShopPayment[]
   stockMovements  ShopStockMovement[]
@@ -396,20 +426,24 @@ model ShopOrder {
 }
 
 model ShopOrderItem {
-  id        String      @id @default(cuid())
-  orderId   String
-  order     ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  orderId       String
+  order         ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   /// Bleibt leer, wenn das Format später gelöscht wird; die Felder darunter sind der Stand zum Kaufzeitpunkt
-  formatId  String?
-  format    ShopFormat? @relation(fields: [formatId], references: [id], onDelete: SetNull)
-  sku       String
-  title     String
-  label     String
-  qty       Int
-  unitCents Int
-  taxRateBp Int
-  digital   Boolean     @default(false)
-  weightG   Int?
+  formatId      String?
+  format        ShopFormat? @relation(fields: [formatId], references: [id], onDelete: SetNull)
+  sku           String
+  title         String
+  label         String
+  qty           Int
+  unitCents     Int
+  taxRateBp     Int
+  digital       Boolean     @default(false)
+  weightG       Int?
+  /// Anteil des Gutscheinrabatts an dieser Position
+  discountCents Int         @default(0)
+  /// Bündel-Bestandteile zum Kaufzeitpunkt: [{ formatId, sku, title, label, qty, digital, weightG }]
+  bundleItems   Json?
 
   @@index([orderId])
 }
@@ -443,4 +477,194 @@ model ShopStockMovement {
 
   @@unique([orderId, sku, reason])
   @@index([sku, createdAt])
+}
+
+// ── Shop, Erweiterungsrunde 2 ─────────────────────────────────────────────────
+
+enum ShopRefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ShopCouponType {
+  PERCENT
+  FIXED
+}
+
+enum ShopReservationStatus {
+  ACTIVE
+  CONSUMED
+  RELEASED
+}
+
+enum ShopReturnStatus {
+  NEW
+  APPROVED
+  REJECTED
+  RECEIVED
+  REFUNDED
+}
+
+/// Laufende Zähler (z. B. Rechnungsnummern je Jahr: key "invoice-2026")
+model ShopCounter {
+  key   String @id
+  value Int    @default(0)
+}
+
+model ShopInvoice {
+  id       String    @id @default(cuid())
+  orderId  String    @unique
+  order    ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  number   String    @unique
+  issuedAt DateTime  @default(now())
+  /// Snapshot zum Ausstellungszeitpunkt (Absenderdaten, Zahlungsart)
+  data     Json      @default("{}")
+}
+
+model ShopRefund {
+  id          String           @id @default(cuid())
+  orderId     String
+  order       ShopOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  paymentId   String?
+  amountCents Int
+  reason      String?
+  restock     Boolean          @default(false)
+  status      ShopRefundStatus @default(PENDING)
+  externalId  String?
+  error       String?
+  userId      String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([orderId])
+}
+
+model ShopOrderEvent {
+  id        String    @id @default(cuid())
+  orderId   String
+  order     ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type      String
+  message   String?   @db.Text
+  userId    String?
+  data      Json?
+  createdAt DateTime  @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model ShopCoupon {
+  id            String          @id @default(cuid())
+  code          String          @unique
+  type          ShopCouponType
+  /// PERCENT: Basispunkte (500 = 5 %), FIXED: Cent
+  value         Int
+  minOrderCents Int?
+  maxUses       Int?
+  usedCount     Int             @default(0)
+  validFrom     DateTime?
+  validUntil    DateTime?
+  active        Boolean         @default(true)
+  note          String?
+  uses          ShopCouponUse[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+/// Eindeutig je Bestellung: macht die Zählung der Einlösung idempotent
+model ShopCouponUse {
+  id       String     @id @default(cuid())
+  couponId String
+  coupon   ShopCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  orderId  String     @unique
+  usedAt   DateTime   @default(now())
+
+  @@index([couponId])
+}
+
+model ShopReservation {
+  id        String                @id @default(cuid())
+  orderId   String
+  order     ShopOrder             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  formatId  String
+  qty       Int
+  status    ShopReservationStatus @default(ACTIVE)
+  expiresAt DateTime
+  createdAt DateTime              @default(now())
+
+  @@index([formatId, status, expiresAt])
+  @@index([orderId])
+}
+
+model ShopDigitalFile {
+  id         String              @id @default(cuid())
+  formatId   String
+  format     ShopFormat          @relation(fields: [formatId], references: [id], onDelete: Cascade)
+  /// Anzeigename (bereinigt); gespeichert wird unter einem Zufallsnamen
+  filename   String
+  storedName String              @unique
+  sizeBytes  Int
+  mime       String?
+  tokens     ShopDownloadToken[]
+  createdAt  DateTime            @default(now())
+
+  @@index([formatId])
+}
+
+model ShopDownloadToken {
+  id             String          @id @default(cuid())
+  orderId        String
+  order          ShopOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fileId         String
+  file           ShopDigitalFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  token          String          @unique
+  expiresAt      DateTime
+  maxDownloads   Int
+  downloads      Int             @default(0)
+  lastDownloadAt DateTime?
+  createdAt      DateTime        @default(now())
+
+  @@unique([orderId, fileId])
+}
+
+model ShopWishlistItem {
+  memberId  String
+  member    Member      @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  productId String
+  product   ShopProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@id([memberId, productId])
+}
+
+model ShopStockAlert {
+  id               String     @id @default(cuid())
+  formatId         String
+  format           ShopFormat @relation(fields: [formatId], references: [id], onDelete: Cascade)
+  email            String
+  locale           String     @default("de")
+  confirmToken     String     @unique
+  unsubscribeToken String     @unique
+  confirmedAt      DateTime?
+  notifiedAt       DateTime?
+  createdAt        DateTime   @default(now())
+
+  @@unique([formatId, email])
+}
+
+model ShopReturnRequest {
+  id        String           @id @default(cuid())
+  orderId   String
+  order     ShopOrder        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  email     String
+  /// [{ sku, qty }] oder leer = ganze Bestellung
+  items     Json             @default("[]")
+  reason    String           @db.Text
+  status    ShopReturnStatus @default(NEW)
+  adminNote String?          @db.Text
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([orderId])
+  @@index([status, createdAt])
 }

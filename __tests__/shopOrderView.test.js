@@ -8,7 +8,7 @@ const ord = (status, o = {}) => ({ reference: 'ORD-2026-000001', status, totalCe
 
 let replies;
 let ticks;
-const setup = (search = '?ref=ORD-2026-000001') => {
+const setup = (search = '?ref=ORD-2026-000001&t=tok12345678') => {
   window.history.pushState({}, '', '/bestellung' + search);
   window.localStorage.setItem('temgine_shop_cart', JSON.stringify([{ sku: 'A', qty: 1 }]));
   global.fetch = jest.fn(() => (replies.length > 1 ? replies.shift() : replies[0]));
@@ -31,7 +31,7 @@ test('paid: thanks with reference and amount, cart cleared', async () => {
   replies = [resp(200, ord('PAID'))];
   const root = setup();
   await flush();
-  expect(fetch).toHaveBeenCalledWith('/api/shop/public/orders/ORD-2026-000001');
+  expect(fetch).toHaveBeenCalledWith('/api/shop/public/orders/ORD-2026-000001?t=tok12345678');
   expect(root.textContent).toContain('Vielen Dank');
   expect(root.textContent).toContain('ORD-2026-000001');
   expect(root.textContent).toContain('29,90 €');
@@ -69,7 +69,7 @@ test('pending then paid', async () => {
 test('stop function cancels polling', async () => {
   replies = [resp(200, ord('PENDING'))];
   document.body.innerHTML = '<div id="x"></div>';
-  window.history.pushState({}, '', '/bestellung?ref=ORD-1');
+  window.history.pushState({}, '', '/bestellung?ref=ORD-1&t=tok12345678');
   global.fetch = jest.fn(() => replies[0]);
   const stop = order.hydrateOrder(document.getElementById('x'));
   await flush();

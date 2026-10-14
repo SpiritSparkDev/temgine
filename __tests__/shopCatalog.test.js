@@ -1,4 +1,5 @@
 jest.disableAutomock();
+jest.mock('../lib/shop/reservations', () => ({ reservedByOthers: jest.fn() }));
 
 const { slugify, validateProductInput, isOrderable, toAdminProduct, toPublicProduct } = require('../lib/shop/catalog');
 
@@ -131,8 +132,8 @@ describe('toAdminProduct', () => {
     const p = toAdminProduct(row());
     expect(p.updatedAt).toBe('2026-01-02T03:04:05.000Z');
     expect(p.formats.map((f) => f.sku)).toEqual(['DS-HC', 'DS-PDF']);
-    expect(p.formats[0]).toEqual({ id: 'f1', sku: 'DS-HC', label: 'Hardcover', priceCents: 4990, taxRateBp: 700, weightG: 1200, stock: 0, digital: false, sortOrder: 0 });
-    expect(Object.keys(p).sort()).toEqual(['active', 'category', 'description', 'formats', 'id', 'images', 'shortText', 'slug', 'sortOrder', 'subtitle', 'title', 'updatedAt']);
+    expect(p.formats[0]).toEqual({ id: 'f1', sku: 'DS-HC', label: 'Hardcover', priceCents: 4990, taxRateBp: 700, weightG: 1200, stock: 0, digital: false, priceTiers: [], bundleItems: [], sortOrder: 0 });
+    expect(Object.keys(p).sort()).toEqual(['active', 'category', 'description', 'formats', 'id', 'images', 'related', 'shortText', 'slug', 'sortOrder', 'subtitle', 'title', 'translations', 'updatedAt']);
   });
   test('non-array images become []', () => {
     expect(toAdminProduct(row({ images: null })).images).toEqual([]);
@@ -144,8 +145,8 @@ describe('toPublicProduct', () => {
     const p = toPublicProduct(row());
     expect(p.fromPriceCents).toBe(1990);
     expect(p.formats).toEqual([
-      { sku: 'DS-HC', label: 'Hardcover', priceCents: 4990, taxRateBp: 700, digital: false, orderable: false, inStock: false },
-      { sku: 'DS-PDF', label: 'PDF', priceCents: 1990, taxRateBp: 700, digital: true, orderable: true, inStock: true },
+      { sku: 'DS-HC', label: 'Hardcover', priceCents: 4990, taxRateBp: 700, digital: false, orderable: false, inStock: false, tiers: [], bundle: null },
+      { sku: 'DS-PDF', label: 'PDF', priceCents: 1990, taxRateBp: 700, digital: true, orderable: true, inStock: true, tiers: [], bundle: null },
     ]);
     const json = JSON.stringify(p);
     expect(json).not.toMatch(/stock"|weightG|"id"|updatedAt|active/);

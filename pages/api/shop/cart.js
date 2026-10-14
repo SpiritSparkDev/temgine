@@ -1,7 +1,12 @@
 import { prisma } from '../../../lib/prisma'
 import { isShopEnabled } from '../../../lib/shop/config'
 import { loadShippingConfig } from '../../../lib/shop/shippingConfig'
-import { priceCart, priceShipping, ShopPricingError } from '../../../lib/shop/pricing'
+import { priceCart, quoteShipping, completeOrder, ShopPricingError } from '../../../lib/shop/pricing'
+import { lookupCoupon } from '../../../lib/shop/coupons'
+import { loadPricingFormats } from '../../../lib/shop/checkout'
+import { reservedByOthers } from '../../../lib/shop/reservations'
+import { loadShopSettings } from '../../../lib/shop/config'
+import { shopCurrency } from '../../../lib/shop/settingsStore'
 
 const MAX_ITEMS = 50
 
@@ -36,29 +41,48 @@ export default async function handler(req, res) {
 
     try {
       const items = parseItems(req.query.items)
-      const formats = await prisma.shopFormat.findMany({
-        where: { sku: { in: items.map((i) => i.sku) }, product: { active: true } },
-        include: { product: { select: { title: true, active: true } } },
-      })
-      const cart = priceCart({ items, formats })
+      const formats = await loadPricingFormats(prisma, items.map((i) => i.sku))
+      const coupon = await lookupCoupon(req.query.coupon)
+      const reserved = await reservedByOthers(formats.map((f) => f.id), { excludeOrderId: undefined })
+      const cart = priceCart({ items, formats, reserved, coupon })
+      const currency = shopCurrency(await loadShopSettings())
+      const shipping = await loadShippingConfig()
       const country = typeof req.query.country === 'string' ? req.query.country.toUpperCase() : ''
+      const afterDiscount = cart.subtotalCents - cart.discountCents
       const out = {
-        lines: cart.lines.map(({ formatId, weightG, ...l }) => l),
+        lines: cart.lines.map(({ formatId, weightG, bundle, ...l }) => ({
+          ...l,
+          bundle: bundle ? bundle.map((b) => ({ sku: b.sku, title: b.title, label: b.label, qty: b.qty })) : null,
+        })),
         subtotalCents: cart.subtotalCents,
+        discountCents: cart.discountCents,
+        coupon: cart.coupon,
         taxBreakdown: cart.taxBreakdown,
         shippingCents: null,
+        shippingTaxBp: null,
         totalCents: null,
+        currency,
+        freeShipping: null,
       }
-      if (!cart.hasPhysical) out.shippingCents = 0
+      const from = shipping.freeShippingFromCents ?? null
+      if (from != null && cart.hasPhysical) out.freeShipping = { fromCents: from, remainingCents: Math.max(0, from - afterDiscount) }
+      let quote = null
+      if (!cart.hasPhysical) quote = { shippingCents: 0, shippingTaxBp: null, freeShipping: false }
       else if (country) {
         try {
-          out.shippingCents = priceShipping(cart.lines, await loadShippingConfig(), country)
+          quote = quoteShipping(cart.lines, shipping, country, afterDiscount)
         } catch (e) {
           if (!(e instanceof ShopPricingError)) throw e
           out.shippingError = { code: e.code, message: e.message }
         }
       }
-      if (out.shippingCents !== null) out.totalCents = cart.subtotalCents + out.shippingCents
+      if (quote) {
+        const full = completeOrder(cart, quote, currency)
+        out.shippingCents = full.shippingCents
+        out.shippingTaxBp = full.shippingTaxBp
+        out.taxBreakdown = full.taxBreakdown
+        out.totalCents = full.totalCents
+      }
       return res.status(200).json(out)
     } catch (e) {
       if (!(e instanceof ShopPricingError)) throw e

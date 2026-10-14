@@ -1,6 +1,6 @@
 import { prisma } from '../../../../../lib/prisma'
 import { isShopEnabled } from '../../../../../lib/shop/config'
-import { toPublicProduct } from '../../../../../lib/shop/catalog'
+import { toPublicProduct, loadPublicContext, localeFromQuery } from '../../../../../lib/shop/catalog'
 
 /** Öffentlich: ein aktives Produkt. GET /api/shop/public/products/[slug] */
 export default async function handler(req, res) {
@@ -14,8 +14,15 @@ export default async function handler(req, res) {
     })
     if (!row) return res.status(404).json({ error: 'Produkt nicht gefunden', code: 'NOT_FOUND' })
 
+    const slugs = Array.isArray(row.related) ? row.related.filter((s) => typeof s === 'string') : []
+    const relatedRows = slugs.length
+      ? await prisma.shopProduct.findMany({ where: { slug: { in: slugs }, active: true }, include: { formats: { orderBy: { sortOrder: 'asc' } } } })
+      : []
+    const ctx = await loadPublicContext(prisma, [row, ...relatedRows])
+    const product = toPublicProduct(row, { locale: localeFromQuery(req.query.lang), relatedRows, ...ctx })
+
     res.setHeader('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=60')
-    return res.status(200).json({ product: toPublicProduct(row) })
+    return res.status(200).json({ product })
   } catch (e) {
     console.error('[/api/shop/public/products/[slug] Error]', e.message)
     return res.status(500).json({ error: 'Interner Serverfehler', code: 'INTERNAL_ERROR' })

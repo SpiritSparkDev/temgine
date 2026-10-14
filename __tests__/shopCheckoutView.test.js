@@ -84,7 +84,7 @@ test('submit posts only allowed keys, hides form, keeps cart, ignores double sub
   resolve({ ok: true, status: 201, json: () => Promise.resolve({ reference: 'ORD-2026-000001', payment: { provider: 'sumup', client: { type: 'redirect', url: 'https://pay.example/x' } } }) });
   await flush();
   const body = JSON.parse(fetch.mock.calls.find((c) => c[0] === '/api/shop/checkout')[1].body);
-  expect(Object.keys(body).sort()).toEqual(['acceptTerms', 'acceptWaiver', 'billing', 'email', 'items', 'provider']);
+  expect(Object.keys(body).sort()).toEqual(['acceptTerms', 'acceptWaiver', 'billing', 'email', 'items', 'locale', 'provider']);
   expect(body.provider).toBe('sumup');
   expect(body.billing).toEqual({ name: 'Max', street: 'Weg 1', zip: '12345', city: 'Ort', country: 'DE' });
   expect(root.textContent).toContain('Bestellung ORD-2026-000001 angelegt.');
@@ -119,7 +119,7 @@ test('422 field errors are shown per field with aria-invalid', async () => {
 });
 
 const widget = { provider: 'sumup', client: { type: 'widget', sdkUrl: 'https://gateway.sumup.com/sdk.js', checkoutId: 'co1', locale: 'de-DE' } };
-const created = (payment) => () => resp(201, { reference: 'ORD-2026-000001', totalCents: 2990, status: 'PENDING', payment });
+const created = (payment) => () => resp(201, { reference: 'ORD-2026-000001', totalCents: 2990, status: 'PENDING', accessToken: 'tok12345678', payment });
 const sdkScripts = () => document.querySelectorAll('script[data-shop-sdk]');
 
 test('single provider: no radio, id still sent; several: radios, choice sent', async () => {
@@ -169,7 +169,7 @@ test('widget: SDK loaded only after 201 and once, mount params, success redirect
   const arg = mount.mock.calls[0][0];
   expect(arg).toMatchObject({ id: 'shop-sumup-card', checkoutId: 'co1', locale: 'de-DE' });
   arg.onResponse('success', {});
-  expect(go).toHaveBeenCalledWith('/bestellung?ref=ORD-2026-000001');
+  expect(go).toHaveBeenCalledWith('/bestellung?ref=ORD-2026-000001&t=tok12345678');
   expect(JSON.parse(window.localStorage.getItem('temgine_shop_cart'))).toHaveLength(1);
   go.mockRestore();
 });

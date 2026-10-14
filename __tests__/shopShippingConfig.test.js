@@ -104,3 +104,37 @@ describe('load / save', () => {
     })
   })
 })
+
+describe('Steuersatz je Zone und Versandkostenfrei-Grenze', () => {
+  test('Standard: taxRateBp null, freeShippingFromCents null', () => {
+    expect(DEFAULT_SHIPPING_CONFIG.freeShippingFromCents).toBeNull()
+    expect(DEFAULT_SHIPPING_CONFIG.zones.every((z) => z.taxRateBp === null)).toBe(true)
+  })
+  test('fehlende Felder werden zu null (Altdaten)', () => {
+    const r = validateShippingConfig(cfg())
+    expect(r.errors).toEqual([])
+    expect(r.data.freeShippingFromCents).toBeNull()
+    expect(r.data.zones[0].taxRateBp).toBeNull()
+  })
+  test('gültige Werte inkl. 0 %', () => {
+    expect(validateShippingConfig(zone({ taxRateBp: 0 })).data.zones[0].taxRateBp).toBe(0)
+    expect(validateShippingConfig(zone({ taxRateBp: 1900 })).data.zones[0].taxRateBp).toBe(1900)
+    expect(validateShippingConfig(cfg({ freeShippingFromCents: 5000 })).data.freeShippingFromCents).toBe(5000)
+    expect(validateShippingConfig(cfg({ freeShippingFromCents: null })).errors).toEqual([])
+  })
+  test.each([[-1], [10001], [1.5], ['19']])('taxRateBp %p ist ungültig', (v) => {
+    expect(errs(zone({ taxRateBp: v })).join()).toMatch(/taxRateBp/)
+  })
+  test.each([[0], [-5], [10000000], [1.5], ['10']])('freeShippingFromCents %p ist ungültig', (v) => {
+    expect(errs(cfg({ freeShippingFromCents: v })).join()).toMatch(/Versandkostenfrei/)
+  })
+  test('Speichern/Laden behält die neuen Felder; ungültig -> Standard', async () => {
+    const data = validateShippingConfig(cfg({ freeShippingFromCents: 7500, zones: [{ id: 'DE', name: 'D', countries: ['DE'], taxRateBp: 1900, tiers: [] }] })).data
+    await saveShippingConfig(data)
+    const saved = JSON.parse(mockPrisma.setting.upsert.mock.calls[0][0].create.value)
+    expect(saved).toMatchObject({ freeShippingFromCents: 7500, zones: [{ taxRateBp: 1900 }] })
+    mockPrisma.setting.findUnique.mockResolvedValue({ value: JSON.stringify(saved) })
+    expect(await loadShippingConfig()).toMatchObject({ freeShippingFromCents: 7500, zones: [{ taxRateBp: 1900 }] })
+    expect(normalizeShippingConfig(cfg({ freeShippingFromCents: 0 }))).toEqual(DEFAULT_SHIPPING_CONFIG)
+  })
+})

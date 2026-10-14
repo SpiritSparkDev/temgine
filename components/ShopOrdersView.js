@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import ShopOrderDetail from './ShopOrderDetail';
-import { STATUS_FILTERS, statusLabel, formatCents, formatDateTime, buildOrdersQuery } from './shopOrdersUtils';
+import { STATUS_FILTERS, statusLabel, formatCents, formatDateTime, buildOrdersQuery, buildExportUrl } from './shopOrdersUtils';
 
-/** Bestellliste mit Statusfilter, Suche (Debounce) und Seitenwechsel; Klick öffnet die Detailansicht. */
-export default function ShopOrdersView({ showToast }) {
+/** Bestellliste mit Status-/Datumsfilter, Suche (Debounce), CSV-Export und Seitenwechsel; Klick öffnet die Detailansicht. */
+export default function ShopOrdersView({ showToast, role }) {
   const [status, setStatus] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [input, setInput] = useState('');
   const [q, setQ] = useState('');
   const [page, setPage] = useState(1);
@@ -23,7 +25,7 @@ export default function ShopOrdersView({ showToast }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/shop/orders${buildOrdersQuery({ status, q, page })}`);
+        const res = await fetch(`/api/shop/orders${buildOrdersQuery({ status, q, page, from, to })}`);
         const d = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (res.ok) setData(d); else showToast(d.error || 'Bestellungen konnten nicht geladen werden', 'error');
@@ -32,7 +34,7 @@ export default function ShopOrdersView({ showToast }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [status, q, page, openId, showToast, reloadKey]);
+  }, [status, q, page, from, to, openId, showToast, reloadKey]);
 
   const reconcile = async () => {
     setReconciling(true);
@@ -49,24 +51,29 @@ export default function ShopOrdersView({ showToast }) {
     }
   };
 
-  if (openId) return <ShopOrderDetail id={openId} onBack={() => setOpenId(null)} showToast={showToast} />;
+  if (openId) return <ShopOrderDetail id={openId} role={role} onBack={() => setOpenId(null)} showToast={showToast} />;
 
   const orders = data?.orders || [];
+  const reset = (setter) => (e) => { setter(e.target.value); setPage(1); };
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select aria-label="Status" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <select aria-label="Status" value={status} onChange={reset(setStatus)}>
           {STATUS_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
+        <label>Von <input type="date" value={from} max={to || undefined} onChange={reset(setFrom)} /></label>
+        <label>Bis <input type="date" value={to} min={from || undefined} onChange={reset(setTo)} /></label>
         <input type="search" aria-label="Suche" placeholder="Bestellnummer oder E-Mail" value={input} onChange={(e) => setInput(e.target.value)} />
         <button className="btn" disabled={reconciling} onClick={reconcile}>Offene Zahlungen abgleichen</button>
+        <a className="btn" href={buildExportUrl({ status, from, to })}>CSV exportieren</a>
+        <a className="btn" href={buildExportUrl({ status, from, to, detail: 'items' })}>CSV mit Positionen</a>
       </div>
       {data && orders.length === 0 && <p>Keine Bestellungen gefunden.</p>}
       {orders.length > 0 && (
         <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ textAlign: 'left' }}><th>Bestellnummer</th><th>Datum</th><th>Status</th><th>E-Mail</th><th>Summe</th></tr>
+            <tr style={{ textAlign: 'left' }}><th>Bestellnummer</th><th>Datum</th><th>Status</th><th>E-Mail</th><th>Summe</th><th>Erstattet</th></tr>
           </thead>
           <tbody>
             {orders.map((o) => (
@@ -75,7 +82,8 @@ export default function ShopOrdersView({ showToast }) {
                 <td>{formatDateTime(o.createdAt)}</td>
                 <td>{statusLabel(o.status)}</td>
                 <td>{o.email}</td>
-                <td>{formatCents(o.totalCents)}</td>
+                <td>{formatCents(o.totalCents, o.currency)}</td>
+                <td>{o.refundedCents > 0 ? formatCents(o.refundedCents, o.currency) : ''}</td>
               </tr>
             ))}
           </tbody>

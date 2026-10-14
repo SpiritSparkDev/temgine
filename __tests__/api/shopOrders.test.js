@@ -10,12 +10,14 @@ jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../../lib/auth', () => ({ requireAuth: jest.fn(), PERMISSIONS: { SHOP_ORDERS_VIEW: ['VIEW'], SHOP_ORDERS_EDIT: ['EDIT'] } }))
 jest.mock('../../lib/audit', () => ({ logAudit: jest.fn() }))
 jest.mock('../../lib/shop/guard', () => ({ requireShopEnabled: jest.fn() }))
-jest.mock('../../lib/shop/orderMails', () => ({ sendShippedMail: jest.fn() }))
+jest.mock('../../lib/shop/events', () => ({ logOrderEvent: jest.fn() }))
+jest.mock('../../lib/shop/orderMails', () => ({ ...jest.requireActual('../../lib/shop/orderMails'), sendShippedMail: jest.fn() }))
 
 const { requireAuth } = require('../../lib/auth')
 const { logAudit } = require('../../lib/audit')
 const { requireShopEnabled } = require('../../lib/shop/guard')
 const { sendShippedMail } = require('../../lib/shop/orderMails')
+const { logOrderEvent } = require('../../lib/shop/events')
 const list = require('../../pages/api/shop/orders').default
 const detail = require('../../pages/api/shop/orders/[id]').default
 const ship = require('../../pages/api/shop/orders/[id]/ship').default
@@ -104,6 +106,13 @@ describe('GET /api/shop/orders/[id]', () => {
       currency: 'EUR', taxBreakdown: {}, acceptedTermsAt: new Date(), acceptedWaiver: false, memberId: 'm1', createdAt: new Date(), paidAt: null, shippedAt: null,
       items: [{ id: 'i1', orderId: 'o1', formatId: 'f1', sku: 'S', title: 'T', label: 'L', qty: 1, unitCents: 1, taxRateBp: 700, digital: false, weightG: 1 }],
       payments: [{ id: 'p1', orderId: 'o1', provider: 'STRIPE', externalId: 'cs_SECRET', status: 'PAID', amountCents: 1, currency: 'EUR', createdAt: new Date() }],
+      accessToken: 'ACCESS_SECRET', locale: 'en', discountCents: 100, shippingTaxBp: 1900, refundedCents: 0, couponCode: 'SOMMER',
+      trackingCarrier: 'DHL', trackingNumber: '123', trackingUrl: 'https://dhl.example/1',
+      events: [{ id: 'e1', type: 'NOTE', message: 'hallo', userId: 'u1', data: { x: 1 }, createdAt: new Date() }],
+      refunds: [{ id: 'r1', amountCents: 5, reason: 'x', restock: false, status: 'SUCCEEDED', externalId: 'RF_SECRET', createdAt: new Date() }],
+      invoice: { number: 'RE-1', issuedAt: new Date(), data: {} },
+      downloadTokens: [{ token: 'TOKEN_SECRET', downloads: 1, maxDownloads: 5, expiresAt: new Date(), file: { filename: 'a.pdf', storedName: 'STORED' } }],
+      returns: [{ id: 'q1', status: 'NEW', createdAt: new Date(), reason: 'privat' }],
     })
     const res = makeRes()
     await detail({ method: 'GET', query: { id: 'o1' } }, res)
@@ -111,6 +120,18 @@ describe('GET /api/shop/orders/[id]', () => {
     expect(body.order.payments[0]).toMatchObject({ provider: 'STRIPE', status: 'PAID' })
     expect(JSON.stringify(body)).not.toMatch(/cs_SECRET|externalId|memberId|formatId/)
     expect(body.order.items[0].sku).toBe('S')
+    expect(JSON.stringify(body)).not.toMatch(/ACCESS_SECRET|TOKEN_SECRET|STORED|RF_SECRET|accessToken/)
+    expect(body.order).toMatchObject({
+      locale: 'en', discountCents: 100, shippingTaxBp: 1900, refundedCents: 0,
+      tracking: { carrier: 'DHL', number: '123', url: 'https://dhl.example/1' },
+      invoice: { number: 'RE-1' },
+      downloads: [{ filename: 'a.pdf', downloads: 1, maxDownloads: 5 }],
+      coupon: { code: 'SOMMER', discountCents: 100 },
+      returns: [{ id: 'q1', status: 'NEW' }],
+    })
+    expect(body.order.events[0]).toMatchObject({ type: 'NOTE', message: 'hallo' })
+    const inc = mockPrisma.shopOrder.findUnique.mock.calls[0][0].include
+    expect(inc.events).toEqual({ orderBy: { createdAt: 'desc' }, take: 200 })
   })
 
   test('unknown id -> 404', async () => {
@@ -138,6 +159,27 @@ describe('POST /api/shop/orders/[id]/ship', () => {
     expect(logAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'shop.order.ship', resourceId: 'o1', userId: 'u1' }))
     expect(res.status).toHaveBeenCalledWith(200)
     expect(res.json.mock.calls[0][0]).toMatchObject({ status: 'SHIPPED', mailError: false })
+  })
+
+  test('stores tracking data in the same conditional update, logs SHIPPED and TRACKING, mails with tracking', async () => {
+    mockPrisma.shopOrder.findUnique.mockResolvedValue(order)
+    mockPrisma.shopOrder.updateMany.mockResolvedValue({ count: 1 })
+    sendShippedMail.mockResolvedValue()
+    const res = makeRes()
+    await ship({ method: 'POST', query: { id: 'o1' }, body: { carrier: 'DHL', trackingNumber: 'AB 1', trackingUrl: 'https://dhl.example/1' } }, res)
+    expect(mockPrisma.shopOrder.updateMany.mock.calls[0][0].data).toMatchObject({ status: 'SHIPPED', trackingCarrier: 'DHL', trackingNumber: 'AB 1', trackingUrl: 'https://dhl.example/1' })
+    expect(logOrderEvent.mock.calls.map((c) => c[1])).toEqual(['SHIPPED', 'TRACKING', 'MAIL'])
+    expect(sendShippedMail.mock.calls[0][0]).toMatchObject({ trackingCarrier: 'DHL', trackingNumber: 'AB 1' })
+  })
+
+  test('invalid tracking data -> 422, nothing changes', async () => {
+    for (const body of [{ trackingUrl: 'http://x.de' }, { carrier: 'x'.repeat(41) }, { trackingNumber: 'a;b' }]) {
+      const res = makeRes()
+      await ship({ method: 'POST', query: { id: 'o1' }, body }, res)
+      expect(res.status).toHaveBeenCalledWith(422)
+    }
+    expect(mockPrisma.shopOrder.updateMany).not.toHaveBeenCalled()
+    expect(sendShippedMail).not.toHaveBeenCalled()
   })
 
   test('second call (or non-PAID order) changes nothing and sends no mail', async () => {

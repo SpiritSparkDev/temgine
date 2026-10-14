@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.51.0] - 2026-10-15
+
+### Added
+- **Shop – Rechnung als PDF:** Nach Zahlungseingang wird genau eine Rechnung mit fortlaufender Nummer (`<Präfix>-<Jahr>-<000001>`) erzeugt (`ShopInvoice`, `pdf-lib`), als Anhang der Bestätigungsmail versandt und im Admin (Bestelldetail), im Kundenkonto und über den Bestelllink (mit Zugriffstoken) abrufbar. Absenderdaten stehen in *Einstellungen → Shop*; fehlen sie, steht ein Platzhalter im PDF.
+- **Shop – Erstattungen und Stornierung:** Voll- und Teilerstattung aus dem Bestelldetail (`POST /api/shop/orders/[id]/refund`, nur Admin) über SumUp, Stripe oder PayPal, optional mit Rückbuchung des Bestands, Statusfolge `REFUNDED`, Mail an den Kunden; unbezahlte Bestellungen lassen sich stornieren. Die Erstattungsaufrufe der Anbieter wurden nur gegen nachgebaute Antworten getestet, nicht gegen die echten APIs.
+- **Shop – Digitale Auslieferung:** Dateien je digitalem Format (Upload im Produkteditor, Speicherort `data/shop-downloads/`, nicht öffentlich), nach Zahlung Download-Links mit Ablauf und Download-Limit (Einstellungen), Neuversand und Zurücksetzen im Bestelldetail.
+- **Shop – Gutscheine, Staffelpreise, Bündel, Versandkostenfrei:** Gutscheincodes (Prozent oder Festbetrag, Mindestbestellwert, Laufzeit, Einlösungslimit), Staffelpreise je Menge, Bündel aus bestehenden Formaten, Versandkostenfrei-Grenze und MwSt.-Satz je Versandzone; alle Preise und Rabatte berechnet nur der Server.
+- **Shop – Bestandsreservierung und Zeitplan:** Reservierung beim Anlegen der Bestellung (Dauer einstellbar), automatische Freigabe, Aufräumen unbezahlter Bestellungen und regelmäßiger Zahlungsabgleich über einen eingebauten Timer (`POST /api/shop/cron` auch extern mit Token aufrufbar).
+- **Shop – Bestellverwaltung:** Verlauf je Bestellung, interne Notizen, Sendungsdaten (Anbieter, Nummer, Link) in der Versandmail, CSV-Export (Zeitraum, Status, optional Positionen), Datumsfilter.
+- **Shop – Übersicht und Berichte:** Neuer Standard-Tab mit Umsatz, Bestellungen je Status, Tagesdiagramm, Top-Produkten, Gutscheinen und Niedrigbestand-Liste; Benachrichtigungsmail an den Verlag bei Unterschreiten der Bestandsschwelle.
+- **Shop – Kundenseite:** Währung und Sprache (de/en) für Shop, Mails und Rechnung, Seite *Meine Bestellungen* für Mitglieder (Bestellungen, Rechnungen, Downloads, Wunschliste), Rückgabe-Anfragen mit Verwaltung im Admin, „Benachrichtige mich“ bei ausverkauften Formaten (Double-Opt-in), Produktempfehlungen. Die Bestellseite ist nur noch mit Zugriffstoken (`?ref=…&t=…`) erreichbar.
+
+### Changed
+- Zahlungsanbieter erhalten den Rabatt (PayPal: eigene Rabattzeile, Stripe: Sammelposition nach Rabatt); Stripe nutzt die Shop-Währung.
+- Backup-Kategorie *Shop* enthält zusätzlich Gutscheine und die neuen Felder an Produkten, Formaten und Bestellungen.
+
+### Database
+- Migration `20261015120000_shop_round2` (12 neue Tabellen, Status `REFUNDED`, neue Spalten); es werden keine Daten gelöscht.
+
+---
+
 ## [0.50.0] - 2026-10-14
 
 ### Added

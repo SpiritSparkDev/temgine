@@ -2,7 +2,7 @@ import { prisma } from '../../../lib/prisma'
 import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 import { logAudit } from '../../../lib/audit'
 import { requireShopEnabled } from '../../../lib/shop/guard'
-import { validateProductInput, toAdminProduct } from '../../../lib/shop/catalog'
+import { validateProductInput, toAdminProduct, loadLookup } from '../../../lib/shop/catalog'
 
 const include = { formats: { orderBy: { sortOrder: 'asc' } } }
 
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { errors, data } = validateProductInput(req.body)
+      const { errors, data } = validateProductInput(req.body, await loadLookup(prisma, req.body))
       if (errors.length) {
         return res.status(422).json({ error: 'Eingabe ungültig', code: 'VALIDATION_ERROR', details: { errors } })
       }

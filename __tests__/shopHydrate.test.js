@@ -18,10 +18,10 @@ test('renders list, loads css once, filters by category', async () => {
   await flush();
   expect(root.textContent).toContain('24,90 €');
   expect(document.querySelectorAll('link#temgine-shop-css')).toHaveLength(1);
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
   root.querySelector('[data-shop-category="RPG"]').click();
   await flush();
-  expect(fetch).toHaveBeenLastCalledWith('/api/shop/public/products?category=RPG');
+  expect(fetch).toHaveBeenLastCalledWith('/api/shop/public/products?category=RPG&lang=de');
 });
 
 test('renders detail, switches price and adds selected sku to cart', async () => {

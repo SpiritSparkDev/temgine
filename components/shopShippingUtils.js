@@ -1,5 +1,5 @@
 // Reine Hilfen für die Versand-Konfiguration im Admin (Eingabe <-> Payload nach Vertrag).
-import { parseEuroToCents, centsToEuro } from './shopFormUtils';
+import { parseEuroToCents, centsToEuro, parsePercentToBp, bpToPercent } from './shopFormUtils';
 
 let seq = 0;
 const nextKey = () => `s${++seq}`;
@@ -8,17 +8,17 @@ export const emptyTier = () => ({ key: nextKey(), maxG: '', price: '' });
 export const emptyZone = (existingIds = []) => {
   let n = existingIds.length + 1;
   while (existingIds.includes(`zone-${n}`)) n++;
-  return { key: nextKey(), id: `zone-${n}`, name: '', countries: [], tiers: [] };
+  return { key: nextKey(), id: `zone-${n}`, name: '', tax: '', countries: [], tiers: [] };
 };
 
 // API-Konfiguration -> Formularzustand
 export function configToForm(cfg) {
   const countries = Object.entries(cfg?.countries || {}).map(([code, name]) => ({ code, name }));
   const zones = (cfg?.zones || []).map((z) => ({
-    key: nextKey(), id: z.id, name: z.name || '', countries: [...(z.countries || [])],
+    key: nextKey(), id: z.id, name: z.name || '', tax: bpToPercent(z.taxRateBp), countries: [...(z.countries || [])],
     tiers: (z.tiers || []).map((t) => ({ key: nextKey(), maxG: String(t.maxG), price: centsToEuro(t.priceCents) })),
   }));
-  return { countries, zones };
+  return { countries, zones, freeShipping: centsToEuro(cfg?.freeShippingFromCents) };
 }
 
 // Liefert { payload, errors }. Bei errors.length > 0 wird nichts gesendet.
@@ -35,11 +35,18 @@ export function formToPayload(form) {
     countries[code] = name;
   });
 
+  const freeShippingFromCents = parseEuroToCents(form.freeShipping);
+  if (Number.isNaN(freeShippingFromCents) || (freeShippingFromCents != null && (freeShippingFromCents < 1 || freeShippingFromCents > 9999999))) {
+    errors.push('Versandkostenfrei ab: Betrag ungültig (z. B. 50,00; mehr als 0 €, leer = aus).');
+  }
+
   const owner = {};
   const zones = form.zones.map((z, i) => {
     const n = `Zone ${i + 1}`;
     const name = z.name.trim();
     if (!name) errors.push(`${n}: Name ist erforderlich.`);
+    const taxRateBp = parsePercentToBp(z.tax);
+    if (Number.isNaN(taxRateBp) || (taxRateBp != null && taxRateBp > 10000)) errors.push(`${n}: MwSt.-Satz ungültig (0–100 %, leer = keine Angabe).`);
     z.countries.forEach((c) => {
       if (!(c in countries)) errors.push(`${n}: Land „${c}“ ist nicht in der Länderliste.`);
       if (owner[c] !== undefined && owner[c] !== i) errors.push(`Land „${c}“ ist mehreren Zonen zugeordnet.`);
@@ -57,7 +64,7 @@ export function formToPayload(form) {
       if (priceCents == null || Number.isNaN(priceCents) || priceCents > 99999) errors.push(`${m}: Preis ungültig (z. B. 4,90; max. 999,99).`);
       return { maxG, priceCents };
     });
-    return { id: z.id, name, countries: [...z.countries], tiers };
+    return { id: z.id, name, countries: [...z.countries], taxRateBp, tiers };
   });
-  return { payload: { countries, zones }, errors: [...new Set(errors)] };
+  return { payload: { countries, freeShippingFromCents, zones }, errors: [...new Set(errors)] };
 }

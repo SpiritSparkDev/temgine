@@ -22,6 +22,27 @@ describe('ShopOrdersView', () => {
     expect(urls()[0]).toBe('/api/shop/orders?page=1');
   });
 
+  it('applies date filters and builds export links with the current filters', async () => {
+    global.fetch = jest.fn(() => res(200, list()));
+    render(<ShopOrdersView showToast={() => {}} />);
+    await screen.findByText('ORD-2026-000001');
+    expect(screen.getByText('CSV exportieren').getAttribute('href')).toBe('/api/shop/orders/export');
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'REFUNDED' } });
+    fireEvent.change(screen.getByLabelText('Von'), { target: { value: '2026-03-01' } });
+    fireEvent.change(screen.getByLabelText('Bis'), { target: { value: '2026-03-31' } });
+    await waitFor(() => expect(urls()).toContain('/api/shop/orders?status=REFUNDED&from=2026-03-01&to=2026-03-31&page=1'));
+    expect(screen.getByText('CSV exportieren').getAttribute('href')).toBe('/api/shop/orders/export?status=REFUNDED&from=2026-03-01&to=2026-03-31');
+    expect(screen.getByText('CSV mit Positionen').getAttribute('href')).toBe('/api/shop/orders/export?status=REFUNDED&from=2026-03-01&to=2026-03-31&detail=items');
+  });
+
+  it('shows refunded amounts and the REFUNDED label', async () => {
+    global.fetch = jest.fn(() => res(200, { ...list(), orders: [{ ...list().orders[0], status: 'REFUNDED', refundedCents: 1000 }] }));
+    render(<ShopOrdersView showToast={() => {}} />);
+    await screen.findByText('ORD-2026-000001');
+    expect(screen.getAllByText('Erstattet').length).toBeGreaterThan(1);
+    expect(screen.getByText(/10,00/)).toBeTruthy();
+  });
+
   it('filters by status and pages', async () => {
     global.fetch = jest.fn(() => res(200, list()));
     render(<ShopOrdersView showToast={() => {}} />);

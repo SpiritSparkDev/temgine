@@ -21,7 +21,7 @@ describe('lib/shop/keys', () => {
   test('all keys share the shop_ prefix; secrets are provider credentials plus the notify address', () => {
     const all = Object.values(keys.SHOP_PROVIDERS).flatMap((p) => p.requiredKeys);
     for (const k of [...all, ...keys.SHOP_SECRET_KEYS, keys.SHOP_ENABLED_KEY]) expect(k.startsWith(keys.SHOP_KEY_PREFIX)).toBe(true);
-    for (const k of keys.SHOP_SECRET_KEYS) expect([...all, keys.SHOP_NOTIFY_EMAIL_KEY]).toContain(k);
+    for (const k of keys.SHOP_SECRET_KEYS) expect([...all, keys.SHOP_NOTIFY_EMAIL_KEY, keys.SHOP_CRON_TOKEN_KEY]).toContain(k);
   });
 
   test('each provider has its own enable switch and the three providers are SumUp, Stripe, PayPal', () => {

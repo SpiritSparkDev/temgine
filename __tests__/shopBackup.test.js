@@ -9,7 +9,7 @@ function fakeDb() {
     upsert: jest.fn(async ({ where }) => { calls.push(`up:${name}`); return { id: `new-${Object.values(where)[0]}` }; }),
     create: jest.fn(async () => { calls.push(`cr:${name}`); return { id: `new-${name}` }; }),
   });
-  return { calls, shopProduct: mk('product'), shopFormat: mk('format'), shopOrder: mk('order'), shopOrderItem: mk('item'), shopPayment: mk('payment'), shopStockMovement: mk('move') };
+  return { calls, shopProduct: mk('product'), shopFormat: mk('format'), shopOrder: mk('order'), shopOrderItem: mk('item'), shopPayment: mk('payment'), shopStockMovement: mk('move'), shopCoupon: mk('coupon') };
 }
 
 const data = {
@@ -22,10 +22,10 @@ const data = {
 };
 
 describe('shop backup', () => {
-  test('export reads exactly the six shop tables and nothing else', async () => {
+  test('export reads exactly the shop tables and nothing else', async () => {
     const db = fakeDb();
     const out = await exportShopData(db);
-    expect(Object.keys(out)).toEqual(['products', 'formats', 'orders', 'orderItems', 'payments', 'stockMovements']);
+    expect(Object.keys(out)).toEqual(['products', 'formats', 'orders', 'orderItems', 'payments', 'stockMovements', 'coupons']);
     expect(db.setting).toBeUndefined();
   });
 
@@ -53,6 +53,6 @@ describe('shop backup', () => {
   test('replace deletes children before parents', async () => {
     const db = fakeDb();
     await importShopData({}, 'replace', db);
-    expect(db.calls).toEqual(['del:move', 'del:payment', 'del:item', 'del:order', 'del:format', 'del:product']);
+    expect(db.calls).toEqual(['del:move', 'del:coupon', 'del:payment', 'del:item', 'del:order', 'del:format', 'del:product']);
   });
 });

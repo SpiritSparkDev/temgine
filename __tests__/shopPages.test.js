@@ -10,15 +10,15 @@ const mk = (existing = {}) => ({ page: {
 
 test('creates missing shop page published with block', async () => {
   const p = mk();
-  expect(await ensureShopPages(p)).toEqual(['shop', 'warenkorb', 'kasse', 'bestellung', 'agb', 'widerruf', 'widerrufsformular', 'versand-zahlung']);
+  expect(await ensureShopPages(p)).toEqual(['shop', 'warenkorb', 'kasse', 'bestellung', 'meine-bestellungen', 'rueckgabe', 'agb', 'widerruf', 'widerrufsformular', 'versand-zahlung']);
   const data = p.page.create.mock.calls[0][0].data;
-  expect(p.page.create.mock.calls.map((c) => c[0].data.blocks[0].type)).toEqual(['shop-products', 'shop-cart', 'shop-checkout', 'shop-order', 'free-html', 'free-html', 'free-html', 'free-html']);
+  expect(p.page.create.mock.calls.map((c) => c[0].data.blocks[0].type)).toEqual(['shop-products', 'shop-cart', 'shop-checkout', 'shop-order', 'shop-account', 'shop-return', 'free-html', 'free-html', 'free-html', 'free-html']);
   expect(data).toMatchObject({ slug: 'shop', status: 'PUBLISHED', blocks: [{ type: 'shop-products' }] });
   expect(data.title).toBeTruthy();
 });
 
 test('never touches existing pages (idempotent)', async () => {
-  const p = mk({ shop: { id: '1' }, warenkorb: { id: '2' }, kasse: { id: '3' }, bestellung: { id: '4' }, agb: {}, widerruf: {}, widerrufsformular: {}, 'versand-zahlung': {} });
+  const p = mk({ shop: { id: '1' }, warenkorb: { id: '2' }, kasse: { id: '3' }, bestellung: { id: '4' }, 'meine-bestellungen': {}, rueckgabe: {}, agb: {}, widerruf: {}, widerrufsformular: {}, 'versand-zahlung': {} });
   expect(await ensureShopPages(p)).toEqual([]);
   expect(p.page.create).not.toHaveBeenCalled();
   expect(p.page.update).not.toHaveBeenCalled();
