@@ -3,7 +3,10 @@ import { getServerSession } from 'next-auth/next'
 import { prisma } from '../../../lib/prisma'
 import { authOptions } from '../auth/[...nextauth]'
 import { rateLimit } from '../../../lib/rateLimit'
-import { isShopEnabled } from '../../../lib/shop/config'
+import { isShopEnabled, loadShopSettings } from '../../../lib/shop/config'
+import { listAvailableProviders } from '../../../lib/shop/providers'
+import { startPayment } from '../../../lib/shop/payments'
+import { resolveBaseUrl } from '../../../lib/seo'
 import { SHOP_ORDER_PREFIX_KEY } from '../../../lib/shop/keys'
 import { loadShippingConfig } from '../../../lib/shop/shippingConfig'
 import { priceOrder, ShopPricingError } from '../../../lib/shop/pricing'
@@ -26,10 +29,25 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'Zu viele Anfragen. Bitte später erneut versuchen.', code: 'RATE_LIMIT_EXCEEDED', retryAfter })
     }
 
+    const settings = await loadShopSettings()
+    const providers = listAvailableProviders(settings)
+    if (!providers.length) {
+      return res.status(409).json({ error: 'Zurzeit ist keine Zahlungsart verfügbar.', code: 'NO_PAYMENT_PROVIDER' })
+    }
+
     const body = req.body && typeof req.body === 'object' ? req.body : {}
     const shippingConfig = await loadShippingConfig()
     const { errors, data } = validateCheckoutInput(body, { countries: shippingConfig.countries })
     const items = sanitizeItems(body.items)
+    let providerId = null
+    if (body.provider === undefined || body.provider === null) {
+      if (providers.length === 1) providerId = providers[0].id
+      else errors.provider = 'Bitte eine Zahlungsart wählen.'
+    } else if (typeof body.provider === 'string' && providers.some((p) => p.id === body.provider)) {
+      providerId = body.provider
+    } else {
+      errors.provider = 'Bitte eine Zahlungsart wählen.'
+    }
     if (items === null) errors.items = 'Ungültiger Warenkorb.'
     if (Object.keys(errors).length) {
       return res.status(422).json({ error: 'Eingabe ungültig', code: 'VALIDATION_ERROR', details: { fields: errors } })
@@ -104,7 +122,25 @@ export default async function handler(req, res) {
       })
     })
 
-    return res.status(201).json({ reference: order.reference, totalCents: order.totalCents, status: 'PENDING', payment: null })
+    const base = resolveBaseUrl(req)
+    let payment
+    try {
+      payment = await startPayment({
+        order: { ...order, currency: order.currency || 'EUR', email: data.email, items: priced.lines },
+        providerId,
+        urls: {
+          returnUrl: `${base}/bestellung?ref=${encodeURIComponent(order.reference)}`,
+          cancelUrl: `${base}/kasse`,
+          webhookUrl: `${base}/api/shop/webhooks/${providerId}`,
+        },
+      })
+    } catch (e) {
+      console.error('[/api/shop/checkout] Zahlung konnte nicht gestartet werden:', order.reference, e.message)
+      await prisma.shopOrder.updateMany({ where: { id: order.id, status: 'PENDING' }, data: { status: 'FAILED' } }).catch(() => {})
+      return res.status(502).json({ error: 'Die Zahlung konnte nicht gestartet werden. Bitte später erneut versuchen.', code: 'PAYMENT_UNAVAILABLE' })
+    }
+
+    return res.status(201).json({ reference: order.reference, totalCents: order.totalCents, status: 'PENDING', payment })
   } catch (e) {
     console.error('[/api/shop/checkout Error]', e.message)
     return res.status(500).json({ error: 'Interner Serverfehler', code: 'INTERNAL_ERROR' })

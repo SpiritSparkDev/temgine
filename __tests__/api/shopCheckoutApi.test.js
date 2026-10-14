@@ -8,6 +8,7 @@ jest.disableAutomock();
 const mockTx = { shopOrder: { create: jest.fn(), update: jest.fn() } };
 const mockPrisma = {
   setting: { findUnique: jest.fn() },
+  shopOrder: { updateMany: jest.fn() },
   shopFormat: { findMany: jest.fn() },
   member: { findUnique: jest.fn() },
   $transaction: jest.fn((fn) => fn(mockTx)),
@@ -15,7 +16,9 @@ const mockPrisma = {
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('next-auth/next', () => ({ getServerSession: jest.fn() }));
 jest.mock('../../pages/api/auth/[...nextauth]', () => ({ authOptions: {} }));
-jest.mock('../../lib/shop/config', () => ({ isShopEnabled: jest.fn() }));
+jest.mock('../../lib/shop/config', () => ({ isShopEnabled: jest.fn(), loadShopSettings: jest.fn() }));
+jest.mock('../../lib/shop/providers', () => ({ listAvailableProviders: jest.fn() }));
+jest.mock('../../lib/shop/payments', () => ({ startPayment: jest.fn() }));
 jest.mock('../../lib/shop/shippingConfig', () => ({ loadShippingConfig: jest.fn() }));
 jest.mock('../../lib/shop/pricing', () => {
   class ShopPricingError extends Error {
@@ -25,7 +28,9 @@ jest.mock('../../lib/shop/pricing', () => {
 });
 
 const { getServerSession } = require('next-auth/next');
-const { isShopEnabled } = require('../../lib/shop/config');
+const { isShopEnabled, loadShopSettings } = require('../../lib/shop/config');
+const { listAvailableProviders } = require('../../lib/shop/providers');
+const { startPayment } = require('../../lib/shop/payments');
 const { loadShippingConfig } = require('../../lib/shop/shippingConfig');
 const { priceOrder, ShopPricingError } = require('../../lib/shop/pricing');
 const handler = require('../../pages/api/shop/checkout').default;
@@ -52,6 +57,10 @@ const priced = { lines: [line], subtotalCents: 2000, taxBreakdown: { 700: 131 },
 beforeEach(() => {
   jest.clearAllMocks();
   isShopEnabled.mockResolvedValue(true);
+  loadShopSettings.mockResolvedValue({});
+  listAvailableProviders.mockReturnValue([{ id: 'sumup', label: 'SumUp' }]);
+  startPayment.mockResolvedValue({ provider: 'sumup', client: { type: 'widget', checkoutId: 'c1' } });
+  mockPrisma.shopOrder.updateMany.mockResolvedValue({ count: 1 });
   loadShippingConfig.mockResolvedValue({ countries: { DE: 'Deutschland', AT: 'Österreich' }, zones: [] });
   getServerSession.mockResolvedValue(null);
   mockPrisma.setting.findUnique.mockResolvedValue(null);
@@ -120,7 +129,7 @@ test('creates order + items in a transaction from server prices; reference built
   expect(res.status).toHaveBeenCalledWith(201);
   const year = new Date().getUTCFullYear();
   const ref = `PF-${year}-000123`;
-  expect(res.json).toHaveBeenCalledWith({ reference: ref, totalCents: 2400, status: 'PENDING', payment: null });
+  expect(res.json).toHaveBeenCalledWith({ reference: ref, totalCents: 2400, status: 'PENDING', payment: { provider: 'sumup', client: { type: 'widget', checkoutId: 'c1' } } });
 
   expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
   // Client-Preise erreichen priceOrder nicht
@@ -189,4 +198,46 @@ test('empty cart reaches pricing (CART_EMPTY) without a DB lookup; too many item
 test('responses are no-store', async () => {
   const res = await call(body());
   expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
+});
+
+describe('payment provider', () => {
+  test('409 NO_PAYMENT_PROVIDER before any order is created', async () => {
+    listAvailableProviders.mockReturnValue([]);
+    const res = await call(body());
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json.mock.calls[0][0].code).toBe('NO_PAYMENT_PROVIDER');
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    expect(startPayment).not.toHaveBeenCalled();
+  });
+
+  test('single provider is used by default, with absolute urls', async () => {
+    await call(body());
+    const arg = startPayment.mock.calls[0][0];
+    expect(arg.providerId).toBe('sumup');
+    expect(arg.urls.returnUrl).toMatch(/^https?:\/\/.+\/bestellung\?ref=ORD-\d{4}-000123$/);
+    expect(arg.urls.webhookUrl).toMatch(/\/api\/shop\/webhooks\/sumup$/);
+    expect(arg.order.items).toHaveLength(1);
+  });
+
+  test('several providers: provider is required and must be available', async () => {
+    listAvailableProviders.mockReturnValue([{ id: 'sumup', label: 'SumUp' }, { id: 'stripe', label: 'Stripe' }]);
+    let res = await call(body());
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json.mock.calls[0][0].details.fields.provider).toBeTruthy();
+    res = await call(body({ provider: 'paypal' }));
+    expect(res.status).toHaveBeenCalledWith(422);
+    res = await call(body({ provider: 'stripe' }));
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(startPayment.mock.calls[0][0].providerId).toBe('stripe');
+  });
+
+  test('startPayment failure: order FAILED, 502 without provider details', async () => {
+    startPayment.mockRejectedValue(new Error('secret-detail'));
+    const res = await call(body());
+    expect(res.status).toHaveBeenCalledWith(502);
+    const out = res.json.mock.calls[0][0];
+    expect(out.code).toBe('PAYMENT_UNAVAILABLE');
+    expect(JSON.stringify(out)).not.toMatch(/secret-detail/);
+    expect(mockPrisma.shopOrder.updateMany).toHaveBeenCalledWith({ where: { id: 'o1', status: 'PENDING' }, data: { status: 'FAILED' } });
+  });
 });

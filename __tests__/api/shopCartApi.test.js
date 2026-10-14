@@ -5,7 +5,7 @@
 jest.disableAutomock()
 
 const mockPrisma = {
-  setting: { findUnique: jest.fn() },
+  setting: { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
   shopFormat: { findMany: jest.fn() },
 }
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }))
@@ -147,7 +147,7 @@ describe('GET /api/shop/public/config', () => {
     const { res, status, body } = await get({}, config)
     expect(status).toBe(200)
     expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store')
-    expect(body).toEqual({ currency: 'EUR', countries: [{ code: 'DE', name: 'Deutschland' }, { code: 'AT', name: 'Österreich' }] })
+    expect(body).toEqual({ currency: 'EUR', countries: [{ code: 'DE', name: 'Deutschland' }, { code: 'AT', name: 'Österreich' }], paymentProviders: [] })
   })
   test('Standard bei fehlendem Setting; Add-on aus -> 404', async () => {
     shippingRow = null

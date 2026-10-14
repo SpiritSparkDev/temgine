@@ -47,7 +47,8 @@ test('list: empty state, categories, from-price', () => {
 
 test('renderPage emits shop containers', () => {
   const { renderPage } = require('../lib/templateEngine');
-  const out = renderPage({ blocks: [{ type: 'shop-products' }, { type: 'shop-product', props: { slug: 'a"b' } }] });
+  const out = renderPage({ blocks: [{ type: 'shop-products' }, { type: 'shop-order' }, { type: 'shop-product', props: { slug: 'a"b' } }] });
   expect(out).toContain('<div class="shop-block" data-shop="products"></div>');
+  expect(out).toContain('<div class="shop-block" data-shop="order"></div>');
   expect(out).toContain('data-shop="product" data-slug="a&quot;b"');
 });

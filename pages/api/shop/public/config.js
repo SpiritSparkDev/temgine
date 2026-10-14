@@ -1,4 +1,5 @@
-import { isShopEnabled } from '../../../../lib/shop/config'
+import { isShopEnabled, loadShopSettings } from '../../../../lib/shop/config'
+import { listAvailableProviders } from '../../../../lib/shop/providers'
 import { loadShippingConfig } from '../../../../lib/shop/shippingConfig'
 
 /** Öffentlich: Währung und lieferbare Länder. GET /api/shop/public/config */
@@ -9,7 +10,8 @@ export default async function handler(req, res) {
     if (!(await isShopEnabled())) return res.status(404).json({ error: 'Nicht gefunden', code: 'NOT_FOUND' })
     const { countries } = await loadShippingConfig()
     const list = Object.entries(countries).map(([code, name]) => ({ code, name })).sort((a, b) => a.name.localeCompare(b.name, 'de'))
-    return res.status(200).json({ currency: 'EUR', countries: list })
+    const paymentProviders = listAvailableProviders(await loadShopSettings())
+    return res.status(200).json({ currency: 'EUR', countries: list, paymentProviders })
   } catch (e) {
     console.error('[/api/shop/public/config Error]', e.message)
     return res.status(500).json({ error: 'Interner Serverfehler', code: 'INTERNAL_ERROR' })
