@@ -1,6 +1,6 @@
 {
   "name": "temgine",
-  "version": "0.50.0",
+  "version": "0.51.0",
   "private": true,
   "scripts": {
     "dev": "npm run test && next dev",
@@ -15,6 +15,7 @@
     "migrate-footer-navigation-to-global": "node ./scripts/migrate-footer-navigation-to-global.js",
     "rollback-model-migration": "node ./scripts/rollback-model-migration.js",
     "postinstall": "node scripts/postinstall.js",
+    "test:e2e": "playwright test",
     "publish-scheduled": "node ./scripts/publish-scheduled.js",
     "import-init": "node ./scripts/import-init.js",
     "docker:up": "docker compose up -d --build",
@@ -64,6 +65,7 @@
     "tiptap-markdown": "^0.8.10"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@testing-library/jest-dom": "^6.9.0",
     "@testing-library/react": "^16.3.0",
     "identity-obj-proxy": "^3.0.0",

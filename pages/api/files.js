@@ -7,6 +7,9 @@ import { listTemplates, saveTemplate } from '../../lib/templateStore';
 import { listNavigations, saveNavigation } from '../../lib/navigationStore';
 import { listFolderItemsRecursive } from '../../lib/uploadFolder';
 import { requireAuth, PERMISSIONS } from '../../lib/auth';
+import { MAX_FILE_SIZE, scanUploads, queryFiles, invalidateFileCache } from '../../lib/fileListing';
+
+export { MAX_FILE_SIZE };
 
 export const config = {
   api: {
@@ -455,8 +458,25 @@ async function syncContentUrlReferences(mappings = []) {
 }
 
 export default async function handler(req, res) {
+  // Schreibende Methoden machen den Scan-Cache des paginierten Listings ungültig
+  if (req.method !== 'GET') res.on('finish', invalidateFileCache);
   if (req.method === 'GET') {
     const { folder } = req.query || {};
+
+    // Limits für den Client
+    if (req.query.limits === '1') return res.status(200).json({ maxFileSize: MAX_FILE_SIZE });
+
+    // Paginiertes Listing (Suche/Sortierung/Filter serverseitig)
+    if (req.query.paged === '1') {
+      const viewAuth = await requireAuth(req, res, PERMISSIONS.FILES_VIEW);
+      if (!viewAuth.authorized) return res.status(viewAuth.status || 401).json({ error: viewAuth.error });
+      try {
+        return res.status(200).json(queryFiles(await scanUploads(), req.query));
+      } catch (error) {
+        console.error('List files error:', error);
+        return res.status(500).json({ error: 'Fehler beim Laden der Dateien' });
+      }
+    }
 
     // Folder-aware listing (when ?folder= param is provided)
     if (folder !== undefined) {
@@ -569,7 +589,7 @@ export default async function handler(req, res) {
       uploadDir: targetUploadDir,
       multiples: true,
       keepExtensions: true,
-      maxFileSize: 10 * 1024 * 1024, // 10MB
+      maxFileSize: MAX_FILE_SIZE,
       filename: (name, ext, part) => {
         const originalName = part.originalFilename || 'upload';
         const parsed = path.parse(originalName);
@@ -593,7 +613,15 @@ export default async function handler(req, res) {
       })
       fields = parsed.fields
       files = parsed.files
-    } catch (_e) {
+    } catch (e) {
+      // formidable: 1009 = maxFileSize überschritten
+      if (e?.httpCode === 413 || e?.code === 1009) {
+        return res.status(413).json({
+          error: `Datei zu groß (maximal ${Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB erlaubt)`,
+          code: 'FILE_TOO_LARGE',
+          maxFileSize: MAX_FILE_SIZE,
+        });
+      }
       return res.status(500).json({ error: 'Upload fehlgeschlagen' })
     }
 
@@ -678,7 +706,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Dateinamen konnten nicht repariert werden: ' + error.message });
     }
   } else if (req.method === 'PUT') {
-    const auth = await requireAuth(req, res, PERMISSIONS.FILES_UPLOAD);
+    const auth = await requireAuth(req, res, PERMISSIONS.FILES_FOLDERS);
     if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
 
     // Ordner erstellen

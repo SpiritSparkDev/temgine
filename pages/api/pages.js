@@ -286,6 +286,14 @@ export default async function handler(req, res) {
        try {
         const results = []
 
+        // Neue Seiten anlegen braucht PAGES_CREATE (Default: wie PAGES_EDIT).
+        {
+          const existing = new Set((await prisma.page.findMany({ select: { slug: true } })).map(r => r.slug))
+          if (body.some(b => b && b.slug && !existing.has(String(b.slug))) && !PERMISSIONS.PAGES_CREATE.includes(auth.user.role)) {
+            return res.status(403).json({ error: 'Keine Berechtigung, Seiten anzulegen', code: 'FORBIDDEN' })
+          }
+        }
+
         // Veralteter Baum? Dann nichts schreiben — sonst überschreibt er fremde
         // Änderungen und löscht Seiten, die andere inzwischen angelegt haben.
         const dbRowsBefore = await prisma.page.findMany()
@@ -314,6 +322,12 @@ export default async function handler(req, res) {
         }
 
         const providedSlugs = collectSlugs(body)
+        // Fehlende Seiten im Baum bedeuten Löschen -> PAGES_DELETE, und zwar vor dem ersten Schreiben.
+        if (!PERMISSIONS.PAGES_DELETE.includes(auth.user.role)) {
+          if (dbRowsBefore.some(r => !providedSlugs.has(r.slug))) {
+            return res.status(403).json({ error: 'Keine Berechtigung, Seiten zu löschen', code: 'FORBIDDEN' })
+          }
+        }
 
         // Slugs müssen nur innerhalb derselben Geschwister-Gruppe eindeutig sein
         // (alle Top-Level-Seiten untereinander, oder alle Kinder eines einzelnen
@@ -536,6 +550,9 @@ export default async function handler(req, res) {
         return res.status(status).json(resp);
       }
       stampNode(p, auth.user)
+      if (!PERMISSIONS.PAGES_CREATE.includes(auth.user.role) && !(await prisma.page.findUnique({ where: { slug: String(p.slug) }, select: { id: true } }))) {
+        return res.status(403).json({ error: 'Keine Berechtigung, Seiten anzulegen', code: 'FORBIDDEN' })
+      }
       const up = await prisma.page.upsert({
         where: { slug: String(p.slug) },
         create: {

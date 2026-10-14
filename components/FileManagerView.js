@@ -115,6 +115,9 @@ export default function FileManagerView({ showToast }) {
   const [isRepairingNames, setIsRepairingNames] = useState(false);
   const [extSources, setExtSources] = useState([]); // Add-on Externe Quellen (nur wenn aktiv + Admin)
   const [showExtImport, setShowExtImport] = useState(false);
+  // Aufräum-Dialog: Liste der zu löschenden, ungenutzten Dateien (null = geschlossen)
+  const [cleanupList, setCleanupList] = useState(null);
+  const [cleaning, setCleaning] = useState(false);
 
   const dragCounter = useRef(0);
   const [usedUrls, setUsedUrls] = useState(() => new Set());
@@ -126,12 +129,14 @@ export default function FileManagerView({ showToast }) {
     loadFiles();
   }, [currentFolder]);
 
-  useEffect(() => {
+  function loadUsage() {
     fetch('/api/files/usage')
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setUsedUrls(new Set(d?.urls || [])))
       .catch(() => {});
-  }, []);
+  }
+
+  useEffect(() => { loadUsage(); }, []);
 
   useEffect(() => {
     fetch('/api/external-sources')
@@ -469,6 +474,36 @@ export default function FileManagerView({ showToast }) {
     loadFiles();
   }
 
+  // Nicht verwendete Dateien: Auswahl (falls vorhanden) oder alle ungenutzten der Ansicht
+  function openCleanup() {
+    const unused = files.filter(f => !usedUrls.has(f.url));
+    const picked = unused.filter(f => selectedUrls.has(f.url));
+    setCleanupList(picked.length ? picked : unused);
+  }
+
+  async function confirmCleanup() {
+    setCleaning(true);
+    try {
+      const res = await fetch('/api/files/unused', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urls: cleanupList.map(f => f.url) })
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Aufräumen fehlgeschlagen', 'error'); return; }
+      const skipped = data.skipped?.length || 0;
+      showToast(`${data.deleted.length} Datei(en) gelöscht${skipped ? `, ${skipped} übersprungen` : ''}`, skipped ? 'warning' : 'success');
+      setSelectedUrls(new Set());
+      setCleanupList(null);
+      loadFiles();
+      loadUsage();
+    } catch (err) {
+      showToast('Fehler: ' + err.message, 'error');
+    } finally {
+      setCleaning(false);
+    }
+  }
+
   async function handleBatchCopyUrls() {
     try {
       await navigator.clipboard.writeText([...selectedUrls].join('\n'));
@@ -540,10 +575,12 @@ export default function FileManagerView({ showToast }) {
   const filteredFiles = files.filter(file => {
     if (filter === 'images')      return isImage(file.name);
     if (filter === 'documents')   return !isImage(file.name);
+    if (filter === 'unused')      return !usedUrls.has(file.url);
     if (filter === 'missing-alt') return isImage(file.name) && !metadataMap[file.url]?.altText;
     return true;
   });
 
+  const unusedCount = files.filter(f => !usedUrls.has(f.url)).length;
   const missingAltCount = files.filter(f => isImage(f.name) && !metadataMap[f.url]?.altText).length;
   const breadcrumbParts = currentFolder ? currentFolder.split('/') : [];
   const isUploading = uploadQueue.length > 0;
@@ -569,6 +606,31 @@ export default function FileManagerView({ showToast }) {
       {showExtImport && (
         <ExternalImportModal sources={extSources} targetFolder={currentFolder} showToast={showToast}
           onClose={() => setShowExtImport(false)} onDone={loadFiles} />
+      )}
+
+      {/* Aufräumen-Bestätigung */}
+      {cleanupList && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={(e) => { if (e.target === e.currentTarget && !cleaning) setCleanupList(null); }}
+        >
+          <div style={{ background: 'var(--bg-primary, #fff)', borderRadius: 12, padding: 24, width: 480, maxWidth: '95vw', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }}>
+            <strong>{cleanupList.length} nicht verwendete Datei(en) endgültig löschen?</strong>
+            <p style={{ fontSize: '0.82rem', margin: '8px 0' }}>
+              Der Server prüft vor dem Löschen erneut, ob die Dateien noch irgendwo eingebunden sind. Das Löschen kann nicht rückgängig gemacht werden.
+            </p>
+            <ul style={{ maxHeight: 220, overflowY: 'auto', fontSize: '0.8rem', margin: '0 0 16px', paddingLeft: 18 }}>
+              {cleanupList.map(f => <li key={f.url} title={f.url}>{f.name} ({formatFileSize(f.size)})</li>)}
+            </ul>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" disabled={cleaning} onClick={() => setCleanupList(null)}>Abbrechen</button>
+              <button type="button" className="btn-primary" disabled={cleaning || cleanupList.length === 0} onClick={confirmCleanup}
+                style={{ background: '#c62828' }}>
+                {cleaning ? 'Lösche…' : `${cleanupList.length} löschen`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Metadaten-Modal */}
@@ -754,6 +816,16 @@ export default function FileManagerView({ showToast }) {
         <button className={`filter-btn ${filter === 'documents' ? 'active' : ''}`} onClick={() => setFilter('documents')}>
           Dokumente ({files.filter(f => !isImage(f.name)).length})
         </button>
+        <button className={`filter-btn ${filter === 'unused' ? 'active' : ''}`} onClick={() => setFilter('unused')}
+          title="Dateien, die nirgends eingebunden sind">
+          Nicht verwendet ({unusedCount})
+        </button>
+        {filter === 'unused' && unusedCount > 0 && (
+          <button className="filter-btn" onClick={openCleanup} style={{ color: '#c62828' }}
+            title="Nicht verwendete Dateien (bzw. die Auswahl) löschen">
+            <Trash2 size={12} /> Aufräumen…
+          </button>
+        )}
         {missingAltCount > 0 && (
           <button className={`filter-btn ${filter === 'missing-alt' ? 'active' : ''}`}
             onClick={() => setFilter('missing-alt')}

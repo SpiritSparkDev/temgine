@@ -32,7 +32,7 @@ jest.mock('../../lib/htmlSanitize', () => ({ sanitizeRecursive: (v) => v }));
 // lib/auth lädt über next-auth das reine ESM-Paket jose (in Jest nicht ladbar).
 // Wie in page-concurrency.test.js: eingeloggter Admin.
 jest.mock('../../lib/auth', () => ({
-  PERMISSIONS: { PAGES_VIEW: ['ADMIN', 'MODERATOR', 'EDITOR'], PAGES_EDIT: ['ADMIN', 'EDITOR'], PAGES_DELETE: ['ADMIN'], TEMPLATES_EDIT: ['ADMIN'] },
+  PERMISSIONS: { PAGES_VIEW: ['ADMIN', 'MODERATOR', 'EDITOR'], PAGES_EDIT: ['ADMIN', 'EDITOR'], PAGES_CREATE: ['ADMIN', 'EDITOR'], PAGES_DELETE: ['ADMIN'], TEMPLATES_EDIT: ['ADMIN'] },
   requireAuth: jest.fn(async () => ({ authorized: true, user: { id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' } })),
 }));
 jest.mock('next-auth/next', () => ({ getServerSession: jest.fn(async () => ({ user: { email: 'admin@example.com', role: 'ADMIN' } })) }));

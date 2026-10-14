@@ -91,3 +91,5 @@ development_docs
 # Plugin-Hilfen (plugins/<id>/help.md, auch im Test-Plugin) gehören ebenfalls ins Repo
 !/plugins/*/help.md
 !/__tests__/fixtures/plugins/*/help.md
+# Thumbnail-Cache (Datei-Auswähler)
+/.cache/

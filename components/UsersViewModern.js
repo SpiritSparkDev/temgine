@@ -280,6 +280,66 @@ export default function UsersViewModern({ showToast }) {
           </div>
         </div>
       </div>
+
+      <PermissionMatrix showToast={showToast} />
+    </div>
+  );
+}
+
+// Rechte pro Rolle (Moderator/Redakteur); Administrator hat immer alles.
+function PermissionMatrix({ showToast }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/users/permissions')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setData(d && d.labels && d.matrix ? d : null))
+      .catch(() => {});
+  }, []);
+
+  if (!data) return null;
+
+  async function toggle(role, key, value) {
+    const matrix = { ...data.matrix, [role]: { ...data.matrix[role], [key]: value } };
+    setData({ ...data, matrix });
+    try {
+      const res = await fetch('/api/users/permissions', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matrix })
+      });
+      if (!res.ok) throw new Error('Speichern fehlgeschlagen');
+      setData({ ...data, matrix: (await res.json()).matrix });
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  return (
+    <div className="permissions-info" style={{ marginTop: 24 }}>
+      <h3>Rechte pro Rolle</h3>
+      <table>
+        <thead>
+          <tr><th align="left">Recht</th><th>Moderator</th><th>Redakteur</th></tr>
+        </thead>
+        <tbody>
+          {Object.entries(data.labels).map(([key, label]) => (
+            <tr key={key}>
+              <td>{label}</td>
+              {['MODERATOR', 'EDITOR'].map(role => (
+                <td key={role} align="center">
+                  <input
+                    type="checkbox"
+                    aria-label={`${label} (${ROLE_LABELS[role]})`}
+                    checked={Boolean(data.matrix[role][key])}
+                    onChange={e => toggle(role, key, e.target.checked)}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -1,8 +1,40 @@
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { requireAuth } from '../../../lib/auth'
+import exportHandler from './export'
+import { AUTO_PREFIX, applyRetention, readSchedule, writeSchedule, validateBackup } from '../../../lib/backupTools'
 
 const BACKUPS_DIR = path.join(process.cwd(), 'data', 'backups')
+
+// Server-Backup: ruft den JSON-Export prozessintern auf und legt das Ergebnis in data/backups ab.
+let running = false
+async function runBackup(req, prefix) {
+  if (running) throw new Error('Es läuft bereits ein Backup')
+  running = true
+  try {
+    let body = ''
+    const fake = { method: 'GET', query: {}, headers: req.headers, __internalBackup: true }
+    const out = { code: 200, headers: {}, setHeader(k, v) { out.headers[k] = v }, status(c) { out.code = c; return out }, send(b) { body = b; return out }, json(b) { body = JSON.stringify(b); return out }, end() { return out } }
+    await exportHandler(fake, out)
+    if (out.code !== 200) throw new Error(`Export fehlgeschlagen (${out.code}): ${body}`)
+    ensureBackupsDir()
+    const d = new Date()
+    const p = (n) => String(n).padStart(2, '0')
+    const filename = `${prefix}${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`
+    fs.writeFileSync(path.join(BACKUPS_DIR, filename), body, 'utf-8')
+    return filename
+  } finally {
+    running = false
+  }
+}
+
+function isCronRequest(req) {
+  const secret = process.env.BACKUP_CRON_SECRET
+  const got = req.headers['x-backup-cron']
+  if (!secret || typeof got !== 'string' || got.length !== secret.length) return false
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(secret))
+}
 
 // Ensure backups directory exists
 function ensureBackupsDir() {
@@ -41,8 +73,36 @@ function getBackupFiles() {
 
 export default async function handler(req, res) {
   try {
+    // Geplanter Lauf aus server.js: Secret statt Session (nur POST {action:'scheduled'}).
+    if (req.method === 'POST' && req.body?.action === 'scheduled' && isCronRequest(req)) {
+      const schedule = readSchedule()
+      if (!schedule.enabled) return res.status(200).json({ ok: true, skipped: true })
+      writeSchedule({ lastRunAt: new Date().toISOString() }) // vor dem Lauf: kein Doppelstart
+      const filename = await runBackup(req, AUTO_PREFIX)
+      applyRetention(schedule.keep)
+      return res.status(200).json({ ok: true, filename })
+    }
+
     const auth = await requireAuth(req, res, ['ADMIN'])
     if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
+    if (req.method === 'GET' && req.query.config) {
+      return res.status(200).json({ ok: true, schedule: readSchedule() })
+    }
+    if (req.method === 'PUT') {
+      return res.status(200).json({ ok: true, schedule: writeSchedule(req.body || {}) })
+    }
+    if (req.method === 'POST' && req.body?.action === 'run') {
+      const filename = await runBackup(req, 'temgine-backup-')
+      return res.status(200).json({ ok: true, filename })
+    }
+    if (req.method === 'POST' && req.body?.action === 'verify') {
+      const filePath = path.join(BACKUPS_DIR, String(req.body.filename || ''))
+      if (!path.resolve(filePath).startsWith(path.resolve(BACKUPS_DIR) + path.sep) || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Backup file not found' })
+      }
+      return res.status(200).json({ ok: true, report: validateBackup(fs.readFileSync(filePath, 'utf-8')) })
+    }
 
     if (req.method === 'GET') {
       // Download a specific backup if filename is given, otherwise list all

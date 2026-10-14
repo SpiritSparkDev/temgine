@@ -729,7 +729,10 @@ export default async function handler(req, res) {
   try {
     if (req.method !== 'GET') return res.status(405).end()
 
-    const auth = await requireAuth(req, res, ['ADMIN'])
+    // __internalBackup wird nur prozessintern von pages/api/admin/backups.js gesetzt (nie über HTTP).
+    const auth = req.__internalBackup
+      ? { authorized: true, user: { id: 'scheduler' } }
+      : await requireAuth(req, res, ['ADMIN'])
     if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
 
     const wantZip = req.query.format === 'zip'

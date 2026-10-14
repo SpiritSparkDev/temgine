@@ -10,12 +10,7 @@ const VARIANT_RE = /_(thumbnail|small|medium|large)(\.[^./]+)$/;
  * GET /api/files/usage → { urls: [...] } – alle /uploads/-URLs, die in Seiten, Templates,
  * Snippets, Navigationen, Inhalts-Einträgen, Blog-Beiträgen oder Einstellungen vorkommen (Größenvarianten zählen für das Original).
  */
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-  const auth = await requireAuth(req, res, ['ADMIN', 'MODERATOR', 'EDITOR']);
-  if (!auth.authorized) return res.status(auth.status || 403).json({ error: auth.error || 'Zugriff verweigert' });
-
-  try {
+export async function collectUsedUrls() {
     const found = new Set();
     const scan = (v) => {
       if (v == null) return;
@@ -44,7 +39,16 @@ export default async function handler(req, res) {
     listTemplates().forEach(t => scan(t.code));
     listNavigations().forEach(n => scan(n.code));
 
-    res.status(200).json({ urls: [...found] });
+    return found;
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+  const auth = await requireAuth(req, res, ['ADMIN', 'MODERATOR', 'EDITOR']);
+  if (!auth.authorized) return res.status(auth.status || 403).json({ error: auth.error || 'Zugriff verweigert' });
+
+  try {
+    res.status(200).json({ urls: [...(await collectUsedUrls())] });
   } catch (error) {
     res.status(500).json({ error: 'Fehler beim Ermitteln der Verwendung: ' + error.message });
   }

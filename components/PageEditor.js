@@ -6,6 +6,7 @@ import { renderTemplate } from '../lib/templateEngine';
 import { loadPageData, renderPageHtml } from '../lib/renderPipeline';
 import { findRawPageNodeById, findRawPageNodeByPath } from '../lib/navTreeHelpers';
 import Toast from './Toast';
+import FilePickerModal from './FilePickerModal';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
@@ -13,6 +14,7 @@ import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
+import { blockSearchText } from '../lib/blockDiff';
 import { formatFieldLabel as formatLabel, SelectOptions, isCheckedValue, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import dynamic from 'next/dynamic';
 
@@ -87,19 +89,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [passwordProtected, setPasswordProtected] = useState(false);
   const [newAccessPassword, setNewAccessPassword] = useState('');
   const [clearAccessPassword, setClearAccessPassword] = useState(false);
-  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [showFileModal, setShowFileModal] = useState(false);
   const [fileModalCallback, setFileModalCallback] = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [fileModalTab, setFileModalTab] = useState('gallery');
-  const [fileModalFolder, setFileModalFolder] = useState('');
-  const [fileModalFolderContents, setFileModalFolderContents] = useState({ files: [], folders: [] });
-  // 'file' = bestehendes Verhalten (Bild-/Datei-Auswahl); 'folder' = {{#folder}}-Felder wählen
-  // einen ganzen Ordner statt einer einzelnen Datei.
+  // 'file' = Bild-/Datei-Auswahl; 'folder' = {{#folder}}-Felder wählen einen ganzen Ordner.
   const [fileModalMode, setFileModalMode] = useState('file');
-  const [galleryFilter, setGalleryFilter] = useState({ types: [], created: 'all', modified: 'all' });
-  const [gallerySort, setGallerySort] = useState('asc');
-  const [galleryLimit, setGalleryLimit] = useState(60);
   const [selectedBlockPath, setSelectedBlockPath] = useState('');
   const [collapsedSections, setCollapsedSections] = useState(new Set());
   const [outlineCollapsed, setOutlineCollapsed] = useState(new Set(['outline-datafields', 'outline-access', 'outline-seo', 'outline-workflow']));
@@ -138,6 +131,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     try { localStorage.setItem('pe-editor-only', v ? '0' : '1'); } catch (_e) {}
     return !v;
   });
+  // Block-Suche (nur Anzeigefilter) und Geräte-Breite der Split-Vorschau
+  const [blockSearch, setBlockSearch] = useState('');
+  const [previewDevice, setPreviewDevice] = useState('desktop');
+  useEffect(() => {
+    try { const d = localStorage.getItem('pe-preview-device'); if (d === 'tablet' || d === 'mobile') setPreviewDevice(d); } catch (_e) {}
+  }, []);
+  const selectPreviewDevice = (d) => {
+    setPreviewDevice(d);
+    try { localStorage.setItem('pe-preview-device', d); } catch (_e) {}
+  };
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   // Rechtes Panel: "Felder" (Block-Editor-Canvas) oder "Seite" (bisheriger,
   // separat ausgelagerter Block-Inspektor) — als Tabs statt zweier Panels.
@@ -909,43 +912,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const formatBlockNumber = (path) => String(path).split('.').map(part => Number(part) + 1).join('.');
 
-  const FILE_TYPE_GROUPS = {
-    image: { label: 'Bilder', ext: /\.(jpe?g|png|gif|webp|svg|avif)$/i },
-    document: { label: 'Dokumente', ext: /\.(pdf|docx?|xlsx?|pptx?|txt|csv)$/i },
-    video: { label: 'Video/Audio', ext: /\.(mp4|mov|avi|webm|mp3|wav|ogg)$/i },
-    archive: { label: 'Archive', ext: /\.(zip|rar|7z)$/i },
-  };
-  const DATE_RANGES = { all: 0, today: 1, week: 7, month: 30, year: 365 };
-  const inRange = (dateStr, range) => {
-    const days = DATE_RANGES[range];
-    if (!days) return true;
-    const t = new Date(dateStr).getTime();
-    return !isNaN(t) && Date.now() - t <= days * 86400000;
-  };
-  const getFilteredGalleryFiles = () => {
-    const { types, created, modified } = galleryFilter;
-    const list = uploadedFiles.filter(f => {
-      const name = f.filename || f.name || '';
-      if (types.length) {
-        const group = Object.keys(FILE_TYPE_GROUPS).find(k => FILE_TYPE_GROUPS[k].ext.test(name)) || 'other';
-        if (!types.includes(group)) return false;
-      }
-      return inRange(f.created, created) && inRange(f.modified, modified);
-    });
-    const dir = gallerySort === 'desc' ? -1 : 1;
-    return list.sort((a, b) => dir * (a.filename || a.name || '').localeCompare(b.filename || b.name || '', 'de', { sensitivity: 'base', numeric: true }));
-  };
-  // Nur beim offenen Modal berechnen, nur einmal pro Render
-  const galleryFiles = showFileModal ? getFilteredGalleryFiles() : [];
-  const galleryFilterActive = galleryFilter.types.length > 0 || galleryFilter.created !== 'all' || galleryFilter.modified !== 'all';
-
   const openFileModal = (callback) => {
     setFileModalCallback(() => callback);
     setFileModalMode('file');
-    setGalleryLimit(60);
-    setFileModalTab('gallery');
-    setFileModalFolder('');
-    setFileModalFolderContents({ files: [], folders: [] });
     setShowFileModal(true);
   };
 
@@ -954,110 +923,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const openFolderModal = (callback) => {
     setFileModalCallback(() => callback);
     setFileModalMode('folder');
-    setFileModalTab('folders');
-    setFileModalFolder('');
-    setFileModalFolderContents({ files: [], folders: [] });
     setShowFileModal(true);
-    loadFolderContents('');
   };
 
   // Helfer, die EditorFields der Section-Provider vom Seiteneditor bekommen
   const sectionEditor = { pickFolder: openFolderModal };
 
-  const loadFolderContents = async (folder) => {
-    const safe = folder || '';
-    setFileModalFolder(safe);
-    try {
-      const res = await fetch(`/api/files?folder=${encodeURIComponent(safe)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setFileModalFolderContents({ files: data.files || [], folders: data.folders || [] });
-      }
-    } catch (e) {
-      console.error('Ordner laden fehlgeschlagen:', e);
-    }
-  };
-
-  const selectFile = (fileUrl) => {
-    if (fileModalCallback) {
-      fileModalCallback(fileUrl);
-    }
+  const closeFileModal = () => {
     setShowFileModal(false);
     setFileModalCallback(null);
   };
 
-  const selectFolder = () => {
-    if (fileModalCallback) {
-      fileModalCallback(fileModalFolder);
-    }
-    setShowFileModal(false);
-    setFileModalCallback(null);
-  };
-
-  const getFilePreview = (file) => {
-    if (!file || !file.filename) return '📎';
-
-    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.filename);
-    if (isImage) {
-      return file.url;
-    }
-    // Fallback icons für andere Dateitypen
-    const ext = file.filename.split('.').pop().toLowerCase();
-    if (['pdf'].includes(ext)) return '📄';
-    if (['doc', 'docx'].includes(ext)) return '📝';
-    if (['zip', 'rar'].includes(ext)) return '📦';
-    if (['mp4', 'mov', 'avi'].includes(ext)) return '🎬';
-    return '📎';
-  };
-
-  const handleFileUpload = async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    setUploading(true);
-    let okCount = 0;
-    const inFolders = fileModalTab === 'folders';
-
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        const res = await fetch(inFolders ? `/api/files?folder=${encodeURIComponent(fileModalFolder || '')}` : '/api/files', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!res.ok) {
-          const error = await res.json().catch(() => ({}));
-          console.error('Upload-Fehler:', error);
-          showToast(`Fehler beim Hochladen von ${file.name}: ${error.error || 'Unbekannter Fehler'}`, 'error');
-          continue;
-        }
-
-        okCount += 1;
-      } catch (error) {
-        console.error('Upload-Fehler:', error);
-        showToast(`Fehler beim Hochladen von ${file.name}`, 'error');
-      }
-    }
-
-    // Dateien neu laden
-    try {
-      const res = await fetch('/api/files');
-      if (res.ok) {
-        const data = await res.json();
-        setUploadedFiles(data.files || []);
-      }
-    } catch (error) {
-      console.error('Fehler beim Laden der Dateien:', error);
-    }
-
-    if (inFolders) await loadFolderContents(fileModalFolder);
-
-    setUploading(false);
-    e.target.value = ''; // Reset input
-    if (okCount > 0) showToast(`${okCount} von ${files.length} Datei(en) hochgeladen`, okCount === files.length ? 'success' : 'error');
+  // Auswahl (Datei-URL bzw. Ordnerpfad) an den Aufrufer geben und schließen
+  const selectFile = (value) => {
+    if (fileModalCallback) fileModalCallback(value);
+    closeFileModal();
   };
 
   function handleAddBlock(type) {
@@ -1859,6 +1739,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const onKeyDown = (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       if (!ctrl) return;
+
+      // Strg+Umschalt+E: "Nur Editor" umschalten
+      if (e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault();
+        toggleEditorOnly();
+        return;
+      }
 
       if (e.key === 's' || e.key === 'S') {
         // Ignore shortcut when focus is inside a text input / textarea / contenteditable
@@ -2681,7 +2568,33 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }
 
   const renderBlocksList = () => {
-    return (blocks || []).map((b, i) => renderBlockEditor(b, String(i), 0))
+    const q = blockSearch.trim().toLowerCase();
+    const total = (blocks || []).length;
+    // Nur Anzeige filtern — Pfade/Indizes bleiben die der vollständigen Liste.
+    const hits = (blocks || []).map((b, i) => ({ b, i })).filter(({ b }) => !q || blockSearchText(b).includes(q));
+    return (
+      <>
+        {total > 1 && (
+          <div className="pe-block-search">
+            <input
+              type="search"
+              value={blockSearch}
+              onChange={(e) => setBlockSearch(e.target.value)}
+              placeholder="Blöcke suchen (Template, Titel, Text)…"
+              aria-label="Blöcke suchen"
+            />
+            {q && <span className="pe-block-search-count">{hits.length} von {total}</span>}
+            {blockSearch && (
+              <button type="button" className="pe-tb-btn" onClick={() => setBlockSearch('')} title="Suche leeren" aria-label="Suche leeren">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
+        {q && hits.length === 0 && <div className="page-block-empty-state">Kein Block passt zu „{blockSearch}“.</div>}
+        {hits.map(({ b, i }) => renderBlockEditor(b, String(i), 0))}
+      </>
+    );
   }
 
   const handleStructureBlockClick = (path) => {
@@ -2759,7 +2672,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               type="button"
               className={`pe-tb-btn${editorOnly ? ' pe-tb-btn-active' : ''}`}
               onClick={toggleEditorOnly}
-              title="Nur Editor: Live-Vorschau aus-/einblenden, Felder nutzen die volle Breite"
+              title="Nur Editor: Live-Vorschau aus-/einblenden, Felder nutzen die volle Breite (Strg+Umschalt+E)"
             >
               <Maximize2 size={14} /> Nur Editor
             </button>
@@ -2997,6 +2910,11 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             <div className="page-split-preview">
               <div className="page-split-preview-head">
                 <span className="page-split-preview-label">Live-Vorschau — Klick zum Auswählen</span>
+                <span className="pe-device-switch" role="group" aria-label="Vorschau-Breite">
+                  {[['desktop', 'Desktop', 'Desktop (volle Breite)'], ['tablet', 'Tablet', 'Tablet (768 px)'], ['mobile', 'Mobil', 'Mobil (375 px)']].map(([id, lbl, tip]) => (
+                    <button key={id} type="button" className={`btn-modern-small hollow${previewDevice === id ? ' active' : ''}`} onClick={() => selectPreviewDevice(id)} title={tip} aria-pressed={previewDevice === id}>{lbl}</button>
+                  ))}
+                </span>
                 <button
                   type="button"
                   className="btn-modern-small hollow"
@@ -3015,6 +2933,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 sandbox="allow-scripts allow-same-origin"
                 className="page-split-preview-iframe"
                 title="Split-Vorschau"
+                style={previewDevice === 'desktop' ? undefined : { width: previewDevice === 'tablet' ? 768 : 375, maxWidth: '100%', alignSelf: 'center', flex: '1 1 auto', borderLeft: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)' }}
                 onLoad={() => {
                   try {
                     splitPreviewIframeRef.current?.contentWindow?.scrollTo(0, splitPreviewScrollRef.current);
@@ -3776,241 +3695,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       )}
 
       {/* Datei-Auswahl Modal */}
-      {showFileModal && (
-        <div className="file-modal-overlay" style={{ zIndex: 10001 }}>
-          <div className="file-modal">
-            <div className="file-modal-header">
-              <h3 className="file-modal-title">{fileModalMode === 'folder' ? 'Ordner auswählen' : 'Datei auswählen'}</h3>
-              <div className="file-modal-header-actions">
-                <label className={`file-upload-label${uploading ? ' is-uploading' : ''}`}>
-                  {uploading ? '⏳ Hochladen...' : '⬆️ Hochladen'}
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    disabled={uploading}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-                <button
-                  onClick={() => setShowFileModal(false)}
-                  className="file-modal-close-btn"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-
-            {/* Tabs — im Ordner-Auswahlmodus gibt es nur die Ordneransicht */}
-            {fileModalMode !== 'folder' && (
-              <div className="file-modal-tabs">
-                <button
-                  className={`file-modal-tab${fileModalTab === 'gallery' ? ' active' : ''}`}
-                  onClick={() => setFileModalTab('gallery')}
-                >
-                  <LayoutGrid size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                  Galerie
-                </button>
-                <button
-                  className={`file-modal-tab${fileModalTab === 'folders' ? ' active' : ''}`}
-                  onClick={() => { setFileModalTab('folders'); loadFolderContents(fileModalFolder); }}
-                >
-                  <Folder size={15} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 5 }} />
-                  Ordner
-                </button>
-              </div>
-            )}
-
-            {/* Gallery Tab */}
-            {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
-              <div className="file-modal-filterbar">
-                <div className="file-modal-filter-group">
-                  {[...Object.entries(FILE_TYPE_GROUPS), ['other', { label: 'Sonstige' }]].map(([key, g]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`file-modal-chip${galleryFilter.types.includes(key) ? ' active' : ''}`}
-                      onClick={() => { setGalleryLimit(60); setGalleryFilter(f => ({ ...f, types: f.types.includes(key) ? f.types.filter(t => t !== key) : [...f.types, key] })); }}
-                    >{g.label}</button>
-                  ))}
-                </div>
-                {[['created', 'Erstellt'], ['modified', 'Geändert']].map(([field, label]) => (
-                  <label key={field} className="file-modal-filter-select">
-                    {label}:
-                    <select value={galleryFilter[field]} onChange={e => { const v = e.target.value; setGalleryLimit(60); setGalleryFilter(f => ({ ...f, [field]: v })); }}>
-                      <option value="all">Alle</option>
-                      <option value="today">Letzte 24 Std.</option>
-                      <option value="week">Letzte 7 Tage</option>
-                      <option value="month">Letzte 30 Tage</option>
-                      <option value="year">Letztes Jahr</option>
-                    </select>
-                  </label>
-                ))}
-                <label className="file-modal-filter-select">
-                  Sortierung:
-                  <select value={gallerySort} onChange={e => { setGallerySort(e.target.value); setGalleryLimit(60); }}>
-                    <option value="asc">A → Z</option>
-                    <option value="desc">Z → A</option>
-                  </select>
-                </label>
-                {galleryFilterActive && (
-                  <button type="button" className="file-modal-chip" onClick={() => { setGalleryFilter({ types: [], created: 'all', modified: 'all' }); setGalleryLimit(60); }}>✕ Filter zurücksetzen</button>
-                )}
-              </div>
-            )}
-
-            {fileModalMode !== 'folder' && fileModalTab === 'gallery' && (
-              <div className="file-modal-grid">
-                {galleryFiles.length === 0 ? (
-                  <div className="file-modal-empty">
-                    {uploadedFiles.length === 0 ? 'Keine Dateien hochgeladen' : 'Keine Dateien für diese Filter'}
-                  </div>
-                ) : (
-                  galleryFiles.slice(0, galleryLimit).map(file => {
-                    const filename = file.filename || file.name;
-                    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(filename);
-                    const preview = isImage ? file.url : getFilePreview(file);
-
-                    return (
-                      <div
-                        key={file.url}
-                        onClick={() => selectFile(file.url)}
-                        title={devTitle(`Datei auswaehlen: ${filename}`)}
-                        aria-label={`Datei auswaehlen: ${filename}`}
-                        className="file-modal-item"
-                      >
-                        <div className="file-modal-thumb">
-                          {isImage ? (
-                            <img
-                              src={file.url}
-                              alt={filename}
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ) : (
-                            <span className="file-modal-icon">{preview}</span>
-                          )}
-                        </div>
-                        <div className="file-modal-filename">
-                          {filename}
-                        </div>
-                        {file.size && (
-                          <div className="file-modal-filesize">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-                {galleryFiles.length > galleryLimit && (
-                  <button type="button" className="file-modal-chip file-modal-more" onClick={() => setGalleryLimit(l => l + 60)}>
-                    Mehr laden ({galleryLimit} von {galleryFiles.length})
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Ordner Tab */}
-            {fileModalTab === 'folders' && (
-              <>
-                {/* Breadcrumb */}
-                <div className="file-modal-breadcrumb">
-                  <button className="bc-btn" onClick={() => loadFolderContents('')}>uploads</button>
-                  {fileModalFolder && fileModalFolder.split('/').map((part, i, arr) => (
-                    <span key={i}>
-                      <span className="bc-sep">/</span>
-                      <button className="bc-btn" onClick={() => loadFolderContents(arr.slice(0, i + 1).join('/'))}>{part}</button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="file-modal-grid">
-                  {/* Zurück-Button */}
-                  {fileModalFolder && (
-                    <div
-                      className="file-modal-item file-modal-folder-item"
-                      onClick={() => {
-                        const parts = fileModalFolder.split('/');
-                        parts.pop();
-                        loadFolderContents(parts.join('/'));
-                      }}
-                    >
-                      <div className="file-modal-thumb"><ArrowLeft size={40} /></div>
-                      <div className="file-modal-filename">..</div>
-                    </div>
-                  )}
-
-                  {/* Unterordner */}
-                  {fileModalFolderContents.folders.map(f => (
-                    <div
-                      key={f.name}
-                      className="file-modal-item file-modal-folder-item"
-                      onClick={() => loadFolderContents(fileModalFolder ? `${fileModalFolder}/${f.name}` : f.name)}
-                    >
-                      <div className="file-modal-thumb"><Folder size={48} /></div>
-                      <div className="file-modal-filename">{f.name}</div>
-                    </div>
-                  ))}
-
-                  {/* Dateien — im Ordner-Auswahlmodus nur zur Orientierung, nicht auswählbar */}
-                  {fileModalFolderContents.files.map(file => {
-                    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.name);
-                    return (
-                      <div
-                        key={file.url}
-                        className={`file-modal-item${fileModalMode === 'folder' ? ' file-modal-item-inert' : ''}`}
-                        onClick={fileModalMode === 'folder' ? undefined : () => selectFile(file.url)}
-                        title={file.name}
-                        aria-label={fileModalMode === 'folder' ? file.name : `Datei auswählen: ${file.name}`}
-                      >
-                        <div className="file-modal-thumb">
-                          {isImage
-                            ? <img src={file.url} alt={file.name} loading="lazy" decoding="async" />
-                            : <span className="file-modal-icon">📎</span>}
-                        </div>
-                        <div className="file-modal-filename">{file.name}</div>
-                        {file.size && (
-                          <div className="file-modal-filesize">{(file.size / 1024).toFixed(1)} KB</div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {fileModalFolderContents.folders.length === 0 && fileModalFolderContents.files.length === 0 && !fileModalFolder && (
-                    <div className="file-modal-empty">Bitte oben auf einen Ordner klicken</div>
-                  )}
-                  {fileModalFolderContents.folders.length === 0 && fileModalFolderContents.files.length === 0 && fileModalFolder && (
-                    <div className="file-modal-empty">Ordner ist leer</div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <div className="file-modal-footer">
-              <button
-                onClick={() => setShowFileModal(false)}
-                title={devTitle('Dateiauswahl abbrechen')}
-                aria-label="Dateiauswahl abbrechen"
-                className="file-modal-cancel-btn"
-              >
-                Abbrechen
-              </button>
-              {fileModalMode === 'folder' && (
-                <button
-                  onClick={selectFolder}
-                  disabled={!fileModalFolder}
-                  title={devTitle(!fileModalFolder ? 'Bitte erst in einen Unterordner wechseln' : `Ordner "${fileModalFolder}" auswaehlen`)}
-                  aria-label="Diesen Ordner auswaehlen"
-                  className="btn-modern"
-                >
-                  ✓ Diesen Ordner auswählen
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <FilePickerModal open={showFileModal} mode={fileModalMode} onSelect={selectFile} onClose={closeFileModal} showToast={showToast} devTitle={devTitle} />
 
       {/* Block in andere Seite kopieren/verschieben */}
       {blockTransferState && (

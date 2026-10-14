@@ -2581,3 +2581,25 @@
 .page-editor-workspace.editor-only .page-split-divider {
   display: none;
 }
+
+/* Datei-Auswähler: Suche, Upload-Fortschritt, Dropzone, Neuer Ordner */
+.file-modal-droppable { position: relative; }
+.file-modal-search { flex: 1 1 180px; min-width: 140px; padding: 4px 8px; font-size: 13px; }
+.file-modal-chip:disabled { opacity: 0.6; cursor: wait; }
+.file-modal-dropzone { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; border: 3px dashed var(--accent-primary, #2563eb); border-radius: 8px; background: rgba(37, 99, 235, 0.15); color: var(--text-primary); font-size: 18px; font-weight: 600; pointer-events: none; }
+.file-modal-progress { position: relative; height: 22px; margin-bottom: 10px; border-radius: 4px; background: rgba(128, 128, 128, 0.25); overflow: hidden; }
+.file-modal-progress-bar { height: 100%; background: var(--accent-primary, #2563eb); transition: width 0.15s linear; }
+.file-modal-progress-label { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: #fff; text-shadow: 0 0 3px rgba(0, 0, 0, 0.6); overflow: hidden; white-space: nowrap; }
+.file-modal-newfolder-btn { margin-left: auto; }
+.file-modal-newfolder { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 16px; }
+.file-modal-newfolder input { padding: 4px 8px; font-size: 13px; }
+.file-modal-error { color: #ef4444; font-size: 12px; }
+
+/* Block-Suche über der Blockliste */
+.pe-block-search { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.pe-block-search input { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-primary, #fff); color: inherit; }
+.pe-block-search-count { font-size: 0.8rem; color: var(--text-secondary, #6b7280); white-space: nowrap; }
+
+/* Geräte-Umschalter der Split-Vorschau */
+.pe-device-switch { display: inline-flex; gap: 4px; margin-left: auto; margin-right: 8px; }
+.pe-device-switch .btn-modern-small.active { background: var(--accent-color, #667eea); color: #fff; }

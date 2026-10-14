@@ -273,5 +273,23 @@ app.prepare().then(() => {
   }).listen(port, (err) => {
     if (err) throw err;
     console.log(`> Ready on port ${port}`);
+
+    // Geplantes Backup: stündliche Prüfung; die API (pages/api/admin/backups.js) entscheidet
+    // anhand data/backup-schedule.json, ob ein Lauf fällig ist. Flag verhindert Doppelstart.
+    if (!global.__backupTimerStarted) {
+      global.__backupTimerStarted = true;
+      process.env.BACKUP_CRON_SECRET = crypto.randomBytes(24).toString('hex');
+      const tick = () => {
+        const body = JSON.stringify({ action: 'scheduled' });
+        const r = require('http').request({
+          host: '127.0.0.1', port, path: '/api/admin/backups', method: 'POST',
+          headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'x-backup-cron': process.env.BACKUP_CRON_SECRET },
+        }, (resp) => resp.resume());
+        r.on('error', (e) => console.warn('> Backup-Timer:', e.message));
+        r.end(body);
+      };
+      setTimeout(tick, 60 * 1000).unref();
+      setInterval(tick, 60 * 60 * 1000).unref();
+    }
   });
 });

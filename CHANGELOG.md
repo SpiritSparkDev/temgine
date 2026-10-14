@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.51.0] - 2026-10-14
+
+### Added
+- **Datei-Auswähler:** eigene Komponente (`FilePickerModal`) mit serverseitiger Paginierung, Textsuche, Sortierung nach Name/Erstellt/Geändert/Größe, gemerkten Filtern, Drag&Drop-Upload mit Fortschritt und Größen-Vorprüfung sowie „Neuer Ordner“.
+- **Dateien-API:** `GET /api/files?paged=1` (Suche/Sortierung/Filter/Paging, 5-s-Scan-Cache), `GET /api/files/thumb` (gecachte Thumbnails), `GET /api/files?limits=1`, Upload-Überschreitung liefert 413.
+- **Dateimanager:** Filter „Nicht verwendet“ und sicheres Aufräumen (`/api/files/unused`).
+- **Seiten-Editor:** Kürzel Strg/Cmd+Umschalt+E für „Nur Editor“, Block-Suche, Geräte-Umschalter (Desktop/Tablet/Mobil) in der Vorschau, Block-Diff im Revisionsverlauf (inkl. „vs. Aktuell“).
+- **Backup:** Zeitplan (täglich/wöchentlich, Aufbewahrung), „Jetzt sichern“ und Wiederherstellen-Test (Trockenlauf) in der Backup-Ansicht.
+- **Rechte:** Neue Rechte `PAGES_CREATE` und `FILES_FOLDERS`, Rechte pro Rolle in der Benutzerverwaltung einstellbar; Datei-Rechte (`FILES_VIEW`, `FILES_FOLDERS`) werden in der Dateien-API durchgesetzt.
+- **E2E:** Playwright-Specs für Datei-Auswähler und „Nur Editor“ (`npm run test:e2e`, Zugangsdaten über `E2E_USER`/`E2E_PASSWORD`).
+
+### Changed
+- Redakteure können per Seitenbaum-Speichern keine Seiten mehr entfernen (403), wenn ihnen `PAGES_DELETE` fehlt.
+
+---
+
 ## [0.50.0] - 2026-10-14
 
 ### Added

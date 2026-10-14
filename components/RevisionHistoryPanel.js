@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { diffBlocks } from '../lib/blockDiff';
 import { X, RotateCcw, Trash2, Clock, Loader, GitCompare } from '../lib/muiIcons';
 
 function formatDate(dateStr) {
@@ -9,6 +10,17 @@ function formatDate(dateStr) {
     hour: '2-digit', minute: '2-digit',
   });
 }
+
+const STATUS = {
+  added: { bg: '#dcfce7', fg: '#166534', text: '+neu' },
+  removed: { bg: '#fee2e2', fg: '#991b1b', text: 'entfernt' },
+  changed: { bg: '#fef9c3', fg: '#854d0e', text: 'geändert' },
+};
+const clip = (v) => {
+  if (v == null || v === '') return v;
+  const t = (typeof v === 'string' ? v : JSON.stringify(v)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.length > 160 ? t.slice(0, 160) + '…' : t;
+};
 
 // Render a simple line-level diff between two text strings
 function renderDiff(oldText, newText) {
@@ -30,6 +42,7 @@ function DiffView({ revA, revB, onClose }) {
   const b = revB.data || {};
   const aBlocks = Array.isArray(a.blocks) ? a.blocks : [];
   const bBlocks = Array.isArray(b.blocks) ? b.blocks : [];
+  const blockRows = diffBlocks(aBlocks, bBlocks);
 
   const rows = [
     { label: 'Titel', old: a.title, new: b.title },
@@ -74,23 +87,21 @@ function DiffView({ revA, revB, onClose }) {
         <div style={{ marginTop: '0.75rem' }}>
           <strong style={{ fontSize: '0.8rem', color: '#374151' }}>Block-Änderungen</strong>
           <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#6b7280' }}>
-            {bBlocks.map((bBlock, i) => {
-              const aBlock = aBlocks[i];
-              const changed = !aBlock || JSON.stringify(aBlock) !== JSON.stringify(bBlock);
-              const added = !aBlock;
+            {blockRows.filter(r => r.status !== 'same').length === 0 && <div style={{ padding: '3px 6px' }}>Keine Block-Änderungen.</div>}
+            {blockRows.filter(r => r.status !== 'same').map((r) => {
+              const meta = STATUS[r.status];
               return (
-                <div key={i} style={{ padding: '3px 6px', borderRadius: 4, marginBottom: 2, background: added ? '#dcfce7' : changed ? '#fef9c3' : 'transparent' }}>
-                  Block {i + 1}: {bBlock.template || bBlock.type || '?'}
-                  {added && <span style={{ marginLeft: 6, color: '#166534' }}>+neu</span>}
-                  {!added && changed && <span style={{ marginLeft: 6, color: '#854d0e' }}>geändert</span>}
+                <div key={`${r.status}-${r.index}`} style={{ padding: '3px 6px', borderRadius: 4, marginBottom: 2, background: meta.bg }}>
+                  Block {r.index + 1}: {r.label}
+                  <span style={{ marginLeft: 6, color: meta.fg }}>{meta.text}</span>
+                  {r.fields.map(f => (
+                    <div key={f.key} style={{ marginTop: 2, paddingLeft: 10, wordBreak: 'break-word' }}>
+                      <span style={{ color: '#374151' }}>{f.key}: </span>{renderDiff(clip(f.old), clip(f.new))}
+                    </div>
+                  ))}
                 </div>
               );
             })}
-            {aBlocks.slice(bBlocks.length).map((_, i) => (
-              <div key={`del-${i}`} style={{ padding: '3px 6px', borderRadius: 4, marginBottom: 2, background: '#fee2e2' }}>
-                Block {bBlocks.length + i + 1}: <span style={{ color: '#991b1b' }}>entfernt</span>
-              </div>
-            ))}
           </div>
         </div>
       )}
@@ -312,6 +323,21 @@ export default function RevisionHistoryPanel({ pageId, pageName, onClose, onRest
                     <GitCompare size={12} />
                     {compareIds.includes(rev.id) ? `✓ ${compareIds.indexOf(rev.id) === 0 ? 'A' : 'B'}` : 'Vergleich'}
                   </button>
+                  {idx > 0 && (
+                  <button
+                    onClick={() => { setCompareIds([rev.id, revisions[0].id]); setShowDiff(true); }}
+                    disabled={busy}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '4px 10px', fontSize: '0.75rem',
+                      background: 'none', border: '1px solid #e5e7eb', borderRadius: '4px',
+                      color: '#6b7280', cursor: busy ? 'not-allowed' : 'pointer',
+                    }}
+                    title="Diese Version mit der aktuellen vergleichen"
+                  >
+                    <GitCompare size={12} /> vs. Aktuell
+                  </button>
+                  )}
                   {!rev.nested && (
                   <button
                     onClick={() => handleDelete(rev.id)}

@@ -76,6 +76,9 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
   const [restoreStrategy, setRestoreStrategy] = useState('merge')
   const [backupSizeLimit, setBackupSizeLimit] = useState(5) // MB
   const [showSizeSettings, setShowSizeSettings] = useState(false)
+  const [schedule, setSchedule] = useState({ enabled: false, interval: 'daily', keep: 7, lastRunAt: null })
+  const [serverBackupBusy, setServerBackupBusy] = useState(false)
+  const [verifyReport, setVerifyReport] = useState(null) // { filename, report }
   const [progressModal, setProgressModal] = useState(null) // { title, subtitle, percent, status: 'running'|'success'|'error' }
 
   const notify = (type, message) => {
@@ -114,6 +117,61 @@ export default function BackupView({ onToast = () => {}, onConfirm = () => {} })
       notify('error', `Fehler beim Laden: ${e.message}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadSchedule = async () => {
+    try {
+      const res = await fetch('/api/admin/backups?config=1')
+      if (res.ok) { const d = await res.json(); if (d && d.schedule) setSchedule(d.schedule) }
+    } catch (e) {}
+  }
+  useEffect(() => { loadSchedule() }, [])
+
+  const saveSchedule = async (patch) => {
+    const next = { ...schedule, ...patch }
+    setSchedule(next)
+    try {
+      const res = await fetch('/api/admin/backups', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next.enabled, interval: next.interval, keep: next.keep }),
+      })
+      if (!res.ok) throw new Error('Speichern fehlgeschlagen')
+      setSchedule((await res.json()).schedule)
+    } catch (e) {
+      notify('error', e.message)
+    }
+  }
+
+  const backupNow = async () => {
+    setServerBackupBusy(true)
+    try {
+      const res = await fetch('/api/admin/backups', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'run' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Backup fehlgeschlagen')
+      notify('success', `Backup gespeichert: ${data.filename}`)
+      loadBackups()
+    } catch (e) {
+      notify('error', e.message)
+    } finally {
+      setServerBackupBusy(false)
+    }
+  }
+
+  const verifyBackup = async (backup) => {
+    try {
+      const res = await fetch('/api/admin/backups', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify', filename: backup.filename }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Test fehlgeschlagen')
+      setVerifyReport({ filename: backup.filename, report: data.report })
+    } catch (e) {
+      notify('error', e.message)
     }
   }
 
@@ -1139,6 +1197,32 @@ ${restoreStrategy === 'replace' ? (
         </div>
       </div>
 
+      {/* Zeitplan */}
+      <div className="backup-section">
+        <h3><CheckCircle className="backup-section-icon" /> Automatisches Backup</h3>
+        <div className="backup-buttons" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            <input type="checkbox" checked={schedule.enabled} onChange={(e) => saveSchedule({ enabled: e.target.checked })} /> Aktiv
+          </label>
+          <select value={schedule.interval} onChange={(e) => saveSchedule({ interval: e.target.value })} aria-label="Intervall">
+            <option value="daily">täglich</option>
+            <option value="weekly">wöchentlich</option>
+          </select>
+          <label>
+            Aufbewahren:{' '}
+            <input type="number" min="1" max="100" style={{ width: 70 }} value={schedule.keep}
+              onChange={(e) => setSchedule({ ...schedule, keep: e.target.value })}
+              onBlur={() => saveSchedule({ keep: schedule.keep })} />
+          </label>
+          <button className="backup-btn" onClick={backupNow} disabled={serverBackupBusy}>
+            {serverBackupBusy ? 'Sichere…' : 'Jetzt sichern'}
+          </button>
+        </div>
+        <div className="backup-item-meta">
+          Letzter automatischer Lauf: {schedule.lastRunAt ? formatDate(schedule.lastRunAt) : 'noch nie'} · Es werden nur automatische Backups (temgine-auto-*) aufgeräumt.
+        </div>
+      </div>
+
       {/* Backups List Section */}
       <div className="backup-section">
         <h3><CheckCircle className="backup-section-icon" /> Gespeicherte Backups</h3>
@@ -1178,6 +1262,9 @@ ${restoreStrategy === 'replace' ? (
                   >
                     <Download size={14} /> Download
                   </button>
+                  <button className="backup-item-btn" onClick={() => verifyBackup(backup)} title="Trockenlauf ohne Änderung der Daten">
+                    <CheckCircle size={14} /> Wiederherstellen-Test
+                  </button>
                   <button
                     className="backup-item-btn backup-item-btn-danger"
                     onClick={() => handleDeleteBackup(backup)}
@@ -1188,6 +1275,16 @@ ${restoreStrategy === 'replace' ? (
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        {verifyReport && (
+          <div className="backup-empty" role="status">
+            <strong>Test: {verifyReport.filename} – {verifyReport.report.ok ? 'in Ordnung' : 'Fehler gefunden'}</strong>
+            <div>{Object.entries(verifyReport.report.counts).map(([k, v]) => `${k}: ${v}`).join(' · ')}</div>
+            {verifyReport.report.errors.map((e, i) => <div key={`e${i}`}>Fehler: {e}</div>)}
+            {verifyReport.report.warnings.map((w, i) => <div key={`w${i}`}>Hinweis: {w}</div>)}
+            <div>Zum echten Wiederherstellen die Datei herunterladen und oben importieren.</div>
+            <button className="backup-item-btn" onClick={() => setVerifyReport(null)}>Schließen</button>
           </div>
         )}
       </div>

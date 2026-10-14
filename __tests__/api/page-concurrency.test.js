@@ -58,7 +58,7 @@ jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('../../lib/audit', () => ({ logAudit: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../lib/htmlSanitize', () => ({ sanitizeRecursive: (v) => v }));
 jest.mock('../../lib/auth', () => ({
-  PERMISSIONS: { PAGES_VIEW: ['ADMIN', 'MODERATOR', 'EDITOR'], PAGES_EDIT: ['ADMIN', 'EDITOR'], PAGES_DELETE: ['ADMIN'], TEMPLATES_EDIT: ['ADMIN'] },
+  PERMISSIONS: { PAGES_VIEW: ['ADMIN', 'MODERATOR', 'EDITOR'], PAGES_EDIT: ['ADMIN', 'EDITOR'], PAGES_CREATE: ['ADMIN', 'EDITOR'], PAGES_DELETE: ['ADMIN'], TEMPLATES_EDIT: ['ADMIN'] },
   requireAuth: jest.fn(async () => ({ authorized: true, user: currentUser })),
 }));
 // GET /api/pages prüft die Session (lib/pageAccess.js): standardmäßig Backend-Nutzer.
