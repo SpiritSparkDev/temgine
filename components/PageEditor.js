@@ -60,6 +60,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const devTitle = (text) => (showDevHints ? text : undefined);
   const richTextEditorMode = useRichTextEditorMode();
   useContentEditorFullscreen();
+
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
@@ -128,6 +129,15 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // Content-Editoren starten im Split-Modus (Vorschau + Felder nebeneinander,
   // ganzer Bildschirm) — kein separater "aus"-Zustand mehr, siehe useContentEditorFullscreen.
   const [splitPreview, setSplitPreview] = useState(true);
+  // "Nur Editor": Live-Vorschau samt Trenner ausblenden, Felder-Panel bekommt die volle Breite
+  const [editorOnly, setEditorOnly] = useState(false);
+  useEffect(() => {
+    try { setEditorOnly(localStorage.getItem('pe-editor-only') === '1'); } catch (_e) {}
+  }, []);
+  const toggleEditorOnly = () => setEditorOnly(v => {
+    try { localStorage.setItem('pe-editor-only', v ? '0' : '1'); } catch (_e) {}
+    return !v;
+  });
   const [splitPreviewHtml, setSplitPreviewHtml] = useState('');
   // Rechtes Panel: "Felder" (Block-Editor-Canvas) oder "Seite" (bisheriger,
   // separat ausgelagerter Block-Inspektor) — als Tabs statt zweier Panels.
@@ -752,7 +762,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // Auto-rebuild split preview (debounced 600ms) when content changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!splitPreview) return;
+    if (!splitPreview || editorOnly) return;
     if (splitPreviewTimerRef.current) clearTimeout(splitPreviewTimerRef.current);
     splitPreviewTimerRef.current = setTimeout(() => {
       try {
@@ -765,7 +775,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }, 600);
     return () => clearTimeout(splitPreviewTimerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitPreview, blocks, templateCodes, enabledCssFiles]);
+  }, [splitPreview, editorOnly, blocks, templateCodes, enabledCssFiles]);
 
   // Aktueller Wert eines Felds (inkl. Repeater-Zeilen "key.index.sub") für
   // die feinkörnige Hervorhebung in der Split-Vorschau — siehe Effekt unten.
@@ -2747,6 +2757,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             </button>
             <button
               type="button"
+              className={`pe-tb-btn${editorOnly ? ' pe-tb-btn-active' : ''}`}
+              onClick={toggleEditorOnly}
+              title="Nur Editor: Live-Vorschau aus-/einblenden, Felder nutzen die volle Breite"
+            >
+              <Maximize2 size={14} /> Nur Editor
+            </button>
+            <button
+              type="button"
               className="pe-tb-btn"
               onClick={() => {
                 const allPaths = flattenedBlocks.map(({ path }) => path);
@@ -2801,7 +2819,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
         <div
           ref={workspaceRef}
-          className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}`}
+          className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}${editorOnly ? ' editor-only' : ''}`}
           style={splitPreview ? { '--pe-split-left': `${splitRatio}%` } : undefined}
         >
           {splitPreview && (

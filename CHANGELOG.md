@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.50.0] - 2026-10-14
+
+### Added
+- **Seiten-Editor:** Umschalter „Nur Editor“ in der Toolbar blendet die Live-Vorschau aus, sodass die Felder die volle Breite nutzen (auch kein Vorschau-Rendering im Hintergrund). Die Einstellung wird im Browser gemerkt.
+
+---
+
 ## [0.49.1] - 2026-10-13
 
 ### Fixed

@@ -2571,3 +2571,13 @@
 .file-modal-filter-select select { padding: 2px 6px; font-size: 12px; }
 .file-modal-more { grid-column: 1 / -1; justify-self: center; padding: 6px 18px; }
 .file-modal-item { content-visibility: auto; contain-intrinsic-size: 160px 150px; }
+
+/* Nur-Editor-Modus: Live-Vorschau und Trenner aus, Felder-Panel in voller Breite */
+.page-editor-workspace.workspace-split.editor-only {
+  grid-template-columns: 1fr;
+  grid-template-areas: "tabs" "content";
+}
+.page-editor-workspace.editor-only .page-split-preview,
+.page-editor-workspace.editor-only .page-split-divider {
+  display: none;
+}
