@@ -251,9 +251,9 @@ export default function CSSManagerViewModern({ showToast }) {
                           aria-label={`${fileObj.name} ${disabledIds.has(fileObj.id) ? 'aktivieren' : 'deaktivieren'}`}
                         />
                         <div className="editor-item-info" style={{flex:1, minWidth:0}}>
-                          <div className="editor-item-label" title={fileObj.href}>{fileObj.name}</div>
+                          <div className="editor-item-label" title={String(fileObj.href).split('?')[0]}>{fileObj.name}</div>
                           <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {fileObj.href}
+                            {String(fileObj.href).split('?')[0]}
                           </div>
                         </div>
                         <span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: 3, padding: '1px 5px', flexShrink: 0 }}>

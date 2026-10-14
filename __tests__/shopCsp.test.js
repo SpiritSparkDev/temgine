@@ -23,7 +23,7 @@ beforeEach(() => {
   findMany.mockReset()
   process.env.DATABASE_URL = 'x'
   mod = require('../lib/shopCsp')
-  matomo = require('../lib/matomoCsp')
+  matomo = require('../lib/pluginCsp')
 })
 
 describe('buildShopCspAdditions', () => {
@@ -72,11 +72,11 @@ describe('applyShopCsp', () => {
     expect(res.headers['content-security-policy']).toBe(csp)
   })
 
-  test('works together with applyMatomoCsp in both orders', async () => {
+  test('works together with applyPluginCsp in both orders', async () => {
     findMany.mockResolvedValue([...rows('true', 'true'), { key: 'matomo_enabled', value: 'true' }, { key: 'matomo_url', value: 'https://m.example.de' }])
-    for (const order of [['applyMatomoCsp', 'applyShopCsp'], ['applyShopCsp', 'applyMatomoCsp']]) {
+    for (const order of [['applyPluginCsp', 'applyShopCsp'], ['applyShopCsp', 'applyPluginCsp']]) {
       const res = fakeRes(BASE)
-      const lib = { applyMatomoCsp: matomo.applyMatomoCsp, applyShopCsp: mod.applyShopCsp }
+      const lib = { applyPluginCsp: matomo.applyPluginCsp, applyShopCsp: mod.applyShopCsp }
       order.forEach(n => lib[n](res))
       res.writeHead(200)
       await flush()

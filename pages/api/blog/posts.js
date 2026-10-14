@@ -1,5 +1,6 @@
 import { prisma } from '../../../lib/prisma';
 import { requireAuth } from '../../../lib/auth';
+import { applyPostQuery, postQueryFromParams, collectTemplateFieldNames } from '../../../lib/blogPostQuery';
 
 export default async function handler(req, res) {
   const auth = await requireAuth(req, res);
@@ -14,22 +15,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'channelId erforderlich' });
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
     const where = { channelId };
     if (status) where.status = status;
 
-    const [posts, total] = await Promise.all([
-      prisma.blogPost.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: parseInt(limit),
-        select: { id: true, title: true, slug: true, excerpt: true, coverImage: true, author: true, status: true, publishAt: true, publishedAt: true, templateData: true, createdAt: true, updatedAt: true },
-      }),
-      prisma.blogPost.count({ where }),
-    ]);
+    // Sortieren/Filtern auch nach Template-Feldern (z. B. „Beginn“) — das geht
+    // nicht in der DB-Abfrage, daher alle Beiträge des Kanals laden (Kanäle
+    // sind klein) und in lib/blogPostQuery.js verarbeiten.
+    const channel = await prisma.blogChannel.findUnique({ where: { id: String(channelId) } });
+    const all = await prisma.blogPost.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: 5000,
+      select: { id: true, title: true, slug: true, excerpt: true, coverImage: true, author: true, status: true, publishAt: true, publishedAt: true, templateData: true, archived: true, createdAt: true, updatedAt: true },
+    });
+    const query = postQueryFromParams({ ...req.query, archive: req.query.archive || 'include' }, channel || {});
+    if (!req.query.sort && !(channel && channel.sortField)) query.sort = 'createdAt';
+    const filtered = applyPostQuery(all, query);
+    const lim = Math.max(1, Math.min(parseInt(limit, 10) || 20, 5000));
+    const pg = Math.max(1, parseInt(page, 10) || 1);
+    const posts = filtered.slice((pg - 1) * lim, pg * lim);
 
-    return res.status(200).json({ posts, total, page: parseInt(page), limit: parseInt(limit) });
+    return res.status(200).json({ posts, total: filtered.length, page: pg, limit: lim, fieldNames: collectTemplateFieldNames(all) });
   }
 
   if (req.method === 'POST') {

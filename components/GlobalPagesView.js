@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar } from '../lib/muiIcons';
-import { navPlaceholderSlug } from '../lib/templateEngine';
+import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar, Copy } from '../lib/muiIcons';
+import { navPlaceholderSlug, buildWidgetPlaceholderKeys, widgetPlaceholderSlug, renderTemplate } from '../lib/templateEngine';
+import { loadGlobalVars } from '../lib/renderPipeline';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -419,12 +422,37 @@ const ROLE_TABS = [
 // immer aktiv (als Baustein platziert, kein Aktivierungskonzept).
 const EXCLUSIVE_ACTIVE_ROLES = ['MAIN', 'FOOTER'];
 
+// Seitenbaum für die Live-Vorschau von MAIN-/PAGE-Navigationen — vereinfachte
+// Variante von loadNavigations()' buildNestedPages in lib/renderPipeline.js
+// (ohne isCurrent, ohne Anker: hier wird kein konkreter Seitenaufruf
+// vorgeführt, sondern die reale Seitenstruktur zum Prüfen von {{#pages}}/
+// {{#children}}/verschachtelten Unterseiten während des Bearbeitens).
+function buildPreviewPagesTree(nodes, parentPath = '') {
+  return (nodes || [])
+    .filter(n => (n.status === 'PUBLISHED' || n.isHomepage) && !Boolean(n?.data?.ignoreInNavigation))
+    .map(n => {
+      const slug = parentPath ? `${parentPath}/${n.slug}` : n.slug;
+      const children = buildPreviewPagesTree(n.children || [], slug);
+      return { id: n.id, slug, title: n.title, hasChildren: children.length > 0, children, data: n.data || {} };
+    });
+}
+
 /**
  * Verwaltet alle "globalen Seitenkomponenten" — Footer, Hauptnavigation und
  * Seitennavigation — in einer Oberfläche (lib/globalPageStore.js). Ersetzt
  * die vormals getrennten Komponenten NavigationView.js und FooterView.js.
  */
 export default function GlobalPagesView({ showToast }) {
+  // Diese Ansicht IST der Content-Editor für globale Seiten (Navigation,
+  // Footer, Widget) — nimmt wie Page-/BlogPostEditor den ganzen Bildschirm
+  // ein, siehe lib/useContentEditorFullscreen.js.
+  useContentEditorFullscreen();
+  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('nav-split-ratio', 75);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [enabledCssFiles, setEnabledCssFiles] = useState([]);
+  const [globalVars, setGlobalVars] = useState({});
+  const [pagesTree, setPagesTree] = useState([]);
+
   const [role, setRole] = useState('MAIN');
   const [list, setList] = useState([]);
   const [editing, setEditing] = useState(null); // { id?, name, role, code, isNew }
@@ -484,6 +512,20 @@ export default function GlobalPagesView({ showToast }) {
     loadOrCreateNavigationCss();
   }, [loadList, loadOrCreateNavigationCss]);
 
+  // Aktivierte CSS-Dateien, globale Variablen und der Seitenbaum für die
+  // Live-Vorschau — wie in PageEditor.js/BlogPostEditor.js einmalig geladen.
+  useEffect(() => {
+    fetch('/api/css')
+      .then(r => r.json())
+      .then(data => setEnabledCssFiles((data.files || []).filter(f => f.enabled !== false)))
+      .catch(() => {});
+    loadGlobalVars().then(setGlobalVars);
+    fetch(`/api/pages?_t=${Date.now()}`)
+      .then(r => r.json())
+      .then(data => setPagesTree(Array.isArray(data) ? buildPreviewPagesTree(data) : []))
+      .catch(() => {});
+  }, []);
+
   async function handleSaveNavigationCss() {
     setIsSavingNavigationCss(true);
     try {
@@ -512,6 +554,22 @@ export default function GlobalPagesView({ showToast }) {
   const entityNoun = isFooter ? 'Footer' : isWidget ? 'Widget' : 'Navigation';
   // Für den "Neue(n/s) <Noun> erstellen"-Titel — deutsche Artikel/Endungen je Rolle.
   const entityAccusativeSuffix = isFooter ? 'n' : isWidget ? 's' : '';
+
+  // Eindeutiger {{{widget.<slug>}}}-Platzhalter je Widget — exakt dieselbe
+  // Funktion wie beim Rendern (lib/templateEngine.js renderPage), damit das
+  // kopierte Snippet immer zu dem passt, was tatsächlich aufgelöst wird.
+  const widgetSlugById = useMemo(
+    () => (isWidget ? buildWidgetPlaceholderKeys(filteredList.map(w => ({ id: w.id, name: w.name }))) : {}),
+    [isWidget, filteredList]
+  );
+
+  function copyWidgetPlaceholder(slug) {
+    const text = `{{{widget.${slug}}}}`;
+    navigator.clipboard?.writeText(text).then(
+      () => showToast(`${text} kopiert`, 'success'),
+      () => showToast('Kopieren fehlgeschlagen', 'error')
+    );
+  }
 
   function handleNew() {
     const entry = { isNew: true, role };
@@ -625,6 +683,35 @@ export default function GlobalPagesView({ showToast }) {
     setShowPresets(false);
   }
 
+  // Rendert den bearbeiteten Code mit genau den Daten, die laut Dokumentation
+  // (help/templates.md, Dokumentations-Panel rechts) für die jeweilige Rolle
+  // zur Verfügung stehen: MAIN/PAGE bekommen den echten Seitenbaum
+  // ({{#pages}}/{{#children}}), FOOTER/WIDGET nur {{global.<key>}}.
+  function buildPreviewHtml() {
+    try {
+      if (!editing || !editCode.trim()) {
+        return '<!DOCTYPE html><html><body><p style="padding:16px;color:#888;font-family:sans-serif">Kein Code zum Anzeigen.</p></body></html>';
+      }
+      const context = (role === 'FOOTER' || role === 'WIDGET')
+        ? { global: globalVars }
+        : { pages: pagesTree, anchors: [], customAnchors: [], childPages: pagesTree };
+      const rendered = renderTemplate(editCode, context);
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">\n${cssLinkTags}</head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildPreviewHtml (GlobalPages) failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewHtml(buildPreviewHtml()), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, editCode, role, globalVars, pagesTree, enabledCssFiles]);
+
   const currentPresets = PRESETS[role] || [];
 
   return (
@@ -679,6 +766,16 @@ export default function GlobalPagesView({ showToast }) {
                 >
                   <div className="nav-card-info">
                     <span className="nav-card-name">{item.name}</span>
+                    {isWidget && (
+                      <button
+                        type="button"
+                        className="gv-key-chip"
+                        onClick={(e) => { e.stopPropagation(); copyWidgetPlaceholder(widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)); }}
+                        title="Platzhalter kopieren"
+                      >
+                        <Copy size={10} /> {`{{{widget.${widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)}}}}`}
+                      </button>
+                    )}
                     {item.isResponsiveCombined && (
                       <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
                         Responsive Combo
@@ -713,7 +810,21 @@ export default function GlobalPagesView({ showToast }) {
           )}
         </div>
 
-        {/* ── Right: Editor panel ─────────────────────────────────────────── */}
+        {/* ── Center: resizable Vorschau + Editor ──────────────────────────── */}
+        <div
+          ref={workspaceRef}
+          className="page-editor-workspace workspace-split nav-main-split"
+          style={{ '--pe-split-left': `${splitRatio}%` }}
+        >
+          <div
+            className="page-split-divider"
+            onMouseDown={startSplitDrag}
+            onTouchStart={startSplitDrag}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Breite von Vorschau und Editor verstellen"
+          />
+          <div className="page-editor-right-tab-content">
         {editing ? (
           <div className="nav-editor-panel">
             <div className="nav-editor-header">
@@ -815,7 +926,12 @@ export default function GlobalPagesView({ showToast }) {
               ) : isWidget ? (
                 <>
                   <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
-                  das Widget wird über einen eigenen Block im Seiten-Editor platziert (Template-Auswahl am
+                  {editName.trim() && (
+                    <>
+                      {' '}<code>{`{{{widget.${widgetPlaceholderSlug(editName)}}}}`}</code> fügt dieses Widget direkt im HTML-Code eines Templates ein ·
+                    </>
+                  )}
+                  {' '}oder über einen eigenen Block im Seiten-Editor platzieren (Template-Auswahl am
                   Block → „Widget: {editName.trim() || '…'}").
                 </>
               ) : (
@@ -847,11 +963,14 @@ export default function GlobalPagesView({ showToast }) {
                 <Sidebar size={40} strokeWidth={1} />
                 <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
                 <p className="nav-editor-empty-hint">
-                  Widgets brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite als
-                  eigener Block platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"), beliebig oft
-                  und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie Sidebars,
-                  Info- oder CTA-Boxen. Nur <code>{`{{global.<key>}}`}</code> steht zur Verfügung — keine
-                  seitenbaum-spezifischen Daten wie bei Navigationen.
+                  Widgets brauchen keine Aktivierung — sie werden entweder direkt per
+                  <code>{`{{{widget.<name>}}}`}</code> im Code eines Templates eingesetzt, oder als eigener
+                  Block in einer Seite platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"),
+                  beliebig oft und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie
+                  Sidebars, Info- oder CTA-Boxen. Als Daten steht nur <code>{`{{global.<key>}}`}</code> zur
+                  Verfügung (keine seitenbaum-spezifischen Daten wie bei Navigationen) — <code>{`{{#if:…}}`}</code>,
+                  <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> funktionieren wie in
+                  Block-Templates.
                 </p>
               </>
             ) : (
@@ -870,6 +989,26 @@ export default function GlobalPagesView({ showToast }) {
             )}
           </div>
         )}
+          </div>
+
+          <div className="page-split-preview">
+            <div className="page-split-preview-head">
+              <span className="page-split-preview-label">Live-Vorschau</span>
+              <button
+                type="button"
+                className="btn-modern-small hollow"
+                onClick={() => setPreviewHtml(buildPreviewHtml())}
+                title="Vorschau aktualisieren"
+              >↻</button>
+            </div>
+            <iframe
+              srcDoc={previewHtml}
+              sandbox="allow-scripts allow-same-origin"
+              className="page-split-preview-iframe"
+              title="Vorschau"
+            />
+          </div>
+        </div>
 
         {/* ── Right: Docs panel ────────────────────────────────────────────── */}
         {showDocs && (
@@ -892,7 +1031,9 @@ export default function GlobalPagesView({ showToast }) {
                   </p>
                   <p>
                     Im Code stehen globale Variablen über <code>{`{{global.<key>}}`}</code> zur Verfügung
-                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen".
+                    (z. B. Firmenname, Logo, Footer-Links) — gepflegt unter „Globale Variablen". Wie bei
+                    Block-Templates funktionieren auch <code>{`{{#if:…}}`}</code>, <code>{`{{#each:…}}`}</code>
+                    und <code>{`{{feld:typ}}`}</code>.
                   </p>
                 </div>
               ) : isWidget ? (
@@ -909,11 +1050,16 @@ export default function GlobalPagesView({ showToast }) {
                   </div>
 
                   <div className="nav-docs-group">
-                    <div className="nav-docs-heading">Einbinden im Seiten-Editor</div>
-                    <p>
-                      An einem Block die Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das
-                      gewünschte Widget wählen — der Block zeigt dann live den Widget-Inhalt.
-                    </p>
+                    <div className="nav-docs-heading">Zwei Wege, ein Widget einzubinden</div>
+                    <ol className="nav-docs-list">
+                      <li><strong>Direkt im Template-Code</strong> — Platzhalter
+                        <code>{`{{{widget.<name>}}}`}</code> per Hand schreiben oder das fertige Snippet
+                        per Klick auf die Kachel in der Liste links kopieren. Funktioniert in jedem Block-,
+                        Navigations- und Footer-Template.</li>
+                      <li><strong>Widget-Block</strong> — im Seiten-Editor an einem Block die
+                        Template-Auswahl öffnen und unter „Widget: &lt;Name&gt;" das gewünschte Widget
+                        wählen — der Block zeigt dann live den Widget-Inhalt.</li>
+                    </ol>
                   </div>
 
                   <div className="nav-docs-group">
@@ -921,7 +1067,14 @@ export default function GlobalPagesView({ showToast }) {
                     <p>
                       Nur <code>{`{{global.<key>}}`}</code> (globale Variablen, z. B. Firmenname, Logo)
                       steht zur Verfügung — keine seitenbaum-spezifischen Daten wie <code>pages</code>,
-                      <code>anchors</code> oder <code>childPages</code> bei Navigationen.
+                      <code>anchors</code> oder <code>childPages</code> bei Navigationen, und auch keine
+                      anderen Widgets (kein verschachteltes <code>{`{{{widget.<name>}}}`}</code> innerhalb
+                      eines Widgets).
+                    </p>
+                    <p>
+                      Wie bei Block-Templates werden auch hier <code>{`{{#if:…}}`}</code>/<code>{`{{^if:…}}`}</code>
+                      (bedingte Abschnitte), <code>{`{{#each:…}}`}</code> (Wiederholungen) und
+                      <code>{`{{feld:typ}}`}</code>-Typannotationen ausgewertet.
                     </p>
                   </div>
                 </>
@@ -938,6 +1091,10 @@ export default function GlobalPagesView({ showToast }) {
                       Baustein gezielt dort platziert, wo sie gebraucht wird — beliebig viele PAGE-Navs
                       können gleichzeitig existieren und auch mehrfach mit unterschiedlichen PAGE-Navs im
                       selben Template auftauchen.
+                    </p>
+                    <p>
+                      Wie bei Block-Templates werden auch hier <code>{`{{#if:…}}`}</code>/<code>{`{{^if:…}}`}</code>,
+                      <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> ausgewertet.
                     </p>
                   </div>
 

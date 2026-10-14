@@ -18,6 +18,15 @@ Stellt sicher, dass das Datenbankschema korrekt ist.
 ### `check-db.js`
 Überprüft die Datenbankverbindung und den Status.
 
+### `blocks-to-channel.js`
+Wandelt Download-Blöcke einer Seite (z. B. eine von Hand gepflegte Newsletter-Liste) in Beiträge eines Blog-/News-Kanals um und ersetzt sie auf der Seite durch einen Kanal-Block. Ohne `--apply` nur Probelauf; idempotent; sichert vorher eine Revision der Seite. Alle Optionen im Kopf der Datei.
+```bash
+docker compose exec temgine node scripts/blocks-to-channel.js --page=mitgliederbereich/newsletter \
+  --channel=newsletter --channel-name=Newsletter --master=Newsletter \
+  --list-template="Newsletter Listeneintrag" --include-text-links --replace          # Probelauf
+# … gleiche Zeile mit --apply ausführen
+```
+
 ## User Management
 
 ### `delete-admin.js`

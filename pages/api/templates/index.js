@@ -1,5 +1,7 @@
 import { listTemplates, getTemplateByName, saveTemplate, deleteTemplateByName } from '../../../lib/templateStore'
 import { validatePreviewSubset } from '../../../lib/blogTemplateWorkflow'
+import { getUsedTemplateNames } from '../../../lib/templateUsage'
+import { deleteContactEmailTemplate } from '../../../lib/contactEmailTemplateStore'
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -7,7 +9,7 @@ const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) 
   return [status, response];
 };
 
-const toResponseShape = (t) => ({
+const toResponseShape = (t, usedNames = null) => ({
   id: t.name, // file-based: name IS the identity, no separate DB id anymore
   name: t.name,
   code: t.code,
@@ -15,6 +17,7 @@ const toResponseShape = (t) => ({
   blogRole: t.blogRole,
   masterTemplateName: t.masterTemplateName,
   category: t.category || null,
+  ...(usedNames ? { isUsed: usedNames.has(t.name) } : {}),
 });
 
 export default async function handler(req, res) {
@@ -30,7 +33,8 @@ export default async function handler(req, res) {
           const [status, resp] = errorResponse(404, 'Template nicht gefunden', 'TEMPLATE_NOT_FOUND');
           return res.status(status).json(resp);
         }
-        return res.status(200).json(toResponseShape(t))
+        const usedNames = await getUsedTemplateNames()
+        return res.status(200).json(toResponseShape(t, usedNames))
       }
 
       let list = listTemplates()
@@ -39,7 +43,8 @@ export default async function handler(req, res) {
       if (scopeFilter === 'blog') list = list.filter((t) => !!t.blogRole)
       if (scopeFilter === 'contact') list = list.filter((t) => t.category === 'contact')
 
-      return res.status(200).json(list.map(toResponseShape))
+      const usedNames = await getUsedTemplateNames()
+      return res.status(200).json(list.map((t) => toResponseShape(t, usedNames)))
     }
 
     if (req.method === 'POST') {
@@ -104,10 +109,14 @@ export default async function handler(req, res) {
         const [status, resp] = errorResponse(400, 'Name erforderlich', 'VALIDATION_ERROR', { missing: ['name'] });
         return res.status(status).json(resp);
       }
+      const existingForDelete = getTemplateByName(String(name))
       const deleted = deleteTemplateByName(String(name))
       if (!deleted) {
         const [status, resp] = errorResponse(404, 'Template nicht gefunden', 'TEMPLATE_NOT_FOUND');
         return res.status(status).json(resp);
+      }
+      if (existingForDelete?.category === 'contact') {
+        deleteContactEmailTemplate(existingForDelete.name)
       }
       return res.status(200).json({ ok: true })
     }

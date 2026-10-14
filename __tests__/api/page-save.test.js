@@ -24,6 +24,19 @@ const mockPrisma = {
   },
 };
 
+// sanitize-html lädt htmlparser2, das ab Version 12 nur noch ESM ausliefert und
+// sich in Jest (CommonJS) nicht laden lässt; sanitize-html verlangt ^12, eine ältere
+// Version scheidet aus. Diese Tests prüfen Speichern/Slots, nicht die Bereinigung –
+// daher wie in import-backup/page-concurrency durch die Identität ersetzt.
+jest.mock('../../lib/htmlSanitize', () => ({ sanitizeRecursive: (v) => v }));
+// lib/auth lädt über next-auth das reine ESM-Paket jose (in Jest nicht ladbar).
+// Wie in page-concurrency.test.js: eingeloggter Admin.
+jest.mock('../../lib/auth', () => ({
+  PERMISSIONS: { PAGES_VIEW: ['ADMIN', 'MODERATOR', 'EDITOR'], PAGES_EDIT: ['ADMIN', 'EDITOR'], PAGES_DELETE: ['ADMIN'], TEMPLATES_EDIT: ['ADMIN'] },
+  requireAuth: jest.fn(async () => ({ authorized: true, user: { id: 'admin-1', email: 'admin@example.com', role: 'ADMIN' } })),
+}));
+jest.mock('next-auth/next', () => ({ getServerSession: jest.fn(async () => ({ user: { email: 'admin@example.com', role: 'ADMIN' } })) }));
+jest.mock('../../pages/api/auth/[...nextauth]', () => ({ authOptions: {} }));
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('../../lib/audit',  () => ({ logAudit: jest.fn().mockResolvedValue(undefined) }));
 
@@ -34,6 +47,7 @@ function makeRes() {
   r.status = jest.fn().mockReturnValue(r);
   r.json   = jest.fn().mockReturnValue(r);
   r.end    = jest.fn().mockReturnValue(r);
+  r.setHeader = jest.fn();
   return r;
 }
 
@@ -119,6 +133,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
 
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'home', title: 'Startseite' },
         { slug: 'about', title: 'Über uns' },
@@ -134,6 +150,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     mockPrisma.page.upsert.mockResolvedValue(basePage);
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'home', title: 'Home' },
         { title: 'Kein Slug — wird übersprungen' },
@@ -148,6 +166,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
     mockPrisma.page.upsert.mockResolvedValue(basePage);
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'page-a', title: 'A' },
         { slug: 'page-b', title: 'B' },
@@ -164,6 +184,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 bei doppeltem Slug zwischen zwei Top-Level-Seiten — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         { slug: 'about', title: 'Über uns A' },
         { slug: 'about', title: 'Über uns B' },
@@ -182,6 +204,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 bei doppeltem Slug in verschachtelten Kindseiten (gleicher Slug an zwei Stellen im Baum) — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'kuenstler',
@@ -208,6 +232,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('200 bei gleichem Slug unter ZWEI UNTERSCHIEDLICHEN Elternseiten — keine echte URL-Kollision', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'team-a',
@@ -234,6 +260,8 @@ describe('POST /api/pages — Array-Save (Batch)', () => {
   test('400 wenn dieselbe Seiten-id mehrfach im Baum auftaucht (z. B. Kopie statt Verschieben) — kein Upsert', async () => {
     const req = {
       method: 'POST',
+      // findMany liefert [] → Version des leeren Baums (siehe lib/pageConcurrency.js)
+      headers: { 'x-pages-version': '0-0' },
       body: [
         {
           slug: 'kuenstler',

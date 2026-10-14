@@ -262,6 +262,31 @@
   cursor: not-allowed;
 }
 
+/* ── Center: resizable Vorschau + Editor (siehe page-editor.css für die
+   geteilten .page-editor-workspace/.page-split-* Klassen, hier ohne die
+   Tab-Leiste von Page-/BlogPostEditor, da es nur einen Editor-Bereich
+   gibt) ───────────────────────────────────────────────────────────────── */
+
+.admin-scope .nav-main-split.workspace-split {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  grid-template-areas: "preview divider content";
+  grid-template-rows: 1fr;
+  align-items: stretch;
+}
+
+/* .nav-editor-panel braucht (anders als die frei fließende
+   .page-editor-canvas) eine feste Höhe für den Monaco-Editor
+   (.nav-monaco-wrap { flex: 1 }) — darum hier Flex-Spalte mit voller Höhe
+   statt des sonst natürlich fließenden Inhalts. */
+.admin-scope .nav-main-split .page-editor-right-tab-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
 /* ── Right: editor panel ──────────────────────────────────────────────────── */
 
 .admin-scope .nav-editor-panel {
@@ -692,4 +717,32 @@
 
 .admin-scope.dark-mode .nav-name-input {
   background: var(--bg-tertiary);
+}
+
+/* ── Kopierbares Platzhalter-Snippet (Widgets, analog zu .gv-key-chip in
+   GlobalVariablesView.js — dort per <style jsx> lokal, hier global, weil
+   GlobalPagesView.js kein <style jsx> nutzt) ──────────────────────────── */
+
+.admin-scope .gv-key-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-family: 'Fira Code', monospace;
+  font-size: 0.7rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-scope .gv-key-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }

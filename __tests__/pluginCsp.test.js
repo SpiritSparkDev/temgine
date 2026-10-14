@@ -1,6 +1,6 @@
-const { originFromSettings, addOriginToCsp } = require('../lib/matomoCsp');
+const { originFromSettings, addOriginToCsp } = require('../lib/pluginCsp');
 
-describe('matomoCsp', () => {
+describe('pluginCsp', () => {
   const csp = "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; connect-src 'self'; img-src 'self' https:";
 
   test('adds origin to script-src and connect-src only', () => {

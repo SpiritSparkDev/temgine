@@ -4,7 +4,7 @@
 // HTML, so mdToHtml's "already HTML" branch never actually calls marked.
 jest.mock('marked', () => ({ marked: { parse: (s) => s, setOptions: () => {} } }));
 
-const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectFolderBlockPaths, navPlaceholderSlug, buildNavPlaceholderKeys } = require('../lib/templateEngine');
+const { renderPage, collectNavigationBlockIds, collectGlobalPageBlockIds, collectSectionKeys, navPlaceholderSlug, buildNavPlaceholderKeys, widgetPlaceholderSlug, buildWidgetPlaceholderKeys } = require('../lib/templateEngine');
 
 describe('collectNavigationBlockIds', () => {
   it('collects navigationId from top-level navigation blocks', () => {
@@ -46,12 +46,12 @@ describe('renderPage navigation slots', () => {
 
   it('renders {{{nav:mobile}}} when a mobile nav is provided', () => {
     const navigations = { mobile: { code: '<nav id="m">Mobile</nav>', data: {} } };
-    const html = renderPage(page, blockTemplates, {}, navigations);
+    const html = renderPage(page, blockTemplates, { navigations });
     expect(html).toContain('<nav id="m">Mobile</nav>');
   });
 
   it('renders an empty slot for {{{nav:mobile}}} when no mobile nav is configured', () => {
-    const html = renderPage(page, blockTemplates, {}, {});
+    const html = renderPage(page, blockTemplates, {});
     expect(html).toContain('<div class="mobile-nav-slot"></div>');
   });
 });
@@ -67,19 +67,19 @@ describe('renderPage navigation blocks (type: navigation)', () => {
 
   it('renders the navigation code looked up by navigationId from navigations.byId', () => {
     const navigations = { byId: { nav1: { code: '<nav id="p">Page Nav</nav>', data: {} } } };
-    const html = renderPage(page, {}, {}, navigations);
+    const html = renderPage(page, {}, { navigations });
     expect(html).toContain('<nav id="p">Page Nav</nav>');
   });
 
   it('renders nothing when navigationId does not resolve in navigations.byId', () => {
-    const html = renderPage(page, {}, {}, { byId: {} });
+    const html = renderPage(page, {}, { navigations: { byId: {} } });
     expect(html).not.toContain('<nav');
     expect(html).not.toContain('missing-block');
   });
 
   it('exposes global.* inside the resolved navigation code', () => {
     const navigations = { byId: { nav1: { code: '<nav>{{global.companyName}}</nav>', data: {} } } };
-    const html = renderPage(page, {}, {}, navigations, null, { companyName: 'Temgine' });
+    const html = renderPage(page, {}, { navigations, globalVars: { companyName: 'Temgine' } });
     expect(html).toContain('<nav>Temgine</nav>');
   });
 });
@@ -126,12 +126,12 @@ describe('renderPage widget blocks (type: global-page)', () => {
 
   it('renders the widget code looked up by globalPageId from globalPages.byId', () => {
     const globalPages = { byId: { w1: { code: '<aside id="sidebar">Sidebar</aside>' } } };
-    const html = renderPage(page, {}, {}, {}, null, {}, {}, globalPages);
+    const html = renderPage(page, {}, { globalPages });
     expect(html).toContain('<aside id="sidebar">Sidebar</aside>');
   });
 
   it('renders nothing when globalPageId does not resolve in globalPages.byId', () => {
-    const html = renderPage(page, {}, {}, {}, null, {}, {}, { byId: {} });
+    const html = renderPage(page, {}, { globalPages: { byId: {} } });
     expect(html).not.toContain('<aside');
   });
 
@@ -142,7 +142,7 @@ describe('renderPage widget blocks (type: global-page)', () => {
 
   it('exposes global.* inside the resolved widget code', () => {
     const globalPages = { byId: { w1: { code: '<aside>{{global.companyName}}</aside>' } } };
-    const html = renderPage(page, {}, {}, {}, null, { companyName: 'Temgine' }, {}, globalPages);
+    const html = renderPage(page, {}, { globalVars: { companyName: 'Temgine' }, globalPages });
     expect(html).toContain('<aside>Temgine</aside>');
   });
 });
@@ -152,17 +152,17 @@ describe('collectFolderBlockPaths', () => {
 
   it('collects the chosen folder path from a block using a folder-block template', () => {
     const blocks = [{ template: 'Gallery', props: { folder: 'produkte/bilder' } }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['produkte/bilder']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['produkte/bilder']);
   });
 
   it('collects folder paths from nested children', () => {
     const blocks = [{ template: 'Text', props: {}, children: [{ template: 'Gallery', props: { folder: 'sub' } }] }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['sub']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['sub']);
   });
 
   it('ignores blocks with no folder chosen yet (empty string)', () => {
     const blocks = [{ template: 'Gallery', props: { folder: '' } }];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual([]);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual([]);
   });
 
   it('dedupes repeated folder paths', () => {
@@ -170,7 +170,7 @@ describe('collectFolderBlockPaths', () => {
       { template: 'Gallery', props: { folder: 'bilder' } },
       { template: 'Gallery', props: { folder: 'bilder' } },
     ];
-    expect(collectFolderBlockPaths(blocks, blockTemplates)).toEqual(['bilder']);
+    expect((collectSectionKeys(blocks, blockTemplates).folder || [])).toEqual(['bilder']);
   });
 });
 
@@ -186,7 +186,7 @@ describe('renderPage folder blocks ({{#folder}})', () => {
 
   it('iterates over the pre-resolved items for the chosen folder path', () => {
     const folderContents = { bilder: [{ name: 'a.jpg', url: '/uploads/bilder/a.jpg' }, { name: 'b.jpg', url: '/uploads/bilder/b.jpg' }] };
-    const html = renderPage(page, blockTemplates, {}, {}, null, {}, folderContents);
+    const html = renderPage(page, blockTemplates, { sectionData: { folder: folderContents } });
     // {{url}} is Mustache-escaped like any other double-brace field (same convention as
     // existing {{ctaUrl:url}}/{{image:image}} template fields) — browsers decode the
     // resulting HTML entities in attribute values, so the link still works correctly.
@@ -195,13 +195,13 @@ describe('renderPage folder blocks ({{#folder}})', () => {
   });
 
   it('renders nothing when the chosen folder path is not present in folderContents', () => {
-    const html = renderPage(page, blockTemplates, {}, {}, null, {}, {});
+    const html = renderPage(page, blockTemplates, {});
     expect(html).not.toContain('<a href=');
   });
 
   it('renders nothing when no folder has been chosen', () => {
     const emptyPage = { ...page, blocks: [{ template: 'Gallery', props: { folder: '' } }] };
-    const html = renderPage(emptyPage, blockTemplates, {}, {}, null, {}, { '': [{ name: 'root.jpg', url: '/uploads/root.jpg' }] });
+    const html = renderPage(emptyPage, blockTemplates, { sectionData: { folder: { '': [{ name: 'root.jpg', url: '/uploads/root.jpg' }] } } });
     expect(html).not.toContain('<a href=');
   });
 
@@ -209,7 +209,7 @@ describe('renderPage folder blocks ({{#folder}})', () => {
     const namedTemplates = { Gallery: '<ul>{{#folder:bilder}}<li>{{name}}</li>{{/folder:bilder}}</ul><ol>{{#folder:dokumente}}<li>{{name}}</li>{{/folder:dokumente}}</ol>' };
     const namedPage = { ...page, blocks: [{ template: 'Gallery', props: { bilder: 'b', dokumente: 'd' } }] };
     const folderContents = { b: [{ name: 'foto.jpg' }], d: [{ name: 'vertrag.pdf' }] };
-    const html = renderPage(namedPage, namedTemplates, {}, {}, null, {}, folderContents);
+    const html = renderPage(namedPage, namedTemplates, { sectionData: { folder: folderContents } });
     expect(html).toContain('<li>foto.jpg</li>');
     expect(html).toContain('<li>vertrag.pdf</li>');
   });
@@ -256,7 +256,7 @@ describe('renderPage named navigation placeholders ({{{nav:<name>}}})', () => {
   it('resolves a navigation by its slugified name, independent of any block', () => {
     const blockTemplates = { Text: '<div>{{{nav:breadcrumb}}}</div>' };
     const navigations = { byId: { nav1: { name: 'Breadcrumb', code: '<nav id="bc">Crumbs</nav>', data: {} } } };
-    const html = renderPage(page, blockTemplates, {}, navigations);
+    const html = renderPage(page, blockTemplates, { navigations });
     expect(html).toContain('<nav id="bc">Crumbs</nav>');
   });
 
@@ -268,7 +268,7 @@ describe('renderPage named navigation placeholders ({{{nav:<name>}}})', () => {
         y: { name: 'TOC?', code: 'B', data: {} },
       },
     };
-    const html = renderPage(page, blockTemplates, {}, navigations);
+    const html = renderPage(page, blockTemplates, { navigations });
     expect(html).toContain('A|B');
   });
 });
@@ -298,29 +298,29 @@ describe('renderPage footer + global variables', () => {
 
   it('appends active footer HTML after blocks content', () => {
     const footer = { code: '<footer class="site-footer">{{global.copyrightText}}</footer>', data: {} };
-    const html = renderPage(page, blockTemplates, {}, {}, footer, { companyName: 'Temgine', copyrightText: '© 2026' });
+    const html = renderPage(page, blockTemplates, { footer, globalVars: { companyName: 'Temgine', copyrightText: '© 2026' } });
     expect(html).toContain('<footer class="site-footer">© 2026</footer>');
     expect(html.indexOf('<div>Temgine</div>')).toBeLessThan(html.indexOf('<footer'));
   });
 
   it('renders nothing when no active footer is passed', () => {
-    const html = renderPage(page, blockTemplates, {}, {}, null, { companyName: 'Temgine' });
+    const html = renderPage(page, blockTemplates, { globalVars: { companyName: 'Temgine' } });
     expect(html).not.toContain('<footer');
   });
 
   it('exposes global.* inside block templates', () => {
-    const html = renderPage(page, blockTemplates, {}, {}, null, { companyName: 'Temgine' });
+    const html = renderPage(page, blockTemplates, { globalVars: { companyName: 'Temgine' } });
     expect(html).toContain('<div>Temgine</div>');
   });
 
   it('renders an empty string for a missing global variable instead of crashing', () => {
-    const html = renderPage(page, blockTemplates, {}, {}, null, {});
+    const html = renderPage(page, blockTemplates, {});
     expect(html).toContain('<div></div>');
   });
 
   it('exposes global.* inside navigation templates', () => {
     const navigations = { main: { code: '<nav>{{global.companyName}}</nav>', data: {} } };
-    const html = renderPage(page, blockTemplates, {}, navigations, null, { companyName: 'Temgine' });
+    const html = renderPage(page, blockTemplates, { navigations, globalVars: { companyName: 'Temgine' } });
     expect(html).toContain('<nav>Temgine</nav>');
   });
 });
@@ -336,13 +336,13 @@ describe('Block ohne Template = freies HTML-Feld', () => {
   test('props.html wird unverändert ausgegeben', () => {
     const { renderPage } = require('../lib/templateEngine');
     const page = { title: 'T', slug: 't', blocks: [{ type: 'content', template: '', props: { html: '<div class="x" style="color:red">Hallo</div>' } }] };
-    expect(renderPage(page, {}, {}, {})).toContain('<div class="x" style="color:red">Hallo</div>');
+    expect(renderPage(page, {}, {})).toContain('<div class="x" style="color:red">Hallo</div>');
   });
 });
 
 describe('{{feld:checkbox}}', () => {
   const tpl = { Faq: '{{#each:Fragen}}<details{{#if:Offen}} open{{/if:Offen}}><!-- {{Offen:checkbox}} -->{{Titel:text}}</details>{{/each:Fragen}}' };
-  const render = (rows) => renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Faq', props: { Fragen: rows } }] }, tpl, {}, {});
+  const render = (rows) => renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Faq', props: { Fragen: rows } }] }, tpl, {});
 
   it('annotation is stripped and #if:… reacts to true / "" / "true"', () => {
     const html = render([{ Offen: true, Titel: 'A' }, { Offen: '', Titel: 'B' }, { Offen: 'true', Titel: 'C' }]);
@@ -356,8 +356,137 @@ describe('{{feld:checkbox}}', () => {
 describe('{{feld:select(...)}}', () => {
   it('Annotation samt Optionsliste wird entfernt, nur der Wert wird ausgegeben', () => {
     const tpl = { Box: '<div class="{{align:select(Links=left, Mitte=center)}}">{{#each:Items}}<i class="{{Pos:select(oben, unten)}}"></i>{{/each:Items}}</div>' };
-    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Box', props: { align: 'center', Items: [{ Pos: 'unten' }] } }] }, tpl, {}, {});
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Box', props: { align: 'center', Items: [{ Pos: 'unten' }] } }] }, tpl, {});
     expect(html).toContain('<div class="center"><i class="unten"></i></div>');
     expect(html).not.toContain('select');
+  });
+});
+
+describe('widgetPlaceholderSlug', () => {
+  it('slugifies like navPlaceholderSlug but falls back to "widget", not "navigation"', () => {
+    expect(widgetPlaceholderSlug('Sidebar CTA')).toBe('sidebar-cta');
+    expect(widgetPlaceholderSlug('')).toBe('widget');
+    expect(widgetPlaceholderSlug(undefined)).toBe('widget');
+  });
+});
+
+describe('buildWidgetPlaceholderKeys', () => {
+  it('assigns unique slugs, appending -2/-3 on name collisions (deterministic by name then id)', () => {
+    const keys = buildWidgetPlaceholderKeys([
+      { id: 'w1', name: 'CTA' },
+      { id: 'w2', name: 'CTA' },
+      { id: 'w3', name: 'CTA' },
+    ]);
+    expect(Object.values(keys).sort()).toEqual(['cta', 'cta-2', 'cta-3']);
+  });
+});
+
+describe('renderPage {{{widget.<name>}}} placeholder (direkt im Template-Code, zusätzlich zum global-page-Block)', () => {
+  const globalPages = { byId: { w1: { name: 'Sidebar CTA', code: '<aside>Hallo</aside>' } } };
+
+  it('löst {{{widget.<slug>}}} in einem Block-Template auf', () => {
+    const tpl = { Seite: '<main>{{{widget.sidebar-cta}}}</main>' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, { globalPages });
+    expect(html).toContain('<main><aside>Hallo</aside></main>');
+  });
+
+  it('löst den Platzhalter auch in Navigationen und im Footer auf', () => {
+    const page = { title: 'T', slug: 't', blocks: [] };
+    const navigations = { main: { code: '{{{widget.sidebar-cta}}}' } };
+    const footer = { code: '{{{widget.sidebar-cta}}}' };
+    const html = renderPage(page, {}, { globalPages, navigations, footer });
+    // Einmal aus dem Footer, einmal aus {{{nav:main}}} (wird automatisch vorangestellt)
+    expect(html.match(/<aside>Hallo<\/aside>/g)).toHaveLength(2);
+  });
+
+  it('ein Widget bekommt keinen eigenen widget-Kontext (keine Selbst-/Querverweis-Rekursion)', () => {
+    const selfReferencing = { byId: { w1: { name: 'A', code: '<a>{{{widget.a}}}</a>' } } };
+    const tpl = { Seite: '{{{widget.a}}}' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, { globalPages: selfReferencing });
+    // {{{widget.a}}} innerhalb des Widget-Codes bleibt unaufgelöst (kein widget-Key im Kontext)
+    expect(html).toContain('<a></a>');
+  });
+
+  it('ohne globalPages bleibt der Platzhalter leer statt zu crashen (backward compatible default)', () => {
+    const tpl = { Seite: '<main>{{{widget.sidebar-cta}}}</main>' };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [{ template: 'Seite', props: {} }] }, tpl, {});
+    expect(html).toContain('<main></main>');
+  });
+});
+
+// Regression: Navigationen/Footer/Widgets wurden bis 0.46.x direkt per rohem
+// Mustache.render() gerendert statt über renderTemplate() wie Block-Templates
+// — dadurch funktionierten {{#if:…}}/{{#each:…}}/{{feld:typ}} dort nicht.
+describe('{{#if:…}} und {{#each:…}} funktionieren in Navigationen, Footer und Widgets (nicht nur in Blöcken)', () => {
+  it('{{#if:…}} in einer Navigation', () => {
+    const navigations = { main: { code: '{{#if:zeigeHinweis}}<p>Hinweis</p>{{/if:zeigeHinweis}}', data: { zeigeHinweis: true } } };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [] }, {}, { navigations });
+    expect(html).toContain('<p>Hinweis</p>');
+  });
+
+  it('{{#each:…}} im Footer', () => {
+    const footer = { code: '{{#each:Links}}<a>{{label}}</a>{{/each:Links}}', data: { Links: [{ label: 'Impressum' }, { label: 'Datenschutz' }] } };
+    const html = renderPage({ title: 'T', slug: 't', blocks: [] }, {}, { footer });
+    expect(html).toContain('<a>Impressum</a><a>Datenschutz</a>');
+  });
+
+  it('{{#if:…}} in einem Widget', () => {
+    const globalPages = { byId: { w1: { code: '{{#if:aktiv}}<b>An</b>{{/if:aktiv}}' } } };
+    const page = { title: 'T', slug: 't', blocks: [{ type: 'global-page', props: { globalPageId: 'w1' } }] };
+    const html = renderPage(page, {}, { globalPages, globalVars: {} });
+    // Das global-page-Widget selbst bekommt keine Block-Props — "aktiv" ist hier leer/false, prüft nur, dass die #if-Syntax überhaupt ausgewertet (nicht wörtlich ausgegeben) wird.
+    expect(html).not.toContain('{{#if:aktiv}}');
+  });
+});
+
+describe('renderPage instrumentPaths (Editor-Split-Vorschau: data-temgine-block Wrapper)', () => {
+  const tpl = {
+    Wrapper: '<section>{{titel}}<div class="inner">{{{inner}}}</div></section>',
+    Karte: '{{#each:Punkte}}<li>{{label}}</li>{{/each:Punkte}}',
+  };
+  const nestedPage = {
+    title: 'T', slug: 't',
+    blocks: [{
+      template: 'Wrapper', props: { titel: 'Außen' },
+      children: [{
+        template: 'Karte', props: { Punkte: [{ label: 'A' }] },
+        children: [{ template: 'Karte', props: { Punkte: [{ label: 'B' }] } }],
+      }],
+    }],
+  };
+
+  it('ohne instrumentPaths erscheint kein data-temgine-block Attribut (Produktions-Rendering unverändert)', () => {
+    const html = renderPage(nestedPage, tpl, {});
+    expect(html).not.toContain('data-temgine-block');
+  });
+
+  it('mit instrumentPaths:true bekommt jeder Block — auch 2 Ebenen tief verschachtelt — seinen Pfad', () => {
+    const html = renderPage(nestedPage, tpl, { instrumentPaths: true });
+    expect(html).toContain('data-temgine-block="0"');
+    expect(html).toContain('data-temgine-block="0.0"');
+    expect(html).toContain('data-temgine-block="0.0.0"');
+  });
+
+  it('der Inhalt (inkl. Repeater in verschachtelten Blöcken) bleibt bei instrumentPaths:true vollständig erhalten', () => {
+    const plain = renderPage(nestedPage, tpl, {});
+    const instrumented = renderPage(nestedPage, tpl, { instrumentPaths: true });
+    // Gleicher Textinhalt in beiden Modi — instrumentPaths fügt nur Wrapper-Divs hinzu, ändert nichts am Inhalt.
+    const textOnly = (html) => html.replace(/<[^>]+>/g, '');
+    expect(textOnly(instrumented)).toBe(textOnly(plain));
+    // "Karte" hat kein {{{inner}}} im Template, daher wird block-children vor
+    // dem schließenden Tag des einzigen Wurzelelements eingefügt (bestehendes
+    // Verhalten, siehe renderPage) — B (ohne eigene Kinder) bleibt unverändert.
+    expect(instrumented).toContain('<li>A<div class="block-children">');
+    expect(instrumented).toContain('<li>B</li>');
+  });
+
+  it('ein fehlendes Template bekommt im instrumentierten Modus ebenfalls einen Pfad-Wrapper', () => {
+    const html = renderPage(
+      { title: 'T', slug: 't', blocks: [{ template: 'DoesNotExist', props: {} }] },
+      {},
+      { instrumentPaths: true }
+    );
+    expect(html).toContain('data-temgine-block="0"');
+    expect(html).toContain('Missing template: DoesNotExist');
   });
 });

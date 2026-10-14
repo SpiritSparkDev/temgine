@@ -3,7 +3,9 @@ import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 import PicginePanel from './PicginePanel';
 import ExternalSourcesPanel from './ExternalSourcesPanel';
+import PluginsPanel from './PluginsPanel';
 import ShopSettingsPanel from './ShopSettingsPanel';
+import { Toggle, Card, Row, SaveButton } from './SettingsUi';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
 const TAB_KEY = 'temgine_settings_tab';
@@ -16,59 +18,9 @@ const TABS = [
   { id: 'picgine', label: 'Picgine' },
   { id: 'external', label: 'Externe Quellen' },
   { id: 'shop', label: 'Shop' },
+  { id: 'plugins', label: 'Plugins' },
   { id: 'live', label: 'Live & Wartung' },
 ];
-
-function Toggle({ checked, onChange, disabled, label }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => !disabled && onChange(!checked)}
-      disabled={disabled}
-      className={`st-toggle${checked ? ' is-on' : ''}`}
-    >
-      <span />
-    </button>
-  );
-}
-
-// Karte mit Titel/Beschreibung; Inhalt sind Zeilen (Row) oder freie Elemente
-function Card({ title, description, children, footer }) {
-  return (
-    <section className="st-card">
-      <header className="st-card-head">
-        <h3>{title}</h3>
-        {description && <p>{description}</p>}
-      </header>
-      <div className="st-card-body">{children}</div>
-      {footer && <footer className="st-card-foot">{footer}</footer>}
-    </section>
-  );
-}
-
-// Zeile: links Label + Hilfetext, rechts das Bedienelement
-function Row({ label, hint, children, stacked }) {
-  return (
-    <div className={`st-row${stacked ? ' is-stacked' : ''}`}>
-      <div className="st-row-label">
-        <strong>{label}</strong>
-        {hint && <small>{hint}</small>}
-      </div>
-      <div className="st-row-control">{children}</div>
-    </div>
-  );
-}
-
-function SaveButton({ onClick, saving, children = 'Speichern' }) {
-  return (
-    <button type="button" className="st-btn st-btn-primary" onClick={onClick} disabled={saving}>
-      {saving ? 'Speichern…' : children}
-    </button>
-  );
-}
 
 export default function SettingsView({ showToast }) {
   const [tab, setTab] = useState('general');
@@ -175,7 +127,7 @@ export default function SettingsView({ showToast }) {
   };
 
   const handleSaveRetention = () => {
-    const n = parseInt(val('revisionRetentionDays', '7'), 10);
+    const n = parseInt(val('revisionRetentionDays', '30'), 10);
     if (isNaN(n) || n < 0) {
       showToast('Bitte eine gültige Anzahl Tage eingeben (≥ 0)', 'error');
       return;
@@ -371,11 +323,11 @@ export default function SettingsView({ showToast }) {
 
             <Card
               title="Versionierung"
-              description="Wie lange alte Seitenversionen gespeichert bleiben. Ältere Versionen werden beim nächsten Speichern gelöscht. 0 = keine Aufbewahrung. Standard: 7 Tage; auch durch Wiederherstellung entstandene Versionen unterliegen der Frist."
+              description="Wie lange alte Seitenversionen gespeichert bleiben. Ältere Versionen werden beim nächsten Speichern gelöscht. 0 = keine Aufbewahrung. Standard: 30 Tage; auch durch Wiederherstellung entstandene Versionen unterliegen der Frist."
             >
               <Row label="Aufbewahrungsdauer (Tage)">
                 <div className="st-inline">
-                  <input type="number" min="0" className="st-input st-input-narrow" value={val('revisionRetentionDays', '7')} onChange={setVal('revisionRetentionDays')} />
+                  <input type="number" min="0" className="st-input st-input-narrow" value={val('revisionRetentionDays', '30')} onChange={setVal('revisionRetentionDays')} />
                   <SaveButton onClick={handleSaveRetention} saving={saving === 'retention'} />
                 </div>
               </Row>
@@ -445,6 +397,8 @@ export default function SettingsView({ showToast }) {
         {tab === 'external' && <ExternalSourcesPanel showToast={showToast} />}
 
         {tab === 'shop' && <ShopSettingsPanel showToast={showToast} />}
+
+        {tab === 'plugins' && <PluginsPanel showToast={showToast} />}
 
         {tab === 'live' && (
           <>

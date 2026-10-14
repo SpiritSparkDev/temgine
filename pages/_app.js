@@ -15,11 +15,13 @@ import '../styles/navigation-view.css'
 import '../styles/wysiwyg-editor.css'
 import '../styles/blog-view.css'
 import '../styles/cookie-consent-view.css'
+import '../styles/changelog.css'
 import { SessionProvider } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { installConsentBridge, getConsent, isAllowed } from '../lib/cookieConsentRuntime';
+import { runClientInit } from '../lib/plugins/client';
 
 export default function App({ Component, pageProps: { session, ...pageProps } }) {
   const router = useRouter();
@@ -156,12 +158,13 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       loadExternalCSS();
       loadExternalJS();
       loadMatomoTracking();
+      runClientInit();
       loadFonts();
     }
   }, [router && router.pathname, Component]);
 
   useEffect(() => {
-    const handler = () => { loadExternalJS(); loadMatomoTracking(); };
+    const handler = () => { loadExternalJS(); loadMatomoTracking(); runClientInit(); };
     window.addEventListener('temgine:consent-changed', handler);
     return () => window.removeEventListener('temgine:consent-changed', handler);
   }, []);

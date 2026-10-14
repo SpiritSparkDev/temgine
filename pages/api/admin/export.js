@@ -8,7 +8,8 @@ import { listNavigations } from '../../../lib/navigationStore'
 import { listFooters } from '../../../lib/footerStore'
 import { listGlobalPages } from '../../../lib/globalPageStore'
 import { getAllMaintenanceAsSettings } from '../../../lib/maintenanceStore'
-import { renderPage, buildNavHtml, collectFolderBlockPaths } from '../../../lib/templateEngine'
+import { loadExternFiles } from '../../../lib/externFiles'
+import { renderPage, buildNavHtml, collectSectionKeys } from '../../../lib/templateEngine'
 import { listFolderItemsRecursive } from '../../../lib/uploadFolder'
 import { findRawPageNodeById } from '../../../lib/navTreeHelpers'
 import { buildGlobalContext } from '../../../lib/globalVariables'
@@ -33,43 +34,9 @@ function safeZipPath(input) {
   return String(input || '').replace(/\\/g, '/').replace(/^\/+/, '').split('/').filter(Boolean).map(part => part.replace(/[^A-Za-z0-9._-]/g, '_')).join('/')
 }
 
+// CSS-/JS-Manager-Dateien in Manager-Reihenfolge (lib/externFiles.js)
 async function loadCSSFiles() {
-  const cssDir = path.join(process.cwd(), 'public', 'extern_css')
-  const files = []
-  
-  if (!fs.existsSync(cssDir)) return files
-  
-  try {
-    // Load .order.json for priority
-    const orderPath = path.join(cssDir, '.order.json')
-    let order = []
-    if (fs.existsSync(orderPath)) {
-      try {
-        const orderData = JSON.parse(fs.readFileSync(orderPath, 'utf-8'))
-        order = orderData.order || []
-      } catch (e) {}
-    }
-    
-    // Load all CSS files (excluding .order.json)
-    const allFiles = fs.readdirSync(cssDir).filter(f => f.endsWith('.css'))
-    const orderedFiles = order.filter(f => allFiles.includes(f))
-    const unorderedFiles = allFiles.filter(f => !order.includes(f))
-    const sortedFiles = [...orderedFiles, ...unorderedFiles]
-    
-    for (const filename of sortedFiles) {
-      const filePath = path.join(cssDir, filename)
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8')
-        files.push({ filename, content })
-      } catch (e) {
-        console.warn(`Failed to read CSS file ${filename}:`, e.message)
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load CSS files:', e.message)
-  }
-  
-  return files
+  return loadExternFiles('css')
 }
 
 function loadJsonConfig(filename) {
@@ -440,7 +407,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   for (const f of allFooters) allFootersById[f.id] = f
   const globalPages = { byId: {} }
   for (const w of listGlobalPages().filter((e) => e.role === 'WIDGET')) {
-    globalPages.byId[w.id] = { code: w.code }
+    globalPages.byId[w.id] = { code: w.code, name: w.name }
   }
   const globalVariableRows = await prisma.globalVariable.findMany({ where: { isActive: true } })
   const globalVars = buildGlobalContext(globalVariableRows)
@@ -631,11 +598,12 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
 
       const navigationsForPage = buildNavigationsForPage(entry.page, publicTree, activeNavigations, allNavigationsById, entry.segments.join('/'))
       const footer = resolveFooterForPage(entry.page, activeFooter, allFootersById)
-      const folderContents = {}
-      for (const folderPath of collectFolderBlockPaths(entry.page.blocks, blockTemplates)) {
-        folderContents[folderPath] = listFolderItemsRecursive(folderPath)
+      // Statischer Export: nur Ordner-Sections (lokale Dateien), wie vor dem Section-Provider-System
+      const folder = {}
+      for (const folderPath of collectSectionKeys(entry.page.blocks, blockTemplates).folder || []) {
+        folder[folderPath] = listFolderItemsRecursive(folderPath)
       }
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1 }, navigationsForPage, footer, globalVars, folderContents, globalPages)
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, sectionData: { folder }, globalPages })
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)
@@ -823,7 +791,14 @@ export default async function handler(req, res) {
       prisma.blogPost.findMany({ orderBy: { createdAt: 'asc' } }),
     ])
 
-    const shop = inc('shop') ? await exportShopData() : null
+    let shop = null
+    if (inc('shop')) {
+      try {
+        shop = await exportShopData()
+      } catch (e) {
+        console.error('[admin/export] Shop-Daten konnten nicht exportiert werden:', e.message)
+      }
+    }
     const shouldBuildProjectTransfer = wantTransferZip || wantZip
     const shouldBuildStaticSite = wantStaticSite
     // Static-site export always needs its own fonts regardless of the chosen
@@ -832,6 +807,8 @@ export default async function handler(req, res) {
     const uploadedFiles = (shouldBuildProjectTransfer && inc('uploadedFiles')) ? listUploadedFiles() : []
 
     const cssConfig = loadJsonConfig('css-config.json')
+    const js = inc('js') ? loadExternFiles('js') : []
+    const jsConfig = loadJsonConfig('js-config.json')
     const fontsConfig = loadJsonConfig('fonts-config.json')
 
     // Map snippets to their original JSON shape when possible
@@ -864,6 +841,7 @@ export default async function handler(req, res) {
         blogChannels: inc('blog') ? blogChannels.length : 0,
         blogPosts: inc('blog') ? blogPosts.length : 0,
         cssFiles: inc('css') ? css.length : 0,
+        jsFiles: js.length,
         navigations: inc('navigations') ? navigations.length : 0,
         globalVariables: inc('globalVariables') ? globalVariables.length : 0,
         shopProducts: shop ? shop.products.length : 0,
@@ -873,6 +851,7 @@ export default async function handler(req, res) {
         uploadFonts: uploadFonts.length,
         uploadedFiles: uploadedFiles.length,
         cssConfig: (inc('css') && cssConfig) ? 1 : 0,
+        jsConfig: (inc('js') && jsConfig) ? 1 : 0,
         fontsConfig: (inc('uploadFonts') && fontsConfig) ? 1 : 0
       }
     }
@@ -890,6 +869,7 @@ export default async function handler(req, res) {
         blogChannels: inc('blog') ? blogChannels : [],
         blogPosts: inc('blog') ? blogPosts : [],
         css: inc('css') ? css : [],
+        js: inc('js') ? js : [],
         navigations: inc('navigations') ? navigations : [],
         globalVariables: inc('globalVariables') ? globalVariables : [],
         shop,
@@ -901,6 +881,7 @@ export default async function handler(req, res) {
         // would just double the export's memory/disk footprint for no benefit.
         uploadFonts: inc('uploadFonts') ? uploadFonts.map((f) => ({ path: f.path })) : [],
         cssConfig: inc('css') ? (cssConfig || null) : null,
+        jsConfig: inc('js') ? (jsConfig || null) : null,
         fontsConfig: inc('uploadFonts') ? (fontsConfig || null) : null
       }
       const json = JSON.stringify(backup, null, 2)
@@ -958,6 +939,14 @@ export default async function handler(req, res) {
         }
       }
 
+      if (inc('js')) {
+        // JS-Dateien des JS-Managers einzeln (Reihenfolge/Kategorien stehen im Manifest)
+        const jsFolder = zip.folder('js')
+        for (const jsFile of js) {
+          jsFolder.file(safeZipPath(jsFile.filename), jsFile.content || '')
+        }
+      }
+
       if (inc('uploadFonts')) {
         // Uploaded fonts (binary) to keep @font-face sources valid after restore.
         // Streamed straight from disk instead of buffered as base64 — for a large
@@ -989,6 +978,7 @@ export default async function handler(req, res) {
         pageCount: inc('pages') ? pages.length : 0,
         blogPostCount: inc('blog') ? blogPosts.length : 0,
         cssCount: inc('css') ? css.length : 0,
+        jsCount: js.length,
         navigationCount: inc('navigations') ? navigations.length : 0,
         uploadFontCount: uploadFonts.length,
         uploadedFileCount: uploadedFiles.length,
@@ -1127,6 +1117,7 @@ export default async function handler(req, res) {
       blogChannels: inc('blog') ? blogChannels : [],
       blogPosts: inc('blog') ? blogPosts : [],
       css: inc('css') ? css : [],
+      js: inc('js') ? js : [],
       navigations: inc('navigations') ? navigations : [],
       globalVariables: inc('globalVariables') ? globalVariables : [],
       shop,
@@ -1135,6 +1126,7 @@ export default async function handler(req, res) {
       uploadFonts: inc('uploadFonts') ? uploadFonts : [],
       uploadedFiles: inc('uploadedFiles') ? uploadedFiles : [],
       cssConfig: inc('css') ? (cssConfig || null) : null,
+      jsConfig: inc('js') ? (jsConfig || null) : null,
       fontsConfig: inc('uploadFonts') ? (fontsConfig || null) : null
     }
 

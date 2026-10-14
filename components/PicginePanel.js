@@ -30,8 +30,10 @@ export default function PicginePanel({ showToast }) {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
+  const [webhookUrl, setWebhookUrl] = useState('/api/picgine/webhook');
 
   useEffect(() => {
+    setWebhookUrl(`${window.location.origin}/api/picgine/webhook`);
     fetch('/api/settings')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -142,6 +144,11 @@ export default function PicginePanel({ showToast }) {
             </span>
           )}
         </div>
+
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
+          Webhook: In Picgine beim Client als Webhook-URL <code>{webhookUrl}</code> eintragen. Bei
+          Galerie-Änderungen wird dann der statische Live-Snapshot automatisch neu gebaut.
+        </p>
       </div>
     </section>
   );

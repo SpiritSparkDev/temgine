@@ -17,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'PUT') {
-    const { title, slug, excerpt, body, coverImage, author, status, publishAt, templateData } = req.body;
+    const { title, slug, excerpt, body, coverImage, author, status, publishAt, templateData, archived } = req.body;
 
     if (!title || !slug) {
       return res.status(400).json({ error: 'Titel und Slug sind erforderlich' });
@@ -54,8 +54,17 @@ export default async function handler(req, res) {
         publishAt: publishAt ? new Date(publishAt) : null,
         publishedAt,
         templateData: templateData !== undefined ? (templateData || null) : post.templateData,
+        archived: archived !== undefined ? Boolean(archived) : post.archived,
       },
     });
+    return res.status(200).json(updated);
+  }
+
+  // PATCH { archived } — Beitrag ins Archiv legen / zurückholen (aus der Beitragsliste)
+  if (req.method === 'PATCH') {
+    const { archived } = req.body || {};
+    if (typeof archived !== 'boolean') return res.status(400).json({ error: 'archived (true/false) erforderlich' });
+    const updated = await prisma.blogPost.update({ where: { id }, data: { archived } });
     return res.status(200).json(updated);
   }
 

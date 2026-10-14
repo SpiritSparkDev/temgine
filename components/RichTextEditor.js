@@ -7,6 +7,8 @@
  *   readOnly    {boolean}  disable editing
  *   placeholder {string}
  *   toolbar     {string[]} subset of buttons to show (default: all)
+ *   toolbarExtra {ReactNode} rendered at the end of the toolbar (e.g. „Groß“-Knopf)
+ *   expanded    {boolean}  fill the parent's height (große Ansicht, see SmartRichTextEditor)
  */
 import React, { useState, useRef, useMemo, useLayoutEffect } from 'react';
 import { marked } from 'marked';
@@ -23,6 +25,8 @@ export default function RichTextEditor({
   readOnly = false,
   placeholder = '',
   toolbar = ALL_TOOLBAR,
+  toolbarExtra = null,
+  expanded = false,
 }) {
   // Normalize: if incoming value is legacy HTML, display as markdown
   const mdValue = useMemo(() => htmlToMd(value), [value]);
@@ -35,9 +39,13 @@ export default function RichTextEditor({
   useLayoutEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
+    if (expanded) {
+      ta.style.height = '';
+      return;
+    }
     ta.style.height = 'auto';
     ta.style.height = ta.scrollHeight + 'px';
-  }, [mdValue, mode]);
+  }, [mdValue, mode, expanded]);
 
   const show = (key) => toolbar.includes(key);
 
@@ -73,7 +81,7 @@ export default function RichTextEditor({
   };
 
   const insertLink = () => {
-    const url = window.prompt('URL:');
+    const url = window.prompt('Adresse des Links – z. B. /seite, https://…, mailto:name@…, /uploads/datei.pdf (Hilfe: „?“-Knopf)');
     if (!url) return;
     const ta = taRef.current;
     if (!ta) return;
@@ -94,7 +102,7 @@ export default function RichTextEditor({
     ) : null;
 
   return (
-    <div style={wrapStyle}>
+    <div style={expanded ? { ...wrapStyle, flex: 1, minHeight: 0, border: 'none', borderRadius: 0 } : wrapStyle}>
       {!readOnly && (
         <div style={toolbarStyle}>
           {btn('bold',       <b>B</b>,  () => wrap('**'),          'Fett (**Text**)')}
@@ -132,13 +140,14 @@ export default function RichTextEditor({
               >👁</button>
             </>
           )}
+          {toolbarExtra && <span style={{ marginLeft: show('preview') ? '4px' : 'auto' }}>{toolbarExtra}</span>}
         </div>
       )}
 
       {mode === 'preview' ? (
         <div style={previewStyle} dangerouslySetInnerHTML={{ __html: previewHtml }} />
       ) : mode === 'split' ? (
-        <div style={splitWrapStyle}>
+        <div style={expanded ? { ...splitWrapStyle, minHeight: 0 } : splitWrapStyle}>
           <textarea
             ref={taRef}
             value={mdValue}
@@ -158,7 +167,7 @@ export default function RichTextEditor({
           disabled={readOnly}
           placeholder={placeholder || 'Markdown eingeben…'}
           rows={4}
-          style={textareaStyle}
+          style={expanded ? { ...textareaStyle, flex: 1, maxHeight: 'none', fontSize: '0.95rem' } : textareaStyle}
           spellCheck={false}
         />
       )}

@@ -4,7 +4,8 @@ const createJestConfig = nextJest({ dir: path.resolve(__dirname) });
 
 module.exports = createJestConfig({
   testEnvironment: 'jsdom',
-  testPathIgnorePatterns: ['/node_modules/', '/.next/'],
+  setupFiles: ['<rootDir>/jest.setup.js'],
+  testPathIgnorePatterns: ['/node_modules/', '/.next/', '/__tests__/fixtures/'],
   moduleNameMapper: {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
   },

@@ -687,6 +687,9 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                       : <Grid size={12} className="tce-item-icon" aria-hidden="true" />
                     }
                     <span className="tce-item-name">{t.name}</span>
+                    {t.isUsed === false && (
+                      <span className="tce-unused-dot" title="Von keiner Seite/keinem Blog-Kanal verwendet" aria-hidden="true" />
+                    )}
                     {canReorder && (
                       <span className="tce-item-order-btns" onClick={(e) => e.stopPropagation()}>
                         <button
@@ -855,6 +858,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                         <tr><td><code>{'{{global.key}}'}</code></td><td>Globale Variable</td></tr>
                         <tr><td><code>{'{{data.key}}'}</code></td><td>Seiten-Datenfeld</td></tr>
                         <tr><td><code>{'{{{nav:main}}}'}</code> <code>{'{{{nav:page}}}'}</code> <code>{'{{{nav:name}}}'}</code> <code>{'{{{nav:mobile}}}'}</code> <code>{'{{{nav:auto}}}'}</code></td><td>Navigationen (HTML) <DocLink doc="navigationen" /></td></tr>
+                        <tr><td><code>{'{{{widget.name}}}'}</code></td><td>Widget (HTML) — Name unter „Globale Seiten → Widgets", Snippet dort zum Kopieren</td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -1255,6 +1259,9 @@ function PageFieldTemplatesPanel({ showToast, onSaved }) {
               >
                 <Grid size={13} className="tce-item-icon" aria-hidden="true" />
                 <span className="tce-item-name">{t.name}</span>
+                {t.isUsed === false && (
+                  <span className="tce-unused-dot" title="Von keiner Seite verwendet" aria-hidden="true" />
+                )}
                 <button
                   className="tce-item-delete"
                   onClick={(e) => { e.stopPropagation(); handleDelete(t); }}

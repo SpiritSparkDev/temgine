@@ -132,7 +132,7 @@ export default function RevisionHistoryPanel({ pageId, pageName, onClose, onRest
       const res = await fetch('/api/pages/revisions', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ revisionId }),
+        body: JSON.stringify({ revisionId, pageId }),
       });
       if (res.ok) {
         showToast && showToast('Version wiederhergestellt', 'success');
@@ -273,6 +273,7 @@ export default function RevisionHistoryPanel({ pageId, pageName, onClose, onRest
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '1px' }}>
                       {formatDate(rev.createdAt)}
+                      {rev.createdBy && ` · ${rev.createdBy}`}
                       {blockCount !== null && ` · ${blockCount} Block${blockCount !== 1 ? 's' : ''}`}
                       {d.status && ` · ${d.status}`}
                     </div>
@@ -311,6 +312,7 @@ export default function RevisionHistoryPanel({ pageId, pageName, onClose, onRest
                     <GitCompare size={12} />
                     {compareIds.includes(rev.id) ? `✓ ${compareIds.indexOf(rev.id) === 0 ? 'A' : 'B'}` : 'Vergleich'}
                   </button>
+                  {!rev.nested && (
                   <button
                     onClick={() => handleDelete(rev.id)}
                     disabled={busy}
@@ -325,6 +327,7 @@ export default function RevisionHistoryPanel({ pageId, pageName, onClose, onRest
                     {isDeleting ? <Loader size={12} /> : <Trash2 size={12} />}
                     Löschen
                   </button>
+                  )}
                   <button
                     onClick={() => handleRestore(rev.id)}
                     disabled={busy || idx === 0}

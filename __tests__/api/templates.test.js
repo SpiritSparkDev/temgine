@@ -7,6 +7,15 @@
 
 jest.disableAutomock();
 
+// Seit 0.41.0 markiert GET /api/templates ungenutzte Templates (lib/templateUsage.js)
+// und fragt dafür Seiten und Blog-Kanäle aus der Datenbank ab – hier ohne Datenbank.
+jest.mock('../../lib/prisma', () => ({
+  prisma: {
+    page: { findMany: jest.fn().mockResolvedValue([]) },
+    blogChannel: { findMany: jest.fn().mockResolvedValue([]) },
+  },
+}));
+
 const { saveTemplate, deleteTemplateByName } = require('../../lib/templateStore');
 
 const handler = require('../../pages/api/templates').default;

@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.37.0] - 2026-10-09
+## [0.50.0] - 2026-10-14
 
 ### Added
 - **Add-on „Online-Shop“ (in Entwicklung, Phase 0: Fundament):** In Einstellungen → *Shop* zuschaltbar (Setting `shop_enabled`, `PUT /api/shop/settings`, nur Admin). Zeigt je Zahlungsanbieter (SumUp, Stripe, PayPal – getrennt zuschaltbar) den Zustand „aktiv / bereit / nicht konfiguriert“, ohne Zugangsdaten auszuliefern. Neue Prisma-Modelle `ShopProduct`, `ShopFormat`, `ShopOrder`, `ShopOrderItem`, `ShopPayment`, `ShopStockMovement` samt Migration `20261009120000_add_shop_addon` (Beträge in Cent, Steuersätze in Hundertstel-Prozent, Bestandsbuchungen mit Eindeutigkeit je Bestellung und SKU für idempotente Abbuchung). Neue Rechte `PERMISSIONS.SHOP_*`. Dateien: `lib/shop/keys.js`, `lib/shop/config.js`, `pages/api/shop/settings.js`, `components/ShopSettingsPanel.js`. Katalog, Kasse und Zahlungsanbieter folgen in den nächsten Schritten.
@@ -19,6 +19,250 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ### Security
 - **Shop-Schlüssel nur für Admins:** `PUT /api/settings` lehnt `shop_*`-Schlüssel für Moderatoren ab (403). Zugangsdaten der Zahlungsanbieter stehen in `SECRET_KEYS`; `GET /api/settings` gibt sie nie aus, nur `<key>_set`.
+
+## [0.36.0] - 2026-10-08
+
+### Added
+- **Feldtyp `:checkbox`:** `{{feld:checkbox}}` rendert im Editor eine Checkbox (Block-Felder, Wiederholungs-Unterfelder und Seiten-Datenfelder). Gespeichert wird `true` bzw. leer – passt zu `{{#if:feld}}…{{/if:feld}}`; die Annotation wird beim Rendern entfernt. Bereits gespeicherte Texte `"true"`/`"1"` erscheinen als angehakt. Dokumentiert in der Typen-Tabelle des Template-Editors.
+- **Feldtyp `:select(…)` (Dropdown):** `{{ausrichtung:select(links, mitte, rechts)}}` bzw. mit Beschriftung `select(Links=left, Mitte=center)` rendert im Editor ein Dropdown (Block-Felder, Wiederholungs-Unterfelder, Seiten-Datenfelder). Ausgegeben wird der Wert; ein gespeicherter Wert außerhalb der Liste bleibt als Eintrag erhalten. Ohne Klammer-Liste verhält sich `:select` wie bisher wie `:text`.
+- **Dokumentation im Editor:** Die Referenz in der rechten Sidebar des Template-Editors ist jetzt eine Kurzreferenz. Der Button „Ausführliche Doku mit Beispielen“ und die „Beispiele →“-Links öffnen ein Dokumentations-Fenster (`components/HelpDocModal.js`), das die Anleitungen aus `help/*.md` rendert und direkt zum passenden Abschnitt springt. Neu: `help/templates.md` (Variablen, Feldtypen, Checkbox, Select, Bedingungen, Wiederholungen, Ordner, Systemvariablen). Die Anleitungen liefert `GET /api/help` bzw. `GET /api/help/<name>` (nur `help/*.md`, kein freier Pfad).
+- **FAQ-Akkordeon:** Startzustand pro Frage über die Checkbox „Offen" (Felder in Wiederholungsblöcken werden nur aus normalen `{{Feld}}`-Platzhaltern erkannt, nicht aus `{{#if:…}}` – deshalb steht `{{Offen:checkbox}}` in einem Kommentar im Block).
+
+---
+
+## [0.49.1] - 2026-10-13
+
+### Fixed
+- `.block-fields-grid`/`.field-group-inner` im Seiten-Editor erzwangen eine feste Spaltenzahl (3 bzw. 2) — passend für den früheren, breiten festen Inspektor. Seit dem Umbau auf die permanente Split-Vorschau ist das Felder-Panel standardmäßig nur noch ~25% der Breite (und bis auf 15% verstellbar), wodurch Text-Inputs dort auf wenige Pixel zusammengequetscht wurden. Fällt jetzt per `repeat(auto-fit, minmax(120px, 1fr))` automatisch auf so viele Spalten zurück, wie tatsächlich Platz ist.
+
+---
+
+## [0.49.0] - 2026-10-13
+
+### Added
+- Klick auf einen Link in der Split-Vorschau des Seiten-Editors (z. B. in einer gerenderten Navigation): verlässt die Vorschau nicht mehr wirklich (das hätte sie in der iframe zu einer völlig unabhängigen echten Seite navigieren lassen) — führt der Link auf eine bekannte Seite dieser Site, wechselt der Editor stattdessen direkt zu deren Bearbeitung (mit demselben "ungespeicherte Änderungen?"-Hinweis wie beim Zurück-Button), sonst bleibt der Klick einfach wirkungslos.
+
+### Fixed
+- Die Split-Vorschau im Seiten-Editor baut ihr iframe bei jeder Änderung komplett neu auf (debounced) — dabei sprang die Scroll-Position bisher jedes Mal an den Anfang zurück. Wird jetzt vor dem Neuaufbau gemerkt und danach wiederhergestellt.
+- `styles/global.css` definierte einige Farb- und Layout-Variablen (`--primary-color`, `--background-color`, `--text-color`, ...) in einem unscoped `:root`-Block — dadurch galten sie nicht nur im Admin-Bereich, sondern sickerten auch auf die öffentliche Website durch. Definiert gleichnamige Variablen dort in `extern_css`, konnte je nach Ladereihenfolge (statisches Admin-CSS-Bundle vs. dynamisch nachgeladenes extern_css) zufällig die eine oder die andere Definition gewinnen. Jetzt auf `.admin-scope, .auth-page` beschränkt — die einzigen tatsächlichen Verbraucher dieser Variablen.
+
+---
+
+## [0.48.0] - 2026-10-13
+
+### Added
+- „Was ist neu"-Fenster im Admin-Bereich: öffnet sich automatisch, sobald die ausgelieferte Version gegenüber der zuletzt im Browser gesehenen einen Minor- oder Major-Sprung macht (reine Patch-Releases lösen es nicht aus), zeigt die Neuerungen in einfacher, nicht-technischer Sprache und lässt sich per Klick außerhalb, Escape oder Schließen-Button beenden. Merkt sich den zuletzt gesehenen Stand pro Browser in `localStorage`. Inhalte getrennt von diesem CHANGELOG gepflegt in `lib/userChangelog.js` (bewusst nutzerfreundlich formuliert statt wie hier an der Code-Historie orientiert). Vergleichslogik in `lib/changelogGate.js` (mit Tests).
+
+---
+
+## [0.47.0] - 2026-10-13
+
+### Added
+- Der Blog/News-Beitragseditor, der Navigation/Footer/Widget-Editor und die Wartungsseiten (im Wartungsseiten-Tab) nutzen jetzt denselben Vollbild-Rahmen mit permanenter, in der Breite verstellbarer Live-Vorschau wie der Seiten-Editor (`lib/useContentEditorFullscreen.js`, `lib/useSplitPaneRatio.js`, gemeinsam genutzt). Die Vorschauen rendern dabei mit echter Render-Parität zur Live-Seite: Blog-Vorschau nutzt denselben Daten-Kontext wie die veröffentlichte Beitragsseite, Navigation/Footer/Widget-Vorschau nutzt je nach Rolle den echten Seitenbaum bzw. globale Variablen, Wartungsseiten-Vorschau rendert `{{global.x}}` wie die echte 404/503/Ladebildschirm-Seite.
+- „Erweitert" (Wrapper-Klasse/-ID, Navigations-Bild) im Seiten-Editor ist jetzt ein eigener Tab neben „Felder"/„Seite" statt eines separaten Modals.
+- Die Live-Vorschau im Seiten-Editor hebt beim Fokussieren eines einzelnen Felds jetzt genau dieses Feld hervor statt immer den ganzen Block — funktioniert für jede Art, ein Feld zu fokussieren (Klick, Tab-Taste), auch für Felder ohne eigenes HTML-Tag im Template (wird dafür zur Hervorhebung dynamisch in ein `<span>` gewickelt).
+
+### Fixed
+- Blog-Lese-Templates bekamen beim Rendern der echten, veröffentlichten Beitragsseite keine globalen Variablen übergeben — `{{global.x}}` blieb dort leer, obwohl `help/templates.md` es als überall verfügbar dokumentiert. Betraf nur die echte Seite (`pages/[...slug].js`), nicht die Editor-Vorschau.
+- Klick in der Split-Vorschau des Seiten-Editors, um zum passenden Feld zu springen: traf bei ungenauen Klicks (z. B. im Zeilenabstand zwischen zwei Feldern) oft gar kein Feld und sprang dann nur zum ganzen Block. Die Zuordnung berücksichtigt jetzt auch diesen Fall und wählt unter mehreren infrage kommenden Feldern das eindeutigste.
+
+---
+
+## [0.46.1] - 2026-10-13
+
+### Fixed
+- Navigationen, Footer und Widgets wurden bisher direkt per `Mustache.render()` gerendert statt über `renderTemplate()` wie Block-Templates — dadurch funktionierten `{{#if:feld}}`/`{{^if:feld}}` (bedingte Abschnitte), `{{#each:name}}` (Wiederholungen) und `{{feld:typ}}`-Typannotationen dort nicht, obwohl sie in der UI identisch aussehen wie bei Blöcken. Alle Content-Editoren (Block-Props, Navigationen, Footer, Widgets) laufen jetzt durch denselben Renderer und unterstützen dieselbe Syntax. Nebeneffekt: ein fehlerhaftes Nav-/Footer-/Widget-Template zeigt jetzt wie bei Blöcken eine sichtbare Fehlermeldung statt leer zu bleiben.
+- Doku in „Globale Seiten" (Footer/Navigationen/Widgets) entsprechend ergänzt.
+
+---
+
+## [0.46.0] - 2026-10-13
+
+### Added
+- Widgets lassen sich jetzt zusätzlich zur bisherigen Block-Einbindung direkt im HTML-Code eines Templates per `{{{widget.<name>}}}` einsetzen (Block-, Navigations- und Footer-Templates). Der Platzhalter-Name wird aus dem Widget-Namen abgeleitet und bei Namensgleichheit automatisch eindeutig gemacht (`-2`, `-3`, …) — dieselbe Berechnung läuft im Editor (fürs Snippet) und beim Rendern (fürs Auflösen).
+- Die Widget-Liste unter „Globale Seiten → Widgets" zeigt pro Widget jetzt ein fertiges Kopier-Snippet wie bei globalen Variablen (Klick kopiert `{{{widget.name}}}` in die Zwischenablage), zusätzlich eine Live-Vorschau des Platzhalters im Editor-Panel beim Tippen des Namens. Die Referenz-Tabelle im Block-Template-Editor und die Widget-Doku wurden ergänzt.
+
+---
+
+## [0.45.1] - 2026-10-13
+
+### Changed
+- Die Eingabemasken für Template-Felder (Block-Props im Seiten-Editor, Beitrags-Template-Felder im Blog/News-Editor) nutzen jetzt eine gemeinsame Komponente (`components/TemplateFieldEditors.js`) statt zweier unabhängig gewachsener Implementierungen. Das behebt mehrere Unklarheiten im Blog-Editor: Feld-Labels wurden dort bisher roh als `{{Feldname}}` angezeigt statt lesbar formatiert, camelCase-Feldnamen wurden nicht in Wörter getrennt, und Repeater-Einträge ("Artikel" u. ä.) quetschten alle Unterfelder — auch Textareas — in gleich schmale Spalten nebeneinander statt Textfelder über die volle Breite laufen zu lassen. Der Blog-Editor bekommt dabei auch das bereits im Seiten-Editor vorhandene Auf-/Zuklappen, Verschieben und Duplizieren von Repeater-Einträgen.
+
+---
+
+## [0.45.0] - 2026-10-11
+
+### Added
+- Kontaktformular-E-Mail-Vorlage: das „Text"-Feld erkennt jetzt automatisch, ob es mit einem HTML-Tag beginnt, und verschickt den Inhalt dann 1:1 als HTML-Mail (statt wie bisher immer nur als einfacher Text mit `\n` → `<br>`-Umwandlung) — der Klartext-Teil der E-Mail wird dafür automatisch durch Entfernen der Tags erzeugt. Reiner Text funktioniert weiterhin unverändert.
+
+---
+
+## [0.44.3] - 2026-10-12
+
+### Fixed
+- **Seitenbaum speichern:** Neue, noch nie gespeicherte Top-Level-Seiten mit gleich benannten Unterseiten (z. B. „Team A › lydia" und „Team B › lydia") wurden mit „Slug mehrfach unter derselben übergeordneten Seite" abgelehnt. `walkAll` (`lib/pageTreeRepair.js`) bildete den Eltern-Schlüssel aus der id der Top-Level-Seite – ohne id wurde daraus für alle neuen Seiten `undefined::…`. Jetzt zählt ihre Position im Baum. Betrifft auch das Reparatur-Werkzeug.
+- **Testsuite wieder vollständig grün.** `page-save` und `pages-slots` ließen sich seit 0.41.0 nicht mehr laden: `sanitize-html` hängt an `htmlparser2` ab Version 12 (nur ESM), `lib/auth` und `lib/pageAccess` laden über `next-auth` das reine ESM-Paket `jose` – beides kann Jest (CommonJS) nicht laden. Beide Tests ersetzen diese Module jetzt wie die übrigen API-Tests. `templates` braucht seit 0.41.0 die Datenbank (`lib/templateUsage.js`) und bekommt dafür eine Prisma-Attrappe. Dabei kam der Seitenbaum-Fehler oben ans Licht.
+- **Tests:** `__tests__/pageTreeRepair.test.js` neu (Kollisionen nur unter derselben Elternseite, auch ohne ids).
+
+---
+
+## [0.44.2] - 2026-10-12
+
+### Fixed
+- **Zufällig fehlschlagende Tests** (`appExternJs`, `wysiwygRichTextEditor`, je nach Verteilung auch andere React-Tests): jsdom kennt kein `setImmediate`. Lud ein Test Next-Serverinterna, merkte sich Next `undefined` als originales `setImmediate` und patchte das Node-Modul `timers`, das sich alle Testdateien eines Jest-Workers teilen – jeder spätere React-Test im selben Worker stürzte dann in `act()` mit „Cannot read properties of undefined (reading 'apply')" ab. Neue `jest.setup.js` (`setupFiles` in `jest.config.cjs`) gibt jsdom das echte `setImmediate`/`clearImmediate` aus Node.
+- **Tests:** `__tests__/jestSetup.test.js` prüft genau diesen Fall (schlägt ohne den Fix deterministisch fehl).
+
+---
+
+## [0.44.1] - 2026-10-12
+
+### Fixed
+- **Import großer Projekttransfer-ZIPs** (z. B. mit Videos in den Uploads) brach mit einem Fehler zur String-Länge ab. Der Browser las bisher jede Upload-Datei als Base64 in einen einzigen JSON-String, der dann an `/api/admin/import` ging – ab einigen hundert MB scheiterte das an der maximalen String-Länge von Browser bzw. Node. Jetzt schickt der Browser die ZIP-Datei unverändert an den neuen Endpunkt `/api/admin/import-zip`, der sie serverseitig entpackt und die Upload-Dateien einzeln als Binärdaten schreibt (Obergrenze 2 GB). Der Bestätigungsdialog liest aus der ZIP nur noch das Manifest. JSON-Backups laufen unverändert über `/api/admin/import`.
+
+### Changed
+- Die Importlogik liegt jetzt in `runImport()` (`pages/api/admin/import.js`) und wird von JSON- und ZIP-Import gemeinsam genutzt. Upload-Dateien können als Base64/Text oder als Binärdaten (`getBuffer()`) übergeben werden.
+- **Tests:** `__tests__/api/import-zip.test.js` neu (Entpacken, Binärdaten, Strategie, Fehlerfälle, Größenlimit), dazu ein Binärdaten-Fall in `import-backup.test.js`.
+
+---
+
+## [0.44.0] - 2026-10-12
+
+### Added
+- **Projekttransfer: neue Kategorie „JavaScript-Dateien"** – Export und Import nehmen jetzt auch die Dateien des JS-Managers (`public/extern_js`) mit, samt Reihenfolge (`.order.json`), Aktivierungsstatus und Cookie-Kategorie je Script (`data/js-config.json`, im Backup als `js` und `jsConfig`, im Transfer-ZIP zusätzlich als Ordner `js/`). Bisher fehlten eigene Scripts nach einem Umzug komplett, oder sie liefen ohne ihre Kategorie erst nach Cookie-Zustimmung.
+- Ältere Backups bleiben sicher: Beim „Ersetzen" werden vorhandene Scripts nur gelöscht, wenn das Backup ausdrücklich JavaScript enthält (`filesIncluded` mit `js`). Backups ohne Kategorienliste würden sonst alle Scripts entfernen.
+- Der Import-Dialog nennt die enthaltenen Scripts mit Namen und weist darauf hin, dass sie nach dem Import auf der Website ausgeführt werden.
+- **Tests:** `__tests__/externFiles.test.js` (Reihenfolge, Merge/Ersetzen, Dateinamen, Zusammenführen der Konfiguration) sowie JS-Fälle in `export-backup.test.js`, `import-backup.test.js` und `backupCategories.test.js`.
+
+### Changed
+- CSS- und JS-Dateien für Export und Import laufen über ein gemeinsames Modul (`lib/externFiles.js`) statt über doppelte Logik in `export.js`/`import.js`. Das Verhalten für CSS ist unverändert.
+- Beim Import im Modus „Zusammenführen" werden Cookie-Kategorien pro Script zusammengeführt (importierte Einträge gewinnen), statt die bestehenden Kategorien komplett zu ersetzen.
+
+---
+
+## [0.43.0] - 2026-10-12
+
+### Added
+- Statische Auslieferung (`server.js`): Byte-Range-Anfragen werden unterstützt (`206 Partial Content`, `Accept-Ranges`, `Content-Range`, `416` bei ungültigem Bereich, `HEAD` ohne Body). Safari/iOS spielen Videos aus `/uploads` sonst nicht ab.
+- Statische Auslieferung: eigene Content-Types für Video und Audio (`.mp4`, `.m4v`, `.webm`, `.ogv`, `.mov`, `.mp3`, `.m4a`, `.ogg`, `.wav`) sowie `.avif`. Bisher gingen diese Dateien als `application/octet-stream` raus, was Browser zusammen mit `X-Content-Type-Options: nosniff` in Produktion als Video blockieren.
+- **Tests:** `__tests__/publicStaticAsset.test.js` prüft die neuen Content-Types und das Auswerten von Range-Headern (`parseByteRange`).
+
+### Changed
+- `/api/css` und `/api/js` hängen an `href` die Änderungszeit der Datei als `?v=…` an (`lib/assetVersion.js`). `/extern_css` und `/extern_js` werden mit `max-age=3600, immutable` ausgeliefert – ohne Versions-Parameter sahen Besucher Änderungen an Stylesheets/Scripts bis zu eine Stunde lang nicht. CSS- und JS-Manager zeigen die Adresse weiterhin ohne Parameter an.
+
+---
+
+## [0.42.1] - 2026-10-11
+
+### Fixed
+- Kontaktformular-Markierung (`_cfTemplate`, siehe 0.42.0) wurde doppelt eingefügt, wenn das Formular-Template per `{{{inner}}}` in ein umschließendes Wrapper-Block-Template eingebettet ist — der Browser schickte dadurch beim Absenden ein Array statt eines einzelnen Namens, `/api/contact` fand darüber keine Vorlage mehr und fiel auf die Standard-Benachrichtigung zurück, obwohl eine individuelle E-Mail-Vorlage hinterlegt war. Die Markierung wird jetzt nur noch einmal gesetzt (am innersten Formular-Template, das die `<form>`-Tags tatsächlich ausgibt).
+
+---
+
+## [0.42.0] - 2026-10-11
+
+### Added
+- Kontaktformulare: neuer Tab „E-Mail-Vorlage" pro Formular (neben dem bisherigen „Formular"-Tab) für Betreff und Text der Benachrichtigungs-Mail, mit Mustache-Platzhaltern wie `{{feldname}}`. Eine rechte Sidebar listet dabei automatisch alle Felder auf, die das Formular per `name="..."`-Attribut tatsächlich abfragt.
+- Der Formular-Versand (`/api/contact`) nutzt diese individuelle Vorlage jetzt tatsächlich: das Rendering markiert jedes ausgegebene Kontaktformular unsichtbar mit seinem Template-Namen (`lib/templateEngine.js`), damit die passende Vorlage beim Absenden gefunden wird. Ohne eigene Vorlage bleibt es bei der bisherigen generischen Benachrichtigungs-Mail. Bereits live stehende Seiten mit Kontaktformularen benötigen dafür einmalig „Live rendern", damit das neue Markierungsfeld in die ausgelieferte Seite übernommen wird.
+
+---
+
+## [0.41.1] - 2026-10-11
+
+### Fixed
+- **Kanal-Listen auf der Startseite blieben leer:** Die Startseite (`pages/index.js`) befüllte Kanal-Platzhalter nicht – nur Unterseiten taten das. `hydrateBlogChannels` läuft jetzt in `hydratePage` und damit auf allen Seiten (z. B. „Kommende Veranstaltungen“ in der Seitenleiste).
+
+---
+
+## [0.41.0] - 2026-10-11
+
+### Added
+- Template-Manager: Templates, die aktuell von keiner Seite und keinem Blog-Kanal referenziert werden, sind jetzt mit einem orangenen Punkt markiert (Block-/Seiten-Templates in der Hauptliste sowie Seiten-Datenfelder-Vorlagen). Die Prüfung durchsucht `page.template` und alle Block-Templates im `blocks`-Baum jeder Seite (unabhängig vom Veröffentlichungsstatus) sowie die vier Template-Felder jedes Blog-Kanals.
+- **Tests:** `__tests__/api/page-concurrency.test.js` spielt die Abläufe mit zwei Personen gegen eine In-Memory-DB durch (veralteter Baum, Konflikt auf derselben Seite, parallele Arbeit an verschiedenen Seiten, verschachtelte Seiten, Revisionen).
+- **Kanäle sortieren und filtern (Frontend und Backend):** Beiträge lassen sich nach Veröffentlichungs-/Erstellungsdatum, Titel oder **beliebigen Template-Feldern** (z. B. „Beginn“) sortieren; Datumswerte (JJJJ-MM-TT) werden als Datum, Zahlen numerisch, Texte deutsch-alphabetisch verglichen, leere Werte stehen am Ende (`lib/blogPostQuery.js`). Zeitraum-Filter „nur kommende“ / „nur vergangene“ über eine Feldliste (z. B. `Ende,Beginn` – das erste nicht-leere Feld zählt). Jeder Kanal hat eine **Standard-Sortierung** (Kanal-Einstellungen), Kanal-Blöcke können sie überschreiben (Sortierung, Richtung, Zeitraum, Archiv, Text bei leerer Liste).
+- **Archiv für Beiträge:** Neues Feld `BlogPost.archived` (Migration `20261011180000_blog_sort_and_archive`, außerdem `BlogChannel.sortField`/`sortDir`). Archivierte Beiträge bleiben per URL erreichbar, erscheinen aber nicht mehr in Kanal-Listen – außer mit Archiv „nur archivierte“ (Archiv-Seite) oder „alle“. In der Beitragsliste per Knopf **Archivieren / Zurückholen**, Filter „Ohne Archiv / Nur Archiv / Alle“ und Badge.
+- **Öffentliche Kanal-API:** `GET /api/blog/public/<kanal>` versteht `sort`, `dir`, `upcoming`, `past`, `archive`.
+- **Kanal-Listen direkt in Templates:** Jedes Element mit `class="blog-channel-block"` und `data-channel` wird gefüllt – nicht nur Kanal-Blöcke, sondern auch fest in Template-HTML geschriebene Platzhalter (z. B. eine Seitenleiste „Kommende Veranstaltungen“): `data-template`, `data-limit`, `data-sort`, `data-dir`, `data-upcoming`, `data-past`, `data-archive`, `data-empty`.
+- **Datumsteile in Kanal-Templates:** Zu jedem Datumsfeld zusätzlich `<Feld>_tag`, `<Feld>_monat` („Okt“), `<Feld>_jahr`, `<Feld>_datum` („28.10.2026“) – in Listen und auf der Beitragsseite.
+- **Große Ansicht für Textfelder:** Knopf „⤢ Groß“ in der Werkzeugleiste jedes Rich-Text-Feldes (Markdown und WYSIWYG) öffnet das Feld bildschirmfüllend (Esc oder „Schließen“).
+- **Anleitung „Links richtig setzen“** (`help/links.md`): interne Seiten, externe Adressen, Dateien, E-Mail, Telefon, Sprungmarken, Button-Link-Felder, häufige Fehler. Erreichbar über den neuen „?“-Knopf in jedem Textfeld und in der Dokumentation; die Link-Abfrage nennt Beispiele.
+- **Tests:** `__tests__/blogPostQuery.test.js`, `__tests__/pageAccess.test.js`; `__tests__/smartRichTextEditor.test.js` deckt große Ansicht und Link-Hilfe ab.
+- **Skript `scripts/blocks-to-channel.js`:** wandelt Download-Blöcke einer Seite (auch einzelne Link-Zeilen in Text-Blöcken) in Kanal-Beiträge um (Titel ohne Datum, Datum aus „(TT.MM.JJJJ)“ ins Datumsfeld, Datei ins Dateifeld), legt den Kanal bei Bedarf mit Standard-Sortierung nach Datum an und ersetzt die Blöcke durch einen Kanal-Block. Probelauf ohne `--apply`, idempotent, Revision vorab; Tests in `__tests__/blocksToChannel.test.js`.
+
+### Changed
+- **Aufbewahrung von Versionen:** Standard 30 statt 7 Tage (Einstellung `revisionRetentionDays` bleibt maßgeblich).
+
+### Fixed
+- **Verlorene Änderungen bei gleichzeitiger Arbeit im Backend:** Bisher schickte jedes Speichern im Seiten-Editor (auch das Autosave) den kompletten Seitenbaum aus dem eigenen Browser, und der Server übernahm ihn ungeprüft. Ein Admin-Tab mit älterem Stand überschrieb so die Änderungen anderer an *anderen* Seiten und löschte zwischenzeitlich angelegte Seiten. Jetzt speichert der Editor nur noch die eine Seite (`PUT /api/pages`, auch für verschachtelte Seiten). Jede Seite trägt einen Stempel `data._savedAt`/`data._savedBy`; hat jemand anderes genau diese Seite inzwischen gespeichert, lehnt der Server ab (409 `PAGE_CONFLICT`) und der Editor zeigt einen Hinweis mit „Neuere Version laden“ oder „Meine Version trotzdem speichern“. Gleichzeitiges Arbeiten an verschiedenen Seiten bleibt konfliktfrei.
+- **Strukturelle Baum-Speicherungen** (Drag & Drop, Anlegen/Löschen, Block verschieben) senden die Version des geladenen Baums (`X-Pages-Version`); ist der Baum veraltet, wird nichts geschrieben (409 `PAGES_TREE_CONFLICT`) und die Seitenliste neu geladen. Schreibzugriffe auf Seiten laufen serialisiert (`lib/pageConcurrency.js`).
+- **Änderungsverlauf vollständig:** Revisionen aus Baum-Speicherungen enthielten weder `data` (Template-Felder) noch `template` und ließen sich für Template-Seiten nicht sinnvoll wiederherstellen. Jetzt immer vollständig, mit Autor (`createdBy`), und nur noch für tatsächlich geänderte Seiten statt bei jedem Speichern für alle.
+- **Verlauf für Unterseiten:** Verschachtelte Seiten zeigen ihre Stände (aus den Revisionen der Elternseite) und lassen sich einzeln wiederherstellen, ohne Geschwister-Seiten zurückzusetzen.
+- **`/api/pages/revisions` ohne Anmeldung erreichbar:** Auflisten, Anlegen, Wiederherstellen und Löschen von Versionen verlangen jetzt Login und passende Rolle (`PAGES_VIEW`/`PAGES_EDIT`/`PAGES_DELETE`).
+- **Passwort-Schutz verschachtelter Seiten** ging bei jeder Baum-Speicherung verloren (der Hash wird nie an den Client ausgeliefert); er wird jetzt aus der DB übernommen.
+- **Wiederherstellen im Editor:** Nach dem Wiederherstellen einer Version lädt der Editor den neuen Stand, statt ihn beim nächsten Autosave mit dem alten Editor-Inhalt zu überschreiben.
+- **Ansicht springt beim Klick in ein Textfeld:** Jeder Klick in einen Block wählte ihn neu aus, scrollte ihn an den oberen Rand und setzte den Fokus auf sein *erstes* Feld (meist „Sprungmarke“) – das angeklickte Feld verlor den Fokus. Auswahl per Klick scrollt und fokussiert jetzt nicht mehr; Navigation über Übersicht/Vorschau weiterhin schon.
+- **Kind-Container ließen sich kaum auswählen:** Der Klick stieg zu allen Eltern-Blöcken auf, ausgewählt war am Ende immer der äußerste Block. Jetzt wählt sich nur der innerste angeklickte Block aus.
+- **Kanal-Listen mit Limit zeigten die falschen Beiträge:** sortiert wurde fest nach `publishedAt` absteigend – bei Terminen also die am weitesten entfernten zuerst. Siehe Sortierung/Filter oben.
+- **Beitragsliste im Backend** lud höchstens 100 Beiträge.
+- **Mitglieder-Seiten waren nur im Browser geschützt:** `GET /api/pages` lieferte Inhalte von Seiten mit Zugangsgruppen (und von passwortgeschützten Seiten „ohne Konto“) an jeden aus – die Sperre griff nur in `pages/[...slug].js`. Jetzt filtert der Server (`lib/pageAccess.js`): Nicht berechtigte Besucher bekommen geschützte Seiten nur noch mit Titel, Slug und Navigationsdaten (`blocks` leer, `accessRestricted: true`), damit Menü und Umleitung zum Mitglieder-Login weiter funktionieren. Mitglieder sehen Seiten ihrer Gruppen bzw. `*`, Passwort-Seiten erst nach dem Entsperren (signiertes Cookie), Backend-Nutzer alles. Antworten sind `Cache-Control: private, no-store`.
+- **Entwürfe öffentlich abrufbar:** `?includeDrafts=true` lieferte unveröffentlichte Seiten an jeden; jetzt nur noch an angemeldete Backend-Nutzer (die Startseite bleibt wie bisher immer erreichbar). Verschachtelte Entwürfe werden für alle anderen ebenfalls entfernt; `X-Pages-Version` gibt es nur für den vollständigen Admin-Baum.
+- **`POST /api/pages/publish` ohne Anmeldung:** Jeder konnte Seiten veröffentlichen, zurückziehen oder planen. Jetzt nur mit Rolle `PAGES_WORKFLOW_PUBLISH`; Audit-Einträge mit Benutzer.
+- **`GET /api/debug/render` ohne Anmeldung:** renderte jede Seite inkl. Entwürfen und Mitglieder-Seiten; jetzt nur für Backend-Nutzer.
+- **Titel von Kanal-Beiträgen wurden als Markdown gerendert:** „4. Newsletter“ wurde zu einer nummerierten Liste. Titel werden jetzt in Listen und auf der Beitragsseite als Text ausgegeben.
+
+---
+
+## [0.40.0] - 2026-10-09
+
+### Added
+- **Plugin-System P2 (Section-Provider):** Ein generischer Mechanismus für `{{#<prefix>:feld}}…{{/<prefix>:feld}}` und `{{#<prefix>:feld=wert}}` (Spezifikation §4). `lib/sections/` enthält die Registry: Kern-Provider `folder` und `picgine` plus `sections` aus den Client-Hooks der Plugins (reservierte bzw. belegte Präfixe werden geloggt und ausgelassen). Provider-Form: `loadClient(keys, ctx)`, `toContext(data, ctx)` mit `ctx = { fieldName, value, basePath, query }`, `EditorField`, `editorFieldLabel`, `editorType`, `requiresDynamic({ html, query })`; serverseitig `loadServer(keys, ctx)` (`lib/sections/server.js`, Kern plus Server-Hooks aktiver Plugins). Laden parallel je Provider, bei Fehler oder Timeout (5 s) bleibt die Section leer.
+- **Tests:** `__tests__/sections.test.js` prüft den Mechanismus mit einem Fake-Provider (Parsen, fester Wert, Sammeln, Timeout/Fehler, `toContext`, Escaping fremder Daten, reservierte Präfixe, `requiresDynamic`, Editor-Feld je Provider).
+
+### Changed
+- **Parser/Engine generisch:** `extractSectionBlocks()`/`extractEditorSections()` und `collectSectionKeys(blocks, templates)` → `{ <prefix>: [werte] }` ersetzen die Ordner-/Picgine-Sonderwege (`extractFolderBlocks`/`extractPicgineBlocks` bleiben als Wrapper; `collectFolderBlockPaths`, `collectPicgineSlugs` und `toPicgineContext` aus `lib/templateEngine.js` entfallen bzw. liegen jetzt in `lib/sections/picgine.js`). Daten fremder Provider sind immer HTML-escaped und von der Markdown- und `{{{ }}}`-Umschreibung ausgenommen; Ordner-Daten (lokale Uploads) werden wie bisher verarbeitet.
+- **`renderPage`-Optionen:** `sectionData = { <prefix>: { <wert>: daten } }`, `basePath` und `query` ersetzen `folderContents`, `picgineContents` und `picgineBasePath`. Render-Pipeline, Live-Snapshot (Section-Daten jetzt einmal für alle Routen geladen, `__meta.json` listet `dynamicRoutes`) und statischer Export angepasst; das gerenderte HTML ist unverändert (Render-Snapshot identisch).
+- **Snapshot-Entscheidung:** `requiresDynamic` aller Provider statt fester Picgine-Prüfung (`?picgine=`, `data-picgine-unlock`).
+- **Seiteneditor/Template-Auswahl:** `PageEditor` und `TemplatePickerModal` zeigen für jede Section das `EditorField` bzw. den `editorType` ihres Providers (Ordner-Picker, Picgine-Galerie-Auswahl) – für Nutzer unverändert.
+
+---
+
+## [0.39.0] - 2026-10-09
+
+### Added
+- **Plugin-System P1 (Plugin-Kern):** Plugins liegen als Ordner unter `plugins/<id>/` (`plugin.json`, `server.js`, `client.js`, `help.md`) und werden über `plugins/index.server.js` / `plugins/index.client.js` registriert (anfangs leer). `lib/plugins/manifest.js` liest und prüft die Manifeste (id, `temgineApi: 1`, Settings-Typen `text|url|number|bool|secret` mit Präfix `<id>_`, CSP-Regeln, Section-Präfixe eindeutig und nicht reserviert); ungültige Plugins werden geloggt und ausgelassen. `lib/plugins/registry.js` liefert `getPlugins()`, `getActivePlugins()` und `getPlugin(id)`; aktiv ist ein Plugin erst mit `plugin_<id>_enabled = "true"`.
+- **Plugin-API:** `pages/api/plugins/[plugin]/[...path].js` verteilt `/api/plugins/<id>/<pfad>` an die `routes` des Plugins (`'GET pfad/:param'`) – 404 bei unbekanntem/deaktiviertem Plugin oder Route, 405 bei falscher Methode, `auth` (`'public'`, `PERMISSIONS`-Name oder Rollen-Array) vor dem Handler, `rateLimit` pro Plugin, Route und IP, JSON-Body bis 1 MB (413) oder roher Buffer bei `rawBody: true`. Handler bekommen `ctx` mit `settings` (inkl. Secrets, nur serverseitig), `user`, `clientIp`, `params`, `query`, `cookies` (Namen auf `temgine_<id>_…` erzwungen), `log` und `rebuildSnapshot()`. `POST /api/plugins/<id>/__test` (nur Admin) ruft den `test`-Hook. `GET /api/plugins` liefert die öffentlichen Settings aktiver Plugins (ohne Secrets), `?all=1` die Plugin-Liste für den Admin.
+- **Einstellungen → Plugins:** Liste aller eingebauten Plugins mit Aktivieren-Schalter; pro aktivem Plugin ein Unter-Tab mit dessen `SettingsPanel` oder einem automatisch erzeugten Formular aus `plugin.json` (Secrets nur schreibbar, „gesetzt“-Hinweis, „Verbindung testen“).
+- **Plugin-Hooks im Frontend:** `_app.js` ruft `clientInit.run(publicSettings)` aktiver Plugins einmal pro Seitenaufruf auf (mit Consent-Kategorie erst nach Zustimmung); `hydratePage` ruft `hydrate(container, { rerender })` aktiver Plugins auf und feuert danach `temgine:rendered` (`picgine:rendered` bleibt erhalten). Ohne registrierte Client-Plugins gibt es keinen zusätzlichen Request.
+- **Hilfe:** `help.md` aktiver Plugins erscheint in der Dokumentation nach den Kern-Anleitungen (Name = Plugin-ID).
+- **Tests:** Test-Plugin `__tests__/fixtures/plugins/echo` nutzt jeden Hook; Vertragstest `__tests__/plugins.contract.test.js` prüft alle Plugins (Manifest, `temgineApi`, Präfixe, Import-Scan von `client.js`, Routen-Auth, keine Secrets in `publicSettings`).
+
+### Changed
+- **CSP:** `lib/matomoCsp.js` heißt jetzt `lib/pluginCsp.js` und ergänzt zusätzlich die CSP-Regeln aktiver Plugins (fester Origin oder Origin aus einem Setting, nur `http(s)://host[:port]`, 30 s Cache). Matomo- und Picgine-Regeln bleiben bis zur Umstellung als Kern-Regeln.
+- **`/api/settings`:** Secrets aus Plugin-Manifesten werden bei GET maskiert (`<key>_set`); PUT erlaubt zusätzlich Manifest-Keys und `plugin_<id>_enabled` bekannter Plugins, unbekannte Keys bleiben 400.
+
+---
+
+## [0.38.0] - 2026-10-09
+
+### Changed
+- **Gemeinsame Render-Pipeline (Plugin-System P0):** `pages/index.js` und `pages/[...slug].js` nutzen `lib/renderPipeline.js` (`loadStaticSnapshot`, `loadPageData`, `renderPageHtml`, `hydratePage`, `useRerender`) statt doppelter Lade-, Snapshot-, Picgine- und Hydration-Logik. Verhalten für Besucher unverändert.
+- **`renderPage` mit Options-Objekt:** `renderPage(page, templates, { isChild, navigations, footer, globalVars, globalPages, folderContents, picgineContents, picgineBasePath })` statt positionaler Parameter; alle Aufrufer angepasst. Ein Jest-Render-Snapshot (`__tests__/renderPageSnapshot.test.js`) sichert das HTML ab.
+- **Snapshot-Neubau zentral:** `lib/liveRebuild.js` (`rebuildLiveSnapshot()`) – entprellt, nie parallel, nur im statischen Modus; der manuelle Neubau (`POST /api/admin/render-live`) läuft sofort und liefert 409, solange ein Neubau läuft – jetzt auch, wenn der Picgine-Webhook ihn ausgelöst hat.
+
+### Security
+- **Allow-List für `PUT /api/settings`:** Nur noch bekannte Kern-Keys (`lib/settingsKeys.js`) und die Wartungsseiten-Keys werden gespeichert; unbekannte Keys werden mit 400 (`UNKNOWN_SETTING_KEY`) abgelehnt und mit Namen geloggt. Ein Test prüft, dass jeder vom Admin-UI geschriebene Key erlaubt ist.
+
+---
+
+## [0.37.0] - 2026-10-09
+
+### Added
+- **Picgine Phase 5 – Downloads:** In `{{#picgine:…}}`-Sections stehen `allowDownload`, `zip` (ZIP aller Originale) und `images[].download` sowie `parentSlug` zur Verfügung.
+- **Picgine Unterordner-Navigation:** `?picgine=<slug>` zeigt in jeder Picgine-Section, deren gewählte Galerie den Unterordner enthält (geprüft über `GET /api/picgine/galleries/<slug>?within=<wurzel>`), den Unterordner an. Neu im Kontext: `children[].url`, `parentUrl` und `breadcrumb[]` (`slug`, `title`, `url`) – beschränkt auf den im Block gewählten Teilbaum. Seiten mit `?picgine=` werden immer dynamisch gerendert.
+- **Picgine Passwort-Reset:** `form[data-picgine-reset]` sendet an den neuen Proxy `POST /api/picgine/reset-request` (Rate-Limit, Besucher-IP als `X-Forwarded-For`) und zeigt in `[data-picgine-message]` den neutralen Hinweis.
+- **Picgine Webhook:** `POST /api/picgine/webhook` prüft `X-Picgine-Signature` (HMAC-SHA256, Schlüssel = SHA-256 des API-Schlüssels, constant-time) und baut im statischen Modus den Live-Snapshot neu – entprellt, nie parallel. Die Webhook-URL steht in Einstellungen → Picgine. Doku in `help/picgine-galerien.md`.
+
+---
 
 ## [0.36.0] - 2026-10-08
 

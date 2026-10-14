@@ -1,9 +1,14 @@
 import { prisma } from '../../../lib/prisma'
 import { renderPage } from '../../../lib/templateEngine'
 import { getTemplateByName } from '../../../lib/templateStore'
+import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 
 export default async function handler(req, res) {
   try {
+    // Rendert jede Seite (auch Entwürfe und Mitglieder-Seiten) — nur für Backend-Nutzer.
+    const auth = await requireAuth(req, res, PERMISSIONS.PAGES_VIEW)
+    if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
+
     const slug = req.query && req.query.slug
     if (!slug) return res.status(400).json({ error: 'slug required' })
 
@@ -56,8 +61,7 @@ export default async function handler(req, res) {
     } catch (e) {}
 
     // Render page (will produce debug panels if blocks missing)
-    const pageTemplateCode = page.template ? (templateCodes[page.template] || null) : null
-    const rendered = renderPage(page, templateCodes, pageTemplateCode, allPages, {}, templateCodes)
+    const rendered = renderPage(page, templateCodes, { navigations: allPages, footer: {}, globalVars: templateCodes })
 
     return res.status(200).json({
       slug: page.slug,

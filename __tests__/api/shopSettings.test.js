@@ -13,6 +13,7 @@ jest.mock('../../lib/shop/pages', () => ({ ensureShopPages: jest.fn().mockResolv
 jest.mock('../../lib/maintenanceStore', () => ({ parseSettingKey: () => null, getAllMaintenanceAsSettings: () => ({}), saveMaintenanceField: jest.fn() }));
 
 const { requireAuth } = require('../../lib/auth');
+const { CORE_SETTING_KEYS } = require('../../lib/settingsKeys');
 const { logAudit } = require('../../lib/audit');
 const shop = require('../../pages/api/shop/settings').default;
 const settings = require('../../pages/api/settings').default;
@@ -140,16 +141,17 @@ describe('/api/settings with shop_ keys', () => {
     expect(mockPrisma.setting.upsert).not.toHaveBeenCalled();
 
     res = makeRes();
-    await settings({ method: 'PUT', body: { key: 'site_title', value: 'x' } }, res);
+    await settings({ method: 'PUT', body: { key: CORE_SETTING_KEYS[0], value: 'x' } }, res);
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockPrisma.setting.upsert).toHaveBeenCalledTimes(1);
   });
 
-  test('an admin may write shop_ keys and a secret write answers with set:true only', async () => {
+  test('shop_ keys are not writable through the generic settings route at all (allow-list); they have their own admin routes', async () => {
     const res = makeRes();
     await settings({ method: 'PUT', body: { key: 'shop_stripe_secret_key', value: 'sk_test_SECRET' } }, res);
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ key: 'shop_stripe_secret_key', set: true });
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(JSON.stringify(res.json.mock.calls)).toContain('UNKNOWN_SETTING_KEY');
+    expect(mockPrisma.setting.upsert).not.toHaveBeenCalled();
   });
 });
 

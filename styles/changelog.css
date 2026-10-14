@@ -1,0 +1,92 @@
+/* ─── "Was ist neu"-Fenster (components/ChangelogPopup.js) ──────────────── */
+
+.changelog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 10500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.changelog-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 12px 40px var(--shadow-medium);
+  width: 540px;
+  max-width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.changelog-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.changelog-modal-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+}
+
+.changelog-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.changelog-close-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.changelog-modal-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.changelog-entry-title {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.changelog-entry-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.changelog-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}

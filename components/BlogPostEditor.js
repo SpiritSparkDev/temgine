@@ -1,9 +1,15 @@
-import React, { useState, useMemo } from 'react';
-import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal, Plus, ChevronUp, ChevronDown } from '../lib/muiIcons';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal } from '../lib/muiIcons';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
+import { formatFieldLabel, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import SeoPanel from './SeoPanel';
+import { renderTemplate } from '../lib/templateEngine';
+import { withDateParts } from '../lib/blogPostQuery';
+import { loadGlobalVars } from '../lib/renderPipeline';
+import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
@@ -20,6 +26,16 @@ const slugify = (v) =>
     .replace(/-+/g, '-');
 
 export default function BlogPostEditor({ post, channelSlug, channelName, onSave, onBack, readingTemplateCode }) {
+  // Content-Editor nimmt den ganzen Bildschirm ein, Vorschau+Felder im
+  // permanenten Split — siehe lib/useContentEditorFullscreen.js /
+  // lib/useSplitPaneRatio.js (gleiches Muster wie PageEditor.js).
+  useContentEditorFullscreen();
+  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('blog-split-ratio', 75);
+  const [rightPanelTab, setRightPanelTab] = useState('felder');
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [enabledCssFiles, setEnabledCssFiles] = useState([]);
+  const [globalVars, setGlobalVars] = useState({});
+
   const richTextEditorMode = useRichTextEditorMode();
   const [title, setTitle]           = useState(post?.title ?? '');
   const [slug, setSlug]             = useState(post?.slug ?? '');
@@ -74,9 +90,54 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
     setTemplateData(prev => ({ ...prev, [sectionName]: rows }));
   }
 
-  const formatLabel = (name) => String(name || '')
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+  // Aktivierte CSS-Dateien und globale Variablen für die Live-Vorschau — wie
+  // in PageEditor.js (siehe dort buildSplitPreviewHtml) einmalig geladen.
+  useEffect(() => {
+    fetch('/api/css')
+      .then(r => r.json())
+      .then(data => setEnabledCssFiles((data.files || []).filter(f => f.enabled !== false)))
+      .catch(() => {});
+    loadGlobalVars().then(setGlobalVars);
+  }, []);
+
+  // Rendert das Lese-Template mit denselben Daten wie die öffentliche Beitragsseite
+  // (siehe pages/[...slug].js) — inkl. {{global.x}}, damit die Vorschau Render-Parität
+  // zur echten Seite hat. Eigene Felder (templateData) überschreiben Basis-Felder
+  // gleichen Namens, genau wie /api/blog/public/.../... es für den Live-Betrieb tut.
+  function buildPreviewHtml() {
+    try {
+      if (!readingTemplateCode) {
+        return '<!DOCTYPE html><html><body><p style="padding:16px;color:#888;font-family:sans-serif">Kein Lese-Template für diesen Kanal hinterlegt.</p></body></html>';
+      }
+      const mergedPost = {
+        ...(post || {}),
+        title, slug, excerpt, body, coverImage, author, status,
+        publishAt: publishAt || null,
+        ...templateData,
+      };
+      const rendered = renderTemplate(readingTemplateCode, {
+        ...withDateParts(mergedPost),
+        channel: { slug: channelSlug, name: channelName },
+        channelUrl: `/${channelSlug}`,
+        postUrl: `/${channelSlug}/${slug || 'beitrag'}`,
+        global: globalVars,
+      }, { title }); // Titel als Text, nicht als Markdown (siehe hydrateBlogChannels)
+
+      const cssLinkTags = enabledCssFiles
+        .map(f => `    <link rel="stylesheet" href="${String(f.href || '').replace(/"/g, '&quot;')}">`)
+        .join('\n');
+      return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title || 'Vorschau'}</title>\n${cssLinkTags}</head><body>${rendered}</body></html>`;
+    } catch (e) {
+      console.error('buildPreviewHtml (Blog) failed:', e);
+      return `<!DOCTYPE html><html><body><pre style="color:red;padding:16px">${String(e)}</pre></body></html>`;
+    }
+  }
+
+  useEffect(() => {
+    const t = setTimeout(() => setPreviewHtml(buildPreviewHtml()), 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, slug, excerpt, body, coverImage, author, status, publishAt, templateData, readingTemplateCode, enabledCssFiles, globalVars, channelSlug, channelName]);
 
   function validate() {
     const errs = {};
@@ -146,8 +207,37 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
       {/* Editor body */}
       <div className="blog-editor-body">
         <form id="blog-post-form" onSubmit={handleSubmit}>
-          <div className="blog-editor-layout">
+          <div
+            ref={workspaceRef}
+            className="page-editor-workspace workspace-split"
+            style={{ '--pe-split-left': `${splitRatio}%` }}
+          >
+            <div className="page-editor-right-tabs">
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'felder' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('felder')}
+              >
+                Felder
+              </button>
+              <button
+                type="button"
+                className={`page-editor-right-tab-btn${rightPanelTab === 'beitrag' ? ' active' : ''}`}
+                onClick={() => setRightPanelTab('beitrag')}
+              >
+                Beitrag
+              </button>
+            </div>
+            <div
+              className="page-split-divider"
+              onMouseDown={startSplitDrag}
+              onTouchStart={startSplitDrag}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Breite von Vorschau und Feldern verstellen"
+            />
 
+            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'felder' ? 'none' : undefined }}>
             {/* ── Main column ── */}
             <div className="blog-editor-main">
 
@@ -218,6 +308,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   <div className="blog-editor-card__body" style={{ padding: '12px 14px' }}>
                     <SmartRichTextEditor
                       mode={richTextEditorMode}
+                      label="Inhalt"
                       value={body}
                       onChange={setBody}
                       toolbar={['bold', 'italic', 'strike', 'h1', 'h2', 'h3', 'ol', 'ul', 'blockquote', 'code', 'link', 'image', 'clear']}
@@ -238,27 +329,15 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                       <div key={group.key} className="blog-editor-template-group">
                         {group.label && <div className="blog-editor-template-group__label">{group.label}</div>}
                         {group.fields.map(field => (
-                          <div key={field} className="blog-editor-field">
-                            <label className="blog-editor-label">
-                              <code style={{ fontSize: 11, fontFamily: 'Fira Code, monospace', opacity: .75 }}>{`{{${field}}}`}</code>
-                            </label>
-                            {customFieldTypeByName.get(String(field).toLowerCase()) === 'textarea' ? (
-                              <textarea
-                                className="blog-editor-textarea"
-                                rows={4}
-                                value={templateData[field] ?? ''}
-                                onChange={e => setCustomField(field, e.target.value)}
-                                placeholder={field}
-                              />
-                            ) : (
-                              <input
-                                className="blog-editor-input"
-                                value={templateData[field] ?? ''}
-                                onChange={e => setCustomField(field, e.target.value)}
-                                placeholder={field}
-                              />
-                            )}
-                          </div>
+                          <SimpleFieldInput
+                            key={field}
+                            varName={field}
+                            inputType={customFieldTypeByName.get(String(field).toLowerCase()) || 'text'}
+                            label={formatFieldLabel(field)}
+                            value={templateData[field] ?? ''}
+                            onChange={(val) => setCustomField(field, val)}
+                            richTextEditorMode={richTextEditorMode}
+                          />
                         ))}
                       </div>
                     ))}
@@ -269,74 +348,28 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
               {/* Repeater fields: {{#each:name}}...{{/each:name}} from the reading template */}
               {fieldSchema.repeaterBlocks.map(({ sectionName, subFields }) => {
                 const rows = Array.isArray(templateData[sectionName]) ? templateData[sectionName] : [];
-                const addRow = () => {
-                  const emptyRow = Object.fromEntries(subFields.map(sf => [sf.name, '']));
-                  setRepeaterRows(sectionName, [...rows, emptyRow]);
-                };
                 return (
                   <div key={sectionName} className="blog-editor-card">
                     <div className="blog-editor-card__head">
-                      <SlidersHorizontal size={12} /> {formatLabel(sectionName)}
-                      <button type="button" onClick={addRow} className="btn-modern-small repeater-add-btn" style={{ marginLeft: 'auto' }}>
-                        <Plus size={12} /> Eintrag hinzufügen
-                      </button>
+                      <SlidersHorizontal size={12} /> {formatFieldLabel(sectionName)}
                     </div>
                     <div className="blog-editor-card__body">
-                      {rows.length === 0 && (
-                        <div className="blog-editor-field" style={{ opacity: .6, fontSize: 13 }}>Noch keine Einträge.</div>
-                      )}
-                      {rows.map((row, rowIdx) => (
-                        <div key={rowIdx} className="repeater-row">
-                          <div className="repeater-row-header">
-                            <span className="repeater-row-num">Eintrag {rowIdx + 1}</span>
-                            <div className="repeater-row-actions">
-                              <button type="button" disabled={rowIdx === 0} className="repeater-row-move" title="Nach oben verschieben"
-                                onClick={() => {
-                                  const next = [...rows];
-                                  [next[rowIdx - 1], next[rowIdx]] = [next[rowIdx], next[rowIdx - 1]];
-                                  setRepeaterRows(sectionName, next);
-                                }}><ChevronUp size={13} /></button>
-                              <button type="button" disabled={rowIdx === rows.length - 1} className="repeater-row-move" title="Nach unten verschieben"
-                                onClick={() => {
-                                  const next = [...rows];
-                                  [next[rowIdx], next[rowIdx + 1]] = [next[rowIdx + 1], next[rowIdx]];
-                                  setRepeaterRows(sectionName, next);
-                                }}><ChevronDown size={13} /></button>
-                              <button type="button" className="repeater-row-delete" title={`Eintrag ${rowIdx + 1} entfernen`}
-                                onClick={() => setRepeaterRows(sectionName, rows.filter((_, i) => i !== rowIdx))}>✕</button>
-                            </div>
-                          </div>
-                          <div className="repeater-row-fields">
-                            {subFields.map(sf => (
-                              <div key={sf.name} className="blog-editor-field repeater-subfield">
-                                <label className="blog-editor-label">{formatLabel(sf.name)}</label>
-                                {sf.type === 'textarea' ? (
-                                  <textarea
-                                    className="blog-editor-textarea"
-                                    rows={3}
-                                    value={row[sf.name] ?? ''}
-                                    onChange={e => setRepeaterRows(sectionName, rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r))}
-                                    placeholder={sf.name}
-                                  />
-                                ) : (
-                                  <input
-                                    className="blog-editor-input"
-                                    value={row[sf.name] ?? ''}
-                                    onChange={e => setRepeaterRows(sectionName, rows.map((r, i) => i === rowIdx ? { ...r, [sf.name]: e.target.value } : r))}
-                                    placeholder={sf.type === 'image' ? '/uploads/bild.jpg' : sf.name}
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                      <RepeaterSectionEditor
+                        sectionName={sectionName}
+                        subFields={subFields}
+                        rows={rows}
+                        onRowsChange={(next) => setRepeaterRows(sectionName, next)}
+                        richTextEditorMode={richTextEditorMode}
+                        showSectionLabel={false}
+                      />
                     </div>
                   </div>
                 );
               })}
             </div>
+            </div>
 
+            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'beitrag' ? 'none' : undefined }}>
             {/* ── Sidebar ── */}
             <div className="blog-editor-sidebar">
 
@@ -432,7 +465,25 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                 slug={channelSlug ? `${channelSlug}/${slug}` : slug}
               />
             </div>
+            </div>
 
+            <div className="page-split-preview">
+              <div className="page-split-preview-head">
+                <span className="page-split-preview-label">Live-Vorschau</span>
+                <button
+                  type="button"
+                  className="btn-modern-small hollow"
+                  onClick={() => setPreviewHtml(buildPreviewHtml())}
+                  title="Vorschau aktualisieren"
+                >↻</button>
+              </div>
+              <iframe
+                srcDoc={previewHtml}
+                sandbox="allow-scripts allow-same-origin"
+                className="page-split-preview-iframe"
+                title="Beitrags-Vorschau"
+              />
+            </div>
           </div>
         </form>
       </div>
