@@ -207,7 +207,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           if (!Array.isArray(blocks)) return
           for (const block of blocks) {
             const tname = block.template || block.type
-            if (tname) templatesToLoad.add(tname)
+            if (tname && !String(tname).startsWith('shop-')) templatesToLoad.add(tname)
             if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
           }
         }

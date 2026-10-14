@@ -434,7 +434,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         if (!Array.isArray(blocks)) return
         for (const block of blocks) {
           const tname = block.template || block.type
-          if (tname && tname !== 'shop-products' && tname !== 'shop-product') templatesToLoad.add(tname)
+          if (tname && !String(tname).startsWith('shop-')) templatesToLoad.add(tname)
           if (block.children && block.children.length > 0) collectBlockTemplates(block.children)
         }
       }

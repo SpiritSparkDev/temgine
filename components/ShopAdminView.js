@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import ShopProductsView from './ShopProductsView';
+import ShopShippingView from './ShopShippingView';
 
 const TABS = [
   { id: 'products', label: 'Produkte' },
   { id: 'orders', label: 'Bestellungen', soon: true },
-  { id: 'shipping', label: 'Versand & Steuer', soon: true },
+  { id: 'shipping', label: 'Versand & Steuer' },
 ];
 
 /** Container des Shop-Add-ons im Admin. Bestellungen sowie Versand & Steuer folgen in späteren Phasen. */
@@ -28,6 +29,7 @@ export default function ShopAdminView({ showToast }) {
         ))}
       </div>
       {tab === 'products' && <ShopProductsView showToast={showToast} />}
+      {tab === 'shipping' && <ShopShippingView showToast={showToast} />}
     </div>
   );
 }
