@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, Trash2, Edit2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, BookOpen, Sidebar, Copy } from '../lib/muiIcons';
+import { Plus, Trash2, Check, X, Compass, Anchor, Globe, Layers, Layout, ChevronRight, ChevronDown, BookOpen, Sidebar, Copy, Search } from '../lib/muiIcons';
 import { navPlaceholderSlug, buildWidgetPlaceholderKeys, widgetPlaceholderSlug, renderTemplate } from '../lib/templateEngine';
 import { loadGlobalVars } from '../lib/renderPipeline';
-import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
-import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
+import EditorShell, { EditorToolbar, PreviewToggleButton, EditorPreviewPane, usePanelToggle } from './EditorShell';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -410,10 +409,13 @@ const PRESETS = {
   ],
 };
 
+// Gruppen der Sidebar. MOBILE ist über die API nicht anlegbar (CREATABLE_ROLES in
+// pages/api/global-pages.js) und wird nur gezeigt, wenn Altdaten existieren.
 const ROLE_TABS = [
   { id: 'MAIN', label: 'Hauptnavigation', Icon: Globe },
-  { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
   { id: 'FOOTER', label: 'Footer', Icon: Layers },
+  { id: 'PAGE', label: 'Seitennavigation', Icon: Anchor },
+  { id: 'MOBILE', label: 'Mobile-Navigation', Icon: Layout, legacyOnly: true },
   { id: 'WIDGET', label: 'Widget', Icon: Sidebar },
 ];
 
@@ -443,11 +445,10 @@ function buildPreviewPagesTree(nodes, parentPath = '') {
  * die vormals getrennten Komponenten NavigationView.js und FooterView.js.
  */
 export default function GlobalPagesView({ showToast }) {
-  // Diese Ansicht IST der Content-Editor für globale Seiten (Navigation,
-  // Footer, Widget) — nimmt wie Page-/BlogPostEditor den ganzen Bildschirm
-  // ein, siehe lib/useContentEditorFullscreen.js.
-  useContentEditorFullscreen();
-  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('nav-split-ratio', 75);
+  // Fokus-Layout (components/EditorShell.js): Sidebar mit allen Rollen, Editor, Vorschau/Doku rechts.
+  const [previewOpen, togglePreview] = usePanelToggle('gp-preview-panel');
+  const [sidebarSearch, setSidebarSearch] = useState('');
+  const [collapsedRoles, setCollapsedRoles] = useState(() => new Set());
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
   const [globalVars, setGlobalVars] = useState({});
@@ -463,7 +464,7 @@ export default function GlobalPagesView({ showToast }) {
   const [showPresets, setShowPresets] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showDocs, setShowDocs] = useState(true);
+  const [showDocs, setShowDocs] = useState(false);
 
   const loadList = useCallback(() => {
     setIsLoading(true);
@@ -559,8 +560,8 @@ export default function GlobalPagesView({ showToast }) {
   // Funktion wie beim Rendern (lib/templateEngine.js renderPage), damit das
   // kopierte Snippet immer zu dem passt, was tatsächlich aufgelöst wird.
   const widgetSlugById = useMemo(
-    () => (isWidget ? buildWidgetPlaceholderKeys(filteredList.map(w => ({ id: w.id, name: w.name }))) : {}),
-    [isWidget, filteredList]
+    () => buildWidgetPlaceholderKeys(list.filter(w => w.role === 'WIDGET').map(w => ({ id: w.id, name: w.name }))),
+    [list]
   );
 
   function copyWidgetPlaceholder(slug) {
@@ -571,11 +572,11 @@ export default function GlobalPagesView({ showToast }) {
     );
   }
 
-  function handleNew() {
-    const entry = { isNew: true, role };
-    setEditing(entry);
+  function handleNew(newRole) {
+    setRole(newRole);
+    setEditing({ isNew: true, role: newRole });
     setEditName('');
-    if (role === 'FOOTER') {
+    if (newRole === 'FOOTER') {
       setEditCode(FOOTER_STARTER_CODE);
       setShowPresets(false);
     } else {
@@ -585,6 +586,7 @@ export default function GlobalPagesView({ showToast }) {
   }
 
   function handleEdit(item) {
+    setRole(item.role);
     setIsLoading(true);
     fetch(`/api/global-pages?id=${encodeURIComponent(item.id)}`)
       .then(r => r.json())
@@ -714,304 +716,17 @@ export default function GlobalPagesView({ showToast }) {
 
   const currentPresets = PRESETS[role] || [];
 
-  return (
-    <div className="nav-view">
-      {/* ── Role Tabs ─────────────────────────────────────────────────────── */}
-      <div className="nav-type-tabs">
-        {ROLE_TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={`nav-type-tab ${role === id ? 'active' : ''}`}
-            onClick={() => { setRole(id); handleCancel(); }}
-          >
-            <Icon size={16} />
-            <span>{label}</span>
-          </button>
-        ))}
-        <button
-          className={`nav-type-tab nav-docs-toggle ${showDocs ? 'active' : ''}`}
-          onClick={() => setShowDocs(v => !v)}
-          title={showDocs ? 'Dokumentation ausblenden' : 'Dokumentation einblenden'}
-        >
-          <BookOpen size={16} />
-          <span>Doku</span>
-        </button>
-      </div>
+  const q = sidebarSearch.trim().toLowerCase();
+  const visibleRoles = ROLE_TABS.filter(t => !t.legacyOnly || list.some(e => e.role === t.id));
+  const toggleRoleGroup = (id) => setCollapsedRoles(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const editingItem = editing && !editing.isNew ? list.find(i => i.id === editing.id) : null;
+  const widgetSlug = editingItem && isWidget ? (widgetSlugById[editingItem.id] || widgetPlaceholderSlug(editingItem.name)) : '';
 
-      <div className="nav-body">
-        {/* ── Left: list ──────────────────────────────────────────────────── */}
-        <div className="nav-list-panel">
-          <div className="nav-list-header">
-            <h3 className="nav-list-title">{roleLabel}</h3>
-            <button className="btn-icon-label" onClick={handleNew} title={`Neue${entityAccusativeSuffix} ${entityNoun} erstellen`}>
-              <Plus size={15} /> Neu
-            </button>
-          </div>
-
-          {isLoading && !editing ? (
-            <div className="nav-empty-hint">Lädt…</div>
-          ) : filteredList.length === 0 ? (
-            <div className="nav-empty-hint">
-              {isFooter ? 'Noch kein Footer angelegt.' : isWidget ? 'Noch keine Widgets angelegt.' : 'Noch keine Navigationen dieses Typs.'}<br />
-              <button className="nav-empty-cta" onClick={handleNew}>
-                {isFooter ? 'Ersten Footer erstellen' : isWidget ? 'Erstes Widget erstellen' : 'Erste Navigation erstellen'}
-              </button>
-            </div>
-          ) : (
-            <ul className="nav-template-list">
-              {filteredList.map(item => (
-                <li
-                  key={item.id}
-                  className={`nav-template-card ${editing?.id === item.id ? 'selected' : ''} ${isExclusiveActiveRole && item.isActive ? 'is-active' : ''}`}
-                >
-                  <div className="nav-card-info">
-                    <span className="nav-card-name">{item.name}</span>
-                    {isWidget && (
-                      <button
-                        type="button"
-                        className="gv-key-chip"
-                        onClick={(e) => { e.stopPropagation(); copyWidgetPlaceholder(widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)); }}
-                        title="Platzhalter kopieren"
-                      >
-                        <Copy size={10} /> {`{{{widget.${widgetSlugById[item.id] || widgetPlaceholderSlug(item.name)}}}}`}
-                      </button>
-                    )}
-                    {item.isResponsiveCombined && (
-                      <span className="nav-responsive-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">
-                        Responsive Combo
-                      </span>
-                    )}
-                    {isExclusiveActiveRole && item.isActive && (
-                      <span className="nav-active-badge">
-                        <Check size={11} /> Aktiv
-                      </span>
-                    )}
-                  </div>
-                  <div className="nav-card-actions">
-                    {isExclusiveActiveRole && (
-                      <button
-                        className={`nav-card-btn activate ${item.isActive ? 'deactivate' : ''}`}
-                        onClick={() => handleActivate(item)}
-                        title={item.isActive ? 'Deaktivieren' : 'Aktivieren'}
-                      >
-                        {item.isActive ? 'Deaktivieren' : 'Aktivieren'}
-                      </button>
-                    )}
-                    <button className="nav-card-btn edit" onClick={() => handleEdit(item)} title="Bearbeiten">
-                      <Edit2 size={13} />
-                    </button>
-                    <button className="nav-card-btn delete" onClick={() => handleDelete(item)} title="Löschen">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* ── Center: resizable Vorschau + Editor ──────────────────────────── */}
-        <div
-          ref={workspaceRef}
-          className="page-editor-workspace workspace-split nav-main-split"
-          style={{ '--pe-split-left': `${splitRatio}%` }}
-        >
-          <div
-            className="page-split-divider"
-            onMouseDown={startSplitDrag}
-            onTouchStart={startSplitDrag}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Breite von Vorschau und Editor verstellen"
-          />
-          <div className="page-editor-right-tab-content">
-        {editing ? (
-          <div className="nav-editor-panel">
-            <div className="nav-editor-header">
-              <input
-                className="nav-name-input"
-                type="text"
-                placeholder={`Name diese${isFooter ? 's Footers' : isWidget ? 's Widgets' : 'r Navigation'}…`}
-                value={editName}
-                onChange={e => setEditName(e.target.value)}
-              />
-              <div className="nav-editor-actions">
-                {currentPresets.length > 0 && (
-                  <button className="nav-card-btn" onClick={() => setShowPresets(v => !v)} title="Preset-Galerie">
-                    <Layout size={14} /> Presets
-                  </button>
-                )}
-                <button className="nav-card-btn" onClick={handleCancel} title="Abbrechen">
-                  <X size={14} /> Abbrechen
-                </button>
-                <button className="nav-card-btn save" onClick={handleSave} disabled={isSaving} title="Speichern">
-                  <Check size={14} /> {isSaving ? 'Speichert…' : 'Speichern'}
-                </button>
-              </div>
-            </div>
-
-            {/* Preset Gallery */}
-            {showPresets && (
-              <div className="nav-preset-gallery">
-                <div className="nav-preset-gallery-head">
-                  <span>Preset wählen</span>
-                  <button className="preset-close" onClick={() => setShowPresets(false)}><X size={13} /></button>
-                </div>
-                <div className="nav-preset-grid">
-                  {currentPresets.map(preset => (
-                    <button key={preset.label} className="nav-preset-card" onClick={() => applyPreset(preset)}>
-                      <span className="preset-name">{preset.label}</span>
-                      <span className="preset-desc">{preset.description}</span>
-                      <span className="preset-use">
-                        Verwenden <ChevronRight size={12} />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {isFooter || isWidget ? (
-              <div className="nav-editor-code" style={{ height: '60vh' }}>
-                <div className="nav-panel-label">Mustache-Template</div>
-                <div className="nav-monaco-wrap">
-                  <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
-                </div>
-              </div>
-            ) : (
-              <div className="nav-editor-split">
-                <div className="nav-editor-code">
-                  <div className="nav-panel-label">Mustache-Template</div>
-                  <div className="nav-monaco-wrap">
-                    <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
-                  </div>
-                </div>
-                <div className="nav-editor-preview">
-                  <div className="nav-panel-label">navigation.css</div>
-                  <div className="nav-monaco-wrap">
-                    <CodeEditor
-                      value={navigationCssCode}
-                      onChange={value => setNavigationCssCode(value || '')}
-                      language="css"
-                      height="100%"
-                    />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                    <button
-                      className="nav-card-btn save"
-                      onClick={handleSaveNavigationCss}
-                      disabled={isSavingNavigationCss}
-                      title="navigation.css speichern"
-                    >
-                      <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
-                    </button>
-                  </div>
-                  <div className="nav-preview-hint">
-                    Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
-                  </div>
-                  <div className="nav-preview-hint">
-                    Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Placeholder reference */}
-            <div className="nav-placeholder-ref">
-              {isFooter ? (
-                <>
-                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
-                  der Footer wird am Ende des Seiten-Layouts eingefügt, wenn er aktiv ist.
-                </>
-              ) : isWidget ? (
-                <>
-                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
-                  {editName.trim() && (
-                    <>
-                      {' '}<code>{`{{{widget.${widgetPlaceholderSlug(editName)}}}}`}</code> fügt dieses Widget direkt im HTML-Code eines Templates ein ·
-                    </>
-                  )}
-                  {' '}oder über einen eigenen Block im Seiten-Editor platzieren (Template-Auswahl am
-                  Block → „Widget: {editName.trim() || '…'}").
-                </>
-              ) : (
-                <>
-                  <strong>Platzhalter:</strong>
-                  <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
-                  <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
-                  {role === 'PAGE' && editName.trim() && (
-                    <>
-                      {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="nav-editor-panel nav-editor-empty">
-            {isFooter ? (
-              <>
-                <Layers size={40} strokeWidth={1} />
-                <p>Footer aus der Liste wählen oder einen neuen erstellen.</p>
-                <p className="nav-editor-empty-hint">
-                  Nur ein aktiver Footer wird gerendert, am Ende des Seiteninhalts.
-                </p>
-              </>
-            ) : isWidget ? (
-              <>
-                <Sidebar size={40} strokeWidth={1} />
-                <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
-                <p className="nav-editor-empty-hint">
-                  Widgets brauchen keine Aktivierung — sie werden entweder direkt per
-                  <code>{`{{{widget.<name>}}}`}</code> im Code eines Templates eingesetzt, oder als eigener
-                  Block in einer Seite platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"),
-                  beliebig oft und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie
-                  Sidebars, Info- oder CTA-Boxen. Als Daten steht nur <code>{`{{global.<key>}}`}</code> zur
-                  Verfügung (keine seitenbaum-spezifischen Daten wie bei Navigationen) — <code>{`{{#if:…}}`}</code>,
-                  <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> funktionieren wie in
-                  Block-Templates.
-                </p>
-              </>
-            ) : (
-              <>
-                <Compass size={40} strokeWidth={1} />
-                <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
-                <p className="nav-editor-empty-hint">
-                  Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
-                  Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
-                  (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
-                  <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
-                  Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
-                  im Reiter „Navigation" per Klick einfügen.
-                </p>
-              </>
-            )}
-          </div>
-        )}
-          </div>
-
-          <div className="page-split-preview">
-            <div className="page-split-preview-head">
-              <span className="page-split-preview-label">Live-Vorschau</span>
-              <button
-                type="button"
-                className="btn-modern-small hollow"
-                onClick={() => setPreviewHtml(buildPreviewHtml())}
-                title="Vorschau aktualisieren"
-              >↻</button>
-            </div>
-            <iframe
-              srcDoc={previewHtml}
-              sandbox="allow-scripts allow-same-origin"
-              className="page-split-preview-iframe"
-              title="Vorschau"
-            />
-          </div>
-        </div>
-
-        {/* ── Right: Docs panel ────────────────────────────────────────────── */}
-        {showDocs && (
+  const docsPanel = (
           <aside className="nav-docs-panel">
             <div className="nav-docs-header">
               <BookOpen size={15} />
@@ -1243,8 +958,309 @@ export default function GlobalPagesView({ showToast }) {
               )}
             </div>
           </aside>
-        )}
+  );
+
+  const sidebar = (
+    <>
+      <div className="pe-outline-search">
+        <Search size={14} aria-hidden="true" />
+        <input
+          type="search"
+          value={sidebarSearch}
+          onChange={e => setSidebarSearch(e.target.value)}
+          placeholder="Suchen…"
+          aria-label="Globale Seiten durchsuchen"
+        />
       </div>
-    </div>
+      <div className="pe-tree">
+        {isLoading && !editing && list.length === 0 && <div className="pe-tree-empty">Lädt…</div>}
+        <ul className="ef-list">
+          {visibleRoles.map(({ id, label, Icon, legacyOnly }) => {
+            const items = list.filter(e => e.role === id && (!q || String(e.name).toLowerCase().includes(q)));
+            const open = !collapsedRoles.has(id) || Boolean(q);
+            const exclusive = EXCLUSIVE_ACTIVE_ROLES.includes(id);
+            return (
+              <li key={id}>
+                <div className="ef-group-head">
+                  <button
+                    type="button"
+                    className="ef-group-toggle"
+                    aria-expanded={open}
+                    aria-controls={`gp-group-${id}`}
+                    onClick={() => toggleRoleGroup(id)}
+                  >
+                    {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <Icon size={14} />
+                    <span>{label}</span>
+                    <span className="pe-tree-count">{items.length}</span>
+                  </button>
+                  {!legacyOnly && (
+                    <button
+                      type="button"
+                      className="ef-group-add"
+                      onClick={() => handleNew(id)}
+                      aria-label={`Neuen Eintrag in ${label} erstellen`}
+                      title={`Neuen Eintrag in ${label} erstellen`}
+                    >
+                      <Plus size={13} /> Neu
+                    </button>
+                  )}
+                </div>
+                {open && (
+                  <ul className="ef-list" id={`gp-group-${id}`} aria-label={label}>
+                    {items.length === 0 ? (
+                      <li className="ef-empty">{q ? 'Keine Treffer.' : 'Noch keine Einträge.'}</li>
+                    ) : items.map(item => (
+                      <li key={item.id} className={`ef-item${editing?.id === item.id ? ' selected' : ''}`}>
+                        <button
+                          type="button"
+                          className="ef-item-btn"
+                          aria-current={editing?.id === item.id ? 'true' : undefined}
+                          onClick={() => handleEdit(item)}
+                        >
+                          <span className="ef-item-name">{item.name}</span>
+                          {item.isResponsiveCombined && (
+                            <span className="ef-item-badge" title="Kombiniertes Desktop/Mobile-Template erkannt">Combo</span>
+                          )}
+                          {exclusive && item.isActive && (
+                            <span className="ef-item-badge"><Check size={10} /> Aktiv</span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </>
+  );
+
+  const toolbar = (
+    <EditorToolbar
+      onBack={editing ? handleCancel : undefined}
+      backLabel="Zurück zur Auswahl"
+      title={editing ? (editName.trim() || `Neue${entityAccusativeSuffix} ${entityNoun}`) : 'Globale Seiten'}
+      subtitle={editing ? roleLabel : 'Navigation, Footer und Widgets'}
+    >
+      {editingItem && isWidget && (
+        <button
+          type="button"
+          className="gv-key-chip"
+          onClick={() => copyWidgetPlaceholder(widgetSlug)}
+          title="Platzhalter kopieren"
+          aria-label="Widget-Platzhalter kopieren"
+        >
+          <Copy size={10} /> {`{{{widget.${widgetSlug}}}}`}
+        </button>
+      )}
+      {editingItem && isExclusiveActiveRole && (
+        <button
+          type="button"
+          className="pe-tb-btn"
+          onClick={() => handleActivate(editingItem)}
+          title={editingItem.isActive ? 'Deaktivieren' : 'Aktivieren'}
+        >
+          {editingItem.isActive ? 'Deaktivieren' : 'Aktivieren'}
+        </button>
+      )}
+      {editingItem && (
+        <button
+          type="button"
+          className="pe-tb-btn pe-tb-btn-danger"
+          onClick={() => handleDelete(editingItem)}
+          aria-label={`${entityNoun} "${editingItem.name}" löschen`}
+          title="Löschen"
+        >
+          <Trash2 size={14} /> Löschen
+        </button>
+      )}
+      <div className="pe-toolbar-sep" />
+      <PreviewToggleButton
+        open={previewOpen && !showDocs}
+        onClick={() => {
+          if (showDocs) { setShowDocs(false); if (!previewOpen) togglePreview(); } else togglePreview();
+        }}
+      />
+      <PreviewToggleButton open={showDocs} onClick={() => setShowDocs(v => !v)} label="Doku" Icon={BookOpen} />
+      {editing && (
+        <button type="button" className="pe-tb-btn pe-tb-btn-primary" onClick={handleSave} disabled={isSaving} title="Speichern">
+          <Check size={14} /> {isSaving ? 'Speichert…' : 'Speichern'}
+        </button>
+      )}
+    </EditorToolbar>
+  );
+
+  return (
+    <EditorShell
+      fill
+      sidebar={sidebar}
+      sidebarLabel="Globale Seiten"
+      toolbar={toolbar}
+      previewPanel={showDocs ? docsPanel : (previewOpen ? (
+        <EditorPreviewPane html={previewHtml} onRefresh={() => setPreviewHtml(buildPreviewHtml())} onClose={togglePreview} />
+      ) : null)}
+    >
+        {editing ? (
+          <div className="nav-editor-panel">
+            <div className="nav-editor-header">
+              <input
+                className="nav-name-input"
+                type="text"
+                placeholder={`Name diese${isFooter ? 's Footers' : isWidget ? 's Widgets' : 'r Navigation'}…`}
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+              />
+              <div className="nav-editor-actions">
+                {currentPresets.length > 0 && (
+                  <button className="nav-card-btn" onClick={() => setShowPresets(v => !v)} title="Preset-Galerie">
+                    <Layout size={14} /> Presets
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Preset Gallery */}
+            {showPresets && (
+              <div className="nav-preset-gallery">
+                <div className="nav-preset-gallery-head">
+                  <span>Preset wählen</span>
+                  <button className="preset-close" onClick={() => setShowPresets(false)}><X size={13} /></button>
+                </div>
+                <div className="nav-preset-grid">
+                  {currentPresets.map(preset => (
+                    <button key={preset.label} className="nav-preset-card" onClick={() => applyPreset(preset)}>
+                      <span className="preset-name">{preset.label}</span>
+                      <span className="preset-desc">{preset.description}</span>
+                      <span className="preset-use">
+                        Verwenden <ChevronRight size={12} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {isFooter || isWidget ? (
+              <div className="nav-editor-code">
+                <div className="nav-panel-label">Mustache-Template</div>
+                <div className="nav-monaco-wrap">
+                  <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                </div>
+              </div>
+            ) : (
+              <div className="nav-editor-split">
+                <div className="nav-editor-code">
+                  <div className="nav-panel-label">Mustache-Template</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor value={editCode} onChange={setEditCode} language="html" height="100%" />
+                  </div>
+                </div>
+                <div className="nav-editor-preview">
+                  <div className="nav-panel-label">navigation.css</div>
+                  <div className="nav-monaco-wrap">
+                    <CodeEditor
+                      value={navigationCssCode}
+                      onChange={value => setNavigationCssCode(value || '')}
+                      language="css"
+                      height="100%"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                    <button
+                      className="nav-card-btn save"
+                      onClick={handleSaveNavigationCss}
+                      disabled={isSavingNavigationCss}
+                      title="navigation.css speichern"
+                    >
+                      <Check size={14} /> {isSavingNavigationCss ? 'Speichert…' : 'navigation.css speichern'}
+                    </button>
+                  </div>
+                  <div className="nav-preview-hint">
+                    Diese Datei liegt in <code>public/extern_css/navigation.css</code> und erscheint automatisch im CSS-Menü.
+                  </div>
+                  <div className="nav-preview-hint">
+                    Responsive-Workflow: Mobile Navigation wird im MAIN-Template über <code>.desktop_nav</code> und <code>.mobile_nav</code> per CSS abgebildet.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Placeholder reference */}
+            <div className="nav-placeholder-ref">
+              {isFooter ? (
+                <>
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  der Footer wird am Ende des Seiten-Layouts eingefügt, wenn er aktiv ist.
+                </>
+              ) : isWidget ? (
+                <>
+                  <strong>Platzhalter:</strong> <code>{`{{global.<key>}}`}</code> globale Variablen ·
+                  {editName.trim() && (
+                    <>
+                      {' '}<code>{`{{{widget.${widgetPlaceholderSlug(editName)}}}}`}</code> fügt dieses Widget direkt im HTML-Code eines Templates ein ·
+                    </>
+                  )}
+                  {' '}oder über einen eigenen Block im Seiten-Editor platzieren (Template-Auswahl am
+                  Block → „Widget: {editName.trim() || '…'}").
+                </>
+              ) : (
+                <>
+                  <strong>Platzhalter:</strong>
+                  <code>{`{{{nav:main}}}`}</code> Hauptnavigation ·
+                  <code>{`{{{nav:page}}}`}</code> Seitennavigation (Standard)
+                  {role === 'PAGE' && editName.trim() && (
+                    <>
+                      {' · '}<code>{`{{{nav:${navPlaceholderSlug(editName)}}}}`}</code> nur diese Navigation
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="nav-editor-panel nav-editor-empty">
+            {isFooter ? (
+              <>
+                <Layers size={40} strokeWidth={1} />
+                <p>Footer aus der Liste wählen oder einen neuen erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Nur ein aktiver Footer wird gerendert, am Ende des Seiteninhalts.
+                </p>
+              </>
+            ) : isWidget ? (
+              <>
+                <Sidebar size={40} strokeWidth={1} />
+                <p>Widget aus der Liste wählen oder ein neues erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Widgets brauchen keine Aktivierung — sie werden entweder direkt per
+                  <code>{`{{{widget.<name>}}}`}</code> im Code eines Templates eingesetzt, oder als eigener
+                  Block in einer Seite platziert (Template-Auswahl am Block → „Widget: &lt;Name&gt;"),
+                  beliebig oft und unabhängig vom Seitenbaum. Gedacht für wiederverwendbare Inhalte wie
+                  Sidebars, Info- oder CTA-Boxen. Als Daten steht nur <code>{`{{global.<key>}}`}</code> zur
+                  Verfügung (keine seitenbaum-spezifischen Daten wie bei Navigationen) — <code>{`{{#if:…}}`}</code>,
+                  <code>{`{{#each:…}}`}</code> und <code>{`{{feld:typ}}`}</code> funktionieren wie in
+                  Block-Templates.
+                </p>
+              </>
+            ) : (
+              <>
+                <Compass size={40} strokeWidth={1} />
+                <p>Navigation aus der Liste wählen oder eine neue erstellen.</p>
+                <p className="nav-editor-empty-hint">
+                  Die aktive Hauptnavigation wird automatisch via <code>{`{{{nav:main}}}`}</code> eingebunden.
+                  Seitennavigationen brauchen keine Aktivierung — sie werden wie Bausteine direkt in einer Seite
+                  (als Navigations-Block, über die Seiten-Navigationsauswahl oder per eigenem Platzhalter
+                  <code>{`{{{nav:<name>}}}`}</code>) platziert, auch mehrfach mit unterschiedlichen
+                  Seitennavigationen in einem Template. Im Template-Editor lassen sich alle Seitennavigationen
+                  im Reiter „Navigation" per Klick einfügen.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+    </EditorShell>
   );
 }

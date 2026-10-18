@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.53.1] - 2026-10-18
+
+### Changed
+- **Alle Editoren im Fokus-Layout:** Globale Seiten, Wartungsseiten und Blog-Beitrags-Editor nutzen jetzt dieselbe Struktur wie der Seiten-Editor (gemeinsames `EditorShell`): schlanke Toolbar, linke Sidebar, Eingabe einspaltig links, Vorschau als zuschaltbares Seitenpanel.
+- **Globale Seiten:** Hauptnavigation, Footer, Seitennavigation und Widget stehen gruppiert in der linken Sidebar (Suche, „+ Neu“ je Gruppe, Aktiv-Badge).
+- **Hauptnavigation (Admin):** Bleibt in allen Editoren dauerhaft links sichtbar (Vollbild-Modus samt `useContentEditorFullscreen` entfernt) und ist zweistufig einklappbar: nur Symbole oder ganz ausgeblendet (Zustand wird gemerkt; auf kleinen Auflösungen weiter Burger-Menü).
+
+---
+
 ## [0.53.0] - 2026-10-18
 
 ### Added

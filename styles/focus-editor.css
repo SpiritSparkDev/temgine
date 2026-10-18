@@ -117,3 +117,63 @@
 .workspace-focus .block-title-row { flex-wrap: wrap; }
 .workspace-focus .page-split-preview-head { flex-wrap: wrap; gap: 6px; }
 .workspace-focus .pe-device-switch { margin-left: 0; }
+
+/* ── EditorShell (Globale Seiten, Wartungsseiten, Blog-Beitrag; components/EditorShell.js) ── */
+.ef-shell { padding: 0 16px; min-width: 0; }
+.ef-body { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 16px; align-items: start; min-width: 0; }
+.ef-body.has-sidebar { grid-template-columns: 240px minmax(0, 1fr); }
+.ef-body.has-side { grid-template-columns: minmax(0, 1fr) minmax(340px, 35vw); }
+.ef-body.has-sidebar.has-side { grid-template-columns: 240px minmax(0, 1fr) minmax(340px, 35vw); }
+.ef-main { min-width: 0; max-width: 1400px; width: 100%; padding-bottom: 16px; }
+.ef-side { position: sticky; top: 64px; min-width: 0; max-height: calc(100vh - 90px); display: flex; flex-direction: column; overflow: auto; }
+.ef-side > .page-split-preview { position: static; max-height: none; height: calc(100vh - 100px); }
+.ef-preview-actions { display: inline-flex; align-items: center; gap: 4px; }
+/* Fill: Hauptbereich mit fester Höhe für Monaco/Code-Editor */
+.ef-fill .ef-main { height: calc(100vh - 150px); min-height: 480px; display: flex; flex-direction: column; }
+.ef-fill .ef-side { height: calc(100vh - 150px); }
+.ef-fill .pe-outline { max-height: calc(100vh - 150px); }
+.ef-shell .pe-outline { top: 64px; }
+
+/* Sidebar-Gruppen/-Einträge (Globale Seiten, Wartungsseiten, Blog-Abschnitte) */
+.ef-list { list-style: none; margin: 0; padding: 0; }
+.ef-group-head { display: flex; align-items: center; gap: 4px; padding: 4px 6px 4px 8px; }
+.ef-group-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: 0; background: transparent; padding: 4px; border-radius: 4px; cursor: pointer; font: inherit; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); text-align: left; }
+.ef-group-toggle:hover { background: var(--bg-tertiary); }
+.ef-group-toggle:focus-visible, .ef-item-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+.ef-group-add { display: inline-flex; align-items: center; gap: 2px; border: 0; background: transparent; padding: 3px 6px; border-radius: 4px; color: var(--text-secondary); cursor: pointer; font-size: 0.75rem; font-weight: 600; }
+.ef-group-add:hover { background: var(--bg-tertiary); color: var(--accent-primary); }
+.ef-item { position: relative; display: flex; align-items: center; }
+.ef-item-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 8px 0 30px; border: 0; background: transparent; font: inherit; font-size: 0.85rem; color: var(--text-primary); cursor: pointer; text-align: left; }
+.ef-item:hover .ef-item-btn { background: var(--bg-tertiary); }
+.ef-item.selected .ef-item-btn { background: color-mix(in srgb, var(--accent-primary) 16%, transparent); font-weight: 600; }
+.ef-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ef-item-badge { flex: none; display: inline-flex; align-items: center; gap: 2px; padding: 0 6px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; background: color-mix(in srgb, var(--status-success, #1d7a3a) 18%, transparent); color: var(--status-success, #1d7a3a); }
+.ef-empty { padding: 4px 12px 8px 30px; font-size: 0.78rem; color: var(--text-secondary); }
+
+/* Hauptbereich Editor: Felder einspaltig */
+.ef-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.ef-field > label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.ef-field > textarea { width: 100%; box-sizing: border-box; min-height: 160px; resize: vertical; padding: 0.55rem 0.75rem; border: 1px solid var(--border-color); border-radius: 6px; font: 0.9rem monospace; background: var(--bg-secondary); color: var(--text-primary); }
+.ef-blog-section { scroll-margin-top: 72px; }
+.ef-blog-form > .blog-editor-main, .ef-blog-form > .blog-editor-sidebar { margin-bottom: 16px; }
+
+@media (max-width: 1100px) {
+  .ef-body.has-sidebar, .ef-body.has-side, .ef-body.has-sidebar.has-side { grid-template-columns: minmax(0, 1fr); }
+  .ef-shell .pe-outline, .ef-side { position: static; max-height: none; }
+  .ef-fill .ef-main { height: auto; }
+}
+
+/* Doku-Panel der Globalen Seiten im rechten Seitenpanel */
+.admin-scope .ef-side .nav-docs-panel { width: auto; flex: 1; min-height: 0; height: calc(100vh - 150px); border: 1px solid var(--border-color); border-radius: 10px; }
+.admin-scope .ef-fill .nav-editor-panel { border: 1px solid var(--border-color); border-radius: 10px; }
+.ef-list.flat .ef-item-btn { padding-left: 12px; }
+.ef-group-toggle { font-size: 0.7rem; letter-spacing: 0; }
+.admin-scope .ef-fill .nav-editor-panel { overflow: auto; }
+.admin-scope .ef-fill .nav-editor-split { flex-direction: column; flex: none; overflow: visible; }
+.admin-scope .ef-fill .nav-editor-split > .nav-editor-code,
+.admin-scope .ef-fill .nav-editor-split > .nav-editor-preview { flex: none; height: 340px; border-right: 0; }
+.admin-scope .ef-fill .nav-editor-code { flex: 1 0 320px; }
+
+/* Blog-Ansicht: Scroll-Container hat 24px Innenabstand — Sticky-Offsets ausgleichen */
+.blog-view__body .ef-toolbar { top: -24px; }
+.blog-view__body .ef-shell .pe-outline, .blog-view__body .ef-side { top: 40px; }

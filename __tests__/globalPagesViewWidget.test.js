@@ -29,18 +29,19 @@ beforeEach(() => {
 });
 
 describe('GlobalPagesView — Widget role', () => {
-  it('renders a Widget tab alongside Footer/Navigation tabs', async () => {
+  it('lists the Widget group in the sidebar alongside Footer/Navigation groups', async () => {
     render(<GlobalPagesView showToast={() => {}} />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
     expect(screen.getByText('Widget')).toBeTruthy();
+    expect(screen.getByText('Footer')).toBeTruthy();
+    expect(screen.getByText('Hauptnavigation')).toBeTruthy();
   });
 
-  it('switching to Widget and creating a new one shows the Widget presets, not nav/footer presets', async () => {
+  it('creating a new Widget from its sidebar group shows the Widget presets, not nav/footer presets', async () => {
     render(<GlobalPagesView showToast={() => {}} />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByText('Widget'));
-    fireEvent.click(screen.getByText('Neu'));
+    fireEvent.click(screen.getByLabelText('Neuen Eintrag in Widget erstellen'));
 
     expect(screen.getByText('Info-Box')).toBeTruthy();
     expect(screen.getByText('CTA-Box')).toBeTruthy();
@@ -51,8 +52,7 @@ describe('GlobalPagesView — Widget role', () => {
     render(<GlobalPagesView showToast={() => {}} />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByText('Widget'));
-    fireEvent.click(screen.getByText('Neu'));
+    fireEvent.click(screen.getByLabelText('Neuen Eintrag in Widget erstellen'));
 
     expect(screen.queryByText('navigation.css')).toBeNull();
   });
@@ -61,8 +61,7 @@ describe('GlobalPagesView — Widget role', () => {
     render(<GlobalPagesView showToast={() => {}} />);
     await waitFor(() => expect(global.fetch).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByText('Widget'));
-    fireEvent.click(screen.getByText('Neu'));
+    fireEvent.click(screen.getByLabelText('Neuen Eintrag in Widget erstellen'));
     fireEvent.click(screen.getByText('Info-Box'));
 
     const nameInput = screen.getByPlaceholderText('Name dieses Widgets…');

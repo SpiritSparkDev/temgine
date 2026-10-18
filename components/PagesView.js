@@ -5,7 +5,7 @@ import GlobalPagesView from './GlobalPagesView';
 import Toast from './Toast';
 import { renderTemplate } from '../lib/templateEngine';
 import { loadGlobalVars } from '../lib/renderPipeline';
-import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
+import EditorShell, { EditorToolbar, PreviewToggleButton, EditorPreviewPane, usePanelToggle } from './EditorShell';
 
 const pagesTabButtonStyle = (active) => ({
   padding: '0.5rem 1.25rem',
@@ -87,10 +87,7 @@ export default function PagesView({
     }
   };
   const [pagesTab, setPagesTab] = useState('pages'); // 'pages', 'global' or 'maintenance'
-  // Wartungsseiten sind ein Content-Editor wie Page-/BlogPostEditor — nimmt
-  // den ganzen Bildschirm nur ein, solange dieser Tab aktiv ist (siehe
-  // lib/useContentEditorFullscreen.js).
-  useContentEditorFullscreen(pagesTab === 'maintenance');
+  const [maintPreviewOpen, toggleMaintPreview] = usePanelToggle('maint-preview-panel');
   const [maintenanceGlobalVars, setMaintenanceGlobalVars] = useState({});
   useEffect(() => {
     if (pagesTab === 'maintenance') loadGlobalVars().then(setMaintenanceGlobalVars);
@@ -474,215 +471,72 @@ export default function PagesView({
           onRefreshPages={onRefreshPages}
         />
       ) : pagesTab === 'maintenance' ? (
-        <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-          <h2 style={{ marginBottom: '1.5rem' }}>Wartungsseiten</h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-              Für jede Wartungsseite können HTML, CSS und JS separat gepflegt werden.
-            </p>
-
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              {maintenanceTabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setMaintenanceTab(tab.id)}
-                  style={{
-                    padding: '0.45rem 0.95rem',
-                    borderRadius: '6px',
-                    border: maintenanceTab === tab.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                    background: maintenanceTab === tab.id ? 'var(--accent-primary-soft, rgba(59,130,246,0.12))' : 'var(--bg-secondary)',
-                    color: maintenanceTab === tab.id ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    fontSize: '0.85rem',
-                  }}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: '1rem',
-              alignItems: 'start',
-            }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  HTML
-                </label>
-                <textarea
-                  value={maintenanceContent[maintenanceTab]?.html || ''}
-                  onChange={e => updateMaintenanceField(maintenanceTab, 'html', e.target.value)}
-                  placeholder="<h1>Wartungsinhalt</h1>"
-                  rows={14}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    boxSizing: 'border-box',
-                    minHeight: '280px',
-                    resize: 'vertical',
-                    fontFamily: 'monospace',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  CSS
-                </label>
-                <textarea
-                  value={maintenanceContent[maintenanceTab]?.css || ''}
-                  onChange={e => updateMaintenanceField(maintenanceTab, 'css', e.target.value)}
-                  placeholder="body { font-family: sans-serif; }"
-                  rows={14}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    boxSizing: 'border-box',
-                    minHeight: '280px',
-                    resize: 'vertical',
-                    fontFamily: 'monospace',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  JS
-                </label>
-                <textarea
-                  value={maintenanceContent[maintenanceTab]?.js || ''}
-                  onChange={e => updateMaintenanceField(maintenanceTab, 'js', e.target.value)}
-                  placeholder="console.log('Wartungsbildschirm');"
-                  rows={14}
-                  style={{
-                    width: '100%',
-                    padding: '0.55rem 0.75rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
-                    fontSize: '0.9rem',
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    boxSizing: 'border-box',
-                    minHeight: '280px',
-                    resize: 'vertical',
-                    fontFamily: 'monospace',
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{
-              border: '1px solid var(--border-color)',
-              borderRadius: '8px',
-              padding: '0.9rem',
-              background: 'var(--bg-secondary)',
-            }}>
-              <div style={{ marginBottom: '0.6rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Vorschau ({maintenanceTabs.find(t => t.id === maintenanceTab)?.label || 'Wartung'})
-              </div>
-              <iframe
-                title={`maintenance-preview-${maintenanceTab}`}
-                srcDoc={buildMaintenancePreviewDoc(maintenanceContent[maintenanceTab])}
-                sandbox="allow-scripts"
-                style={{
-                  width: '100%',
-                  minHeight: '380px',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '6px',
-                  background: '#fff',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>Vorschau aller Wartungsseiten</div>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                gap: '0.75rem',
-              }}>
+        <EditorShell
+          sidebarLabel="Wartungsseiten"
+          sidebar={(
+            <div className="pe-tree">
+              <ul className="ef-list flat" aria-label="Wartungsseiten">
                 {maintenanceTabs.map(tab => (
-                  <div
-                    key={`preview-${tab.id}`}
-                    style={{
-                      border: maintenanceTab === tab.id ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
-                      borderRadius: '8px',
-                      padding: '0.5rem',
-                      background: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '0.4rem',
-                    }}>
-                      <strong style={{ color: 'var(--text-primary)', fontSize: '0.84rem' }}>{tab.label}</strong>
-                      <button
-                        onClick={() => setMaintenanceTab(tab.id)}
-                        style={{
-                          border: '1px solid var(--border-color)',
-                          background: '#fff',
-                          borderRadius: '6px',
-                          padding: '0.2rem 0.45rem',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        Bearbeiten
-                      </button>
-                    </div>
-                    <iframe
-                      title={`maintenance-preview-card-${tab.id}`}
-                      srcDoc={buildMaintenancePreviewDoc(maintenanceContent[tab.id])}
-                      sandbox="allow-scripts"
-                      style={{
-                        width: '100%',
-                        minHeight: '180px',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        background: '#fff',
-                      }}
-                    />
-                  </div>
+                  <li key={tab.id} className={`ef-item${maintenanceTab === tab.id ? ' selected' : ''}`}>
+                    <button
+                      type="button"
+                      className="ef-item-btn"
+                      aria-current={maintenanceTab === tab.id ? 'true' : undefined}
+                      onClick={() => setMaintenanceTab(tab.id)}
+                    >
+                      <span className="ef-item-name">{tab.label}</span>
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
-
-            <div>
+          )}
+          toolbar={(
+            <EditorToolbar
+              title="Wartungsseiten"
+              subtitle={maintenanceTabs.find(t => t.id === maintenanceTab)?.label}
+            >
+              <PreviewToggleButton open={maintPreviewOpen} onClick={toggleMaintPreview} />
               <button
+                type="button"
+                className="pe-tb-btn pe-tb-btn-primary"
                 onClick={handleSaveMaintenance}
                 disabled={isSavingMaintenance}
-                style={{
-                  padding: '0.6rem 1.5rem',
-                  background: '#10b981',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: isSavingMaintenance ? 'not-allowed' : 'pointer',
-                  opacity: isSavingMaintenance ? 0.6 : 1,
-                }}
+                aria-label="Wartungsseiten speichern"
               >
-                {isSavingMaintenance ? 'Speichern…' : 'Wartungsseiten speichern'}
+                {isSavingMaintenance ? 'Speichern…' : 'Speichern'}
               </button>
+            </EditorToolbar>
+          )}
+          previewPanel={maintPreviewOpen ? (
+            <EditorPreviewPane
+              html={buildMaintenancePreviewDoc(maintenanceContent[maintenanceTab])}
+              title={`maintenance-preview-${maintenanceTab}`}
+              sandbox="allow-scripts"
+              onClose={toggleMaintPreview}
+            />
+          ) : null}
+        >
+          <p style={{ margin: '0 0 1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            Für jede Wartungsseite können HTML, CSS und JS separat gepflegt werden.
+          </p>
+          {[
+            { field: 'html', label: 'HTML', placeholder: '<h1>Wartungsinhalt</h1>' },
+            { field: 'css', label: 'CSS', placeholder: 'body { font-family: sans-serif; }' },
+            { field: 'js', label: 'JS', placeholder: "console.log('Wartungsbildschirm');" },
+          ].map(({ field, label, placeholder }) => (
+            <div key={field} className="ef-field">
+              <label htmlFor={`maint-${field}`}>{label}</label>
+              <textarea
+                id={`maint-${field}`}
+                value={maintenanceContent[maintenanceTab]?.[field] || ''}
+                onChange={e => updateMaintenanceField(maintenanceTab, field, e.target.value)}
+                placeholder={placeholder}
+                rows={8}
+              />
             </div>
-          </div>
-        </div>
+          ))}
+        </EditorShell>
       ) : null}
     </div>
   );

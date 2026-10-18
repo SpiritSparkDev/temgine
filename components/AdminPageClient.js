@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useSession, signOut } from 'next-auth/react';
-import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, FolderOpen, HardDrive, Type, Rss, Mail, Shield, Palette, Functions, Tag, Cookie } from '../lib/muiIcons';
+import { LogOut, Moon, Search, Sun, LayoutDashboard, FileText, Layout, Code, Users, Settings, Menu, ChevronLeft, ChevronRight, FolderOpen, HardDrive, Type, Rss, Mail, Shield, Palette, Functions, Tag, Cookie } from '../lib/muiIcons';
 import pkg from '../package.json';
 import DashboardView from './DashboardView';
 import TemplatesViewModern from './TemplatesViewModern';
@@ -67,6 +67,19 @@ export default function AdminPageClient() {
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [darkMode, setDarkMode] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Desktop-Navigationsstufe: 0 voll, 1 nur Symbole, 2 ausgeblendet
+  const [navState, setNavState] = useState(0);
+  useEffect(() => {
+    try {
+      const v = parseInt(localStorage.getItem('admin-nav-state'), 10);
+      if (v === 0 || v === 1 || v === 2) setNavState(v);
+    } catch {}
+  }, []);
+  function changeNavState(v) {
+    setNavState(v);
+    try { localStorage.setItem('admin-nav-state', String(v)); } catch {}
+  }
+  const navNextLabel = ['Navigation auf Symbole verkleinern', 'Navigation ausblenden', 'Navigation einblenden'][navState];
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadWarnings, setLoadWarnings] = useState([]);
   const router = useRouter();
@@ -581,7 +594,7 @@ export default function AdminPageClient() {
 
   return (
     <ErrorBoundary>
-      <div className={`admin-scope${darkMode ? ' dark-mode' : ''}`}>
+      <div className={`admin-scope nav-s${navState}${darkMode ? ' dark-mode' : ''}`}>
       <Head>
         <title>Temgine CMS Admin</title>
       </Head>
@@ -711,7 +724,8 @@ export default function AdminPageClient() {
         <div className="admin-navbar-left">
           <button
             className="admin-mobile-menu-btn"
-            onClick={() => setMobileNavOpen(true)}
+            onClick={() => (window.matchMedia('(min-width: 1024px)').matches ? changeNavState(0) : setMobileNavOpen(true))}
+            aria-expanded={mobileNavOpen || navState !== 2}
             aria-label="Navigation öffnen"
             title="Navigation öffnen"
           >
@@ -766,30 +780,39 @@ export default function AdminPageClient() {
             >
               Schließen
             </button>
+            <button
+              className="admin-nav-cycle"
+              onClick={() => changeNavState((navState + 1) % 3)}
+              aria-label={navNextLabel}
+              aria-expanded={navState === 0}
+              title={navNextLabel}
+            >
+              {navState === 2 ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            </button>
             <ul>
               <li className="menu-group-label">Inhalt</li>
-              <li><button className={`menu-item ${view==='dashboard'?'active':''}`} onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /> Dashboard</button></li>
-              <li><button className={`menu-item ${view==='pages'?'active':''}`} onClick={() => handleSelectView('pages')}><FileText size={18} /> Pages</button></li>
-              <li><button className={`menu-item ${view==='blog'?'active':''}`} onClick={() => handleSelectView('blog')}><Rss size={18} /> Blog / News</button></li>
-              <li><button className={`menu-item ${view==='contactForms'?'active':''}`} onClick={() => handleSelectView('contactForms')}><Mail size={18} /> Kontaktformulare</button></li>
-              <li><button className={`menu-item ${view==='cookies'?'active':''}`} onClick={() => handleSelectView('cookies')}><Cookie size={18} /> Cookies</button></li>
-              <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} onClick={() => handleSelectView('globalVariables')}><Tag size={18} /> Globale Variablen</button></li>
+              <li><button className={`menu-item ${view==='dashboard'?'active':''}`} title="Dashboard" aria-label="Dashboard" onClick={() => handleSelectView('dashboard')}><LayoutDashboard size={18} /><span className="menu-label">Dashboard</span></button></li>
+              <li><button className={`menu-item ${view==='pages'?'active':''}`} title="Pages" aria-label="Pages" onClick={() => handleSelectView('pages')}><FileText size={18} /><span className="menu-label">Pages</span></button></li>
+              <li><button className={`menu-item ${view==='blog'?'active':''}`} title="Blog / News" aria-label="Blog / News" onClick={() => handleSelectView('blog')}><Rss size={18} /><span className="menu-label">Blog / News</span></button></li>
+              <li><button className={`menu-item ${view==='contactForms'?'active':''}`} title="Kontaktformulare" aria-label="Kontaktformulare" onClick={() => handleSelectView('contactForms')}><Mail size={18} /><span className="menu-label">Kontaktformulare</span></button></li>
+              <li><button className={`menu-item ${view==='cookies'?'active':''}`} title="Cookies" aria-label="Cookies" onClick={() => handleSelectView('cookies')}><Cookie size={18} /><span className="menu-label">Cookies</span></button></li>
+              <li><button className={`menu-item ${view==='globalVariables'?'active':''}`} title="Globale Variablen" aria-label="Globale Variablen" onClick={() => handleSelectView('globalVariables')}><Tag size={18} /><span className="menu-label">Globale Variablen</span></button></li>
 
               <li className="menu-group-label">Design</li>
-              <li><button className={`menu-item ${view==='builder'?'active':''}`} onClick={() => handleSelectView('builder')}><Layout size={18} /> Templates</button></li>
-              <li><button className={`menu-item ${view==='css'?'active':''}`} onClick={() => handleSelectView('css')}><Palette size={18} /> CSS</button></li>
-              <li><button className={`menu-item ${view==='js'?'active':''}`} onClick={() => handleSelectView('js')}><Functions size={18} /> JS</button></li>
-              <li><button className={`menu-item ${view==='fonts'?'active':''}`} onClick={() => handleSelectView('fonts')}><Type size={18} /> Fonts</button></li>
-              <li><button className={`menu-item ${view==='files'?'active':''}`} onClick={() => handleSelectView('files')}><FolderOpen size={18} /> Dateien</button></li>
+              <li><button className={`menu-item ${view==='builder'?'active':''}`} title="Templates" aria-label="Templates" onClick={() => handleSelectView('builder')}><Layout size={18} /><span className="menu-label">Templates</span></button></li>
+              <li><button className={`menu-item ${view==='css'?'active':''}`} title="CSS" aria-label="CSS" onClick={() => handleSelectView('css')}><Palette size={18} /><span className="menu-label">CSS</span></button></li>
+              <li><button className={`menu-item ${view==='js'?'active':''}`} title="JS" aria-label="JS" onClick={() => handleSelectView('js')}><Functions size={18} /><span className="menu-label">JS</span></button></li>
+              <li><button className={`menu-item ${view==='fonts'?'active':''}`} title="Fonts" aria-label="Fonts" onClick={() => handleSelectView('fonts')}><Type size={18} /><span className="menu-label">Fonts</span></button></li>
+              <li><button className={`menu-item ${view==='files'?'active':''}`} title="Dateien" aria-label="Dateien" onClick={() => handleSelectView('files')}><FolderOpen size={18} /><span className="menu-label">Dateien</span></button></li>
 
               <li className="menu-group-label">Mitglieder</li>
-              <li><button className={`menu-item ${view==='members'?'active':''}`} onClick={() => handleSelectView('members')}><Users size={18} /> Mitglieder</button></li>
-              <li><button className={`menu-item ${view==='contact-messages'?'active':''}`} onClick={() => handleSelectView('contact-messages')}><Mail size={18} /> Nachrichten</button></li>
+              <li><button className={`menu-item ${view==='members'?'active':''}`} title="Mitglieder" aria-label="Mitglieder" onClick={() => handleSelectView('members')}><Users size={18} /><span className="menu-label">Mitglieder</span></button></li>
+              <li><button className={`menu-item ${view==='contact-messages'?'active':''}`} title="Nachrichten" aria-label="Nachrichten" onClick={() => handleSelectView('contact-messages')}><Mail size={18} /><span className="menu-label">Nachrichten</span></button></li>
 
               <li className="menu-group-label">System</li>
-              <li><button className={`menu-item ${view==='users'?'active':''}`} onClick={() => handleSelectView('users')}><Users size={18} /> Benutzer</button></li>
-              <li><button className={`menu-item ${view==='settings'?'active':''}`} onClick={() => handleSelectView('settings')}><Settings size={18} /> Einstellungen</button></li>
-              <li><button className={`menu-item ${view==='backup'?'active':''}`} onClick={() => handleSelectView('backup')}><HardDrive size={18} /> Backup</button></li>
+              <li><button className={`menu-item ${view==='users'?'active':''}`} title="Benutzer" aria-label="Benutzer" onClick={() => handleSelectView('users')}><Users size={18} /><span className="menu-label">Benutzer</span></button></li>
+              <li><button className={`menu-item ${view==='settings'?'active':''}`} title="Einstellungen" aria-label="Einstellungen" onClick={() => handleSelectView('settings')}><Settings size={18} /><span className="menu-label">Einstellungen</span></button></li>
+              <li><button className={`menu-item ${view==='backup'?'active':''}`} title="Backup" aria-label="Backup" onClick={() => handleSelectView('backup')}><HardDrive size={18} /><span className="menu-label">Backup</span></button></li>
             </ul>
             <div className="menu-sep" />
           </nav>

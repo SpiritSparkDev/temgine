@@ -9,7 +9,6 @@ import Toast from './Toast';
 import FilePickerModal from './FilePickerModal';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
-import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
 import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
 import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
@@ -123,7 +122,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [lightboxBlockPath, setLightboxBlockPath] = useState('');
   const [blockTransferState, setBlockTransferState] = useState(null); // { path, mode: 'copy'|'move', targetPageId, search }
   // Content-Editoren starten im Split-Modus (Vorschau + Felder nebeneinander,
-  // ganzer Bildschirm) — kein separater "aus"-Zustand mehr, siehe useContentEditorFullscreen.
+  // ganzer Bildschirm) — kein separater "aus"-Zustand mehr.
   const [splitPreview, setSplitPreview] = useState(true);
   // "Nur Editor" (Standard): Live-Vorschau samt Trenner ausblenden, Felder-Panel bekommt die volle Breite
   const [editorOnly, setEditorOnly] = useState(true);
@@ -144,9 +143,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setPreviewPanel(localStorage.getItem('pe-preview-panel') === '1');
     } catch (_e) {}
   }, []);
-  // Fokus-Layout hat schmale Spalten: die Haupt-Navigation bleibt dauerhaft sichtbar;
-  // nur das klassische Split-Layout nutzt weiter den Vollbild-Modus (Burger-Menü).
-  useContentEditorFullscreen(layout !== 'fokus');
   const toggleLayout = () => setLayout(v => {
     const next = v === 'fokus' ? 'klassisch' : 'fokus';
     setRightPanelTab('felder');

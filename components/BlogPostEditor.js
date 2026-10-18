@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ChevronLeft, Save, FileText, ImageIcon, User, Clock, Tag, Rss, SlidersHorizontal } from '../lib/muiIcons';
+import { Save, FileText, ImageIcon, User, Clock, Tag, SlidersHorizontal } from '../lib/muiIcons';
 import SmartRichTextEditor from './SmartRichTextEditor';
 import { useRichTextEditorMode } from '../lib/useRichTextEditorMode';
 import { resolveTemplateFields } from '../lib/templateFieldResolver';
@@ -8,8 +8,7 @@ import SeoPanel from './SeoPanel';
 import { renderTemplate } from '../lib/templateEngine';
 import { withDateParts } from '../lib/blogPostQuery';
 import { loadGlobalVars } from '../lib/renderPipeline';
-import { useContentEditorFullscreen } from '../lib/useContentEditorFullscreen';
-import { useSplitPaneRatio } from '../lib/useSplitPaneRatio';
+import EditorShell, { EditorToolbar, PreviewToggleButton, EditorPreviewPane, usePanelToggle } from './EditorShell';
 
 const STATUS_OPTIONS = [
   { value: 'DRAFT',     label: 'Entwurf',                   color: '#64748b' },
@@ -26,12 +25,8 @@ const slugify = (v) =>
     .replace(/-+/g, '-');
 
 export default function BlogPostEditor({ post, channelSlug, channelName, onSave, onBack, readingTemplateCode }) {
-  // Content-Editor nimmt den ganzen Bildschirm ein, Vorschau+Felder im
-  // permanenten Split — siehe lib/useContentEditorFullscreen.js /
-  // lib/useSplitPaneRatio.js (gleiches Muster wie PageEditor.js).
-  useContentEditorFullscreen();
-  const { ratio: splitRatio, workspaceRef, startDrag: startSplitDrag } = useSplitPaneRatio('blog-split-ratio', 75);
-  const [rightPanelTab, setRightPanelTab] = useState('felder');
+  // Fokus-Layout (components/EditorShell.js): Abschnitts-Sidebar, einspaltige Felder, Vorschau als Seitenpanel.
+  const [previewOpen, togglePreview] = usePanelToggle('blog-preview-panel');
   const [previewHtml, setPreviewHtml] = useState('');
   const [enabledCssFiles, setEnabledCssFiles] = useState([]);
   const [globalVars, setGlobalVars] = useState({});
@@ -172,20 +167,41 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
 
   const currentStatus = STATUS_OPTIONS.find(o => o.value === status);
 
+  const sections = [
+    (showTitleField || showSlugField || showExcerptField) && { id: 'basis', label: 'Grunddaten' },
+    showBodyField && { id: 'inhalt', label: 'Inhalt' },
+    customFields.length > 0 && { id: 'felder', label: 'Template-Felder' },
+    ...fieldSchema.repeaterBlocks.map(({ sectionName }) => ({ id: `rep-${sectionName}`, label: formatFieldLabel(sectionName) })),
+    { id: 'status', label: 'Status & Zeitplan' },
+    showCoverField && { id: 'cover', label: 'Cover-Bild' },
+    showAuthorField && { id: 'autor', label: 'Autor' },
+    { id: 'seo', label: 'SEO' },
+  ].filter(Boolean);
+  const jumpTo = (id) => document.getElementById(`bp-sec-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   return (
-    <div className="blog-post-editor">
-      {/* Top bar */}
-      <div className="blog-topbar">
-        <button className="blog-topbar__back" onClick={onBack} title="Zurück zur Beitragsliste">
-          <ChevronLeft size={16} />
-        </button>
-        <div className="blog-topbar__breadcrumb">
-          <Rss size={14} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-          <span className="blog-topbar__channel">{channelName || channelSlug}</span>
-          <span className="blog-topbar__sep">/</span>
-          <span className="blog-topbar__sub">{post ? title || 'Beitrag bearbeiten' : 'Neuer Beitrag'}</span>
+    <EditorShell
+      sidebarLabel="Beitrags-Abschnitte"
+      sidebar={(
+        <div className="pe-tree">
+          <ul className="ef-list flat" aria-label="Abschnitte des Beitrags">
+            {sections.map(sec => (
+              <li key={sec.id} className="ef-item">
+                <button type="button" className="ef-item-btn" onClick={() => jumpTo(sec.id)}>
+                  <span className="ef-item-name">{sec.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="blog-topbar__actions">
+      )}
+      toolbar={(
+        <EditorToolbar
+          onBack={onBack}
+          backLabel="Zurück zur Beitragsliste"
+          title={post ? title || 'Beitrag bearbeiten' : 'Neuer Beitrag'}
+          subtitle={channelName || channelSlug}
+        >
           {currentStatus && (
             <span
               className="blog-status-badge"
@@ -198,52 +214,28 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
               {currentStatus.label}
             </span>
           )}
-          <button className="btn-modern" form="blog-post-form" type="submit" disabled={saving}>
+          <PreviewToggleButton open={previewOpen} onClick={togglePreview} />
+          <button className="pe-tb-btn pe-tb-btn-primary" form="blog-post-form" type="submit" disabled={saving}>
             <Save size={14} /> {saving ? 'Speichern…' : 'Speichern'}
           </button>
-        </div>
-      </div>
-
-      {/* Editor body */}
-      <div className="blog-editor-body">
-        <form id="blog-post-form" onSubmit={handleSubmit}>
-          <div
-            ref={workspaceRef}
-            className="page-editor-workspace workspace-split"
-            style={{ '--pe-split-left': `${splitRatio}%` }}
-          >
-            <div className="page-editor-right-tabs">
-              <button
-                type="button"
-                className={`page-editor-right-tab-btn${rightPanelTab === 'felder' ? ' active' : ''}`}
-                onClick={() => setRightPanelTab('felder')}
-              >
-                Felder
-              </button>
-              <button
-                type="button"
-                className={`page-editor-right-tab-btn${rightPanelTab === 'beitrag' ? ' active' : ''}`}
-                onClick={() => setRightPanelTab('beitrag')}
-              >
-                Beitrag
-              </button>
-            </div>
-            <div
-              className="page-split-divider"
-              onMouseDown={startSplitDrag}
-              onTouchStart={startSplitDrag}
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Breite von Vorschau und Feldern verstellen"
-            />
-
-            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'felder' ? 'none' : undefined }}>
+        </EditorToolbar>
+      )}
+      previewPanel={previewOpen ? (
+        <EditorPreviewPane
+          html={previewHtml}
+          title="Beitrags-Vorschau"
+          onRefresh={() => setPreviewHtml(buildPreviewHtml())}
+          onClose={togglePreview}
+        />
+      ) : null}
+    >
+      <form id="blog-post-form" className="ef-blog-form" onSubmit={handleSubmit}>
             {/* ── Main column ── */}
             <div className="blog-editor-main">
 
               {/* Title + Slug */}
               {(showTitleField || showSlugField || showExcerptField) && (
-                <div className="blog-editor-card">
+                <div id="bp-sec-basis" className="blog-editor-card ef-blog-section">
                   <div className="blog-editor-card__head">
                     <FileText size={12} /> Grunddaten
                   </div>
@@ -301,7 +293,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
 
               {/* Body */}
               {showBodyField && (
-                <div className="blog-editor-card">
+                <div id="bp-sec-inhalt" className="blog-editor-card ef-blog-section">
                   <div className="blog-editor-card__head">
                     <Tag size={12} /> Inhalt
                   </div>
@@ -319,7 +311,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
 
               {/* Custom template fields (from reading template) */}
               {customFields.length > 0 && (
-                <div className="blog-editor-card">
+                <div id="bp-sec-felder" className="blog-editor-card ef-blog-section">
                   <div className="blog-editor-card__head">
                     <SlidersHorizontal size={12} /> Template-Felder
                     <span className="blog-editor-card__head-hint">aus Master-Template</span>
@@ -349,7 +341,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
               {fieldSchema.repeaterBlocks.map(({ sectionName, subFields }) => {
                 const rows = Array.isArray(templateData[sectionName]) ? templateData[sectionName] : [];
                 return (
-                  <div key={sectionName} className="blog-editor-card">
+                  <div key={sectionName} id={`bp-sec-rep-${sectionName}`} className="blog-editor-card ef-blog-section">
                     <div className="blog-editor-card__head">
                       <SlidersHorizontal size={12} /> {formatFieldLabel(sectionName)}
                     </div>
@@ -367,14 +359,12 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                 );
               })}
             </div>
-            </div>
 
-            <div className="page-editor-right-tab-content" style={{ display: rightPanelTab !== 'beitrag' ? 'none' : undefined }}>
-            {/* ── Sidebar ── */}
+            {/* ── Status, Cover, Autor, SEO ── */}
             <div className="blog-editor-sidebar">
 
               {/* Status & Datum */}
-              <div className="blog-editor-card">
+              <div id="bp-sec-status" className="blog-editor-card ef-blog-section">
                 <div className="blog-editor-card__head">
                   <Clock size={12} /> Status & Zeitplan
                 </div>
@@ -411,7 +401,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
 
               {/* Cover image */}
               {showCoverField && (
-                <div className="blog-editor-card">
+                <div id="bp-sec-cover" className="blog-editor-card ef-blog-section">
                   <div className="blog-editor-card__head">
                     <ImageIcon size={12} /> Cover-Bild
                   </div>
@@ -438,7 +428,7 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
 
               {/* Author */}
               {showAuthorField && (
-                <div className="blog-editor-card">
+                <div id="bp-sec-autor" className="blog-editor-card ef-blog-section">
                   <div className="blog-editor-card__head">
                     <User size={12} /> Autor
                   </div>
@@ -459,34 +449,15 @@ export default function BlogPostEditor({ post, channelSlug, channelName, onSave,
                   Auf-/Zuklapp-Zustand selbst. Overrides liegen unter
                   templateData.seo (genau wie page.data.seo bei Seiten) und
                   werden von lib/seo.js::buildBlogPostMeta beim Rendern gelesen. */}
-              <SeoPanel
-                pageData={templateData}
-                onChange={setTemplateData}
-                slug={channelSlug ? `${channelSlug}/${slug}` : slug}
-              />
-            </div>
-            </div>
-
-            <div className="page-split-preview">
-              <div className="page-split-preview-head">
-                <span className="page-split-preview-label">Live-Vorschau</span>
-                <button
-                  type="button"
-                  className="btn-modern-small hollow"
-                  onClick={() => setPreviewHtml(buildPreviewHtml())}
-                  title="Vorschau aktualisieren"
-                >↻</button>
+              <div id="bp-sec-seo" className="ef-blog-section">
+                <SeoPanel
+                  pageData={templateData}
+                  onChange={setTemplateData}
+                  slug={channelSlug ? `${channelSlug}/${slug}` : slug}
+                />
               </div>
-              <iframe
-                srcDoc={previewHtml}
-                sandbox="allow-scripts allow-same-origin"
-                className="page-split-preview-iframe"
-                title="Beitrags-Vorschau"
-              />
             </div>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </EditorShell>
   );
 }

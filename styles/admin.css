@@ -723,55 +723,66 @@ body { /* Einzige Ausnahme für den Scope*/
   }
 }
 
-/* ── Content-Editor-Vollbild ──────────────────────────────────────────────
-   Ein Content-Editor (Seiten-, Blog-, Navigations-/Footer-/Widget-, Wartungs-
-   seiten-Editor) markiert .admin-scope bei seinem Mount mit dieser Klasse
-   (siehe lib/useContentEditorFullscreen.js) und nimmt sich damit den ganzen
-   Bildschirm: linke Hauptnavigation nur noch über das Burger-Menü erreichbar
-   — exakt dieselben Regeln wie @media (max-width: 1023px) oben, nur ohne
-   Viewport-Bedingung, damit es auf jeder Fensterbreite greift. */
-.admin-scope.content-editor-fullscreen .admin-mobile-menu-btn {
-  display: inline-flex;
-}
-
-.admin-scope.content-editor-fullscreen .admin-sidebar {
-  position: fixed;
-  top: 60px;
-  left: 0;
-  bottom: 0;
-  width: min(82vw, 320px);
-  height: auto;
-  transform: translateX(-100%);
-  transition: transform 0.25s ease;
-  z-index: 1300;
-  overflow-y: auto;
-  padding: 16px 12px;
-  box-shadow: 6px 0 24px var(--shadow-medium);
-}
-
-.admin-scope.content-editor-fullscreen .admin-sidebar.open {
-  transform: translateX(0);
-}
-
-.admin-scope.content-editor-fullscreen .admin-sidebar-close {
-  display: inline-flex;
+/* ── Desktop-Navigationsstufen (nur >= 1024px; darunter gilt der Drawer oben) ──
+   .nav-s0 voll, .nav-s1 nur Symbole, .nav-s2 ausgeblendet (Burger im Header holt zurück). */
+.admin-nav-cycle {
+  display: none;
+  margin: 0 0 8px auto;
+  width: 32px;
+  height: 32px;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
 }
 
-.admin-scope.content-editor-fullscreen .admin-sidebar-overlay {
-  display: block;
-  position: fixed;
-  top: 60px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 1200;
+.admin-nav-cycle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
-.admin-scope.content-editor-fullscreen .admin-editor {
-  margin-left: 0;
+@media (min-width: 1024px) {
+  .admin-scope { --admin-nav-w: 240px; }
+  .admin-scope.nav-s1 { --admin-nav-w: 60px; }
+  .admin-scope.nav-s2 { --admin-nav-w: 0px; }
+
+  .admin-nav-cycle { display: flex; }
+
+  .admin-scope .admin-sidebar {
+    width: var(--admin-nav-w);
+    overflow-x: hidden;
+    transition: width 0.2s ease, padding 0.2s ease;
+  }
+
+  .admin-scope .admin-editor {
+    margin-left: var(--admin-nav-w);
+    transition: margin-left 0.2s ease, background-color 0.3s ease;
+  }
+
+  .admin-scope.nav-s1 .admin-sidebar { padding-left: 8px; padding-right: 8px; }
+  .admin-scope.nav-s1 .menu-label { display: none; }
+  .admin-scope.nav-s1 .admin-nav button.menu-item { justify-content: center; padding: 8px 0; }
+  .admin-scope.nav-s1 .admin-nav .menu-group-label {
+    font-size: 0;
+    padding: 0;
+    margin: 8px 6px;
+    height: 1px;
+    background: var(--border-color);
+  }
+  .admin-scope.nav-s1 .admin-nav-cycle { margin: 0 auto 8px; }
+  .admin-scope.nav-s1 .admin-version-badge { left: 8px; font-size: 9px; }
+
+  .admin-scope.nav-s2 .admin-sidebar {
+    visibility: hidden;
+    padding-left: 0;
+    padding-right: 0;
+    border-right: none;
+  }
+  .admin-scope.nav-s2 .admin-version-badge { display: none; }
+  .admin-scope.nav-s2 .admin-mobile-menu-btn { display: inline-flex; }
 }
 
 @media (max-width: 767px) {
