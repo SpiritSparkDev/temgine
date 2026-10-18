@@ -18,6 +18,8 @@ import { blockSearchText } from '../lib/blockDiff';
 import BlockOutlineTree from './BlockOutlineTree';
 import { moveBlock as moveBlockInTree, duplicateBlock as duplicateBlockInTree } from '../lib/blockTree';
 import { formatFieldLabel as formatLabel, SelectOptions, isCheckedValue, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
+import FieldGroupTree from './FieldGroupTree';
+import { buildFieldTree } from '../lib/templateStructure';
 import dynamic from 'next/dynamic';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
@@ -896,6 +898,20 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     });
     return out;
   }, [templateCodes]);
+
+  // Maps template name → { nodes, hasStructure } (DOM-Gruppierung der Felder, lib/templateStructure.js)
+  const templateFieldTreeByName = useMemo(() => {
+    const out = {};
+    Object.entries(templateCodes || {}).forEach(([name, code]) => {
+      try {
+        const typeMap = templateTypeMapByName[name] || {};
+        out[name] = buildFieldTree(code, { typeOf: (v) => typeMap[v] || guessInputType(v) });
+      } catch (e) {
+        out[name] = { nodes: [], hasStructure: false };
+      }
+    });
+    return out;
+  }, [templateCodes, templateTypeMapByName]);
 
   // Maps template name → editor-picked provider sections [{ prefix, sectionName, provider }]
   // ({{#folder:name}}, {{#picgine:name}}, Plugin-Präfixe; feste "=wert"-Sections haben kein Feld)
@@ -1948,6 +1964,30 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
     // Resolve effective input type: explicit annotation wins over guessed type
     const resolveInputType = (varName) => typeMap[varName] || guessInputType(varName);
+    const fieldTree = block.template ? templateFieldTreeByName[block.template] : null;
+    const renderRepeaterEditor = ({ sectionName, subFields }) => {
+      const rows = Array.isArray(block.props[sectionName]) ? block.props[sectionName] : [];
+      const rowKey = `${path}|${sectionName}`;
+      return (
+        <RepeaterSectionEditor
+          key={sectionName}
+          sectionName={sectionName}
+          subFields={subFields}
+          rows={rows}
+          onRowsChange={(next) => updateNestedBlock(path, { [sectionName]: next })}
+          richTextEditorMode={richTextEditorMode}
+          openFileModal={openFileModal}
+          devTitle={devTitle}
+          getFieldRef={(rowIdx, name) => (el) => setFieldRef(path, `${sectionName}.${rowIdx}.${name}`, el)}
+          collapsedRows={collapsedRepeaterRows[rowKey] || []}
+          onCollapsedRowsChange={(updater) => setCollapsedRepeaterRows(prev => {
+            const cur = prev[rowKey] || [];
+            const next = typeof updater === 'function' ? updater(cur) : updater;
+            return { ...prev, [rowKey]: next };
+          })}
+        />
+      );
+    };
     const selectOptionsMap = block.template ? (templateOptionsMapByName[block.template] || {}) : {};
     // Zusammenfassung für zugeklappte Blöcke: erster gefüllter Text + erstes Bild
     const summaryVars = templateVariables;
@@ -2375,6 +2415,21 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   );
                 };
 
+                if (fieldTree?.hasStructure) {
+                  const reps = templateRepeatersByName[block.template] || [];
+                  return (
+                    <FieldGroupTree
+                      nodes={fieldTree.nodes}
+                      tkeyPrefix={path}
+                      toggles={sectionToggles}
+                      onToggle={(k, v) => setSectionToggles(prev => ({ ...prev, [k]: v }))}
+                      showDev={showDevHints}
+                      renderField={renderFieldItem}
+                      renderRepeater={(name) => { const r = reps.find(x => x.sectionName === name); return r ? renderRepeaterEditor(r) : null; }}
+                    />
+                  );
+                }
+
                 // Template-Reihenfolge, gruppiert in Abschnitte: explizit via {{x:type|Gruppe}},
                 // sonst "Inhalt" bzw. (Select/Farbe/Zahl/Level/Klasse/…) "Darstellung".
                 const groupMap = templateGroupMapByName[block.template] || {};
@@ -2414,29 +2469,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               })()}
 
               {/* Repeater fields: {{#each:name}}...{{/each:name}} */}
-              {(templateRepeatersByName[block.template] || []).map(({ sectionName, subFields }) => {
-                const rows = Array.isArray(block.props[sectionName]) ? block.props[sectionName] : [];
-                const rowKey = `${path}|${sectionName}`;
-                return (
-                  <RepeaterSectionEditor
-                    key={sectionName}
-                    sectionName={sectionName}
-                    subFields={subFields}
-                    rows={rows}
-                    onRowsChange={(next) => updateNestedBlock(path, { [sectionName]: next })}
-                    richTextEditorMode={richTextEditorMode}
-                    openFileModal={openFileModal}
-                    devTitle={devTitle}
-                    getFieldRef={(rowIdx, name) => (el) => setFieldRef(path, `${sectionName}.${rowIdx}.${name}`, el)}
-                    collapsedRows={collapsedRepeaterRows[rowKey] || []}
-                    onCollapsedRowsChange={(updater) => setCollapsedRepeaterRows(prev => {
-                      const cur = prev[rowKey] || [];
-                      const next = typeof updater === 'function' ? updater(cur) : updater;
-                      return { ...prev, [rowKey]: next };
-                    })}
-                  />
-                );
-              })}
+              {!fieldTree?.hasStructure && (templateRepeatersByName[block.template] || []).map(renderRepeaterEditor)}
 
               {/* Section fields: EditorField des Section-Providers (lib/sections/) */}
               {(templateSectionsByName[block.template] || []).map(({ prefix, sectionName, provider }) => {

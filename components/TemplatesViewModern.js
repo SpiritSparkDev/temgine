@@ -7,6 +7,7 @@ import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 import { buildNavPlaceholderKeys } from '../lib/templateEngine';
 import { extractTypedVariables, guessInputType } from '../lib/templateParser';
 import HelpDocModal from './HelpDocModal';
+import TemplateGroupHint from './TemplateGroupHint';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -355,6 +356,7 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('');
+  const codeApiRef = React.useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [rightTab, setRightTab] = useState('referenz');
@@ -747,8 +749,10 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                   value={templateCode}
                   onChange={(value) => setTemplateCode(value || '')}
                   options={{}}
+                  registerInserter={(api) => { codeApiRef.current = api; }}
                 />
               </div>
+              <TemplateGroupHint code={templateCode} onJump={(s) => codeApiRef.current?.goTo?.(s)} />
               <div className="tce-statusbar">
                 <span className="tce-status-item">HTML</span>
                 <span className="tce-status-sep">·</span>

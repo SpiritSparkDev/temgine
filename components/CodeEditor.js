@@ -115,6 +115,15 @@ export default function CodeEditor({ value = '', onChange = () => {}, language =
       },
       async insertAsync(text) { return api.insert(text) },
       focus() { try { view.focus() } catch (e) {} },
+      goTo(needle) {
+        try {
+          const i = view.state.doc.toString().indexOf(needle)
+          if (i < 0) return false
+          view.dispatch({ selection: { anchor: i, head: i + needle.length }, effects: EditorView.scrollIntoView(i, { y: 'center' }) })
+          view.focus()
+          return true
+        } catch (e) { return false }
+      },
     }
 
     try { if (typeof registerInserter === 'function') registerInserter(api) } catch (e) {}

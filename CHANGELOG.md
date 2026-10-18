@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.53.0] - 2026-10-18
+
+### Added
+- **Eingabemasken mit Template-Hierarchie:** Die Block-Eingabemaske bildet die DOM-Gruppierung des Templates (`section`, `article`, `header`, `div` …) als Hierarchie ab: Gruppen als Karten (Ebene 1) bzw. eingerückte Gruppen (Ebene 2+), semantische Tags mit Akzentrahmen, Gruppentitel aus `data-label`/`aria-label`/Überschrift/Klasse/id, benachbarte Text-/URL-Felder in einer Zeile, Repeater an ihrer Template-Position. Templates ohne erkennbare Struktur verhalten sich wie bisher. Logik in `lib/templateStructure.js`, Darstellung in `components/FieldGroupTree.js`.
+- **Template-Editor:** Hinweis-Panel „Erkannte Eingabe-Gruppen“ mit Hierarchie-Vorschau, Tipps (`data-label`, `{{feld:typ|Gruppe}}`) und Klick-Sprung in den Code (`CodeEditor.goTo`).
+
+---
+
 ## [0.52.0] - 2026-10-18
 
 ### Added
