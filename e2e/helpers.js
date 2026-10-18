@@ -16,7 +16,7 @@ async function openPageEditor(page) {
   await page.addInitScript(() => { try { localStorage.setItem('adminView', 'pages'); } catch (e) {} });
   await page.goto('/admin');
   await page.getByRole('button', { name: 'Bearbeiten' }).first().click();
-  await page.getByRole('button', { name: /Nur Editor/ }).waitFor();
+  await page.getByRole('button', { name: /Fokus|Klassisch/ }).waitFor();
 }
 
 module.exports = { login, openPageEditor };

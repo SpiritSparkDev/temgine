@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Copy, GitCompare } from '../lib/muiIcons';
+import { GripVertical, Grid, Eye, EyeOff, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Plus, Sparkles, Trash2, Folder, LayoutGrid, ArrowLeft, History, Layers, Layout, Monitor, Minimize2, Maximize2, X, Copy, GitCompare, Settings } from '../lib/muiIcons';
 import { extractTemplateVariables, extractTypedVariables, guessInputType, generateDefaultProps, extractRepeaterBlocks, extractEditorSections } from '../lib/templateParser';
 import { renderTemplate } from '../lib/templateEngine';
 import { loadPageData, renderPageHtml } from '../lib/renderPipeline';
@@ -15,6 +15,8 @@ import TemplateStructurePreview from './TemplateStructurePreview';
 import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
 import { blockSearchText } from '../lib/blockDiff';
+import BlockOutlineTree from './BlockOutlineTree';
+import { moveBlock as moveBlockInTree, duplicateBlock as duplicateBlockInTree } from '../lib/blockTree';
 import { formatFieldLabel as formatLabel, SelectOptions, isCheckedValue, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import dynamic from 'next/dynamic';
 
@@ -61,7 +63,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const showDevHints = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const devTitle = (text) => (showDevHints ? text : undefined);
   const richTextEditorMode = useRichTextEditorMode();
-  useContentEditorFullscreen();
 
   const [showRevisions, setShowRevisions] = useState(false);
   const [title, setTitle] = useState('');
@@ -122,15 +123,39 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // Content-Editoren starten im Split-Modus (Vorschau + Felder nebeneinander,
   // ganzer Bildschirm) — kein separater "aus"-Zustand mehr, siehe useContentEditorFullscreen.
   const [splitPreview, setSplitPreview] = useState(true);
-  // "Nur Editor": Live-Vorschau samt Trenner ausblenden, Felder-Panel bekommt die volle Breite
-  const [editorOnly, setEditorOnly] = useState(false);
+  // "Nur Editor" (Standard): Live-Vorschau samt Trenner ausblenden, Felder-Panel bekommt die volle Breite
+  const [editorOnly, setEditorOnly] = useState(true);
   useEffect(() => {
-    try { setEditorOnly(localStorage.getItem('pe-editor-only') === '1'); } catch (_e) {}
+    try { setEditorOnly(localStorage.getItem('pe-editor-only') !== '0'); } catch (_e) {}
   }, []);
   const toggleEditorOnly = () => setEditorOnly(v => {
     try { localStorage.setItem('pe-editor-only', v ? '0' : '1'); } catch (_e) {}
     return !v;
   });
+  // Layout: 'fokus' (Gliederung links, ein Block in der Mitte, Vorschau/Seite als rechtes
+  // Panel; Standard) oder 'klassisch' (bisheriger Split-Modus). Siehe docs/specs/focus-editor.md.
+  const [layout, setLayout] = useState('fokus');
+  const [previewPanel, setPreviewPanel] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('pe-layout') === 'klassisch') setLayout('klassisch');
+      setPreviewPanel(localStorage.getItem('pe-preview-panel') === '1');
+    } catch (_e) {}
+  }, []);
+  // Fokus-Layout hat schmale Spalten: die Haupt-Navigation bleibt dauerhaft sichtbar;
+  // nur das klassische Split-Layout nutzt weiter den Vollbild-Modus (Burger-Menü).
+  useContentEditorFullscreen(layout !== 'fokus');
+  const toggleLayout = () => setLayout(v => {
+    const next = v === 'fokus' ? 'klassisch' : 'fokus';
+    setRightPanelTab('felder');
+    try { localStorage.setItem('pe-layout', next); } catch (_e) {}
+    return next;
+  });
+  const togglePreviewPanel = () => setPreviewPanel(v => {
+    try { localStorage.setItem('pe-preview-panel', v ? '0' : '1'); } catch (_e) {}
+    return !v;
+  });
+  const focusLayout = layout === 'fokus';
   // Block-Suche (nur Anzeigefilter) und Geräte-Breite der Split-Vorschau
   const [blockSearch, setBlockSearch] = useState('');
   const [previewDevice, setPreviewDevice] = useState('desktop');
@@ -578,22 +603,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }, [templates]);
 
   useEffect(() => {
-    // Lade hochgeladene Dateien
-    const loadFiles = async () => {
-      try {
-        const res = await fetch('/api/files');
-        if (res.ok) {
-          const data = await res.json();
-          setUploadedFiles(data.files || []);
-        }
-      } catch (e) {
-        console.error('Dateien laden fehlgeschlagen:', e);
-      }
-    };
-    loadFiles();
-  }, []);
-
-  useEffect(() => {
     // Lade Blog-Kanäle für Blog-Channel-Blöcke
     const loadBlogChannels = async () => {
       try {
@@ -764,8 +773,10 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   // Auto-rebuild split preview (debounced 600ms) when content changes
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fokus-Layout: Vorschau nur als zuschaltbares Panel (und nur, solange keine Schublade offen ist)
+  const previewVisible = splitPreview && (focusLayout ? previewPanel && rightPanelTab === 'felder' : !editorOnly);
   useEffect(() => {
-    if (!splitPreview || editorOnly) return;
+    if (!previewVisible) return;
     if (splitPreviewTimerRef.current) clearTimeout(splitPreviewTimerRef.current);
     splitPreviewTimerRef.current = setTimeout(() => {
       try {
@@ -778,7 +789,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     }, 600);
     return () => clearTimeout(splitPreviewTimerRef.current);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [splitPreview, editorOnly, blocks, templateCodes, enabledCssFiles]);
+  }, [previewVisible, blocks, templateCodes, enabledCssFiles]);
 
   // Aktueller Wert eines Felds (inkl. Repeater-Zeilen "key.index.sub") für
   // die feinkörnige Hervorhebung in der Split-Vorschau — siehe Effekt unten.
@@ -1245,6 +1256,45 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   const openBlockTransfer = (path, mode) => {
     setBlockTransferState({ path, mode, targetPageId: '', search: '' });
+  };
+
+  // Fokus-Layout: Aktionen der Gliederung (components/BlockOutlineTree.js) auf die
+  // vorhandenen State-Setter abbilden — Undo/Autosave laufen wie gewohnt über `blocks`.
+  const handleOutlineSelect = (path) => {
+    setSelectedBlockPath(path);
+    setSelectedFieldKey('');
+  };
+  const handleOutlineMove = (from, to, position) => {
+    const r = moveBlockInTree(blocks, from, to, position);
+    if (!r) return;
+    setBlocks(r.blocks);
+    setSelectedBlockPath(r.path);
+  };
+  const handleOutlineAction = (action, path) => {
+    if (action === 'duplicate') {
+      const r = duplicateBlockInTree(blocks, path);
+      if (r) { setBlocks(r.blocks); setSelectedBlockPath(r.path); }
+    } else if (action === 'toggleHidden') {
+      toggleNestedBlockHidden(path);
+    } else if (action === 'copy' || action === 'move') {
+      openBlockTransfer(path, action);
+    } else if (action === 'delete') {
+      const b = getBlockAtPath(path);
+      if (b?.children?.length && !window.confirm('Block samt allen Unterblöcken löschen?')) return;
+      handleDeleteBlock(path);
+      if (selectedBlockPath === path || selectedBlockPath.startsWith(`${path}.`)) {
+        const segs = path.split('.');
+        setSelectedBlockPath(segs.length > 1 ? segs.slice(0, -1).join('.') : '0');
+      }
+    }
+  };
+  // Hover in der Gliederung -> Block in der Vorschau hervorheben (zurück auf die Auswahl beim Verlassen)
+  const previewHoverBlock = (path) => {
+    try {
+      splitPreviewIframeRef.current?.contentWindow?.postMessage(
+        { type: 'temgine-highlight-block', blockPath: path ?? selectedBlockPath }, '*'
+      );
+    } catch (_e) {}
   };
 
   async function handleConfirmBlockTransfer() {
@@ -1893,7 +1943,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const renderBlockEditor = (block, path, depth = 0, options = {}) => {
     const inLightbox = !!options.inLightbox;
     const isTop = depth === 0 && !inLightbox;
-    const isCollapsed = !inLightbox && collapsedBlocks.has(path);
+    const isCollapsed = !inLightbox && !options.focus && collapsedBlocks.has(path);
     const templateVariables = block.template ? (templateVariablesByName[block.template] || []) : [];
     const typeMap = block.template ? (templateTypeMapByName[block.template] || {}) : {};
     // Resolve effective input type: explicit annotation wins over guessed type
@@ -2536,7 +2586,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
 
           {/* Render children editors recursively */}
-          {(block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1, options))}
+          {!options.focus && (block.children || []).map((child, i) => renderBlockEditor(child, `${path}.${i}`, depth + 1, options))}
         </div>
         }
 
@@ -2566,6 +2616,12 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       </div>
     )
   }
+
+  // Fokus-Layout: nur der gewählte Block (ohne Unterblöcke, die stehen in der Gliederung)
+  const renderFocusBlock = () => {
+    const b = getBlockAtPath(selectedBlockPath);
+    return b ? renderBlockEditor(b, selectedBlockPath, 0, { focus: true }) : null;
+  };
 
   const renderBlocksList = () => {
     const q = blockSearch.trim().toLowerCase();
@@ -2660,33 +2716,69 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 <Layers size={14} /> {useDOMEditor ? 'DOM' : 'Blöcke'}
               </button>
             )}
-            <button
-              type="button"
-              className={`pe-tb-btn${showPreview ? ' pe-tb-btn-active' : ''}`}
-              onClick={handleTogglePreview}
-              title={devTitle('Live-Vorschau ein-/ausblenden')}
-            >
-              <Eye size={14} /> Vorschau
-            </button>
-            <button
-              type="button"
-              className={`pe-tb-btn${editorOnly ? ' pe-tb-btn-active' : ''}`}
-              onClick={toggleEditorOnly}
-              title="Nur Editor: Live-Vorschau aus-/einblenden, Felder nutzen die volle Breite (Strg+Umschalt+E)"
-            >
-              <Maximize2 size={14} /> Nur Editor
-            </button>
+            {focusLayout ? (
+              <>
+                <button
+                  type="button"
+                  className={`pe-tb-btn${rightPanelTab !== 'felder' ? ' pe-tb-btn-active' : ''}`}
+                  onClick={() => setRightPanelTab(t => (t === 'felder' ? 'seite' : 'felder'))}
+                  title="Seiten-Einstellungen (Titel, Slug, SEO, Zugriff, Erweitert) als Seitenpanel"
+                  aria-pressed={rightPanelTab !== 'felder'}
+                >
+                  <Settings size={14} /> Seite
+                </button>
+                <button
+                  type="button"
+                  className={`pe-tb-btn${previewVisible ? ' pe-tb-btn-active' : ''}`}
+                  onClick={() => {
+                    // Schublade offen: Vorschau statt ihrer zeigen; sonst Panel umschalten
+                    if (rightPanelTab !== 'felder') { setRightPanelTab('felder'); if (!previewPanel) togglePreviewPanel(); } else togglePreviewPanel();
+                  }}
+                  title="Live-Vorschau als schmales Seitenpanel ein-/ausblenden"
+                  aria-pressed={previewVisible}
+                >
+                  <Eye size={14} /> Vorschau
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className={`pe-tb-btn${showPreview ? ' pe-tb-btn-active' : ''}`}
+                  onClick={handleTogglePreview}
+                  title={devTitle('Live-Vorschau ein-/ausblenden')}
+                >
+                  <Eye size={14} /> Vorschau
+                </button>
+                <button
+                  type="button"
+                  className={`pe-tb-btn${editorOnly ? ' pe-tb-btn-active' : ''}`}
+                  onClick={toggleEditorOnly}
+                  title="Nur Editor: Live-Vorschau aus-/einblenden, Felder nutzen die volle Breite (Strg+Umschalt+E)"
+                >
+                  <Maximize2 size={14} /> Nur Editor
+                </button>
+                <button
+                  type="button"
+                  className="pe-tb-btn"
+                  onClick={() => {
+                    const allPaths = flattenedBlocks.map(({ path }) => path);
+                    const anyOpen = allPaths.some(pth => !collapsedBlocks.has(pth));
+                    setCollapsedBlocks(anyOpen ? new Set(allPaths) : new Set());
+                  }}
+                  title="Alle Blöcke zu einer Übersicht zuklappen bzw. wieder aufklappen"
+                >
+                  <Minimize2 size={14} /> Übersicht
+                </button>
+              </>
+            )}
             <button
               type="button"
               className="pe-tb-btn"
-              onClick={() => {
-                const allPaths = flattenedBlocks.map(({ path }) => path);
-                const anyOpen = allPaths.some(pth => !collapsedBlocks.has(pth));
-                setCollapsedBlocks(anyOpen ? new Set(allPaths) : new Set());
-              }}
-              title="Alle Blöcke zu einer Übersicht zuklappen bzw. wieder aufklappen"
+              onClick={toggleLayout}
+              title={focusLayout ? 'Zum klassischen Split-Layout wechseln' : 'Zum Fokus-Layout (Gliederung + ein Block) wechseln'}
             >
-              <Minimize2 size={14} /> Übersicht
+              <Layout size={14} /> {focusLayout ? 'Fokus' : 'Klassisch'}
             </button>
             <button
               type="button"
@@ -2732,11 +2824,31 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
         <div
           ref={workspaceRef}
-          className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}${editorOnly ? ' editor-only' : ''}`}
-          style={splitPreview ? { '--pe-split-left': `${splitRatio}%` } : undefined}
+          className={`page-editor-workspace${splitPreview ? ' workspace-split' : ''}${focusLayout ? ` workspace-focus${previewVisible || rightPanelTab !== 'felder' ? ' fx-side' : ''}` : (editorOnly ? ' editor-only' : '')}`}
+          style={splitPreview && !focusLayout ? { '--pe-split-left': `${splitRatio}%` } : undefined}
         >
-          {splitPreview && (
+          {focusLayout && redirectType === 'none' && !useDOMEditor && (
+            <BlockOutlineTree
+              blocks={blocks}
+              selectedPath={selectedBlockPath}
+              onSelect={handleOutlineSelect}
+              onMove={handleOutlineMove}
+              onAction={handleOutlineAction}
+              onHover={previewHoverBlock}
+              search={blockSearch}
+              onSearch={setBlockSearch}
+              onAddBlock={() => { const p = String((blocks || []).length); handleAddBlock('content'); setSelectedBlockPath(p); }}
+              onAddChild={() => {
+                const b = getBlockAtPath(selectedBlockPath);
+                if (!b) return;
+                addNestedBlock(selectedBlockPath, 'content', true);
+                setSelectedBlockPath(`${selectedBlockPath}.${(b.children || []).length}`);
+              }}
+            />
+          )}
+          {splitPreview && (!focusLayout || rightPanelTab !== 'felder') && (
             <div className="page-editor-right-tabs">
+              {!focusLayout && (
               <button
                 type="button"
                 className={`page-editor-right-tab-btn${rightPanelTab === 'felder' ? ' active' : ''}`}
@@ -2744,6 +2856,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               >
                 Felder
               </button>
+              )}
               <button
                 type="button"
                 className={`page-editor-right-tab-btn${rightPanelTab === 'seite' ? ' active' : ''}`}
@@ -2759,9 +2872,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               >
                 Erweitert{(pageData.wrapperClass || pageData.wrapperId || pageData.navImage) && <span className="inspector-more-badge">●</span>}
               </button>
+              {focusLayout && (
+                <button type="button" className="pe-outline-icon-btn pe-focus-close" onClick={() => setRightPanelTab('felder')} title="Seiten-Einstellungen schließen" aria-label="Seiten-Einstellungen schließen">
+                  <X size={16} />
+                </button>
+              )}
             </div>
           )}
-          {splitPreview && (
+          {splitPreview && !focusLayout && (
             <div
               className="page-split-divider"
               onMouseDown={startSplitDrag}
@@ -2771,7 +2889,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
               aria-label="Breite von Vorschau und Feldern verstellen"
             />
           )}
-          <div className={splitPreview ? 'page-editor-right-tab-content' : undefined} style={{ display: splitPreview && rightPanelTab !== 'felder' ? 'none' : undefined }}>
+          <div className={splitPreview ? `page-editor-right-tab-content${focusLayout ? ' pe-focus-main' : ''}` : undefined} style={{ display: splitPreview && !focusLayout && rightPanelTab !== 'felder' ? 'none' : undefined }}>
           {redirectType !== 'none' ? (
             // Weiterleitungs-Seite: keine Blöcke, stattdessen Ziel-URL/Target konfigurieren
             <div className="page-editor-canvas" title={devTitle('Weiterleitungs-Konfiguration')}>
@@ -2883,7 +3001,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
             // Legacy Blocks Editor View
             <div className="page-editor-canvas" title={devTitle('Bereich: Inhaltsbloecke der Seite')}>
               <div className="blocks-container">
-                {blocks.length > 0 ? renderBlocksList() : (
+                {blocks.length > 0 ? (focusLayout ? renderFocusBlock() : renderBlocksList()) : (
                   <div className="page-block-empty-state">
                     <strong>Noch keine Blöcke vorhanden</strong>
                     <p>Füge den ersten Inhaltsblock hinzu, um die Seite modular aufzubauen.</p>
@@ -2906,7 +3024,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           )}
           </div>
 
-          {splitPreview && (
+          {splitPreview && (!focusLayout || (previewPanel && rightPanelTab === 'felder')) && (
             <div className="page-split-preview">
               <div className="page-split-preview-head">
                 <span className="page-split-preview-label">Live-Vorschau — Klick zum Auswählen</span>
@@ -2936,8 +3054,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 style={previewDevice === 'desktop' ? undefined : { width: previewDevice === 'tablet' ? 768 : 375, maxWidth: '100%', alignSelf: 'center', flex: '1 1 auto', borderLeft: '1px solid var(--border-color)', borderRight: '1px solid var(--border-color)' }}
                 onLoad={() => {
                   try {
-                    splitPreviewIframeRef.current?.contentWindow?.scrollTo(0, splitPreviewScrollRef.current);
-                  } catch (_e) {}
+                    splitPreviewIframeRef.current?.contentWindow?.scrollTo(0, splitPreviewScrollRef.current);                  } catch (_e) {}
                 }}
               />
             </div>

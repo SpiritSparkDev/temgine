@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.52.0] - 2026-10-18
+
+### Added
+- **Seiten-Editor – Fokus-Layout (neuer Standard):** Gliederung links als Baumdiagramm (Einrückung, Verbindungslinien, Auf-/Zuklappen), Drag&Drop zum Umsortieren und Verschachteln (Zyklusschutz), Hover-Aktionen und Info-Tooltip, Tastaturbedienung; in der Mitte nur der gewählte Block; Seiten-Einstellungen als Schublade; Vorschau als zuschaltbares Seitenpanel mit Block-Hervorhebung. Umschalter „Fokus“/„Klassisch“ in der Toolbar. Die Hauptnavigation bleibt im Fokus-Layout dauerhaft sichtbar.
+- `lib/blockTree.js` (Baum-/Move-Logik) mit Tests.
+
+### Changed
+- „Nur Editor“ (klassisches Layout) ist standardmäßig aktiv, die Split-Vorschau ist eine Option.
+
+### Fixed
+- Verwaister Aufruf `setUploadedFiles` im Seiten-Editor entfernt (Fehler im Dev-Overlay, unnötiges Laden der kompletten Dateiliste beim Öffnen).
+
+---
+
 ## [0.51.0] - 2026-10-14
 
 ### Added

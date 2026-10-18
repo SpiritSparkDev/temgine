@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { login, openPageEditor } = require('./helpers');
 
 test('Nur-Editor-Umschalter blendet Vorschau aus und wieder ein (Button und Strg+Umschalt+E)', async ({ page }) => {
+  await page.addInitScript(() => { try { localStorage.setItem('pe-layout', 'klassisch'); } catch (e) {} }); // "Nur Editor" gibt es nur im klassischen Layout
   await login(page);
   await openPageEditor(page);
 
