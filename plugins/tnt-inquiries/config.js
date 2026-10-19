@@ -206,6 +206,19 @@ export async function testConnection(ctx, fetchImpl) {
 // ── Einhängepunkt Kontaktformular ────────────────────────────────────────────
 
 /** Plan für diese Absendung oder null (Formular nicht zugeordnet, unvollständig, Fehler). Das Plugin ist hier immer aktiv. */
+/**
+ * Rückfallebene: Ist das Datum zugeordnet, aber keine Uhrzeit (z. B. weil die gespeicherte Zuordnung aus der Zeit
+ * stammt, bevor das Feld im Formular stand), wird das Zeitfeld des Formulars (type=time bzw. Name "uhrzeit")
+ * als event.time übertragen. Greift nur, wenn dieses Feld sonst nirgends zugeordnet ist.
+ */
+export function withTimeFallback(mapping, fieldDefs) {
+  const fields = mapping?.fields || {};
+  const targets = Object.values(fields);
+  if (!targets.includes('event.date') || targets.includes('event.time')) return mapping;
+  const f = (fieldDefs || []).find((x) => !fields[x.name] && (x.type === 'time' || /^uhrzeit$/i.test(x.name)));
+  return f ? { ...mapping, fields: { ...fields, [f.name]: 'event.time' } } : mapping;
+}
+
 export async function getForwardingPlan(ctx, formName) {
   try {
     const name = typeof formName === 'string' ? formName.trim() : '';
@@ -213,8 +226,9 @@ export async function getForwardingPlan(ctx, formName) {
     const cfg = await loadConfig(ctx);
     const form = getTemplateByName(name);
     if (!form || form.category !== 'contact') return null;
-    const mapping = cfg.mappings[form.name];
+    let mapping = cfg.mappings[form.name];
     if (!mapping?.privacyField) return null;
+    mapping = withTimeFallback(mapping, extractContactFormFields(form.code));
     const rt = await getRuntime(ctx);
     if (!normalizeBaseUrl(rt.baseUrl) || !rt.token) return null;
     return { formId: form.name, mapping, rt };

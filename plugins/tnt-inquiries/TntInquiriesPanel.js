@@ -177,6 +177,18 @@ export default function TntInquiriesPanel({ showToast }) {
                 })}
               </tbody>
             </table>
+            {(() => {
+              const mapped = Object.values(maps[f.formId]?.fields || {});
+              if (!mapped.includes('event.date') || mapped.includes('event.time')) return null;
+              const hasTimeField = f.fields.some((fl) => fl.type === 'time' || /uhrzeit|zeit|time/i.test(fl.key));
+              return (
+                <p role="alert" style={{ margin: '8px 0 0', color: '#c53030' }}>
+                  <small>{hasTimeField
+                    ? 'Das Datum ist zugeordnet, die Uhrzeit aber nicht. TNT zeigt dann „Uhrzeit nicht angegeben“. Bitte beim Feld „Uhrzeit“ das Ziel „Uhrzeit“ wählen und speichern.'
+                    : 'Das Formular hat kein Uhrzeit-Feld (z. B. <input type="time" name="uhrzeit">). Ohne dieses Feld im gespeicherten Formular-Template kann keine Uhrzeit an TNT gehen.'}</small>
+                </p>
+              );
+            })()}
             {Object.keys(suggested).some((k) => k.startsWith(`${f.formId}:`)) && (
               <p role="status" style={{ margin: '8px 0 0', color: '#b7791f' }}>
                 <small>Für neue oder noch nicht gespeicherte Felder wurde ein Vorschlag eingetragen. Bitte unten auf „Speichern“ klicken, sonst werden diese Felder nicht übertragen.</small>

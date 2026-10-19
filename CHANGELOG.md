@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.55.3] - 2026-10-19
+
+### Fixed
+- **Plugin Anfrage-Weiterleitung:** Ist das Datum zugeordnet, aber keine Uhrzeit (z. B. weil die gespeicherte Zuordnung aus der Zeit stammt, bevor das Feld im Formular stand), wird das Zeitfeld des Formulars (`type="time"` bzw. Name `uhrzeit`) jetzt automatisch als `event.time` übertragen – TNT zeigte sonst „Uhrzeit nicht angegeben“. Das Panel warnt zusätzlich, wenn Datum, aber keine Uhrzeit zugeordnet ist bzw. das Formular kein Uhrzeit-Feld hat.
+
+---
+
 ## [0.55.2] - 2026-10-19
 
 ### Fixed

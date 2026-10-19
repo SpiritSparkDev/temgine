@@ -95,6 +95,14 @@ describe('Senden und Klassifizierung', () => {
     expect(p.event).toEqual({ date: '2026-11-11', time: '19:30', venue: 'Schloss' });
   });
 
+  test('Rückfallebene: Datum zugeordnet, Uhrzeit nicht -> Zeitfeld wird als event.time ergänzt', () => {
+    const defs = [{ name: 'datum', type: 'date' }, { name: 'uhrzeit', type: 'time' }, { name: 'name', type: 'text' }];
+    const m = C.withTimeFallback({ fields: { datum: 'event.date', name: 'customer.lastName' }, privacyField: 'dsgvo' }, defs);
+    expect(m.fields.uhrzeit).toBe('event.time');
+    expect(C.withTimeFallback({ fields: { datum: 'event.date', uhrzeit: 'event.title' } }, defs).fields.uhrzeit).toBe('event.title');
+    expect(C.withTimeFallback({ fields: { name: 'customer.lastName' } }, defs).fields.uhrzeit).toBeUndefined();
+  });
+
   test('Basis-URL mit versehentlich eingetragenem /api/inquiries wird bereinigt', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(resp(200));
     await T.postInquiry({ baseUrl: 'https://tnt.example.de/api/inquiries/', token: TOKEN, payload: {}, dryRun: true, fetchImpl });
