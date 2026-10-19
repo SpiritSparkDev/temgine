@@ -4,21 +4,6 @@ import { isChecked, processOutbox, cleanupOutbox, retryFailed } from './lib';
 import { getForwardingPlan, forwardSubmission, getRuntime, buildView, applyUpdate, testConnection } from './config';
 
 const ADMIN = ['ADMIN'];
-const HOUR_MS = 3_600_000;
-const MAX_PER_HOUR = 5;
-
-// IP-Limit: 5 Absendungen/Stunde für Formulare mit Weiterleitung (nur im Prozessspeicher).
-const hits = (global.__tntInquiryHits = global.__tntInquiryHits || new Map());
-export function hitLimit(ip, now = Date.now()) {
-  const recent = (hits.get(ip) || []).filter((t) => now - t < HOUR_MS);
-  if (recent.length >= MAX_PER_HOUR) {
-    hits.set(ip, recent);
-    return { ok: false, retryAfter: Math.ceil((recent[0] + HOUR_MS - now) / 1000) };
-  }
-  hits.set(ip, [...recent, now]);
-  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some((t) => now - t < HOUR_MS)) hits.delete(k);
-  return { ok: true };
-}
 
 // Nur Metadaten, nie Inhalte (kein payload, kein lastError-Freitext).
 const LIST_SELECT = { id: true, formId: true, status: true, attempts: true, nextAttemptAt: true, lastStatusCode: true, createdAt: true, deliveredAt: true };
@@ -63,16 +48,15 @@ export default {
   },
 
   hooks: {
-    // Datenschutz-Pflicht + IP-Limit, bevor Mail/Speichern passiert. Nur für zugeordnete Formulare.
-    beforeContactSubmission: async (ctx, { formId, values, clientIp }) => {
+    // Datenschutz-Pflicht, bevor Mail/Speichern passiert. Nur für zugeordnete Formulare.
+    // Kein eigenes IP-Limit: hinter einem Proxy/Docker sehen alle Besucher gleich aus; Spam-Schutz = Altcha, Honeypot und das Limit des Kontaktformulars im Kern.
+    beforeContactSubmission: async (ctx, { formId, values }) => {
       const plan = await getForwardingPlan(ctx, formId);
       if (!plan) return { ok: true };
       const { privacyField } = plan.mapping;
       if (!isChecked(values?.[privacyField])) {
         return { ok: false, status: 400, errors: { [privacyField]: 'Bitte stimme der Datenschutzerklärung zu.' } };
       }
-      const limit = hitLimit(clientIp || 'unknown');
-      if (!limit.ok) return { ok: false, status: 429, error: 'Zu viele Anfragen. Bitte versuche es später erneut.', retryAfter: limit.retryAfter };
       return { ok: true };
     },
     // Outbox schreiben, Sendeversuch läuft im Hintergrund (nicht abgewartet): ein TNT-Ausfall bleibt unsichtbar.

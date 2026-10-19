@@ -45,7 +45,7 @@ const SUGGESTIONS = [
   [/e.?mail|mail/i, 'customer.email'],
   [/tel|phone|handy|mobil/i, 'customer.phone'],
   [/anrede|salutation/i, 'customer.salutation'],
-  [/veranstaltungsort|location|venue|spielort|auftrittsort/i, 'event.venue'],
+  [/^ort$|veranstaltungsort|location|venue|spielort|auftrittsort/i, 'event.venue'],
   [/adresse|address|stra(ß|ss)e|plz|anschrift/i, 'customer.address'],
   [/dauer|duration/i, 'event.durationMinutes'],
   [/g(ä|ae)ste|guests|personen|teilnehmer/i, 'event.guests'],

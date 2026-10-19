@@ -177,6 +177,11 @@ export default function TntInquiriesPanel({ showToast }) {
                 })}
               </tbody>
             </table>
+            {Object.keys(suggested).some((k) => k.startsWith(`${f.formId}:`)) && (
+              <p role="status" style={{ margin: '8px 0 0', color: '#b7791f' }}>
+                <small>Für neue oder noch nicht gespeicherte Felder wurde ein Vorschlag eingetragen. Bitte unten auf „Speichern“ klicken, sonst werden diese Felder nicht übertragen.</small>
+              </p>
+            )}
             <label style={{ display: 'grid', gap: 2, marginTop: 8 }}>
               <small>Datenschutz-Checkbox</small>
               <select className="st-input" aria-label={`Datenschutz-Checkbox ${f.label}`} value={maps[f.formId]?.privacyField || ''}

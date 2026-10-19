@@ -87,6 +87,14 @@ describe('Senden und Klassifizierung', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  test('Vorschläge und Payload für Datum/Uhrzeit/Ort', () => {
+    expect(T.suggestTarget('uhrzeit', 'time')).toBe('event.time');
+    expect(T.suggestTarget('ort', 'text')).toBe('event.venue');
+    const mapping = { fields: { name: 'customer.lastName', email: 'customer.email', datum: 'event.date', uhrzeit: 'event.time', ort: 'event.venue' }, privacyField: 'datenschutz' };
+    const p = T.buildInquiryPayload({ formId: 'F' }, { name: 'A', email: 'a@b.de', datum: '2026-11-11', uhrzeit: '19:30', ort: 'Schloss', datenschutz: 'akzeptiert' }, mapping, '1');
+    expect(p.event).toEqual({ date: '2026-11-11', time: '19:30', venue: 'Schloss' });
+  });
+
   test('Basis-URL mit versehentlich eingetragenem /api/inquiries wird bereinigt', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(resp(200));
     await T.postInquiry({ baseUrl: 'https://tnt.example.de/api/inquiries/', token: TOKEN, payload: {}, dryRun: true, fetchImpl });

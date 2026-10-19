@@ -58,7 +58,6 @@ afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 beforeEach(async () => {
   jest.clearAllMocks();
   mockMsgId = 0;
-  global.__tntInquiryHits.clear();
   _resetJobState();
   registry._setPluginSource({ dir, server: { 'tnt-inquiries': plugin } });
   mockPrisma._rows.length = 0; mockPrisma._settings.clear();
@@ -107,18 +106,6 @@ describe('POST /api/contact mit Plugin', () => {
     await flush();
     expect(r.code).toBe(200);
     expect(mockPrisma._rows[0]).toMatchObject({ status: 'pending', lastError: 'NETWORK' });
-  });
-
-  test('IP-Limit 5/h: die 6. Absendung ergibt 429 mit Retry-After, nichts gesendet; andere IP unberührt', async () => {
-    for (let i = 0; i < 5; i++) expect((await post(form())).code).toBe(200);
-    await flush();
-    global.fetch.mockClear(); sendMail.mockClear();
-    const r = await post(form());
-    expect(r.code).toBe(429);
-    expect(r.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(Number));
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(sendMail).not.toHaveBeenCalled();
-    expect((await post(form(), '9.9.9.9')).code).toBe(200);
   });
 
   test('Honeypot gefüllt: stilles 200, nichts weitergegeben', async () => {

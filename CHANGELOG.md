@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.55.2] - 2026-10-19
+
+### Fixed
+- **Plugin Anfrage-Weiterleitung:** Das eigene IP-Limit (5 Absendungen/Stunde) ist entfernt – hinter einem Proxy bzw. Docker sehen alle Besucher wie dieselbe IP aus und wurden mit „Zu viele Anfragen“ abgewiesen. Spam-Schutz bleibt über Altcha, Honeypot und das Limit des Kontaktformulars im Kern.
+- Das Feld „Ort“ wird jetzt automatisch als `event.venue` vorgeschlagen, und das Panel weist darauf hin, wenn für neue Formularfelder (z. B. Uhrzeit) nur ein ungespeicherter Vorschlag besteht.
+
+---
+
 ## [0.55.1] - 2026-10-19
 
 ### Fixed
