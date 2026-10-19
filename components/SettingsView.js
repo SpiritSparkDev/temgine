@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
-import PicginePanel from './PicginePanel';
 import ExternalSourcesPanel from './ExternalSourcesPanel';
-import TntInquiriesPanel from './TntInquiriesPanel';
 import PluginsPanel from './PluginsPanel';
 import { Toggle, Card, Row, SaveButton } from './SettingsUi';
 
@@ -15,9 +13,7 @@ const TABS = [
   { id: 'general', label: 'Allgemein' },
   { id: 'seo', label: 'SEO' },
   { id: 'stats', label: 'Statistik' },
-  { id: 'picgine', label: 'Picgine' },
   { id: 'external', label: 'Externe Quellen' },
-  { id: 'tnt', label: 'Anfrage-Weiterleitung' },
   { id: 'plugins', label: 'Plugins' },
   { id: 'live', label: 'Live & Wartung' },
 ];
@@ -392,10 +388,8 @@ export default function SettingsView({ showToast }) {
 
         {tab === 'stats' && <MatomoPanel showToast={showToast} />}
 
-        {tab === 'picgine' && <PicginePanel showToast={showToast} />}
 
         {tab === 'external' && <ExternalSourcesPanel showToast={showToast} />}
-        {tab === 'tnt' && <TntInquiriesPanel showToast={showToast} />}
 
         {tab === 'plugins' && <PluginsPanel showToast={showToast} />}
 

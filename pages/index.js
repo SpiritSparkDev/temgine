@@ -29,7 +29,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     applyMaintenanceAssets(initialLoadingScreenHtml, initialLoadingScreenCss, initialLoadingScreenJs)
   )
   const [homePage, setHomePage] = useState(null)
-  // Picgine-Entsperren/Logout: neu rendern ohne Ladebildschirm (siehe lib/renderPipeline.js)
+  // Plugin-Hydration (rerender): neu rendern ohne Ladebildschirm (siehe lib/renderPipeline.js)
   const { token: rerenderToken, rerender, consumeSilent } = useRerender()
 
   const defaultNoHomepageHtml = '<div style="padding: 40px; text-align: center;"><h1>Keine Startseite gefunden</h1></div>'
@@ -207,7 +207,7 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
     })()
   }, [rerenderToken])
 
-  // Kontaktformulare, Picgine und Consent-Embeds im gerenderten HTML verdrahten
+  // Kontaktformulare, Plugins und Consent-Embeds im gerenderten HTML verdrahten
   // (lib/renderPipeline.js). Kernverhalten, nicht Teil des abschaltbaren /api/js-Bundles.
   useEffect(() => {
     if (!html) return

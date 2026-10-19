@@ -1,6 +1,6 @@
 {
   "name": "temgine",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "private": true,
   "scripts": {
     "dev": "npm run test && next dev",
@@ -18,6 +18,8 @@
     "test:e2e": "playwright test",
     "publish-scheduled": "node ./scripts/publish-scheduled.js",
     "import-init": "node ./scripts/import-init.js",
+    "plugins:sync": "node scripts/plugins-sync.js",
+    "plugins:check": "node scripts/plugins-sync.js --check",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "clean": "if (Test-Path .next) { Remove-Item .next -Recurse -Force }; if (Test-Path .next-dev) { Remove-Item .next-dev -Recurse -Force }; if (Test-Path node_modules/.cache) { Remove-Item node_modules/.cache -Recurse -Force }; Write-Host 'Cleaned build artifacts and caches'"

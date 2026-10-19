@@ -173,10 +173,11 @@ Läuft über alle Dateien eines im Editor gewählten Upload-Ordners (rekursiv):
 Pro Datei verfügbar: `name`, `slug`, `url`, `path`, `ext`, `size` (Bytes),
 `modified`, `isImage`.
 
-## Picgine-Galerien
+## Plugin-Sections
 
-`{{#picgine:galerie}}…{{/picgine:galerie}}` bindet eine Picgine-Galerie ein.
-Ausführlich beschrieben in der Anleitung **Picgine-Galerien**.
+Aktive Plugins können eigene Sections mitbringen, z. B. `{{#picgine:galerie}}…{{/picgine:galerie}}`
+für eine Picgine-Galerie. Die Syntax entspricht `{{#folder:…}}`; Details stehen in der Anleitung
+des jeweiligen Plugins (Hilfe-Fenster, Eintrag mit dem Plugin-Namen).
 
 ## Kanal-Beiträge in einem Template: `blog-channel-block`
 

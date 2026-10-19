@@ -2,12 +2,13 @@ import { prisma } from '../../lib/prisma'
 import { requireAuth } from '../../lib/auth'
 import { parseSettingKey, getAllMaintenanceAsSettings, saveMaintenanceField } from '../../lib/maintenanceStore'
 import { CORE_SETTING_KEYS } from '../../lib/settingsKeys'
-import { pluginSecretKeys, pluginSettingKeys } from '../../lib/plugins/registry'
+import { pluginSecretKeys, pluginSettingKeys, pluginJsonKeys } from '../../lib/plugins/registry'
 
 // Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
 // stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
 // Dazu kommen alle Settings vom Typ "secret" aus den Plugin-Manifesten.
-const CORE_SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources', 'tnt_inquiries', 'tnt_inquiries_alert']
+// picgine_api_key bleibt zusätzlich hier: der Schlüssel darf auch ohne das Plugin im Code nie über GET herauskommen.
+const CORE_SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources']
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };
@@ -56,6 +57,13 @@ export default async function handler(req, res) {
       if (value === undefined || value === null) {
         const [status, resp] = errorResponse(400, 'value erforderlich', 'VALIDATION_ERROR', { missing: ['value'] });
         return res.status(status).json(resp);
+      }
+
+      if (pluginJsonKeys().includes(key) && String(value).trim()) {
+        try { JSON.parse(String(value)) } catch (_e) {
+          const [status, resp] = errorResponse(400, `"${String(key)}" ist kein gültiges JSON`, 'VALIDATION_ERROR', { invalid: [String(key)] });
+          return res.status(status).json(resp);
+        }
       }
 
       const maintenanceKey = parseSettingKey(key)

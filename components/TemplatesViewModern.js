@@ -6,6 +6,7 @@ import { FONT_AWESOME_ICONS, getIconHtml } from '../lib/fontAwesomeIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 import { buildNavPlaceholderKeys } from '../lib/templateEngine';
 import { extractTypedVariables, guessInputType } from '../lib/templateParser';
+import { getSectionProviders } from '../lib/sections';
 import HelpDocModal from './HelpDocModal';
 import TemplateGroupHint from './TemplateGroupHint';
 
@@ -848,7 +849,9 @@ function BlockTemplatesEditor({ showToast, onSaved }) {
                         <tr><td><code>{'{{#if:f}}…{{/if:f}}'}</code></td><td>Wenn <code>f</code> nicht leer / angehakt; <code>{'{{^if:f}}'}</code> = wenn leer <DocLink anchor="bedingungen" /></td></tr>
                         <tr><td><code>{'{{#each:n}}…{{/each:n}}'}</code></td><td>Wiederholbare Liste <DocLink anchor="wiederholungen" /></td></tr>
                         <tr><td><code>{'{{#folder:n}}…{{/folder:n}}'}</code></td><td>Dateien eines Upload-Ordners <DocLink anchor="dateien" /></td></tr>
-                        <tr><td><code>{'{{#picgine:n}}…{{/picgine:n}}'}</code></td><td>Picgine-Galerie <DocLink doc="picgine-galerien" /></td></tr>
+                        {Object.entries(getSectionProviders()).filter(([, p]) => p.pluginId).map(([prefix, p]) => (
+                          <tr key={prefix}><td><code>{`{{#${prefix}:n}}…{{/${prefix}:n}}`}</code></td><td>{p.editorFieldLabel || prefix} <DocLink doc={p.pluginId} /></td></tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>

@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.55.0] - 2026-10-19
+
+### Added
+- **Externe Plugins:** Plugins leben als eigene Repos unter `E:\Werkbank	emgine-plugins\<id>` und werden mit `npm run plugins:sync` nach `plugins/<id>/` kopiert (vendored, wird mit eingecheckt); `npm run plugins:check` prüft Kopien und Registries (`plugins/index.*.js` werden generiert). Konfiguration in `plugins.config.json`.
+- **Neue Plugin-Erweiterungspunkte:** Hooks `beforeContactSubmission` (kann Kontaktformular-Absendungen mit Feldfehlern ablehnen) und `onContactSubmission`, Hintergrund-`jobs`, `ctx.prisma`/`ctx.crypto` (`lib/pluginCrypto.js`), Setting-Typ `json` (optional `secret`) und generischer Plugin-Seed (`scripts/plugins-seed.js` führt beim Start `plugins/<id>/seed.cjs` aus).
+
+### Changed
+- **Picgine ist jetzt ein Plugin** (`plugins/picgine`, Quelle `temgine-plugins/picgine`): Routen unter `/api/plugins/picgine/*` (der alte Pfad `/api/picgine/*` wird weitergeleitet, bestehende Webhook-URLs funktionieren weiter), Einstellungs-Keys unverändert, Aktivierung beim Start automatisch, wenn `picgine_url` gesetzt ist; Hilfe heißt jetzt `picgine`. Webhook-Body bis 1 MB.
+- **Anfrage-Weiterleitung (TNT Manager) ist jetzt ein Plugin** (`plugins/tnt-inquiries`): Admin-API unter `/api/plugins/tnt-inquiries/*` (alte Pfade `/api/tnt-inquiries/*` entfallen), Einstellungen werden beim Start einmalig in die Plugin-Keys übernommen, Ein-/Ausschalten unter Einstellungen → Plugins. Die Weiterleitung läuft jetzt nach Mail und Speichern; die Datenschutz-Pflicht bleibt davor. Das 30-Tage-Aufräumen läuft nur bei aktivem Plugin.
+- Meldung bei zu vielen Versuchen heißt „Zu viele Anfragen …“.
+
+### Removed
+- Picgine- und TNT-spezifischer Code aus dem Kern (Libs, API-Routen, Komponenten, Tests). Die Tabelle `InquiryOutbox` bleibt im Kern.
+
+---
+
 ## [0.54.0] - 2026-10-19
 
 ### Added

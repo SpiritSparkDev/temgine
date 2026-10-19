@@ -8,6 +8,8 @@
 import { requireAuth, PERMISSIONS } from '../../../../lib/auth';
 import { rateLimit } from '../../../../lib/rateLimit';
 import { rebuildLiveSnapshot } from '../../../../lib/liveRebuild';
+import { prisma } from '../../../../lib/prisma';
+import * as pluginCrypto from '../../../../lib/pluginCrypto';
 import { getActivePlugin, getPluginSettings } from '../../../../lib/plugins/registry';
 
 export const config = { api: { bodyParser: false } };
@@ -80,7 +82,8 @@ function makeCookies(req, res, id) {
   const prefix = `temgine_${id}_`;
   const full = (name) => {
     if (!/^[A-Za-z0-9_-]+$/.test(String(name))) throw new Error(`ungültiger Cookie-Name ${JSON.stringify(name)}`);
-    return name.startsWith(prefix) ? name : prefix + name;
+    // Der genaue Name temgine_<id> ist erlaubt (Cookies aus der Zeit vor dem Plugin bleiben gültig).
+    return name === prefix.slice(0, -1) || name.startsWith(prefix) ? name : prefix + name;
   };
   return {
     get: (name) => req.cookies?.[full(name)],
@@ -119,7 +122,7 @@ export default async function handler(req, res) {
         res.setHeader('Allow', 'POST');
         return res.status(405).json({ error: 'Methode nicht erlaubt', code: 'METHOD_NOT_ALLOWED' });
       }
-      route = { auth: 'SETTINGS_EDIT', handler: async (_req, r, ctx) => r.status(200).json(await plugin.server.test(ctx)) };
+      route = { auth: 'SETTINGS_EDIT', handler: async (_req, r, ctx) => r.status(200).json(await plugin.server.test(ctx, _req.body)) };
     } else {
       const found = findRoute(plugin.server.routes, req.method, segments);
       if (found.status === 405) {
@@ -160,6 +163,8 @@ export default async function handler(req, res) {
       query,
       cookies: makeCookies(req, res, id),
       log,
+      prisma,
+      crypto: pluginCrypto,
       rebuildSnapshot: () => rebuildLiveSnapshot(),
     };
     return await route.handler(req, res, ctx);

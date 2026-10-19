@@ -14,7 +14,7 @@ const mask = (s) => {
   return { ...s, config };
 };
 
-// Leere Geheimnisfelder behalten den gespeicherten Wert (write-only wie bei Picgine).
+// Leere Geheimnisfelder behalten den gespeicherten Wert (write-only wie bei Plugin-Secrets).
 const withStoredSecrets = (incoming, stored) => {
   const old = stored.find((x) => x.id === incoming.id);
   const config = { ...incoming.config };

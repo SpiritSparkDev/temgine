@@ -8,6 +8,7 @@
  * - Optionally saves message to DB (controlled by Setting contactSaveToDb)
  */
 
+import crypto from 'crypto';
 import Mustache from 'mustache';
 import { verifySolution } from 'altcha-lib/v1';
 import { rateLimit } from '../../lib/rateLimit';
@@ -16,17 +17,10 @@ import { prisma } from '../../lib/prisma';
 import { ALTCHA_HMAC_KEY } from '../../lib/altcha';
 import { getTemplateByName } from '../../lib/templateStore';
 import { getContactEmailTemplate } from '../../lib/contactEmailTemplateStore';
-import { getForwardingPlan, forwardSubmission } from '../../lib/tntInquiriesConfig';
-import { isChecked } from '../../lib/tntInquiries';
+import { extractContactFormFields } from '../../lib/contactFormFields';
+import { runContactHooks } from '../../lib/plugins/registry';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
-// Add-on "Anfrage-Weiterleitung": zusätzlich 5 Absendungen/Stunde je IP (eigener Key, sonst teilt
-// rateLimit den Speicher mit dem Minuten-Limiter).
-const tntLimiter = rateLimit({
-  windowMs: 3_600_000,
-  max: 5,
-  keyFn: (req) => `tnt:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
-});
 // Honeypot: für Menschen unsichtbares Feld im Formular; Bots füllen es aus.
 const HONEYPOT_FIELD = 'hp_website';
 
@@ -135,6 +129,19 @@ function buildFormFields(body) {
   return fields;
 }
 
+// Plugin-Hooks (hooks.beforeContactSubmission / hooks.onContactSubmission, siehe development_docs/PLUGINS.md):
+// formId = Name des Kontaktformular-Templates (_cfTemplate) oder null, values = Rohwerte ohne Meta-Felder.
+function pluginHookInput(body, clientIp) {
+  const formId = typeof body._cfTemplate === 'string' && body._cfTemplate.trim() ? body._cfTemplate.trim() : null;
+  const form = formId ? getTemplateByName(formId) : null;
+  return {
+    formId,
+    values: Object.fromEntries(Object.entries(body).filter(([key]) => !META_FIELD_KEYS.has(key))),
+    fieldDefs: form && form.category === 'contact' ? extractContactFormFields(form.code) : [],
+    clientIp,
+  };
+}
+
 function buildAutoMessage(fields) {
   return fields.map((field) => `${field.label}: ${field.value}`).join('\n');
 }
@@ -166,9 +173,14 @@ export default async function handler(req, res) {
   }
 
   const body = (req.body && typeof req.body === 'object') ? req.body : {};
+  const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
 
   // Spam: Honeypot ausgefüllt → still verwerfen (Bot sieht Erfolg), nichts wird gesendet.
-  if (body[HONEYPOT_FIELD]) return res.status(200).json({ ok: true });
+  // Plugins erfahren davon nur über onContactSubmission mit honeypotTripped: true (ohne submissionId).
+  if (body[HONEYPOT_FIELD]) {
+    await runContactHooks('after', { ...pluginHookInput(body, clientIp), submissionId: null, honeypotTripped: true }, clientIp);
+    return res.status(200).json({ ok: true });
+  }
 
   // Spam protection — require a solved ALTCHA proof-of-work challenge
   const altchaValid = body.altcha
@@ -204,29 +216,23 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Validierungsfehler', fields: errors });
   }
 
-  // Add-on "Anfrage-Weiterleitung an TNT Manager" (nur wenn aktiv und dieses Formular zugeordnet ist)
-  const tntPlan = await getForwardingPlan(prisma, body._cfTemplate);
-  if (tntPlan) {
-    const { privacyField } = tntPlan.mapping;
-    if (!isChecked(body[privacyField])) {
-      return res.status(400).json({
-        error: 'Validierungsfehler',
-        fields: { [privacyField]: 'Bitte stimme der Datenschutzerklärung zu.' },
-      });
-    }
-    const tnt = tntLimiter.check(req);
-    if (!tnt.ok) {
-      res.setHeader('Retry-After', tnt.retryAfter);
-      return res.status(429).json({ error: 'Zu viele Anfragen. Bitte versuche es später erneut.', retryAfter: tnt.retryAfter });
-    }
-    // Outbox schreiben, Sendeversuch läuft im Hintergrund; ein Ausfall von TNT bleibt für den Besucher unsichtbar.
-    await forwardSubmission(prisma, tntPlan, body);
+  // Plugin-Vorprüfung (z. B. Pflicht-Checkbox): ein Plugin kann die Absendung mit Feldfehlern ablehnen.
+  const hookInput = pluginHookInput(body, clientIp);
+  const pre = await runContactHooks('before', hookInput, clientIp);
+  if (!pre.ok) {
+    if (pre.retryAfter) res.setHeader('Retry-After', pre.retryAfter);
+    return res.status(pre.status).json({
+      error: pre.error || 'Validierungsfehler',
+      ...(Object.keys(pre.errors).length ? { fields: pre.errors } : {}),
+      ...(pre.retryAfter ? { retryAfter: pre.retryAfter } : {}),
+    });
   }
 
   // Read settings from DB
   let contactMailTo = null;
   let subjectPrefix = '';
   let saveToDb = false;
+  let submissionId = null;
   try {
     const rows = await prisma.setting.findMany({
       where: { key: { in: ['contact_recipient_email', 'contactMailTo', 'contact_subject_prefix', 'contactSaveToDb'] } },
@@ -296,9 +302,10 @@ export default async function handler(req, res) {
   // Save to DB (opt-in)
   if (saveToDb) {
     try {
-      await prisma.contactMessage.create({
+      const saved = await prisma.contactMessage.create({
         data: { name, email, subject: subject || null, message },
       });
+      submissionId = saved && saved.id != null ? String(saved.id) : null;
       results.savedToDb = true;
     } catch (e) {
       console.error('[contact] DB-Speicherung fehlgeschlagen:', e.message);
@@ -309,6 +316,13 @@ export default async function handler(req, res) {
     // No destination configured — still return success to the user
     console.warn('[contact] Kein Empfänger konfiguriert (contactMailTo). Nachricht verworfen.');
   }
+
+  // Plugin-Nachbereitung (Weiterleitung o. Ä.): Fehler eines Plugins lassen die Absendung nie scheitern.
+  await runContactHooks('after', {
+    ...hookInput,
+    submissionId: submissionId || crypto.randomUUID(),
+    honeypotTripped: false,
+  }, clientIp);
 
   return res.status(200).json({ ok: true });
 }

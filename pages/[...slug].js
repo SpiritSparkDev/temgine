@@ -35,7 +35,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
   )
   const [accessDenied, setAccessDenied] = useState(false)
   const [passwordGate, setPasswordGate] = useState(null) // { pageId } | null
-  // reload: nach Passwort-Entsperren; rerender: Picgine-Entsperren/Logout ohne Ladebildschirm
+  // reload: nach Passwort-Entsperren; rerender: Plugin-Hydration (z. B. Entsperren) ohne Ladebildschirm
   const { token: reloadToken, reload, rerender, consumeSilent } = useRerender()
   const debugRender = process.env.NEXT_PUBLIC_DEBUG_RENDER === 'true'
   const debugLog = (...args) => {
@@ -345,7 +345,7 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
     loadLoadingScreenHtml().then(setLoadingScreenHtml).catch(() => setLoadingScreenHtml(defaultLoadingHtml))
   }, [])
 
-  // Inline-Scripts ausführen, Blog-Kanäle füllen, dann Kontaktformulare, Picgine und
+  // Inline-Scripts ausführen, Blog-Kanäle füllen, dann Kontaktformulare, Plugins und
   // Consent-Embeds verdrahten (lib/renderPipeline.js). Kernverhalten, nicht Teil des
   // abschaltbaren /api/js-Bundles.
   useEffect(() => {

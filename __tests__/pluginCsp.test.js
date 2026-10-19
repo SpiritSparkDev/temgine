@@ -11,7 +11,7 @@ describe('pluginCsp', () => {
     expect(out).toContain("img-src 'self' https:");
   });
 
-  test('adds origin to given directives only (Picgine: img-src)', () => {
+  test('adds origin to given directives only (z. B. img-src)', () => {
     const out = addOriginToCsp(csp, 'http://localhost:3040', ['img-src']);
     expect(out).toContain("img-src 'self' https: http://localhost:3040");
     expect(out).toContain("connect-src 'self';");

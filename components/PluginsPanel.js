@@ -20,7 +20,8 @@ const INPUT_TYPES = { text: 'text', url: 'url', number: 'number', secret: 'passw
 // Secrets sind write-only: leer lassen = unverändert, „gesetzt“ zeigt einen gespeicherten Wert.
 function PluginSettingsForm({ plugin, values, showToast, onSaved }) {
   const entries = Object.entries(plugin.settings);
-  const [form, setForm] = useState(() => Object.fromEntries(entries.map(([key, def]) => [key, def.type === 'secret' ? '' : values[key] ?? ''])));
+  const isSecret = (def) => def.type === 'secret' || def.secret === true;
+  const [form, setForm] = useState(() => Object.fromEntries(entries.map(([key, def]) => [key, isSecret(def) ? '' : values[key] ?? ''])));
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
@@ -29,11 +30,11 @@ function PluginSettingsForm({ plugin, values, showToast, onSaved }) {
     setSaving(true);
     try {
       for (const [key, def] of entries) {
-        if (def.type === 'secret' && !form[key]) continue;
+        if (isSecret(def) && !form[key]) continue;
         await putSetting(key, form[key]);
       }
       showToast(`${plugin.name}: Einstellungen gespeichert`, 'success');
-      setForm((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, plugin.settings[k].type === 'secret' ? '' : v])));
+      setForm((f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, isSecret(plugin.settings[k]) ? '' : v])));
       onSaved();
     } catch (e) {
       showToast(e.message, 'error');
@@ -74,9 +75,19 @@ function PluginSettingsForm({ plugin, values, showToast, onSaved }) {
     >
       {!entries.length && <p className="st-note">Dieses Plugin hat keine Einstellungen.</p>}
       {entries.map(([key, def]) => (
-        <Row key={key} label={def.label || key} hint={def.type === 'secret' && values[`${key}_set`] ? 'gesetzt — leer lassen, um den Wert zu behalten' : def.hint} stacked={def.type !== 'bool'}>
+        <Row key={key} label={def.label || key} hint={isSecret(def) && values[`${key}_set`] ? 'gesetzt — leer lassen, um den Wert zu behalten' : def.hint} stacked={def.type !== 'bool'}>
           {def.type === 'bool' ? (
             <Toggle checked={form[key] === 'true'} onChange={(on) => setForm((f) => ({ ...f, [key]: on ? 'true' : 'false' }))} label={def.label || key} />
+          ) : def.type === 'json' ? (
+            <textarea
+              className="st-input"
+              rows={8}
+              spellCheck={false}
+              style={{ fontFamily: 'monospace' }}
+              value={form[key]}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+              placeholder={def.secret && values[`${key}_set`] ? 'gesetzt' : def.placeholder || '{ }'}
+            />
           ) : (
             <input
               type={INPUT_TYPES[def.type]}

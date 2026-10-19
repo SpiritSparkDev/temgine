@@ -231,6 +231,9 @@ if (process.env.DATABASE_URL) {
     const prismaBin = path.join(__dirname, 'node_modules', '.bin', 'prisma');
     execSync(`"${prismaBin}" migrate deploy`, { stdio: 'inherit', env: process.env });
     console.log('> Migrations complete.');
+
+    // Plugins: einmalige Übernahme alter Kern-Settings (plugins/<id>/seed.cjs), idempotent, bricht den Start nie ab.
+    execSync(`node "${path.join(__dirname, 'scripts', 'plugins-seed.js')}"`, { stdio: 'inherit', env: process.env });
   } catch (e) {
     console.error('> Migration failed:', e.message);
     // Don't exit — app may still work if schema is already up to date
@@ -292,22 +295,26 @@ app.prepare().then(() => {
       setInterval(tick, 60 * 60 * 1000).unref();
     }
 
-    // Add-on "Anfrage-Weiterleitung": minütlicher Retry-Worker. Die API (pages/api/tnt-inquiries/outbox)
-    // prüft, ob das Add-on aktiv ist, und verarbeitet nur dann fällige Einträge (Cleanup läuft immer).
-    if (!global.__tntOutboxTimerStarted && process.env.NODE_ENV !== 'test') {
-      global.__tntOutboxTimerStarted = true;
-      process.env.TNT_CRON_SECRET = crypto.randomBytes(24).toString('hex');
-      const tntTick = () => {
-        const body = JSON.stringify({ action: 'process' });
-        const r = require('http').request({
-          host: '127.0.0.1', port, path: '/api/tnt-inquiries/outbox', method: 'POST',
-          headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'x-tnt-cron': process.env.TNT_CRON_SECRET },
-        }, (resp) => resp.resume());
-        r.on('error', () => {}); // nie Details loggen
-        r.end(body);
-      };
-      setTimeout(tntTick, 30 * 1000).unref();
-      setInterval(tntTick, 60 * 1000).unref();
+    // Plugin-Jobs (plugins/<id>/server.js → jobs): server.js kann ESM-Plugin-Code nicht laden, daher
+    // alle 30 s ein interner Aufruf mit Prozess-Secret; die Route führt fällige Jobs aktiver Plugins aus
+    // (lib/plugins/jobs.js). Nur gestartet, wenn überhaupt Plugins vorhanden sind.
+    if (!global.__pluginJobsTimerStarted && process.env.NODE_ENV !== 'test') {
+      let hasPlugins = false;
+      try { hasPlugins = require('./lib/plugins/manifest').loadManifests().length > 0; } catch (_e) { /* keine Plugins */ }
+      if (hasPlugins) {
+        global.__pluginJobsTimerStarted = true;
+        process.env.PLUGIN_CRON_SECRET = crypto.randomBytes(24).toString('hex');
+        const jobsTick = () => {
+          const r = require('http').request({
+            host: '127.0.0.1', port, path: '/api/plugins/__jobs', method: 'POST',
+            headers: { 'content-length': 0, 'x-plugin-cron': process.env.PLUGIN_CRON_SECRET },
+          }, (resp) => resp.resume());
+          r.on('error', () => {});
+          r.end();
+        };
+        setTimeout(jobsTick, 45 * 1000).unref();
+        setInterval(jobsTick, 30 * 1000).unref();
+      }
     }
   });
 });

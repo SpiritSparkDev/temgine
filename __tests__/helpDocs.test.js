@@ -4,7 +4,7 @@ describe('helpDocs', () => {
   it('listet die Anleitungen aus help/ mit Titel, Templates zuerst', () => {
     const docs = listHelpDocs();
     expect(docs[0]).toEqual({ name: 'templates', title: 'Templates in Temgine' });
-    expect(docs.map(d => d.name)).toEqual(expect.arrayContaining(['navigationen', 'picgine-galerien']));
+    expect(docs.map(d => d.name)).toEqual(expect.arrayContaining(['navigationen']));
   });
 
   it('liefert Markdown für bekannte Namen, null für alles andere (kein Pfad-Zugriff)', () => {

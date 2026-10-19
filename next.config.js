@@ -50,6 +50,14 @@ module.exports = {
   serverExternalPackages: ['ssh2', 'ssh2-sftp-client'], // native Module, nicht bündeln
   async rewrites() {
     return {
+      // Plugin picgine: alte Webhook-URLs (in Picgine eingetragen) und Templates bleiben gültig.
+      // Wird mit dem nächsten Major entfernt (Plugin-System-Spec §5).
+      afterFiles: [
+        {
+          source: '/api/picgine/:path*',
+          destination: '/api/plugins/picgine/:path*',
+        },
+      ],
       fallback: [
         {
           source: '/extern_css/:path*',

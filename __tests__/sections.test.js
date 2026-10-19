@@ -34,7 +34,7 @@ afterEach(() => {
 describe('registry', () => {
   it('registers plugin providers after the core ones, never trusted', () => {
     const providers = getSectionProviders();
-    expect(Object.keys(providers)).toEqual(['folder', 'picgine', 'fake']);
+    expect(Object.keys(providers)).toEqual(['folder', 'fake']);
     expect(providers.fake.trusted).toBe(false);
     expect(providers.fake.pluginId).toBe('fakeplugin');
   });
@@ -62,12 +62,12 @@ describe('parser', () => {
   });
 
   it('selects the EditorField per provider (fixed values get no field)', () => {
-    const code = `${TPL}{{#folder:bilder}}{{name}}{{/folder:bilder}}{{#picgine:galerie}}{{title}}{{/picgine:galerie}}`;
+    const code = `${TPL}{{#folder:bilder}}{{name}}{{/folder:bilder}}`;
     const sections = extractEditorSections(code);
-    expect(sections.map((s) => [s.prefix, s.sectionName])).toEqual([['folder', 'bilder'], ['picgine', 'galerie'], ['fake', 'feld']]);
-    expect(sections[2].provider.EditorField).toBe(FakeField);
-    expect(sections.map((s) => s.provider.editorType)).toEqual(['folder', 'gallery', 'select']);
-    expect(sections.map((s) => s.provider.editorFieldLabel)).toEqual([undefined, 'Picgine-Galerie', 'Fake']);
+    expect(sections.map((s) => [s.prefix, s.sectionName])).toEqual([['folder', 'bilder'], ['fake', 'feld']]);
+    expect(sections[1].provider.EditorField).toBe(FakeField);
+    expect(sections.map((s) => s.provider.editorType)).toEqual(['folder', 'select']);
+    expect(sections.map((s) => s.provider.editorFieldLabel)).toEqual([undefined, 'Fake']);
   });
 
   it('collects section keys per prefix over nested blocks', () => {
@@ -133,8 +133,5 @@ describe('requiresDynamic', () => {
     expect(sectionsRequireDynamic({ html: '<p></p>', query: {} })).toBe(false);
     expect(sectionsRequireDynamic({ html: '<form data-fake-lock>', query: {} })).toBe(true);
     expect(sectionsRequireDynamic({ html: '', query: { fake: '1' } })).toBe(true);
-    expect(sectionsRequireDynamic({ html: '<form data-picgine-unlock="x">', query: {} })).toBe(true);
-    expect(sectionsRequireDynamic({ html: '', query: { picgine: 'kirche' } })).toBe(true);
-    expect(sectionsRequireDynamic({ html: '', query: { picgine: '../x' } })).toBe(false);
   });
 });

@@ -1,0 +1,16 @@
+{
+  "id": "picgine",
+  "name": "Picgine-Galerien",
+  "version": "1.0.0",
+  "temgineApi": 1,
+  "description": "Fotogalerien aus Picgine per {{#picgine:name}} einbinden (inkl. Passwort-/Viewer-Zugang und Webhook für den Live-Snapshot)",
+  "settings": {
+    "picgine_url": { "label": "Picgine-URL", "type": "url", "placeholder": "https://pics.example.com" },
+    "picgine_api_key": { "label": "API-Schlüssel", "type": "secret", "placeholder": "Client-Schlüssel aus Picgine" }
+  },
+  "csp": [
+    { "directive": "img-src", "originFromSetting": "picgine_url" }
+  ],
+  "sections": ["picgine"],
+  "help": "help.md"
+}

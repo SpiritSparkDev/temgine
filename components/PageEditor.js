@@ -910,7 +910,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   }, [templateCodes, templateTypeMapByName]);
 
   // Maps template name → editor-picked provider sections [{ prefix, sectionName, provider }]
-  // ({{#folder:name}}, {{#picgine:name}}, Plugin-Präfixe; feste "=wert"-Sections haben kein Feld)
+  // ({{#folder:name}}, Plugin-Präfixe; feste "=wert"-Sections haben kein Feld)
   const templateSectionsByName = useMemo(() => {
     const out = {};
     Object.entries(templateCodes || {}).forEach(([name, code]) => {

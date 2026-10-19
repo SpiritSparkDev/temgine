@@ -1,0 +1,14 @@
+{
+  "id": "tnt-inquiries",
+  "name": "TNT-Anfrage-Weiterleitung",
+  "version": "1.0.0",
+  "temgineApi": 1,
+  "description": "Leitet Kontaktformular-Absendungen serverseitig und nur per HTTPS als Anfrage an den TNT Manager weiter (mit Outbox, Wiederholungen und Datenschutz-Pflicht).",
+  "settings": {
+    "tnt-inquiries_base_url": { "label": "TNT-Adresse (https://…)", "type": "url" },
+    "tnt-inquiries_token": { "label": "Zugangs-Token (verschlüsselt)", "type": "secret" },
+    "tnt-inquiries_mappings": { "label": "Feld-Zuordnung je Formular", "type": "json", "secret": false },
+    "tnt-inquiries_alert": { "label": "Alarmstatus (intern)", "type": "json", "secret": true }
+  },
+  "help": "help.md"
+}

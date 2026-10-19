@@ -28,7 +28,7 @@ const fixtures = loadManifests(FIXTURES).map((m) => ({
 const all = [...builtIn, ...fixtures];
 
 // Statischer Import-Scan: client.js und alle relativ importierten Dateien im Plugin-Ordner.
-const FORBIDDEN = /(^|\/)(prisma|server)(\.js)?$|^@prisma\/|^(node:.*|fs|child_process|crypto|net|tls)$|lib\/(picgine|auth|liveRebuild|liveSnapshot|plugins\/registry|plugins\/manifest)(\.js)?$/;
+const FORBIDDEN = /(^|\/)(prisma|server)(\.js)?$|^@prisma\/|^(node:.*|fs|child_process|crypto|net|tls)$|lib\/(auth|liveRebuild|liveSnapshot|plugins\/registry|plugins\/manifest)(\.js)?$/;
 function imports(file) {
   const src = fs.readFileSync(file, 'utf8');
   return [...src.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]/g)].map((m) => m[1]);
