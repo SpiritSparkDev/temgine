@@ -7,7 +7,7 @@ import { pluginSecretKeys, pluginSettingKeys } from '../../lib/plugins/registry'
 // Geheimnisse, die GET nie herausgibt (GET ist öffentlich, z. B. für Matomo in _app.js) —
 // stattdessen nur "<key>_set": true. Geschrieben werden sie weiterhin per PUT.
 // Dazu kommen alle Settings vom Typ "secret" aus den Plugin-Manifesten.
-const CORE_SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources']
+const CORE_SECRET_KEYS = ['picgine_api_key', 'smtp_pass', 'external_sources', 'tnt_inquiries', 'tnt_inquiries_alert']
 
 const errorResponse = (status, message, code = 'UNKNOWN_ERROR', details = null) => {
   const response = { error: message, code };

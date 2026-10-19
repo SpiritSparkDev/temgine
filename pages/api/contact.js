@@ -16,12 +16,23 @@ import { prisma } from '../../lib/prisma';
 import { ALTCHA_HMAC_KEY } from '../../lib/altcha';
 import { getTemplateByName } from '../../lib/templateStore';
 import { getContactEmailTemplate } from '../../lib/contactEmailTemplateStore';
+import { getForwardingPlan, forwardSubmission } from '../../lib/tntInquiriesConfig';
+import { isChecked } from '../../lib/tntInquiries';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
+// Add-on "Anfrage-Weiterleitung": zusätzlich 5 Absendungen/Stunde je IP (eigener Key, sonst teilt
+// rateLimit den Speicher mit dem Minuten-Limiter).
+const tntLimiter = rateLimit({
+  windowMs: 3_600_000,
+  max: 5,
+  keyFn: (req) => `tnt:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+});
+// Honeypot: für Menschen unsichtbares Feld im Formular; Bots füllen es aus.
+const HONEYPOT_FIELD = 'hp_website';
 
 const META_FIELD_KEYS = new Set([
   'altcha', 'captcha', 'hcaptcha', 'g-recaptcha-response',
-  'recaptcha', 'csrf', 'csrfToken', '_csrf', '_method', '_cfTemplate',
+  'recaptcha', 'csrf', 'csrfToken', '_csrf', '_method', '_cfTemplate', HONEYPOT_FIELD,
 ]);
 
 // Rendert eine Admin-Email-Vorlage mit den (schon sanitisierten) Formularfeldern
@@ -156,6 +167,9 @@ export default async function handler(req, res) {
 
   const body = (req.body && typeof req.body === 'object') ? req.body : {};
 
+  // Spam: Honeypot ausgefüllt → still verwerfen (Bot sieht Erfolg), nichts wird gesendet.
+  if (body[HONEYPOT_FIELD]) return res.status(200).json({ ok: true });
+
   // Spam protection — require a solved ALTCHA proof-of-work challenge
   const altchaValid = body.altcha
     ? await verifySolution(body.altcha, ALTCHA_HMAC_KEY).catch(() => false)
@@ -188,6 +202,25 @@ export default async function handler(req, res) {
 
   if (Object.keys(errors).length > 0) {
     return res.status(400).json({ error: 'Validierungsfehler', fields: errors });
+  }
+
+  // Add-on "Anfrage-Weiterleitung an TNT Manager" (nur wenn aktiv und dieses Formular zugeordnet ist)
+  const tntPlan = await getForwardingPlan(prisma, body._cfTemplate);
+  if (tntPlan) {
+    const { privacyField } = tntPlan.mapping;
+    if (!isChecked(body[privacyField])) {
+      return res.status(400).json({
+        error: 'Validierungsfehler',
+        fields: { [privacyField]: 'Bitte stimme der Datenschutzerklärung zu.' },
+      });
+    }
+    const tnt = tntLimiter.check(req);
+    if (!tnt.ok) {
+      res.setHeader('Retry-After', tnt.retryAfter);
+      return res.status(429).json({ error: 'Zu viele Anfragen. Bitte versuche es später erneut.', retryAfter: tnt.retryAfter });
+    }
+    // Outbox schreiben, Sendeversuch läuft im Hintergrund; ein Ausfall von TNT bleibt für den Besucher unsichtbar.
+    await forwardSubmission(prisma, tntPlan, body);
   }
 
   // Read settings from DB

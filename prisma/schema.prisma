@@ -208,6 +208,25 @@ model ContactMessage {
   @@index([createdAt])
 }
 
+// Warteschlange des Add-ons "Anfrage-Weiterleitung" (lib/tntInquiries.js).
+// payload = AES-256-GCM-verschlüsseltes JSON, wird nach Zustellung auf NULL gesetzt.
+model InquiryOutbox {
+  id             String    @id @default(cuid())
+  formId         String
+  submissionId   String
+  externalId     String    @unique
+  payload        String?   @db.Text
+  status         String    @default("pending") // pending | delivered | failed
+  attempts       Int       @default(0)
+  nextAttemptAt  DateTime  @default(now())
+  lastStatusCode Int?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  deliveredAt    DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
 // ── Member System ─────────────────────────────────────────────────────────────
 
 model Member {

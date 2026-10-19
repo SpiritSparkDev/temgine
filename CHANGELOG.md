@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.54.0] - 2026-10-19
+
+### Added
+- **Add-on Anfrage-Weiterleitung (TNT Manager):** Kontaktformular-Absendungen werden – standardmäßig inaktiv – als Anfrage an die TNT-Manager-API (`POST /api/inquiries`) weitergegeben. Nur über HTTPS (kein Klartext, TLS-Prüfung nie deaktiviert, keine Weiterleitungen, 10 s Zeitlimit), Bearer-Token verschlüsselt gespeichert und im Admin nur maskiert, Absendungen laufen zuerst in eine verschlüsselte Warteschlange (`InquiryOutbox`, Migration `20261019120000_add_inquiry_outbox`) mit Wiederholungen (1 min … 24 h, stabile `externalId`); nach Zustellung werden Personendaten gelöscht, nicht zugestellte Einträge nach 30 Tagen. Datenschutz-Checkbox wird serverseitig erzwungen; Honeypot und IP-Limit (5/h).
+- **Admin:** Tab „Anfrage-Weiterleitung“ in den Einstellungen (Status, Verbindung testen, Feld-Zuordnung je Formular, Warnbanner, Liste der Absendungen ohne Inhalte, „Erneut senden“).
+- Retry-Worker in `server.js` (Takt 60 s, nur bei aktivem Add-on).
+
+---
+
 ## [0.53.1] - 2026-10-18
 
 ### Changed
