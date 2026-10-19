@@ -1,7 +1,7 @@
 // Plugin "Anfrage-Weiterleitung an TNT Manager": Kontaktformular-Hooks, Outbox-Job, Admin-Routen.
 // Spezifikation und Abnahmekriterien: docs/specs/. Personendaten stehen nur im verschlüsselten Outbox-Payload.
 import { isChecked, processOutbox, cleanupOutbox, retryFailed } from './lib';
-import { getForwardingPlan, forwardSubmission, getRuntime, buildView, applyUpdate, testConnection } from './config';
+import { getForwardingPlan, forwardSubmission, mailContextFor, getRuntime, buildView, applyUpdate, testConnection } from './config';
 
 const ADMIN = ['ADMIN'];
 
@@ -60,8 +60,10 @@ export default {
       return { ok: true };
     },
     // Outbox schreiben, Sendeversuch läuft im Hintergrund (nicht abgewartet): ein TNT-Ausfall bleibt unsichtbar.
-    onContactSubmission: async (ctx, { formId, values, submissionId, honeypotTripped }) => {
-      if (honeypotTripped) return;
+    // Option „Mail erst nach TNT-Antwort“: Zustellung VOR dem Mailversand (max. 5 s), liefert tnt_url/tnt_id/tnt_status für die Betreiber-Mail.
+    contactMailContext: (ctx, { formId, values, submissionId }) => mailContextFor(ctx, formId, values, submissionId),
+    onContactSubmission: async (ctx, { formId, values, submissionId, honeypotTripped, mailContext }) => {
+      if (honeypotTripped || mailContext) return; // mailContext gesetzt: schon im Vor-Mail-Hook angelegt
       const plan = await getForwardingPlan(ctx, formId);
       if (plan) await forwardSubmission(ctx, plan, values, submissionId);
     },

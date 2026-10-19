@@ -33,7 +33,7 @@ const jobsApi = require('../pages/api/plugins/__jobs').default;
 const settingsApi = require('../pages/api/settings').default;
 
 let dir;
-const hooks = { beforeContactSubmission: jest.fn(), onContactSubmission: jest.fn() };
+const hooks = { beforeContactSubmission: jest.fn(), contactMailContext: jest.fn(), onContactSubmission: jest.fn() };
 const job = { id: 'tick', intervalMs: 60000, run: jest.fn() };
 const manifest = {
   id: 'hk', name: 'Hk', version: '1.0.0', temgineApi: 1,
@@ -52,11 +52,13 @@ beforeEach(() => {
   _resetJobState();
   hooks.beforeContactSubmission.mockResolvedValue({ ok: true });
   hooks.onContactSubmission.mockResolvedValue(undefined);
+  hooks.contactMailContext.mockResolvedValue(undefined);
   job.run.mockResolvedValue(undefined);
   registry._setPluginSource({ dir, server: { hk: { hooks, jobs: [job] } } });
   mockStore.plugin_hk_enabled = 'true';
   mockStore.contactSaveToDb = 'true';
   mockStore.hk_plain = 'x';
+  mockStore.contact_recipient_email = 'op@example.de';
 });
 
 function res() {
@@ -83,7 +85,10 @@ describe('contact hooks', () => {
     expect(bctx).toMatchObject({ settings: { hk_plain: 'x' }, prisma: mockPrisma, clientIp: '1.2.3.4' });
     expect(typeof bctx.crypto.encrypt).toBe('function');
     const [, sub] = hooks.onContactSubmission.mock.calls[0];
-    expect(sub).toMatchObject({ formId: 'gibt-es-nicht', submissionId: '42', honeypotTripped: false });
+    expect(sub).toMatchObject({ formId: 'gibt-es-nicht', messageId: '42', honeypotTripped: false, mailContext: null });
+    expect(sub.submissionId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(input.submissionId).toBe(sub.submissionId);
+    expect(hooks.contactMailContext.mock.calls[0][1].submissionId).toBe(sub.submissionId);
   });
 
   test('before hook can reject with field errors; nothing is saved or after-hooked', async () => {
@@ -114,6 +119,34 @@ describe('contact hooks', () => {
     expect(hooks.beforeContactSubmission).not.toHaveBeenCalled();
     expect(hooks.onContactSubmission.mock.calls[0][1]).toMatchObject({ honeypotTripped: true, submissionId: null });
     expect(mockPrisma.contactMessage.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('contactMailContext', () => {
+  const { sendMail } = require('../lib/email');
+
+  test('vars/appendText reach the mail; foreign prefixes, bad keys, objects are dropped; result goes to the after hook', async () => {
+    hooks.contactMailContext.mockResolvedValue({ vars: { hk_url: 'https://x.de/1', hk_n: 5, other_x: 'no', 'Hk_Bad': 'no', hk_obj: { a: 1 } }, appendText: 'Zusatz <b>' });
+    await post({});
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.text).toContain('Zusatz <b>');
+    expect(mail.html).toContain('Zusatz &lt;b&gt;');
+    expect(hooks.onContactSubmission.mock.calls[0][1].mailContext).toEqual({ vars: { hk_url: 'https://x.de/1', hk_n: '5' }, appendText: 'Zusatz <b>' });
+  });
+
+  test('fail-open: throwing hook still sends the mail without extras', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    hooks.contactMailContext.mockRejectedValue(new Error('boom'));
+    expect((await post({})).code).toBe(200);
+    expect(sendMail).toHaveBeenCalledTimes(1);
+    expect(sendMail.mock.calls[0][0].text).not.toContain('undefined');
+    console.error.mockRestore();
+  });
+
+  test('not called without recipient or for inactive plugins', async () => {
+    delete mockStore.contact_recipient_email;
+    await post({});
+    expect(hooks.contactMailContext).not.toHaveBeenCalled();
   });
 });
 

@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.56.0] - 2026-10-20
+
+### Added
+- **Plugin Anfrage-Weiterleitung: „Mail erst nach TNT-Antwort senden“** (pro Kontaktformular im Plugin-Panel): Die Absendung wird zuerst in die Outbox geschrieben und synchron (Timeout 5 s) an TNT gesendet, danach geht die Betreiber-Mail raus – mit Termin-Link. In der Mail-Vorlage stehen `{{tnt_url}}` (nur `appointmentUrl` aus der TNT-Antwort, nur `https://` und exakt der Host der Basis-URL), `{{tnt_id}}` und `{{tnt_status}}` (`angelegt`/`ausstehend`) zur Verfügung; ohne eigene Vorlage hängt die Standardmail den Link an. Bei Fehler, Timeout oder Status ≠ 200/201 geht die Mail sofort ohne Link raus, die Weiterleitung wird später mit derselben `externalId` wiederholt. Der Link steht nur in der Betreiber-Mail (nie in Logs, Antworten oder Outbox). Option aus: Verhalten wie bisher.
+- **Neuer Plugin-Hook `contactMailContext`** (läuft vor dem Mailversand, 15 s, fail-open; liefert Mail-Variablen mit Plugin-Präfix und optionalen `appendText`). Die `submissionId` (UUID) ist jetzt in allen Kontakt-Hooks identisch, der Nach-Hook bekommt zusätzlich `messageId` und `mailContext`.
+
+### Security
+- Formularfeld-Schlüssel im reservierten Namensraum eines Plugins mit Mail-Hook (z. B. `tnt_…`) werden nicht in den Mustache-Kontext der Betreiber-Mail übernommen – ein Besucher kann so keinen eigenen „Termin-Link“ einschleusen.
+
+---
+
 ## [0.55.3] - 2026-10-19
 
 ### Fixed

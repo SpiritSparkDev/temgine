@@ -41,7 +41,7 @@ export default function TntInquiriesPanel({ showToast }) {
         else if (fl.suggested) { fields[fl.key] = fl.suggested; sug[`${f.formId}:${fl.key}`] = true; }
         else fields[fl.key] = '';
       });
-      m[f.formId] = { fields, privacyField: f.privacyField || f.suggestedPrivacyField || '' };
+      m[f.formId] = { fields, privacyField: f.privacyField || f.suggestedPrivacyField || '', mailAfterDelivery: !!f.mailAfterDelivery };
     });
     setMaps(m);
     setSuggested(sug);
@@ -202,6 +202,14 @@ export default function TntInquiriesPanel({ showToast }) {
                 {f.fields.map((fl) => <option key={fl.key} value={fl.key}>{fl.label}</option>)}
               </select>
               <small>Pflicht: Ohne Datenschutz-Checkbox ist keine Aktivierung möglich.</small>
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 8 }}>
+              <input type="checkbox" aria-label={`Mail erst nach TNT-Antwort senden ${f.label}`} checked={!!maps[f.formId]?.mailAfterDelivery}
+                onChange={(e) => setMaps((m) => ({ ...m, [f.formId]: { ...m[f.formId], mailAfterDelivery: e.target.checked } }))} />
+              <span>
+                Mail erst nach TNT-Antwort senden (Termin-Link im Mail-Text mit {'{{tnt_url}}'})
+                <br /><small>Die Anfrage geht zuerst an TNT, danach erst die Mail an dich. Besucher warten dafür bis zu 5 Sekunden. Ist TNT nicht erreichbar, geht die Mail trotzdem sofort raus, ohne Link; die Weiterleitung wird später wiederholt. Platzhalter in der Mail-Vorlage: <code>{'{{tnt_url}}'}</code> (Link), <code>{'{{tnt_id}}'}</code> (Termin-Nr.), <code>{'{{tnt_status}}'}</code> (angelegt / ausstehend). Der Link steht nur in der Mail an dich.</small>
+              </span>
             </label>
           </fieldset>
         ))}

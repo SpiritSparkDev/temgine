@@ -7,7 +7,7 @@ import { listTemplates, getTemplateByName } from '../../lib/templateStore';
 import { extractContactFormFields } from '../../lib/contactFormFields';
 import {
   TARGETS, TARGET_BY_PATH, BLOCKING_ALERTS, suggestTarget, suggestPrivacyField, normalizeBaseUrl,
-  postInquiry, buildInquiryPayload, validateInquiry, enqueue, deliverSafely, releaseHeld,
+  postInquiry, buildInquiryPayload, validateInquiry, enqueue, deliverSafely, releaseHeld, isChecked,
 } from './lib';
 
 export const K = {
@@ -115,6 +115,7 @@ export async function buildView(ctx) {
         fields: f.fields.map((x) => ({ ...x, suggested: suggestTarget(x.key, x.type) })),
         mapping: Object.fromEntries(f.fields.map((x) => [x.key, m.fields?.[x.key] || ''])),
         privacyField: m.privacyField || null,
+        mailAfterDelivery: !!m.mailAfterDelivery,
         suggestedPrivacyField: suggestPrivacyField(f.fields),
       };
     }),
@@ -156,7 +157,8 @@ export async function applyUpdate(ctx, body) {
       }
       const privacyField = m?.privacyField || null;
       if (privacyField && !keys.has(privacyField)) errors[`mappings.${formId}.privacyField`] = 'Unbekanntes Feld.';
-      next.mappings[formId] = { fields, privacyField };
+      const mailAfterDelivery = typeof m?.mailAfterDelivery === 'boolean' ? m.mailAfterDelivery : !!cfg.mappings[formId]?.mailAfterDelivery;
+      next.mappings[formId] = { fields, privacyField, mailAfterDelivery };
     }
   }
   if (Object.keys(errors).length) return { errors };
@@ -254,5 +256,36 @@ export async function forwardSubmission(ctx, plan, body, submissionId = crypto.r
   } catch {
     console.warn(`[tnt-inquiries] ${submissionId} error ENQUEUE`);
     return null;
+  }
+}
+
+// Mail erst nach TNT-Antwort: Wartezeit für den Besucher höchstens MAIL_WAIT_MS.
+export const MAIL_WAIT_MS = 5000;
+
+/**
+ * Hook contactMailContext: Outbox-Eintrag anlegen, synchron zustellen (5 s) und Mail-Variablen liefern.
+ * Nur wenn die Option am Formular an ist und die Datenschutz-Checkbox angehakt wurde, sonst undefined.
+ * Fehler/Timeout/Alarm: { tnt_status: 'ausstehend' } ohne tnt_url; der Retry-Job stellt später zu. Wirft nie, loggt nie Inhalte.
+ */
+export async function mailContextFor(ctx, formId, values, submissionId) {
+  try {
+    const plan = await getForwardingPlan(ctx, formId);
+    if (!plan?.mapping.mailAfterDelivery || !isChecked(values?.[plan.mapping.privacyField])) return undefined;
+    const payload = buildInquiryPayload({ formId: plan.formId }, values, plan.mapping, submissionId);
+    if (!payload || validateInquiry(payload).length) return undefined;
+    const row = await enqueue(ctx.prisma, plan.rt, { formId: plan.formId, submissionId, payload });
+    if (!row) return undefined; // Duplikat: schon angelegt, nichts doppelt
+    const pending = { vars: { tnt_status: 'ausstehend' }, appendText: 'Übertragung an den Planer steht noch aus.' };
+    if (BLOCKING_ALERTS.includes(await plan.rt.getAlertCode())) return pending;
+    const out = await deliverSafely(ctx.prisma, { ...plan.rt, timeoutMs: MAIL_WAIT_MS, readBody: true }, row);
+    if (out?.row?.status !== 'delivered') return pending;
+    const { appointmentId: id, appointmentUrl: url } = out.answer || {};
+    const vars = { tnt_status: 'angelegt' };
+    if (id) vars.tnt_id = id;
+    if (url) vars.tnt_url = url;
+    return { vars, appendText: url ? `Termin im Planer: ${url}` : (id ? `Termin im Planer: Nr. ${id}` : 'Anfrage an den Planer übertragen.') };
+  } catch {
+    console.warn(`[tnt-inquiries] ${submissionId} error MAILCONTEXT`);
+    return undefined;
   }
 }

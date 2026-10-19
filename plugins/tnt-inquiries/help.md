@@ -21,6 +21,18 @@ Der Status „Bereit“ zeigt an, dass Adresse, Token und eine vollständige Zuo
 - Nicht zugestellte Einträge samt Inhalt werden nach 30 Tagen gelöscht.
 - Pro IP-Adresse sind 5 Absendungen pro Stunde möglich.
 
+## Mail erst nach TNT-Antwort (optional)
+
+Je Formular kann die Checkbox „Mail erst nach TNT-Antwort senden“ gesetzt werden. Dann geht die Anfrage zuerst an TNT und erst danach die Mail an dich. Besucher warten dafür bis zu 5 Sekunden. In der Mail-Vorlage des Formulars stehen drei Platzhalter bereit:
+
+- `{{tnt_url}}`: Link zum Termin im Planer (nur gesetzt, wenn TNT den Termin angelegt hat). Für Textmails `{{{tnt_url}}}` verwenden, damit der Link nicht maskiert wird.
+- `{{tnt_id}}`: Termin-Nr.
+- `{{tnt_status}}`: `angelegt` oder `ausstehend`.
+
+Mit `{{#tnt_url}}…{{/tnt_url}}` lässt sich ein Abschnitt nur dann anzeigen, wenn es einen Link gibt (Beispiel: `docs/mail-template-example.html` im Plugin-Repo). Ohne eigene Vorlage hängt Temgine eine Zeile „Termin im Planer: …“ an die Standardmail an.
+
+Ist TNT nicht erreichbar oder antwortet fehlerhaft, geht die Mail trotzdem sofort raus, ohne Link und mit dem Hinweis, dass die Übertragung noch aussteht; die Weiterleitung wird später automatisch wiederholt. Der Link steht nur in der Mail an dich, nie beim Besucher.
+
 ## Hinweise für Template-Autoren
 
 Das Formular braucht das für Menschen unsichtbare Feld `hp_website` (Honeypot). Wird es ausgefüllt, verwirft Temgine die Absendung still, und es wird nichts weitergeleitet.

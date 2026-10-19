@@ -37,6 +37,17 @@ describe('TntInquiriesPanel', () => {
     expect(screen.getByText('Datenschutz-Checkbox zuordnen')).toBeTruthy();
   });
 
+  it('Option „Mail erst nach TNT-Antwort“: Checkbox, Hinweis mit 5 s, wird mit gespeichert', async () => {
+    await setup();
+    expect(screen.getByText(/bis zu 5 Sekunden/)).toBeTruthy();
+    expect(screen.getByText(/tnt_url/, { selector: 'code' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Mail erst nach TNT-Antwort senden/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    await waitFor(() => expect(global.fetch.mock.calls.some(([, o]) => o && o.method === 'PUT')).toBe(true));
+    const put = global.fetch.mock.calls.find(([, o]) => o && o.method === 'PUT')[1];
+    expect(JSON.parse(put.body).mappings.f1.mailAfterDelivery).toBe(true);
+  });
+
   it('lehnt http://-URL clientseitig ab (kein PUT)', async () => {
     await setup();
     fireEvent.change(screen.getByPlaceholderText('https://tnt.example.com'), { target: { value: 'http://x.de' } });

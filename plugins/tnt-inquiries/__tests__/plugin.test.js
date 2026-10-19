@@ -16,6 +16,8 @@ const { makePrisma } = require('./fixtures/fakePrisma');
 const mockPrisma = makePrisma();
 let mockMsgId = 0;
 mockPrisma.contactMessage = { create: jest.fn(async () => ({ id: ++mockMsgId })) };
+let mockEmailTpl = { subject: '', body: '' };
+jest.mock('../../../lib/contactEmailTemplateStore', () => ({ getContactEmailTemplate: () => mockEmailTpl }));
 jest.mock('../../../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('../../../lib/email', () => ({ sendMail: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../../lib/rateLimit', () => ({ rateLimit: () => ({ check: () => ({ ok: true }) }) }));
@@ -58,6 +60,7 @@ afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
 beforeEach(async () => {
   jest.clearAllMocks();
   mockMsgId = 0;
+  mockEmailTpl = { subject: '', body: '' };
   _resetJobState();
   registry._setPluginSource({ dir, server: { 'tnt-inquiries': plugin } });
   mockPrisma._rows.length = 0; mockPrisma._settings.clear();
@@ -80,14 +83,14 @@ test('Manifest ist gültig, Token/Alarm sind Secrets, alle Routen nur ADMIN', ()
 });
 
 describe('POST /api/contact mit Plugin', () => {
-  test('gültig: 200, E-Mail wie bisher, Outbox + Sendeversuch an https, submissionId = Nachrichten-ID', async () => {
+  test('gültig: 200, E-Mail wie bisher, Outbox + Sendeversuch an https, submissionId = UUID', async () => {
     const r = await post(form());
     await flush();
     expect(r.code).toBe(200);
     expect(sendMail).toHaveBeenCalledTimes(1);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(global.fetch.mock.calls[0][0]).toBe('https://tnt.example.de/api/inquiries');
-    expect(mockPrisma._rows[0]).toMatchObject({ formId: 'Anfrage', submissionId: '1', status: 'delivered', payload: null });
+    expect(mockPrisma._rows[0]).toMatchObject({ formId: 'Anfrage', submissionId: expect.stringMatching(/^[0-9a-f-]{36}$/), status: 'delivered', payload: null });
   });
 
   test('ohne Datenschutz-Haken: 400 mit Feldfehler, nichts gesendet/gespeichert', async () => {
@@ -203,5 +206,140 @@ describe('Retry-Job', () => {
     mockPrisma._rows.push({ id: 'p', status: 'pending', attempts: 0, nextAttemptAt: new Date(0), createdAt: new Date(), payload: 'x' });
     await runDueJobs(Date.now());
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('Option „Mail erst nach TNT-Antwort“', () => {
+  const answer = (status, json) => ({ status, headers: new Headers(), body: null, text: async () => JSON.stringify(json) });
+  const OK = { ok: true, duplicate: false, appointmentId: 77, appointmentUrl: 'https://tnt.example.de/appointments/77' };
+  const turnOn = (on = true) => applyUpdate(ctxOf(), { mappings: { Anfrage: { ...MAPPING, mailAfterDelivery: on } } });
+  const mail = () => sendMail.mock.calls[0][0];
+
+  test('Option aus: Mail ohne Link, Weiterleitung nach der Mail wie bisher', async () => {
+    global.fetch.mockResolvedValue(answer(201, OK));
+    mockEmailTpl = { subject: 'S', body: 'Link: {{tnt_url}}|{{tnt_status}}' };
+    await post(form());
+    expect(mail().text).toBe('Link: |');
+    await flush();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('Option an, 201: eigene Vorlage und generische Mail enthalten URL/ID, je Absendung genau ein Request', async () => {
+    await turnOn();
+    global.fetch.mockResolvedValue(answer(201, OK));
+    mockEmailTpl = { subject: 'S', body: '<p>Nr {{tnt_id}} {{tnt_status}}</p>{{#tnt_url}}<a href="{{tnt_url}}">Termin</a>{{/tnt_url}}' };
+    const r = await post(form());
+    expect(r.code).toBe(200);
+    expect(mail().html).toContain('Nr 77 angelegt');
+    expect(mail().html).toContain('<a href="https:&#x2F;&#x2F;tnt.example.de&#x2F;appointments&#x2F;77">');
+    mockEmailTpl = { subject: '', body: '' };
+    await post(form());
+    expect(sendMail.mock.calls[1][0].text).toContain('Termin im Planer: https://tnt.example.de/appointments/77');
+    await flush();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(mockPrisma._rows.map((x) => x.status)).toEqual(['delivered', 'delivered']);
+    expect(global.fetch.mock.calls[0][1].signal).toBeDefined();
+  });
+
+  test('URL mit fremdem Host, http:// oder Userinfo wird verworfen; ID bleibt', async () => {
+    await turnOn();
+    mockEmailTpl = { subject: 'S', body: '[{{tnt_url}}][{{tnt_id}}]' };
+    for (const bad of ['https://evil.example/x', 'http://tnt.example.de/x', 'https://u:p@tnt.example.de/x', 'https://tnt.example.de.evil.io/x', 'javascript:alert(1)']) {
+      sendMail.mockClear(); mockPrisma._rows.length = 0;
+      global.fetch.mockResolvedValue(answer(201, { ...OK, appointmentUrl: bad }));
+      await post(form());
+      expect(mail().text).toBe('[][77]');
+    }
+  });
+
+  test('Spoofing: ein Formularfeld tnt_url/tnt_id kann den Termin-Link nicht verdrängen oder einschleusen', async () => {
+    await turnOn();
+    mockEmailTpl = { subject: 'S', body: '[{{{tnt_url}}}][{{tnt_id}}][{{tnt_status}}]' };
+    global.fetch.mockResolvedValue(answer(201, OK));
+    await post(form({ tnt_url: 'https://evil.example/phish', tnt_id: '666' }));
+    expect(mail().text).toContain('/appointments/77');
+    expect(mail().text).not.toContain('evil.example');
+    expect(mail().text).not.toContain('666');
+    // TNT-Ausfall: das Formularfeld darf nicht an die Stelle des fehlenden Links treten
+    sendMail.mockClear(); mockPrisma._rows.length = 0;
+    global.fetch.mockResolvedValue(answer(503, {}));
+    await post(form({ tnt_url: 'https://evil.example/phish' }));
+    expect(mail().text).not.toContain('evil.example');
+  });
+
+  test('Duplikat-Antwort 200 liefert ebenfalls ID/URL', async () => {
+    await turnOn();
+    global.fetch.mockResolvedValue(answer(200, { ...OK, duplicate: true }));
+    mockEmailTpl = { subject: 'S', body: '{{{tnt_url}}}' };
+    await post(form());
+    expect(mail().text).toContain('/appointments/77');
+  });
+
+  test('TNT 5xx oder Timeout: Mail sofort ohne Link, ausstehend, Outbox pending, Retry stellt später zu', async () => {
+    await turnOn();
+    mockEmailTpl = { subject: 'S', body: '[{{tnt_url}}][{{tnt_status}}]' };
+    for (const fail of [() => Promise.resolve(answer(503, {})), () => Promise.reject(Object.assign(new Error('x'), { name: 'AbortError' }))]) {
+      sendMail.mockClear(); mockPrisma._rows.length = 0;
+      global.fetch.mockImplementation(fail);
+      expect((await post(form())).code).toBe(200);
+      expect(mail().text).toBe('[][ausstehend]');
+      expect(mockPrisma._rows[0].status).toBe('pending');
+    }
+    sendMail.mockClear();
+    mockEmailTpl = { subject: '', body: '' };
+    await post(form({ name: 'Anna Zwei' }));
+    expect(mail().text).toContain('Übertragung an den Planer steht noch aus');
+    mockPrisma._rows.forEach((x) => { x.nextAttemptAt = new Date(Date.now() - 1000); });
+    global.fetch.mockReset();
+    global.fetch.mockResolvedValue(answer(201, OK));
+    await runDueJobs(Date.now());
+    expect(mockPrisma._rows.every((x) => x.status === 'delivered')).toBe(true);
+  });
+
+  test('401: Mail ohne Link, Alarm gesetzt, Eintrag gehalten', async () => {
+    await turnOn();
+    global.fetch.mockResolvedValue(answer(401, {}));
+    mockEmailTpl = { subject: 'S', body: '[{{tnt_url}}][{{tnt_status}}]' };
+    await post(form());
+    expect(mail().text).toBe('[][ausstehend]');
+    expect(JSON.parse(mockPrisma._settings.get('tnt-inquiries_alert')).code).toBe('AUTH');
+    expect(mockPrisma._rows[0].status).toBe('pending');
+  });
+
+  test('ohne Datenschutz-Haken: 400, nichts passiert', async () => {
+    await turnOn();
+    expect((await post(form({ datenschutz: undefined }))).code).toBe(400);
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  test('URL landet nur in der Betreiber-Mail: nicht in Antwort, Logs, Outbox, ContactMessage', async () => {
+    await turnOn();
+    global.fetch.mockResolvedValue(answer(201, OK));
+    const r = await post(form());
+    await flush();
+    const logs = [console.log, console.warn, console.error].map((f) => JSON.stringify(f.mock?.calls || [])).join();
+    expect(JSON.stringify(r.body)).not.toContain('appointments');
+    expect(logs).not.toContain('appointments');
+    expect(JSON.stringify(mockPrisma.contactMessage.create.mock.calls)).not.toContain('appointments');
+    expect(JSON.stringify(mockPrisma._rows)).not.toContain('appointments');
+    expect(mail().text).toContain('appointments');
+  });
+
+  test('Plugin-Variablen (tnt_*) sind reserviert: gleichnamige Formularfelder werden verworfen', async () => {
+    await turnOn();
+    global.fetch.mockResolvedValue(answer(201, OK));
+    mockEmailTpl = { subject: 'S', body: '{{tnt_status}}' };
+    await post(form({ tnt_status: 'Formular' }));
+    expect(mail().text).toBe('angelegt');
+  });
+
+  test('Admin: Option wird gespeichert und in der Sicht ausgegeben', async () => {
+    await turnOn();
+    const r = res();
+    await plugin.routes['GET config'].handler({ headers: {}, body: {} }, r, ctxOf());
+    expect(r.body.forms[0].mailAfterDelivery).toBe(true);
+    await turnOn(false);
+    expect(JSON.parse(mockPrisma._settings.get('tnt-inquiries_mappings')).Anfrage.mailAfterDelivery).toBe(false);
   });
 });

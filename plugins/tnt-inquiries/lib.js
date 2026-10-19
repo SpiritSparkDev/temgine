@@ -195,16 +195,45 @@ export function errorCode(err) {
   return 'NETWORK';
 }
 
+const MAX_ANSWER_BYTES = 4096;
+
+/** Liest höchstens 4 KB der Antwort; übernimmt nur appointmentId (Ganzzahl > 0) und appointmentUrl (https, Host = Basis-Host, ohne Userinfo). Nie loggen. */
+export async function readAnswer(res, base) {
+  const out = { appointmentId: null, appointmentUrl: null };
+  try {
+    let text = '';
+    if (res.body?.getReader) {
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let size = 0;
+      while (size < MAX_ANSWER_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.length;
+        text += dec.decode(value, { stream: true });
+      }
+      try { await reader.cancel(); } catch { /* egal */ }
+    } else if (typeof res.text === 'function') text = await res.text();
+    const j = JSON.parse(text.slice(0, MAX_ANSWER_BYTES));
+    if (Number.isInteger(j?.appointmentId) && j.appointmentId > 0) out.appointmentId = j.appointmentId;
+    if (typeof j?.appointmentUrl === 'string' && j.appointmentUrl.length <= 500) {
+      const u = new URL(j.appointmentUrl);
+      if (u.protocol === 'https:' && !u.username && !u.password && u.host === new URL(base).host) out.appointmentUrl = u.href;
+    }
+  } catch { /* unlesbar: ohne Zusatzdaten */ }
+  return out;
+}
+
 /**
  * Sendet einen Request an TNT. Wirft nie; Ergebnis: { status, headers } oder { error: <Code> }.
  * Kein http, keine Weiterleitungen, TLS-Prüfung unverändert (kein Agent/Option, die sie abschaltet).
  */
-export async function postInquiry({ baseUrl, token, payload, dryRun = false, fetchImpl = globalThis.fetch }) {
+export async function postInquiry({ baseUrl, token, payload, dryRun = false, fetchImpl = globalThis.fetch, timeoutMs = TIMEOUT_MS, readBody = false }) {
   const base = normalizeBaseUrl(baseUrl);
   if (!base) return { error: 'HTTPS' };
   if (!token) return { error: 'NO_TOKEN' };
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const res = await fetchImpl(`${base}/api/inquiries${dryRun ? '?dryRun=1' : ''}`, {
       method: 'POST',
@@ -213,7 +242,9 @@ export async function postInquiry({ baseUrl, token, payload, dryRun = false, fet
       redirect: 'error',
       signal: ctl.signal,
     });
-    try { await res.body?.cancel?.(); } catch { /* Antwortinhalt wird nie gebraucht */ }
+    // Antwortinhalt wird nur bei readBody gelesen (Mail-Pfad) und auf appointmentId/appointmentUrl reduziert.
+    if (readBody && (res.status === 200 || res.status === 201)) return { status: res.status, headers: res.headers, answer: await readAnswer(res, base) };
+    try { await res.body?.cancel?.(); } catch { /* nicht gebraucht */ }
     return { status: res.status, headers: res.headers };
   } catch (e) {
     return { error: errorCode(e) };
@@ -278,9 +309,9 @@ export async function deliver(prisma, rt, row, now = new Date()) {
   let payload;
   try { payload = JSON.parse(rt.decrypt(row.payload)); } catch {
     logStatus(row.id, 'failed DECRYPT');
-    return upd({ status: 'failed', payload: null, lastError: 'DECRYPT' });
+    return { row: await upd({ status: 'failed', payload: null, lastError: 'DECRYPT' }), answer: null };
   }
-  const res = await postInquiry({ baseUrl: rt.baseUrl, token: rt.token, payload, fetchImpl: rt.fetchImpl });
+  const res = await postInquiry({ baseUrl: rt.baseUrl, token: rt.token, payload, fetchImpl: rt.fetchImpl, timeoutMs: rt.timeoutMs, readBody: rt.readBody });
   const attempts = row.attempts + 1;
   const code = res.status ?? null;
 
@@ -293,23 +324,23 @@ export async function deliver(prisma, rt, row, now = new Date()) {
 
   if (c.action === 'delivered') {
     await rt.clearAlert();
-    return upd({ status: 'delivered', payload: null, attempts, lastStatusCode: code, lastError: null, deliveredAt: now });
+    return { answer: res.answer || null, row: await upd({ status: 'delivered', payload: null, attempts, lastStatusCode: code, lastError: null, deliveredAt: now }) };
   }
   if (c.action === 'alert') { // Absendung bleibt erhalten, Versuch wird nicht verbraucht
     await rt.setAlert(c.alert);
-    return upd({ nextAttemptAt: new Date(now.getTime() + HOLD_MS), lastStatusCode: code, lastError: errTag });
+    return { row: await upd({ nextAttemptAt: new Date(now.getTime() + HOLD_MS), lastStatusCode: code, lastError: errTag }), answer: null };
   }
   if (c.action === 'retry' && attempts < MAX_ATTEMPTS) {
     const wait = c.retryAfterMs ?? nextDelay(attempts);
-    return upd({ attempts, nextAttemptAt: new Date(now.getTime() + wait), lastStatusCode: code, lastError: errTag });
+    return { row: await upd({ attempts, nextAttemptAt: new Date(now.getTime() + wait), lastStatusCode: code, lastError: errTag }), answer: null };
   }
   // fail-permanent oder Versuche aufgebraucht: Payload bleibt (für „Erneut senden“) bis zur Aufbewahrungsfrist
-  return upd({ status: 'failed', attempts, lastStatusCode: code, lastError: c.action === 'retry' ? 'RETRIES_EXHAUSTED' : errTag });
+  return { answer: null, row: await upd({ status: 'failed', attempts, lastStatusCode: code, lastError: c.action === 'retry' ? 'RETRIES_EXHAUSTED' : errTag }) };
 }
 
 /** Sofortversuch direkt nach dem Anlegen. Fängt jeden Fehler ab. */
 export async function deliverSafely(prisma, rt, row, now = new Date()) {
-  try { await deliver(prisma, rt, row, now); } catch { logStatus(row.id, 'error INTERNAL'); }
+  try { return await deliver(prisma, rt, row, now); } catch { logStatus(row.id, 'error INTERNAL'); return null; }
 }
 
 /** Fällige Einträge senden. Hält komplett an, solange ein blockierender Alarm besteht. */

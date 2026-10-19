@@ -18,7 +18,7 @@ import { ALTCHA_HMAC_KEY } from '../../lib/altcha';
 import { getTemplateByName } from '../../lib/templateStore';
 import { getContactEmailTemplate } from '../../lib/contactEmailTemplateStore';
 import { extractContactFormFields } from '../../lib/contactFormFields';
-import { runContactHooks } from '../../lib/plugins/registry';
+import { runContactHooks, isReservedMailVar } from '../../lib/plugins/registry';
 
 const limiter = rateLimit({ windowMs: 60_000, max: 5 });
 // Honeypot: für Menschen unsichtbares Feld im Formular; Bots füllen es aus.
@@ -45,6 +45,7 @@ function renderEmailTemplatePart(tpl, context, fallback) {
 // noch \n → <br> gewandelt) oder schon fertiges HTML — am öffnenden Tag erkannt,
 // damit beides im selben "Text"-Feld funktioniert.
 const looksLikeHtml = (str) => /<[a-z][\s\S]*>/i.test(String(str || ''));
+const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const stripHtmlTags = (str) => String(str || '').replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n').trim();
 
 const NAME_ALIASES = ['name', 'fullName', 'fullname', 'full_name'];
@@ -129,7 +130,7 @@ function buildFormFields(body) {
   return fields;
 }
 
-// Plugin-Hooks (hooks.beforeContactSubmission / hooks.onContactSubmission, siehe development_docs/PLUGINS.md):
+// Plugin-Hooks (hooks.beforeContactSubmission / contactMailContext / onContactSubmission, siehe development_docs/PLUGINS.md):
 // formId = Name des Kontaktformular-Templates (_cfTemplate) oder null, values = Rohwerte ohne Meta-Felder.
 function pluginHookInput(body, clientIp) {
   const formId = typeof body._cfTemplate === 'string' && body._cfTemplate.trim() ? body._cfTemplate.trim() : null;
@@ -178,7 +179,7 @@ export default async function handler(req, res) {
   // Spam: Honeypot ausgefüllt → still verwerfen (Bot sieht Erfolg), nichts wird gesendet.
   // Plugins erfahren davon nur über onContactSubmission mit honeypotTripped: true (ohne submissionId).
   if (body[HONEYPOT_FIELD]) {
-    await runContactHooks('after', { ...pluginHookInput(body, clientIp), submissionId: null, honeypotTripped: true }, clientIp);
+    await runContactHooks('after', { ...pluginHookInput(body, clientIp), submissionId: null, messageId: null, honeypotTripped: true }, clientIp);
     return res.status(200).json({ ok: true });
   }
 
@@ -217,7 +218,9 @@ export default async function handler(req, res) {
   }
 
   // Plugin-Vorprüfung (z. B. Pflicht-Checkbox): ein Plugin kann die Absendung mit Feldfehlern ablehnen.
-  const hookInput = pluginHookInput(body, clientIp);
+  // submissionId: stabile ID dieser Absendung für alle Hooks (before/mailContext/after); messageId = ContactMessage-ID (erst im Nach-Hook, falls gespeichert).
+  const submissionId = crypto.randomUUID();
+  const hookInput = { ...pluginHookInput(body, clientIp), submissionId };
   const pre = await runContactHooks('before', hookInput, clientIp);
   if (!pre.ok) {
     if (pre.retryAfter) res.setHeader('Retry-After', pre.retryAfter);
@@ -232,7 +235,7 @@ export default async function handler(req, res) {
   let contactMailTo = null;
   let subjectPrefix = '';
   let saveToDb = false;
-  let submissionId = null;
+  let messageId = null;
   try {
     const rows = await prisma.setting.findMany({
       where: { key: { in: ['contact_recipient_email', 'contactMailTo', 'contact_subject_prefix', 'contactSaveToDb'] } },
@@ -249,13 +252,17 @@ export default async function handler(req, res) {
   const results = { emailSent: false, savedToDb: false };
 
   // Send email
+  let mailCtx = { vars: {}, appendText: '', byPlugin: {} };
   if (contactMailTo) {
+    // Plugins können vor dem Versand Zusatzdaten liefern (z. B. Termin-Link); Fehler/Timeouts = Mail geht ohne.
+    mailCtx = await runContactHooks('mailContext', { ...hookInput, messageId: null, honeypotTripped: false }, clientIp);
     try {
       const genericSubject = subject
         ? `${subjectPrefix ? subjectPrefix + ' ' : ''}${subject}`
         : `${subjectPrefix || 'Neue Kontaktanfrage von'} ${name}`;
-      const genericText = `Name: ${name}\nE-Mail: ${email}\n\n${message}`;
-      const genericHtml = `<p><strong>Name:</strong> ${name}<br><strong>E-Mail:</strong> ${email}</p><p>${message.replace(/\n/g, '<br>')}</p>`;
+      const extra = mailCtx.appendText; // Plugin-Zusatzzeile(n), nur in der generischen Mail
+      const genericText = `Name: ${name}\nE-Mail: ${email}\n\n${message}${extra ? `\n\n${extra}` : ''}`;
+      const genericHtml = `<p><strong>Name:</strong> ${name}<br><strong>E-Mail:</strong> ${email}</p><p>${message.replace(/\n/g, '<br>')}</p>${extra ? `<p>${escapeHtml(extra).replace(/\n/g, '<br>')}</p>` : ''}`;
 
       // Welches Kontaktformular-Template wurde abgesendet? (vom Renderer als
       // verstecktes Feld eingefügt, siehe lib/templateEngine.js) — wenn dafür
@@ -269,7 +276,9 @@ export default async function handler(req, res) {
         if (form && form.category === 'contact') {
           const emailTpl = getContactEmailTemplate(form.name);
           if (emailTpl.subject || emailTpl.body) {
-            const mustacheContext = Object.fromEntries(formFields.map((f) => [f.key, f.value]));
+            // Plugin-Variablen haben einen reservierten Namensraum (z. B. tnt_): Formularfelder mit solchen Schlüsseln
+            // werden verworfen, damit Besucher keine Plugin-Variablen (Termin-Link) einschleusen können.
+            const mustacheContext = { ...mailCtx.vars, ...Object.fromEntries(formFields.filter((f) => !isReservedMailVar(f.key)).map((f) => [f.key, f.value])) };
             subjectLine = renderEmailTemplatePart(emailTpl.subject, mustacheContext, genericSubject);
             const renderedBody = renderEmailTemplatePart(emailTpl.body, mustacheContext, genericText);
             if (looksLikeHtml(emailTpl.body)) {
@@ -305,7 +314,7 @@ export default async function handler(req, res) {
       const saved = await prisma.contactMessage.create({
         data: { name, email, subject: subject || null, message },
       });
-      submissionId = saved && saved.id != null ? String(saved.id) : null;
+      messageId = saved && saved.id != null ? String(saved.id) : null;
       results.savedToDb = true;
     } catch (e) {
       console.error('[contact] DB-Speicherung fehlgeschlagen:', e.message);
@@ -320,7 +329,8 @@ export default async function handler(req, res) {
   // Plugin-Nachbereitung (Weiterleitung o. Ä.): Fehler eines Plugins lassen die Absendung nie scheitern.
   await runContactHooks('after', {
     ...hookInput,
-    submissionId: submissionId || crypto.randomUUID(),
+    messageId,
+    mailContextByPlugin: mailCtx.byPlugin,
     honeypotTripped: false,
   }, clientIp);
 
