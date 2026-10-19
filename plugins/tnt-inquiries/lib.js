@@ -182,7 +182,8 @@ export function normalizeBaseUrl(raw) {
   let u;
   try { u = new URL(String(raw || '').trim()); } catch { return null; }
   if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || !u.hostname) return null;
-  return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+  // Versehentlich mit eingetragenes /api/inquiries entfernen (der Pfad wird beim Senden selbst angehängt)
+  return `${u.origin}${u.pathname.replace(/\/+$/, '').replace(/\/api\/inquiries$/i, '')}`;
 }
 
 /** Fehler → generischer Code. Nie die Fehlermeldung selbst weitergeben (kann URLs enthalten). */

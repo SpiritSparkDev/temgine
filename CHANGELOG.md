@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.55.1] - 2026-10-19
+
+### Fixed
+- **Plugin Anfrage-Weiterleitung:** Eine Basis-URL mit angehängtem `/api/inquiries` (z. B. `https://planner.example.de/api/inquiries`) führte beim Verbindungstest zu 404, weil der Pfad doppelt angehängt wurde. Der Pfad wird jetzt automatisch entfernt, das Panel weist im Feld darauf hin.
+
+---
+
 ## [0.55.0] - 2026-10-19
 
 ### Added

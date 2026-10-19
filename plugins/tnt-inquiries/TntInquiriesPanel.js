@@ -131,7 +131,7 @@ export default function TntInquiriesPanel({ showToast }) {
         </div>
 
         <label style={{ display: 'grid', gap: 2 }}>
-          <small>Basis-URL (https://…)</small>
+          <small>Basis-URL (https://…, nur die Adresse ohne /api/inquiries)</small>
           <input className="st-input" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://tnt.example.com" autoComplete="off" aria-invalid={!!urlError} />
           {urlError && <small role="alert" style={{ color: '#c53030' }}>{urlError}</small>}
         </label>

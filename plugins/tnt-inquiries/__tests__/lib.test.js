@@ -87,6 +87,13 @@ describe('Senden und Klassifizierung', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  test('Basis-URL mit versehentlich eingetragenem /api/inquiries wird bereinigt', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(resp(200));
+    await T.postInquiry({ baseUrl: 'https://tnt.example.de/api/inquiries/', token: TOKEN, payload: {}, dryRun: true, fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://tnt.example.de/api/inquiries?dryRun=1');
+    expect(T.normalizeBaseUrl('https://tnt.example.de/app/api/inquiries')).toBe('https://tnt.example.de/app');
+  });
+
   test('Request: https, Bearer, redirect:error, Timeout-Signal, kein Zertifikats-Bypass', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(resp(201));
     await T.postInquiry({ baseUrl: 'https://tnt.example.de/', token: TOKEN, payload: { a: 1 }, fetchImpl });
