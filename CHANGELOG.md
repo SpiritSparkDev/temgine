@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.58.0] - 2026-10-20
+
+### Changed
+- **WYSIWYG-Editor an SparkDown angeglichen:** Ansichten Markdown / WYSIWYG / Split (Quelle und Vorschau live synchron, beide editierbar), gruppierte Werkzeugleiste mit Aktiv-Zuständen, Überschrift 1–5, Unterstrichen, Codeblock, Tabellen (mit Zeilen-/Spalten-Werkzeugen), Zoom (Statuszeile, Strg+Mausrad), Rechtsklick-Menü und anpassbare Leiste („☰ Anpassen“, pro Browser gespeichert). Listen aus Word/OpenOffice werden beim Einfügen zu echten Listen. Die `toolbar`-Prop der Aufrufer wird im WYSIWYG-Modus nicht mehr ausgewertet. Leerzeilen erscheinen im Markdown-Quelltext als `<br>`-Zeile.
+- **Link-Dialog** statt Browser-Eingabefeld: Titel, „In neuem Tab öffnen“ (`target="_blank"`, `rel="noopener noreferrer"`) und `rel="nofollow"`.
+
+### Fixed
+- Der Editor setzte an jedem Link automatisch `rel="nofollow"`; jetzt nur noch auf Wunsch.
+
+### Added
+- HTML-Bereinigung lässt `title` an Links, `colspan`/`rowspan` an Tabellenzellen und `class` an `<code>` zu. Neue Abhängigkeiten: TipTap-Erweiterungen für Unterstreichen und Tabellen.
+
+---
+
 ## [0.57.0] - 2026-10-20
 
 ### Changed

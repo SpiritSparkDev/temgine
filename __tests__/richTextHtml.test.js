@@ -4,6 +4,7 @@ const { toEditorHtml, fromEditorHtml } = require('../lib/richTextHtml');
 describe('richTextHtml', () => {
   it('lässt HTML unverändert, wandelt Markdown/Text', () => {
     expect(toEditorHtml('<h2>A</h2><p>b</p>')).toBe('<h2>A</h2><p>b</p>');
+    expect(toEditorHtml('<p>a</p><p><br></p>')).toBe('<p>a</p><p></p>');
     expect(toEditorHtml('text')).toBe('<p>text</p>\n');
     expect(toEditorHtml('')).toBe('');
   });

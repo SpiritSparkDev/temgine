@@ -87,6 +87,7 @@
 .wte-content .ProseMirror h2 { font-size: 1.35em; }
 .wte-content .ProseMirror h3 { font-size: 1.15em; }
 .wte-content .ProseMirror h4 { font-size: 1em; }
+.wte-content .ProseMirror h5 { font-size: 0.9em; margin: 0.8em 0 0.4em; }
 
 .wte-content .ProseMirror hr {
   border: none;
@@ -101,4 +102,28 @@
 
 .wte-content .ProseMirror img.ProseMirror-selectednode {
   outline: 2px solid var(--accent-primary);
+}
+
+.wte-content .ProseMirror table {
+  border-collapse: collapse;
+  margin: 0 0 0.8em;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.wte-content .ProseMirror th,
+.wte-content .ProseMirror td {
+  border: 1px solid var(--border-color);
+  padding: 4px 8px;
+  vertical-align: top;
+  min-width: 1em;
+}
+
+.wte-content .ProseMirror th {
+  background: var(--bg-tertiary);
+  text-align: left;
+}
+
+.wte-content .ProseMirror .selectedCell {
+  background: color-mix(in srgb, var(--accent-primary) 20%, transparent);
 }

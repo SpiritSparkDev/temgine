@@ -27,12 +27,30 @@ describe('WysiwygRichTextEditor', () => {
     expect(document.querySelectorAll('.wte-content p').length).toBe(3);
   });
 
-  it('renders only the requested toolbar buttons', async () => {
-    render(<WysiwygRichTextEditor value="" onChange={() => {}} toolbar={['bold']} />);
+  it('zeigt Werkzeugleiste mit Ansichten und Tabellen-/Codeblock-Befehlen', async () => {
+    render(<WysiwygRichTextEditor value="" onChange={() => {}} />);
     await act(async () => {});
-    expect(screen.getByTitle('Fett')).toBeTruthy();
-    expect(screen.queryByTitle('Kursiv')).toBeNull();
-    expect(screen.queryByTitle('Link einfügen')).toBeNull();
+    ['Fett', 'Unterstrichen', 'Überschrift 5', 'Codeblock', 'Tabelle einfügen', 'Link einfügen', 'Markdown-Ansicht', 'Split-Ansicht'].forEach((t) => {
+      expect(screen.getByTitle(t)).toBeTruthy();
+    });
+  });
+
+  it('Markdown-Ansicht zeigt Quelltext, Leerzeilen als <br>-Zeile', async () => {
+    localStorage.setItem('temgine.richText.v1', JSON.stringify({ view: 'md' }));
+    render(<WysiwygRichTextEditor value={'<p>a</p><p><br></p><p>b</p>'} onChange={() => {}} />);
+    await act(async () => {});
+    const src = document.querySelector('textarea');
+    expect(src.value).toBe(['a', '', '<br>', '', 'b'].join('\n'));
+    localStorage.clear();
+  });
+
+  it('behält target, rel und title an Links', async () => {
+    render(<WysiwygRichTextEditor value={'<p><a href="/x" target="_blank" rel="noopener noreferrer nofollow" title="T">L</a></p>'} onChange={() => {}} />);
+    await act(async () => {});
+    const a = document.querySelector('.wte-content a');
+    expect(a.getAttribute('target')).toBe('_blank');
+    expect(a.getAttribute('rel')).toBe('noopener noreferrer nofollow');
+    expect(a.getAttribute('title')).toBe('T');
   });
 
   it('hides the toolbar entirely when readOnly', async () => {
