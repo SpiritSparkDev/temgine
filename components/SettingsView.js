@@ -308,11 +308,11 @@ export default function SettingsView({ showToast }) {
               </Row>
             </Card>
 
-            <Card title="Rich-Text-Editor" description="Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge). In beiden Modi wird derselbe Markdown-Text gespeichert, ein Wechsel verändert keine bestehenden Inhalte.">
+            <Card title="Rich-Text-Editor" description="Gilt für alle Rich-Text-Felder (Seiten-Bausteine, Blog-Beiträge, Content-Einträge). Der WYSIWYG-Editor speichert HTML (Leerzeilen, Überschriften, Bilder); Markdown-Altinhalte werden beim Bearbeiten übernommen. Der Markdown-Modus bleibt als Quelltext-Fallback.">
               <Row label="Editor">
-                <select className="st-input st-input-narrow" value={val(RICH_TEXT_EDITOR_MODE_KEY, 'markdown') === 'wysiwyg' ? 'wysiwyg' : 'markdown'} onChange={(e) => handleRichTextMode(e.target.value)} disabled={saving === 'rtmode'}>
-                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
+                <select className="st-input st-input-narrow" value={val(RICH_TEXT_EDITOR_MODE_KEY, 'wysiwyg') === 'markdown' ? 'markdown' : 'wysiwyg'} onChange={(e) => handleRichTextMode(e.target.value)} disabled={saving === 'rtmode'}>
                   <option value="wysiwyg">WYSIWYG (TipTap)</option>
+                  <option value="markdown">Markdown (Toolbar + Quelltext/Vorschau)</option>
                 </select>
               </Row>
             </Card>

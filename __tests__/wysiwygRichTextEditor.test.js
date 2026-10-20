@@ -1,6 +1,8 @@
 /**
  * @jest-environment jsdom
  */
+jest.mock('marked', () => ({ marked: { parse: (s) => `<p>${s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')}</p>` } }));
+
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
 import WysiwygRichTextEditor from '../components/WysiwygRichTextEditor';
@@ -14,6 +16,15 @@ describe('WysiwygRichTextEditor', () => {
     const strong = document.querySelector('.wte-content strong');
     expect(strong).toBeTruthy();
     expect(strong.textContent).toBe('Welt');
+  });
+
+  it('speichert HTML und behält Leerzeilen, Überschriften und Trennlinien', async () => {
+    const onChange = jest.fn();
+    render(<WysiwygRichTextEditor value={'<h2>Titel</h2><p>a</p><p><br></p><hr><p>b</p>'} onChange={onChange} />);
+    await act(async () => {});
+    expect(document.querySelector('.wte-content h2').textContent).toBe('Titel');
+    expect(document.querySelector('.wte-content hr')).toBeTruthy();
+    expect(document.querySelectorAll('.wte-content p').length).toBe(3);
   });
 
   it('renders only the requested toolbar buttons', async () => {

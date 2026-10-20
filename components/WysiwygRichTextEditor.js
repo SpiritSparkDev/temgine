@@ -1,25 +1,26 @@
 /**
  * WysiwygRichTextEditor – TipTap-basierter WYSIWYG-Editor mit identischer
- * Props-Schnittstelle wie RichTextEditor (Markdown rein/raus), damit beide
- * über SmartRichTextEditor austauschbar sind, ohne dass Aufrufer sich
- * ändern müssen.
+ * Props-Schnittstelle wie RichTextEditor, damit beide über
+ * SmartRichTextEditor austauschbar sind. Speichert HTML (Leerzeilen,
+ * Überschriften, Bilder); Markdown-Altwerte werden beim Laden gewandelt.
  *
  * Props:
- *   value       {string}   Markdown string (controlled)
- *   onChange    {Function} called with new Markdown string on every change
+ *   value       {string}   HTML oder Markdown (controlled)
+ *   onChange    {Function} called with new HTML string on every change
  *   readOnly    {boolean}  disable editing
  *   placeholder {string}
  *   toolbar     {string[]} subset of buttons to show (default: all unterstützten)
  *   toolbarExtra {ReactNode} am Ende der Werkzeugleiste (z. B. „Groß“-Knopf)
  *   expanded    {boolean}  füllt die Höhe des Elternelements (große Ansicht)
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import { Markdown } from 'tiptap-markdown';
-import { htmlToMd } from '../lib/richTextNormalize';
+import Image from '@tiptap/extension-image';
+import { toEditorHtml, fromEditorHtml } from '../lib/richTextHtml';
+import FilePickerModal from './FilePickerModal';
 
 const ALL_TOOLBAR = ['bold', 'italic', 'strike', 'ol', 'ul', 'blockquote', 'code', 'link', 'clear'];
 
@@ -33,22 +34,26 @@ export default function WysiwygRichTextEditor({
   expanded = false,
 }) {
   const show = (key) => toolbar.includes(key);
+  const lastEmitted = useRef(value);
+  const [pickingImage, setPickingImage] = useState(false);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- nur einmal erzeugen, Sync unten per useEffect
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Link.configure({ openOnClick: false }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] } }),
+      Link.configure({ openOnClick: false, HTMLAttributes: { target: null } }),
+      Image,
       Placeholder.configure({ placeholder: placeholder || 'Text eingeben…' }),
-      Markdown.configure({ html: false, breaks: true, linkify: false }),
     ],
-    content: htmlToMd(value),
+    content: toEditorHtml(value),
     editable: !readOnly,
     editorProps: {
       attributes: { class: 'wte-content' },
     },
     onUpdate({ editor: ed }) {
-      onChange?.(ed.storage.markdown.getMarkdown());
+      const out = fromEditorHtml(ed.getHTML());
+      lastEmitted.current = out;
+      onChange?.(out);
     },
   }, []);
 
@@ -58,12 +63,9 @@ export default function WysiwygRichTextEditor({
   // Update (onUpdate → onChange → Eltern-State → neuer value-Prop) den
   // Cursor zurücksetzen.
   useEffect(() => {
-    if (!editor) return;
-    const current = editor.storage.markdown.getMarkdown();
-    const next = htmlToMd(value);
-    if (next !== current) {
-      editor.commands.setContent(next, false);
-    }
+    if (!editor || value === lastEmitted.current) return;
+    lastEmitted.current = value;
+    editor.commands.setContent(toEditorHtml(value), false);
   }, [value, editor]);
 
   useEffect(() => {
@@ -74,6 +76,25 @@ export default function WysiwygRichTextEditor({
     <div style={expanded ? { ...wrapStyle, flex: 1, minHeight: 0, border: 'none', borderRadius: 0 } : wrapStyle}>
       {!readOnly && editor && (
         <div style={toolbarStyle}>
+          <button type="button" title="Rückgängig (Strg+Z)" disabled={!editor.can().undo()} onClick={() => editor.chain().focus().undo().run()} style={btnStyle}>↶</button>
+          <button type="button" title="Wiederholen (Strg+Y)" disabled={!editor.can().redo()} onClick={() => editor.chain().focus().redo().run()} style={btnStyle}>↷</button>
+          <select
+            title="Absatzformat"
+            value={[1, 2, 3, 4].find((l) => editor.isActive('heading', { level: l })) || 0}
+            onChange={(e) => {
+              const l = Number(e.target.value);
+              const c = editor.chain().focus();
+              (l ? c.setHeading({ level: l }) : c.setParagraph()).run();
+            }}
+            style={{ ...btnStyle, fontWeight: 400 }}
+          >
+            <option value={0}>Absatz</option>
+            <option value={1}>Überschrift 1</option>
+            <option value={2}>Überschrift 2</option>
+            <option value={3}>Überschrift 3</option>
+            <option value={4}>Überschrift 4</option>
+          </select>
+          <span style={sepStyle} />
           {show('bold') && (
             <button type="button" title="Fett" onClick={() => editor.chain().focus().toggleBold().run()} style={{ ...btnStyle, ...(editor.isActive('bold') ? btnActiveStyle : {}) }}><b>B</b></button>
           )}
@@ -108,6 +129,8 @@ export default function WysiwygRichTextEditor({
               style={{ ...btnStyle, ...(editor.isActive('link') ? btnActiveStyle : {}) }}
             >Link</button>
           )}
+          <button type="button" title="Trennlinie" onClick={() => editor.chain().focus().setHorizontalRule().run()} style={btnStyle}>―</button>
+          <button type="button" title="Bild einfügen" onClick={() => setPickingImage(true)} style={btnStyle}>Bild</button>
           {show('clear') && <span style={sepStyle} />}
           {show('clear') && (
             <button type="button" title="Leeren" onClick={() => editor.chain().focus().clearContent().run()} style={btnStyle}>✕</button>
@@ -116,6 +139,11 @@ export default function WysiwygRichTextEditor({
         </div>
       )}
 
+      <FilePickerModal
+        open={pickingImage}
+        onSelect={(url) => { setPickingImage(false); editor?.chain().focus().setImage({ src: url, alt: '' }).run(); }}
+        onClose={() => setPickingImage(false)}
+      />
       <EditorContent editor={editor} className={expanded ? 'wte-expanded' : undefined} style={expanded ? { flex: 1, minHeight: 0, overflowY: 'auto' } : undefined} />
     </div>
   );

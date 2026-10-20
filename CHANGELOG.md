@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.57.0] - 2026-10-20
+
+### Changed
+- **WYSIWYG-Editor ausgebaut und zum Standard gemacht:** Er speichert jetzt HTML statt Markdown. Leerzeilen bleiben erhalten (als `<p><br></p>`), neu sind Absatzformat (Überschrift 1–4), Trennlinie, Bilder aus der Medienauswahl sowie Rückgängig/Wiederholen. Markdown-Altinhalte werden beim Öffnen automatisch dargestellt und erst beim Bearbeiten als HTML gespeichert; der Markdown-Modus bleibt unter Einstellungen → Rich-Text-Editor als Quelltext-Fallback wählbar.
+- Ein Wert, der nur aus einem einzelnen HTML-Absatz besteht, wird in Templates wie ein Markdown-Einzelabsatz ohne `<p>` eingesetzt (`lib/templateEngine.js`).
+
+### Added
+- HTML-Bereinigung (`lib/htmlSanitize.js`) lässt zusätzlich `<hr>`, `<s>`, `<del>` und `title` an Bildern zu.
+
+---
+
 ## [0.56.0] - 2026-10-20
 
 ### Added
