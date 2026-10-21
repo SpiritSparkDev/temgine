@@ -128,7 +128,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       if (!document.getElementById('temgine-cookie-banner-style')) {
         const style = document.createElement('style');
         style.id = 'temgine-cookie-banner-style';
-        style.textContent = (data.banner?.css || '') + (data.settings?.hideReopenButton ? '\n#temgine-cookie-reopen { display: none !important; }' : '');
+        style.textContent = (data.banner?.css || '') + (data.settings?.hideReopenButton ? '\nbutton#temgine-cookie-reopen { display: none !important; }' : '');
         document.head.appendChild(style);
       }
 
