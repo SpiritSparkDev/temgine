@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.56.2] - 2026-10-21
+
+### Fixed
+- **Cookie-Banner:** Die automatisch angehängte Regel zum Ausblenden des festen Cookie-Buttons nutzt jetzt `button#temgine-cookie-reopen` (höhere Spezifität), damit sie auch gegen andere Button-Regeln im Seiten-CSS greift.
+
+---
+
 ## [0.56.1] - 2026-10-21
 
 ### Added
