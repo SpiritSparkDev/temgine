@@ -128,7 +128,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       if (!document.getElementById('temgine-cookie-banner-style')) {
         const style = document.createElement('style');
         style.id = 'temgine-cookie-banner-style';
-        style.textContent = data.banner?.css || '';
+        style.textContent = (data.banner?.css || '') + (data.settings?.hideReopenButton ? '\n#temgine-cookie-reopen { display: none !important; }' : '');
         document.head.appendChild(style);
       }
 
@@ -163,6 +163,18 @@ export default function App({ Component, pageProps: { session, ...pageProps } })
       loadFonts();
     }
   }, [router && router.pathname, Component]);
+
+  // Beliebiges Element mit data-tcb-open öffnet die Cookie-Einstellungen (auch bei ausgeblendetem festen Button).
+  useEffect(() => {
+    const open = (e) => {
+      if (e.target.closest && e.target.closest('[data-tcb-open]')) {
+        const btn = document.getElementById('temgine-cookie-reopen');
+        if (btn) { e.preventDefault(); btn.click(); }
+      }
+    };
+    document.addEventListener('click', open);
+    return () => document.removeEventListener('click', open);
+  }, []);
 
   useEffect(() => {
     const handler = () => { loadExternalJS(); loadMatomoTracking(); runClientInit(); };

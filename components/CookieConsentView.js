@@ -31,6 +31,7 @@ export default function CookieConsentView({ showToast }) {
   const [banner, setBanner] = useState({ html: '', css: '', js: '' });
   const [bannerDefaults, setBannerDefaults] = useState({ html: '', css: '', js: '' });
   const [bannerTab, setBannerTab] = useState('html');
+  const [hideReopen, setHideReopen] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -42,6 +43,7 @@ export default function CookieConsentView({ showToast }) {
         setServices(data.services || []);
         setBanner(data.banner || { html: '', css: '', js: '' });
         setBannerDefaults(data.bannerDefaults || { html: '', css: '', js: '' });
+        setHideReopen(!!data.settings?.hideReopenButton);
       })
       .catch(() => showToast('Fehler beim Laden', 'error'))
       .finally(() => setLoading(false));
@@ -106,6 +108,21 @@ export default function CookieConsentView({ showToast }) {
         else showToast(data.error || 'Fehler beim Speichern', 'error');
       })
       .catch(err => showToast('Fehler: ' + err.message, 'error'));
+  }
+
+  function persistHideReopen(value) {
+    setHideReopen(value);
+    fetch('/api/cookies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: { hideReopenButton: value } }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) showToast('Gespeichert', 'success');
+        else { setHideReopen(!value); showToast(data.error || 'Fehler beim Speichern', 'error'); }
+      })
+      .catch(err => { setHideReopen(!value); showToast('Fehler: ' + err.message, 'error'); });
   }
 
   function handleBannerChange(field, value) {
@@ -214,6 +231,17 @@ export default function CookieConsentView({ showToast }) {
 
         {activeTab === 'banner' && (
           <div>
+            <div className="cookie-banner-option">
+              <label>
+                <input type="checkbox" checked={hideReopen} onChange={e => persistHideReopen(e.target.checked)} />
+                {' '}Festen Cookie-Button unten links ausblenden
+              </label>
+              <p>
+                Eigener Button für Seiten, Footer oder Navigation (öffnet die Cookie-Einstellungen):
+                {' '}<code>{'<button type="button" data-tcb-open>Cookie-Einstellungen</button>'}</code>
+                {' '}– <code>data-tcb-open</code> funktioniert auch an Links und anderen Elementen.
+              </p>
+            </div>
             <div className="cookie-banner-toolbar">
               {['html', 'css', 'js'].map(field => (
                 <button
