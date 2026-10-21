@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.56.1] - 2026-10-21
+
+### Added
+- **Cookie-Banner: festen Cookie-Button ausblenden** (Admin → Cookies → Banner). Mit `data-tcb-open` an einem beliebigen Element (z. B. `<button type="button" data-tcb-open>Cookie-Einstellungen</button>`) lassen sich die Cookie-Einstellungen von überall öffnen.
+- **Videos: Datenschutz-Vorschaubild.** Der Platzhalter für blockierte YouTube-Videos zeigt einen Link „Auf YouTube ansehen“ (lokales Play-Symbol, optional lokales Bild über `data-tcb-thumb`, im Videos-Template als Feld `thumbnail`). Vor der Einwilligung wird nichts von Google geladen; bei vorhandenem Vorschaubild entfällt der Blocktext.
+
+---
+
 ## [0.56.0] - 2026-10-20
 
 ### Added
