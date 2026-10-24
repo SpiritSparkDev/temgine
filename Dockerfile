@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22.23.4-slim
 WORKDIR /app
 
 # Prisma's query engine needs libssl; Debian 12 (bookworm) doesn't ship it by default.

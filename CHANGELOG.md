@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.56.3] - 2026-10-24
+
+### Security
+- **Node.js 22.23.4:** Docker-Basisimage von `node:20-slim` auf `node:22.23.4-slim` (Dockerfile, docker-compose.dev.yml) umgestellt. Behebt CVE-2026-111497 (Brotli-Decoder, Node.js-Security-Release Oktober 2026); Node 20 ist EOL und erhält keine Fixes.
+
 ## [0.56.2] - 2026-10-21
 
 ### Fixed
