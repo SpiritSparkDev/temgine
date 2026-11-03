@@ -72,6 +72,21 @@ describe('hydrateConsentGatedEmbeds', () => {
     expect(document.querySelector('.tcb-embed-placeholder')).not.toBeNull();
   });
 
+  test('blocked YouTube placeholder links to the video without loading any Google resource', () => {
+    document.body.innerHTML = '<div id="c"><iframe src="https://www.youtube.com/embed/abc123XYZ_-?rel=0"></iframe></div>';
+    hydrateConsentGatedEmbeds(document.getElementById('c'));
+    const link = document.querySelector('.tcb-embed-placeholder a.tcb-embed-link');
+    expect(link.href).toBe('https://www.youtube.com/watch?v=abc123XYZ_-');
+    expect(link.rel).toContain('noopener');
+    expect(document.querySelector('.tcb-embed-placeholder img')).toBeNull();
+  });
+
+  test('blocked YouTube placeholder shows the local thumbnail from data-tcb-thumb', () => {
+    document.body.innerHTML = '<div id="c"><iframe src="https://www.youtube.com/embed/abc123XYZ_-" data-tcb-thumb="/uploads/t.jpg"></iframe></div>';
+    hydrateConsentGatedEmbeds(document.getElementById('c'));
+    expect(document.querySelector('.tcb-embed-link img').getAttribute('src')).toBe('/uploads/t.jpg');
+  });
+
   test('leaves an already-consented iframe untouched', () => {
     setConsent({ marketing: true });
     document.body.innerHTML = '<div id="c"><iframe src="https://www.youtube.com/embed/abc"></iframe></div>';

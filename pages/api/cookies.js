@@ -2,6 +2,8 @@ import { requireAuth } from '../../lib/auth';
 import {
   getServices,
   saveServices,
+  getSettings,
+  saveSettings,
   getBannerContent,
   saveBannerField,
   DEFAULT_BANNER_HTML,
@@ -15,6 +17,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({
       services: [...NECESSARY_BASELINE, ...getServices()],
+      settings: getSettings(),
       banner: getBannerContent(),
       bannerDefaults: { html: DEFAULT_BANNER_HTML, css: DEFAULT_BANNER_CSS, js: DEFAULT_BANNER_JS },
     });
@@ -24,7 +27,12 @@ export default async function handler(req, res) {
     const auth = await requireAuth(req, res, ['ADMIN', 'MODERATOR']);
     if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error });
 
-    const { services, banner } = req.body || {};
+    const { services, banner, settings } = req.body || {};
+
+    if (settings && typeof settings === 'object') {
+      saveSettings(settings);
+      return res.status(200).json({ success: true });
+    }
 
     if (Array.isArray(services)) {
       saveServices(services);
