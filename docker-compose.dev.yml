@@ -21,19 +21,19 @@ services:
       retries: 10
 
   app:
-    image: node:20-slim
+    image: node:22.23.4-slim
     working_dir: /app
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://temgine:temgine_dev@postgres:5432/temgine_cms
-      NEXTAUTH_URL: http://localhost:3020
+      NEXTAUTH_URL: http://localhost:3021
       NEXTAUTH_SECRET: dev-only-secret-change-me
       ALTCHA_HMAC_KEY: dev-only-altcha-key
       WATCHPACK_POLLING: "true" # Datei-Änderungen über den Windows-Bind-Mount erkennen
     ports:
-      - "3020:3020"
+      - "3021:3020"
     volumes:
       - .:/app
       - node_modules:/app/node_modules # Linux-Binaries (sharp, prisma) getrennt von Windows-node_modules

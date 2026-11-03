@@ -104,6 +104,78 @@ function PluginSettingsForm({ plugin, values, showToast, onSaved }) {
   );
 }
 
+const STATE_LABEL = { loaded: 'eingespielt', build: 'Sync + Neu-Build nötig', invalid: 'ungültig' };
+
+/**
+ * Git-Quellen: Repo-URLs hinterlegen und holen. Geholt wird nur in den Cache (data/plugin-sources/);
+ * aktiv wird ein Plugin erst nach `npm run plugins:sync` und Neu-Build (Next bündelt Plugins beim Build).
+ */
+function GitSources({ showToast }) {
+  const [sources, setSources] = useState(null);
+  const [url, setUrl] = useState('');
+  const [ref, setRef] = useState('');
+  const [busy, setBusy] = useState('');
+
+  const load = () => fetch('/api/plugins/__sources').then((r) => (r.ok ? r.json() : { sources: [] })).then((d) => setSources(d.sources || [])).catch(() => setSources([]));
+  useEffect(() => { load(); }, []);
+
+  const call = async (key, method, body, okMessage) => {
+    setBusy(key);
+    try {
+      const res = await fetch('/api/plugins/__sources', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Fehlgeschlagen');
+      showToast(okMessage, 'success');
+      return true;
+    } catch (e) {
+      showToast(e.message, 'error');
+      return false;
+    } finally {
+      setBusy('');
+      load();
+    }
+  };
+
+  const add = async () => {
+    if (await call('add', 'POST', { url, ref }, 'Quelle geholt')) { setUrl(''); setRef(''); }
+  };
+
+  return (
+    <Card
+      title="Git-Quellen"
+      description="Git-Repositories mit Plugins (plugin.json im Hauptordner oder in Unterordnern). „Holen“ klont sie in data/plugin-sources/ und prüft die Manifeste. Aktiv wird ein Plugin erst nach „npm run plugins:sync“ und einem Neu-Build (z. B. docker compose up -d --build); Temgine baut sich nicht selbst neu."
+    >
+      {sources === null && <p className="st-note">Lade Quellen…</p>}
+      {sources && !sources.length && <p className="st-note">Noch keine Git-Quellen.</p>}
+      {(sources || []).map((s) => {
+        const key = `${s.url}#${s.ref}`;
+        return (
+          <Row key={key} label={`${s.url}${s.ref ? ` @ ${s.ref}` : ''}`} hint={s.fetchedAt ? `Stand ${s.commit} · geholt ${new Date(s.fetchedAt).toLocaleString('de-DE')}` : 'noch nicht geholt'} stacked>
+            {s.error && <p className="st-error">✗ {s.error}</p>}
+            {s.plugins.map((p) => (
+              <p key={p.id} className="st-note" style={{ margin: '2px 0' }}>
+                <strong>{p.name} {p.version}</strong> — {STATE_LABEL[p.state]}
+                {p.errors.length > 0 && <span className="st-error"> ({p.errors.join('; ')})</span>}
+              </p>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <button type="button" className="st-btn" disabled={!!busy} onClick={() => call(key, 'POST', { action: 'fetch', url: s.url, ref: s.ref }, 'Quelle aktualisiert')}>{busy === key ? 'Hole…' : 'Neu holen'}</button>
+              <button type="button" className="st-btn" disabled={!!busy} onClick={() => window.confirm('Quelle samt Cache entfernen? Bereits eingespielte Plugins bleiben erhalten.') && call(key, 'DELETE', { url: s.url, ref: s.ref }, 'Quelle entfernt')}>Entfernen</button>
+            </div>
+          </Row>
+        );
+      })}
+      <Row label="Neue Quelle" hint="https://… oder git@host:pfad.git; Branch oder Tag optional" stacked>
+        <input type="text" className="st-input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://github.com/name/mein-plugin.git" aria-label="Git-URL" />
+        <input type="text" className="st-input" style={{ marginTop: 6 }} value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Branch oder Tag (optional)" aria-label="Branch oder Tag" />
+        <div style={{ marginTop: 8 }}>
+          <button type="button" className="st-btn" disabled={!url.trim() || !!busy} onClick={add}>{busy === 'add' ? 'Hole…' : 'Hinzufügen und holen'}</button>
+        </div>
+      </Row>
+    </Card>
+  );
+}
+
 /**
  * Einstellungen → Plugins: Liste aller eingebauten Plugins mit Aktivieren-Schalter und pro
  * aktivem Plugin ein Unter-Tab mit dessen SettingsPanel (plugins/<id>/client.js) oder dem
@@ -163,6 +235,7 @@ export default function PluginsPanel({ showToast }) {
           ))}
         </Card>
       )}
+      {!current && <GitSources showToast={showToast} />}
 
       {current && (CustomPanel
         ? <CustomPanel showToast={showToast} plugin={current} />

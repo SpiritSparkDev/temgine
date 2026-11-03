@@ -8,6 +8,7 @@
  *
  * Quellen (plugins.config.json im Temgine-Root: { "sources": ["..."] }), überschreibbar über die
  * Umgebungsvariable TEMGINE_PLUGINS_SRC (Pfadliste, getrennt mit ; unter Windows bzw. : sonst).
+ * Zusätzlich immer: die Cache-Ordner der Git-Quellen (data/plugin-sources/, lib/plugins/sources.js).
  * Standard: E:\Werkbank\temgine-plugins. Jeder Eintrag ist ein Basisordner (enthält Plugin-Ordner)
  * oder ein einzelner Plugin-Ordner (enthält plugin.json); relative Pfade gelten ab dem Temgine-Root.
  * Ordner mit Präfix "_" oder "." werden ignoriert. Die Registries enthalten alle Ordner in plugins/
@@ -17,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { validateManifest } = require('../lib/plugins/manifest');
+const { cachedSourceDirs } = require('../lib/plugins/sources');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULT_SOURCE = 'E:\\Werkbank\\temgine-plugins';
@@ -26,14 +28,16 @@ const isIgnoredFile = (name) => name === META_FILE || name.endsWith('.log');
 const HEADER = '// generiert von scripts/plugins-sync.js – nicht von Hand ändern (npm run plugins:sync)\n';
 
 function readSources(root = ROOT, env = process.env) {
-  if (env.TEMGINE_PLUGINS_SRC) return env.TEMGINE_PLUGINS_SRC.split(path.delimiter).filter(Boolean).map((p) => path.resolve(root, p));
+  // Geholte Git-Quellen (Einstellungen → Plugins → Git-Quellen) kommen immer dazu.
+  const cached = cachedSourceDirs(root);
+  if (env.TEMGINE_PLUGINS_SRC) return [...env.TEMGINE_PLUGINS_SRC.split(path.delimiter).filter(Boolean).map((p) => path.resolve(root, p)), ...cached];
   let list = [DEFAULT_SOURCE];
   const file = path.join(root, 'plugins.config.json');
   if (fs.existsSync(file)) {
     const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (Array.isArray(cfg.sources)) list = cfg.sources;
   }
-  return list.map((p) => path.resolve(root, p));
+  return [...list.map((p) => path.resolve(root, p)), ...cached];
 }
 
 // Alle relevanten Dateien eines Plugin-Ordners: sortierte relative Pfade (mit /).

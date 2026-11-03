@@ -294,3 +294,14 @@
   flex: 1;
   min-height: 0;
 }
+.css-editor-body { display: flex; flex: 1; min-height: 0; }
+.css-editor-body .css-editor-wrapper { min-width: 0; }
+.css-outline { width: 260px; display: flex; flex-direction: column; border-left: 1px solid var(--border-color); height: 600px; }
+.css-outline-search { margin: 0.5rem; padding: 6px 8px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary); }
+.css-outline-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.css-outline-item { display: flex; justify-content: space-between; gap: 8px; width: 100%; padding: 3px 10px; border: 0; background: none; color: var(--text-primary); font: 0.8rem monospace; text-align: left; cursor: pointer; }
+.css-outline-item:hover { background: var(--border-color); }
+.css-outline-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.css-outline-at .css-outline-name { color: var(--accent-primary); }
+.css-outline-var .css-outline-name { color: var(--text-secondary); }
+.css-outline-line { color: var(--text-tertiary); flex-shrink: 0; }

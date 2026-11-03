@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { GripVertical, X } from '../lib/muiIcons';
+import { parseCssOutline } from '../lib/cssOutline';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -11,6 +12,13 @@ export default function CSSManagerView({ showToast }) {
   const [newFileName, setNewFileName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
+  const [outlineQuery, setOutlineQuery] = useState('');
+  const editorApi = useRef(null);
+  const outline = useMemo(() => {
+    const q = outlineQuery.trim().toLowerCase();
+    const all = parseCssOutline(cssCode);
+    return { total: all.length, items: q ? all.filter(e => e.name.toLowerCase().includes(q)) : all };
+  }, [cssCode, outlineQuery]);
 
   useEffect(() => {
     loadCSSFiles();
@@ -242,14 +250,41 @@ export default function CSSManagerView({ showToast }) {
             </div>
           )}
 
-          <div className="css-editor-wrapper">
-            <CodeEditor
-              height="600px"
-              language="css"
-              value={cssCode}
-              onChange={(value) => setCssCode(value || '')}
-              options={{}}
-            />
+          <div className="css-editor-body">
+            <div className="css-editor-wrapper">
+              <CodeEditor
+                height="600px"
+                language="css"
+                value={cssCode}
+                onChange={(value) => setCssCode(value || '')}
+                options={{}}
+                registerInserter={(api) => { editorApi.current = api; }}
+              />
+            </div>
+            <aside className="css-outline">
+              <input
+                type="search"
+                value={outlineQuery}
+                onChange={(e) => setOutlineQuery(e.target.value)}
+                placeholder={`Suchen (${outline.total} Einträge)`}
+                className="css-outline-search"
+              />
+              <ul className="css-outline-list">
+                {outline.items.map((e, i) => (
+                  <li key={i}>
+                    <button
+                      type="button"
+                      className={`css-outline-item css-outline-${e.kind}`}
+                      onClick={() => editorApi.current && editorApi.current.goToLine(e.line)}
+                      title={e.name}
+                    >
+                      <span className="css-outline-name">{e.name}</span>
+                      <span className="css-outline-line">{e.line}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </aside>
           </div>
 
           <div className="action-bar">

@@ -16,4 +16,5 @@ public/extern_js
 public/assets/template
 public/assets/template_blog
 public/__live
-data
+data/*
+!data/plugin-sources
