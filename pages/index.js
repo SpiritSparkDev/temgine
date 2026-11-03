@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/router'
 import { renderTemplate } from '../lib/templateEngine'
-import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
+import { getPageRedirect, buildRedirectLinkHtml, DEFAULT_REDIRECT_HTML, fillRedirectUrl } from '../lib/pageRedirect'
 import { loadStaticSnapshot, loadPageData, renderPageHtml, hydratePage, useRerender } from '../lib/renderPipeline'
 import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
 import SeoHead from '../components/SeoHead'
@@ -175,8 +175,14 @@ export default function Home({ initialLoadingScreenHtml = defaultLoadingHtml, in
           if (homeRedirect.target === '_blank') {
             setHtml(buildRedirectLinkHtml(homePage.title, homeRedirect.url))
           } else {
+            const settings = await loadMaintenanceSettings()
+            if (homeRedirect.interstitial) {
+              const tpl = await buildMaintenanceHtml(settings, 'maintenance_redirect', DEFAULT_REDIRECT_HTML)
+              setHtml(fillRedirectUrl(tpl, homeRedirect.url))
+            } else {
+              setHtml('')
+            }
             window.location.href = homeRedirect.url
-            setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
           }
           setLoading(false)
           return

@@ -98,6 +98,7 @@ export default function PagesView({
     '503': { html: '', css: '', js: '' },
     noHomepage: { html: '', css: '', js: '' },
     loading: { html: '', css: '', js: '' },
+    redirect: { html: '', css: '', js: '' },
   });
   const [isSavingMaintenance, setIsSavingMaintenance] = useState(false);
   const [maintenanceLoaded, setMaintenanceLoaded] = useState(false);
@@ -107,6 +108,7 @@ export default function PagesView({
     { id: '503', label: '503 Seite' },
     { id: 'noHomepage', label: 'Keine Startseite' },
     { id: 'loading', label: 'Ladebildschirm' },
+    { id: 'redirect', label: 'Weiterleitung' },
   ];
 
   const showToast = (message, type = 'success') => {
@@ -138,6 +140,11 @@ export default function PagesView({
           html: settings?.maintenance_loading_html || '',
           css: settings?.maintenance_loading_css || '',
           js: settings?.maintenance_loading_js || '',
+        },
+        redirect: {
+          html: settings?.maintenance_redirect_html || '',
+          css: settings?.maintenance_redirect_css || '',
+          js: settings?.maintenance_redirect_js || '',
         },
       });
       setMaintenanceLoaded(true);
@@ -171,6 +178,9 @@ export default function PagesView({
       ['maintenance_loading_html', maintenanceContent.loading?.html || ''],
       ['maintenance_loading_css', maintenanceContent.loading?.css || ''],
       ['maintenance_loading_js', maintenanceContent.loading?.js || ''],
+      ['maintenance_redirect_html', maintenanceContent.redirect?.html || ''],
+      ['maintenance_redirect_css', maintenanceContent.redirect?.css || ''],
+      ['maintenance_redirect_js', maintenanceContent.redirect?.js || ''],
     ];
 
     try {
@@ -520,6 +530,11 @@ export default function PagesView({
           <p style={{ margin: '0 0 1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             Für jede Wartungsseite können HTML, CSS und JS separat gepflegt werden.
           </p>
+          {maintenanceTab === 'redirect' && (
+            <p style={{ margin: '0 0 1rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              Erscheint kurz bei Weiterleitungen im Browser (nicht bei der HTTP-301/302-Weiterleitung des Servers). Im HTML steht <code>{'{{redirect.url}}'}</code> für das Ziel. Ob die Zwischenseite erscheint, wird pro Weiterleitungsseite im Seiteneditor festgelegt.
+            </p>
+          )}
           {[
             { field: 'html', label: 'HTML', placeholder: '<h1>Wartungsinhalt</h1>' },
             { field: 'css', label: 'CSS', placeholder: 'body { font-family: sans-serif; }' },

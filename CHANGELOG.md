@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.61.0] - 2026-11-03
+
+### Added
+- **Weiterleitung: Zwischenseite einstellbar:** Neue Wartungsseite „Weiterleitung“ (HTML/CSS/JS, `{{redirect.url}}` = Ziel) gestaltet die Seite, die bei browserseitigen Weiterleitungen kurz erscheint. Pro Weiterleitungsseite einstellbar (Seiteneditor: „Zwischenseite anzeigen“); aus = direkt weiterleiten ohne Zwischenseite. Standard bleibt an.
+
+## [0.60.0] - 2026-10-30
+
+### Added
+- **CSS-Editor: Gliederung:** Rechte Seitenleiste listet alle Selektoren, @-Regeln und Custom Properties (`--name`) mit Zeilennummer; Suchfeld filtert, Klick springt im Editor zur Zeile.
+
+## [0.59.1] - 2026-10-24
+
+### Security
+- **Node.js 22.23.4:** Docker-Basisimage von `node:20-slim` auf `node:22.23.4-slim` (Dockerfile, docker-compose.dev.yml) umgestellt. Behebt CVE-2026-111497 (Brotli-Decoder, Node.js-Security-Release Oktober 2026); Node 20 ist EOL und erhält keine Fixes.
+
+## [0.59.0] - 2026-10-21
+
+### Added
+- **Git-Quellen für Plugins:** Einstellungen → Plugins → „Git-Quellen“: Git-URL (https oder `git@host:pfad`, optional Branch/Tag) eintragen, „Holen“ klont flach nach `data/plugin-sources/` und prüft die `plugin.json` (ein Plugin im Hauptordner oder mehrere in Unterordnern). Je Plugin zeigt die Liste „eingespielt“, „Sync + Neu-Build nötig“ oder die Manifest-Fehler. Nur Admins, Aktionen im Audit-Log. Aktiv wird ein Plugin weiterhin erst nach `npm run plugins:sync` und Neu-Build; Temgine baut sich nicht selbst neu.
+- `scripts/plugins-sync.js` nimmt die geholten Cache-Ordner automatisch als Quellen mit. Das Dockerfile installiert `git` und führt vor dem Build `plugins-sync` aus (`.dockerignore` lässt `data/plugin-sources` durch).
+
 ## [0.58.0] - 2026-10-20
 
 ### Changed

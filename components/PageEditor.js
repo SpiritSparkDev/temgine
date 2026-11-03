@@ -80,6 +80,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const [redirectType, setRedirectType] = useState('none'); // 'none' | 'permanent' | 'temporary'
   const [redirectUrl, setRedirectUrl] = useState('');
   const [redirectTarget, setRedirectTarget] = useState('_self'); // '_self' | '_blank'
+  const [redirectInterstitial, setRedirectInterstitial] = useState(true); // Zwischenseite bei Client-Weiterleitung
   const [isHomepage, setIsHomepage] = useState(false);
   const [accessGroups, setAccessGroups] = useState([]); // [] = public, ['*'] = all members, ['slug1'] = specific groups
   const [availableMemberGroups, setAvailableMemberGroups] = useState([]);
@@ -217,6 +218,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     redirectType,
     redirectUrl,
     redirectTarget,
+    redirectInterstitial,
     isHomepage,
     pageFieldsTemplate,
   }) => JSON.stringify({
@@ -227,6 +229,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     redirectType: redirectType || 'none',
     redirectUrl: redirectUrl || '',
     redirectTarget: redirectTarget || '_self',
+    redirectInterstitial: redirectInterstitial !== false,
     isHomepage: Boolean(isHomepage),
     pageFieldsTemplate: pageFieldsTemplate || '',
   });
@@ -323,6 +326,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       const initialRedirectType = (initialRedirect.type === 'permanent' || initialRedirect.type === 'temporary') ? initialRedirect.type : 'none';
       const initialRedirectUrl = initialRedirect.url || '';
       const initialRedirectTarget = initialRedirect.target === '_blank' ? '_blank' : '_self';
+      const initialRedirectInterstitial = initialRedirect.interstitial !== false;
       const initialIsHomepage = page.isHomepage || false;
       const initialPageData = page.data || {};
       const initialAccessGroups = Array.isArray(page.accessGroups) ? page.accessGroups : [];
@@ -337,6 +341,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       setRedirectType(initialRedirectType);
       setRedirectUrl(initialRedirectUrl);
       setRedirectTarget(initialRedirectTarget);
+      setRedirectInterstitial(initialRedirectInterstitial);
       setIsHomepage(initialIsHomepage);
       setAccessGroups(initialAccessGroups);
       setPasswordProtected(initialPasswordProtected);
@@ -376,6 +381,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType: initialRedirectType,
         redirectUrl: initialRedirectUrl,
         redirectTarget: initialRedirectTarget,
+        redirectInterstitial: initialRedirectInterstitial,
         isHomepage: initialIsHomepage,
         pageFieldsTemplate: initialPageFieldsTemplate,
       });
@@ -413,6 +419,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType,
         redirectUrl,
         redirectTarget,
+        redirectInterstitial,
         isHomepage,
         pageFieldsTemplate,
       });
@@ -426,13 +433,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       redirectType,
       redirectUrl,
       redirectTarget,
+      redirectInterstitial,
       isHomepage,
       pageFieldsTemplate,
     });
     const dirty = currentSnapshot !== initialSnapshotRef.current;
     setIsDirty(dirty);
     onDirtyChange?.(dirty);
-  }, [title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage, pageFieldsTemplate, onDirtyChange]);
+  }, [title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, redirectInterstitial, isHomepage, pageFieldsTemplate, onDirtyChange]);
 
   useEffect(() => {
     if (!isDirty) return undefined;
@@ -1336,6 +1344,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
           redirectType,
           redirectUrl,
           redirectTarget,
+          redirectInterstitial,
           isHomepage,
           pageFieldsTemplate,
         });
@@ -1688,7 +1697,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     // Weiterleitung lebt in data.redirect (keine eigene DB-Spalte) statt als
     // Top-Level-Feld — siehe lib/pageRedirect.js, das dieselbe Form liest.
     if (redirectType === 'permanent' || redirectType === 'temporary') {
-      normalizedPageData.redirect = { type: redirectType, url: redirectUrl, target: redirectTarget };
+      normalizedPageData.redirect = { type: redirectType, url: redirectUrl, target: redirectTarget, interstitial: redirectInterstitial };
     } else {
       delete normalizedPageData.redirect;
     }
@@ -1760,6 +1769,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         redirectType,
         redirectUrl,
         redirectTarget,
+        redirectInterstitial,
         isHomepage,
         pageFieldsTemplate,
       });
@@ -1877,7 +1887,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
         clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, isHomepage]);
+  }, [page?.id, isDirty, title, slug, blocks, pageData, redirectType, redirectUrl, redirectTarget, redirectInterstitial, isHomepage]);
 
   function handleCancelClick() {
     if (isDirty) {
@@ -2957,6 +2967,13 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                     erreichbar und zeigt einen klickbaren Link zur Ziel-URL, statt automatisch dorthin zu
                     springen. Für eine echte, automatische HTTP-Weiterleitung (301/302) "Gleicher Tab" wählen.
                   </p>
+                )}
+
+                {redirectTarget === '_self' && (
+                  <label className="page-editor-outline-toggle" style={{ marginTop: '14px' }}>
+                    <input type="checkbox" checked={redirectInterstitial} onChange={e => setRedirectInterstitial(e.target.checked)} />
+                    Zwischenseite anzeigen (nur bei Weiterleitung im Browser, Gestaltung unter Wartungsseiten → Weiterleitung)
+                  </label>
                 )}
 
                 <button

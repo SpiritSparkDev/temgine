@@ -9,12 +9,12 @@ describe('getPageRedirect', () => {
 
   test('normalizes type/target and passes through valid urls', () => {
     expect(getPageRedirect({ data: { redirect: { type: 'permanent', url: '/impressum' } } }))
-      .toEqual({ type: 'permanent', url: '/impressum', target: '_self' })
+      .toEqual({ type: 'permanent', url: '/impressum', target: '_self', interstitial: true })
     expect(getPageRedirect({ data: { redirect: { type: 'temporary', url: 'https://example.com/x?a=1&b=2', target: '_blank' } } }))
-      .toEqual({ type: 'temporary', url: 'https://example.com/x?a=1&b=2', target: '_blank' })
+      .toEqual({ type: 'temporary', url: 'https://example.com/x?a=1&b=2', target: '_blank', interstitial: true })
     // unknown type defaults to temporary, unknown target defaults to _self
     expect(getPageRedirect({ data: { redirect: { url: '/x' } } }))
-      .toEqual({ type: 'temporary', url: '/x', target: '_self' })
+      .toEqual({ type: 'temporary', url: '/x', target: '_self', interstitial: true })
   })
 
   test('rejects dangerous or malformed urls', () => {
@@ -29,7 +29,7 @@ describe('extractRedirectForSave', () => {
   test('pulls redirect out of data and validates it', () => {
     const { data, redirect } = extractRedirectForSave({ foo: 'bar', redirect: { type: 'permanent', url: '/x?a=1&b=2' } })
     expect(data).toEqual({ foo: 'bar' })
-    expect(redirect).toEqual({ type: 'permanent', url: '/x?a=1&b=2', target: '_self' })
+    expect(redirect).toEqual({ type: 'permanent', url: '/x?a=1&b=2', target: '_self', interstitial: true })
   })
 
   test('returns null redirect when absent or invalid', () => {
@@ -38,3 +38,7 @@ describe('extractRedirectForSave', () => {
     expect(extractRedirectForSave(undefined)).toEqual({ data: {}, redirect: null })
   })
 })
+
+test('interstitial: false wird übernommen', () => {
+  expect(getPageRedirect({ data: { redirect: { type: 'permanent', url: '/x', interstitial: false } } }).interstitial).toBe(false);
+});

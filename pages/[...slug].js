@@ -2,7 +2,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { renderTemplate } from '../lib/templateEngine'
-import { getPageRedirect, buildRedirectLinkHtml } from '../lib/pageRedirect'
+import { getPageRedirect, buildRedirectLinkHtml, DEFAULT_REDIRECT_HTML, fillRedirectUrl } from '../lib/pageRedirect'
 import { loadStaticSnapshot, loadPageData, renderPageHtml, runInlineScripts, hydratePage, useRerender, loadGlobalVars } from '../lib/renderPipeline'
 import { withDateParts } from '../lib/blogPostQuery'
 import { stripBlockedIframeSrcs, getConsent } from '../lib/cookieConsentRuntime'
@@ -302,8 +302,15 @@ export default function PageCatchAll({ initialLoadingScreenHtml = defaultLoading
         if (pageRedirect.target === '_blank') {
           setHtml(buildRedirectLinkHtml(foundPage.title, pageRedirect.url))
         } else {
+          const settings = await loadMaintenanceSettings()
+          if (cancelled) return
+          if (pageRedirect.interstitial) {
+            const tpl = await buildMaintenanceHtml(settings, 'maintenance_redirect', DEFAULT_REDIRECT_HTML)
+            setHtml(fillRedirectUrl(tpl, pageRedirect.url))
+          } else {
+            setHtml('')
+          }
           window.location.href = pageRedirect.url
-          setHtml('<div style="padding: 40px; text-align: center;"><p>Weiterleitung...</p></div>')
         }
         setLoading(false)
         return
