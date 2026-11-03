@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.61.0] - 2026-11-03
+
+### Changed
+- **Neue Seite per Dialog:** „Seite hinzufügen“ und „Unterseite/Geschwisterseite hinzufügen“ öffnen einen Dialog mit Name, Position (oberste Ebene, Unterseite von …, nach Seite …), Seitentyp (reguläre Seite oder Weiterleitung 301/302), Navigation und Footer. Die Titel-/Navigations-Felder und das Weiterleitungs-Menü neben dem Button entfallen.
+
 ## [0.60.1] - 2026-11-03
 
 ### Added

@@ -38,7 +38,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     setViewModeState(mode);
     sessionStorage.setItem('pageTreeViewMode', mode);
   };
-  const [newTitle, setNewTitle] = useState('');  const [newNavigation, setNewNavigation] = useState('');  const [navigations, setNavigations] = useState([]);
+  const [newPageDialog, setNewPageDialog] = useState(null); // { mode: 'root'|'child'|'after', refId } — Dialog "Neue Seite"
+  const [navigations, setNavigations] = useState([]);
   const [footers, setFooters] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [toast, setToast] = useState(null);
@@ -50,7 +51,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
   const [dropIndicator, setDropIndicator] = useState(null); // { id, position: 'before'|'after'|'inside' }
   const [addMenuOpenId, setAddMenuOpenId] = useState(null);
   const [addMenuAnchor, setAddMenuAnchor] = useState(null); // { top, left } in Viewport-Koordinaten
-  const [showAddTypeMenu, setShowAddTypeMenu] = useState(false); // Dropdown am Haupt-"Seite hinzufügen"-Button
   const thumbObserverRef = useRef(null);
 
   // Schließt das "Hinzufügen"-Menü bei Klick außerhalb (Menü selbst lebt
@@ -66,16 +66,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [addMenuOpenId]);
 
-  useEffect(() => {
-    if (!showAddTypeMenu) return;
-    const handleOutside = (e) => {
-      if (e.target.closest && e.target.closest('.page-add-type-menu-wrap')) return;
-      setShowAddTypeMenu(false);
-    };
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [showAddTypeMenu]);
-
   function toggleAddMenu(e, nodeId) {
     if (addMenuOpenId === nodeId) {
       setAddMenuOpenId(null);
@@ -90,27 +80,14 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     if (addMenuOpenId !== node.id || !addMenuAnchor || typeof document === 'undefined') return null;
     return createPortal(
       <div className="page-add-menu" style={{ position: 'fixed', top: addMenuAnchor.top, left: addMenuAnchor.left }}>
-        <button onClick={() => { setAddMenuOpenId(null); handleAdd(node.id); }}>
-          <Plus size={14} /> Unterseite hinzufügen
+        <button onClick={() => { setAddMenuOpenId(null); setNewPageDialog({ mode: 'child', refId: node.id }); }}>
+          <Plus size={14} /> Unterseite hinzufügen…
         </button>
-        <button onClick={() => { setAddMenuOpenId(null); handleAddSibling(node.id); }}>
-          <Users size={14} /> Geschwisterseite hinzufügen
+        <button onClick={() => { setAddMenuOpenId(null); setNewPageDialog({ mode: 'after', refId: node.id }); }}>
+          <Users size={14} /> Geschwisterseite hinzufügen…
         </button>
         <button onClick={() => { setAddMenuOpenId(null); handleDuplicate(node.id); }}>
           <Copy size={14} /> Duplizieren
-        </button>
-        <div className="page-add-menu-sep" />
-        <button onClick={() => { setAddMenuOpenId(null); handleAdd(node.id, 'permanent'); }}>
-          <Plus size={14} /> Unterseite: Permanente Weiterleitung
-        </button>
-        <button onClick={() => { setAddMenuOpenId(null); handleAdd(node.id, 'temporary'); }}>
-          <Plus size={14} /> Unterseite: Temporäre Weiterleitung
-        </button>
-        <button onClick={() => { setAddMenuOpenId(null); handleAddSibling(node.id, 'permanent'); }}>
-          <Users size={14} /> Geschwisterseite: Permanente Weiterleitung
-        </button>
-        <button onClick={() => { setAddMenuOpenId(null); handleAddSibling(node.id, 'temporary'); }}>
-          <Users size={14} /> Geschwisterseite: Temporäre Weiterleitung
         </button>
       </div>,
       document.body
@@ -223,49 +200,54 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     return filterNodes(tree);
   }, [searchTerm, tree]);
 
-  async function handleAdd(parentId = null, redirectType = null) {
-    const id = Math.random().toString(36).substr(2, 9);
+  // Legt eine Seite an der im Dialog gewählten Stelle an: mode 'root' (oberste
+  // Ebene, ans Ende), 'child' (Unterseite von refId) oder 'after' (direkt nach refId).
+  async function createPage({ title, mode, refId, navigation, footer, redirectType }) {
     const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
-    const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
-    const slug = uniqueSlugFrom(slugify(title, 'neue-seite'), getAllSlugs(tree));
+    const pageTitle = title || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
     const newPage = {
-      id,
-      title,
-      slug,
+      id: Math.random().toString(36).substr(2, 9),
+      title: pageTitle,
+      slug: uniqueSlugFrom(slugify(pageTitle, 'neue-seite'), getAllSlugs(tree)),
       children: [],
       blocks: [],
       status: 'DRAFT',
       data: {
-        ...(newNavigation ? { pageNav: newNavigation } : {}),
+        ...(navigation ? { pageNav: navigation } : {}),
+        ...(footer ? { pageFooter: footer } : {}),
         ...(isRedirect ? { redirect: { type: redirectType, url: '', target: '_self' } } : {}),
       },
     };
-    if (!parentId) {
-      const updated = [...tree, newPage];
-      setTree(updated);
-      if (onUpdate) await onUpdate(updated);
-    } else {
-      let parentFound = false;
-      const addChild = (nodes) => nodes.map(n => {
-        if (n.id === parentId) {
-          parentFound = true;
+
+    let found = mode === 'root';
+    const place = (nodes) => {
+      if (mode === 'after') {
+        const idx = nodes.findIndex(n => n.id === refId);
+        if (idx !== -1) {
+          found = true;
+          const out = [...nodes];
+          out.splice(idx + 1, 0, newPage);
+          return out;
+        }
+      }
+      return nodes.map(n => {
+        if (mode === 'child' && n.id === refId) {
+          found = true;
           return { ...n, children: [...(n.children || []), newPage] };
         }
-        return { ...n, children: addChild(n.children || []) };
+        return { ...n, children: place(n.children || []) };
       });
-      const updated = addChild(tree);
-      if (!parentFound) {
-        // Übergeordnete Seite wurde nicht gefunden (z. B. veraltete ID nach
-        // gleichzeitiger Änderung) — lieber sichtbar fehlschlagen, statt die
-        // neue Seite unbemerkt als Top-Level-Seite landen zu lassen.
-        setToast({ message: 'Übergeordnete Seite nicht gefunden. Bitte Seite neu laden und erneut versuchen.', type: 'error' });
-        return;
-      }
-      setTree(updated);
-      if (onUpdate) await onUpdate(updated);
+    };
+    const updated = mode === 'root' ? [...tree, newPage] : place(tree);
+    if (!found) {
+      // Bezugsseite nicht gefunden (z. B. veraltete ID nach gleichzeitiger
+      // Änderung) — sichtbar fehlschlagen statt die Seite unbemerkt auf die
+      // oberste Ebene zu legen.
+      setToast({ message: 'Bezugsseite nicht gefunden. Bitte Seite neu laden und erneut versuchen.', type: 'error' });
+      return;
     }
-    setNewTitle('');
-    setNewNavigation('');
+    setTree(updated);
+    if (onUpdate) await onUpdate(updated);
     // Reload tree from DB so node.id matches the real CUID assigned by Prisma.
     // Without this, publish/workflow calls fail with 404 because they send the
     // temporary random frontend-ID instead of the actual DB record ID.
@@ -312,43 +294,6 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
     if (onUpdate) await onUpdate(updated);
     if (onRefreshPages) await onRefreshPages();
     setToast({ message: `"${source.title}" dupliziert.`, type: 'success' });
-  }
-
-  async function handleAddSibling(nodeId, redirectType = null) {
-    const id = Math.random().toString(36).substr(2, 9);
-    const isRedirect = redirectType === 'permanent' || redirectType === 'temporary';
-    const title = newTitle || (isRedirect ? 'Neue Weiterleitung' : 'Neue Seite');
-    const slug = uniqueSlugFrom(slugify(title, 'neue-seite'), getAllSlugs(tree));
-    const newPage = {
-      id,
-      title,
-      slug,
-      children: [],
-      blocks: [],
-      status: 'DRAFT',
-      data: {
-        ...(newNavigation ? { pageNav: newNavigation } : {}),
-        ...(isRedirect ? { redirect: { type: redirectType, url: '', target: '_self' } } : {}),
-      },
-    };
-
-    // Insert sibling directly after nodeId at the same level
-    const insertAfter = (nodes) => {
-      const idx = nodes.findIndex(n => n.id === nodeId);
-      if (idx !== -1) {
-        const updated = [...nodes];
-        updated.splice(idx + 1, 0, newPage);
-        return updated;
-      }
-      return nodes.map(n => ({ ...n, children: insertAfter(n.children || []) }));
-    };
-
-    const updated = insertAfter(tree);
-    setTree(updated);
-    if (onUpdate) await onUpdate(updated);
-    setNewTitle('');
-    setNewNavigation('');
-    if (onRefreshPages) await onRefreshPages();
   }
 
   function handleDelete(id) {
@@ -1312,6 +1257,17 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
         />
       )}
 
+      {newPageDialog && (
+        <NewPageModal
+          tree={tree}
+          navigations={navigations}
+          footers={footers}
+          initial={newPageDialog}
+          onCancel={() => setNewPageDialog(null)}
+          onConfirm={async (values) => { setNewPageDialog(null); await createPage(values); }}
+        />
+      )}
+
       {targetPicker && (
         <PageTargetPickerModal
           mode={targetPicker.mode}
@@ -1354,53 +1310,10 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
           </div>
 
           <div className="controls">
-            <input
-              type="text"
-              placeholder="Titel für neue Seite"
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleAdd();
-              }}
-            />
-            <select
-              value={newNavigation}
-              onChange={e => setNewNavigation(e.target.value)}
-              aria-label="Navigation für neue Seite"
-              style={{ fontSize: '0.85rem', padding: '6px 8px', border: '1px solid var(--border-color)', borderRadius: 6, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-            >
-              <option value="">— Navigation wählen —</option>
-              {navigations.map(n => (
-                <option key={n.id} value={n.id}>{n.name} ({n.type})</option>
-              ))}
-            </select>
-            <span className="page-add-menu-wrap page-add-type-menu-wrap">
-              <button className="primary" onClick={() => handleAdd()}>
-                <Plus size={16} />
-                Seite hinzufügen
-              </button>
-              <button
-                className="primary page-add-type-caret"
-                onClick={() => setShowAddTypeMenu(v => !v)}
-                title="Weitere Seitentypen"
-                aria-label="Weitere Seitentypen"
-                aria-haspopup="true"
-                aria-expanded={showAddTypeMenu}
-                style={{ padding: '0 8px', borderLeft: '1px solid rgba(255,255,255,0.3)' }}
-              >
-                <ChevronDown size={14} />
-              </button>
-              {showAddTypeMenu && (
-                <div className="page-add-menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 20 }}>
-                  <button onClick={() => { setShowAddTypeMenu(false); handleAdd(null, 'permanent'); }}>
-                    Permanente Weiterleitung
-                  </button>
-                  <button onClick={() => { setShowAddTypeMenu(false); handleAdd(null, 'temporary'); }}>
-                    Temporäre Weiterleitung
-                  </button>
-                </div>
-              )}
-            </span>
+            <button className="primary" onClick={() => setNewPageDialog({ mode: 'root', refId: null })}>
+              <Plus size={16} />
+              Seite hinzufügen
+            </button>
           </div>
         </div>
 
@@ -1566,6 +1479,87 @@ function PageTargetPickerModal({ mode, tree, selectedIds, onCancel, onConfirm })
             >
               {mode === 'move' ? 'Verschieben' : 'Kopieren'}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function NewPageModal({ tree, navigations, footers, initial, onCancel, onConfirm }) {
+  const [title, setTitle] = useState('');
+  const [mode, setMode] = useState(initial.mode);
+  const [refId, setRefId] = useState(initial.refId || '');
+  const [navigation, setNavigation] = useState('');
+  const [footer, setFooter] = useState('');
+  const [redirectType, setRedirectType] = useState(''); // '' = reguläre Seite
+
+  const options = [];
+  const walk = (nodes, depth) => nodes.forEach(n => {
+    options.push({ id: n.id, label: `${'— '.repeat(depth)}${n.title} (/${n.slug})` });
+    walk(n.children || [], depth + 1);
+  });
+  walk(tree, 0);
+
+  const needsRef = mode !== 'root';
+  const refValue = refId || options[0]?.id || '';
+  const canSubmit = title.trim() && (!needsRef || refValue);
+  const submit = () => {
+    if (!canSubmit) return;
+    onConfirm({ title: title.trim(), mode, refId: needsRef ? refValue : null, navigation, footer, redirectType });
+  };
+
+  const isDarkMode = typeof document !== 'undefined' && !!document.querySelector('.admin-scope')?.classList.contains('dark-mode');
+  const fieldStyle = { width: '100%', padding: '6px 8px', border: '1px solid var(--border-color)', borderRadius: 6, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' };
+  const labelStyle = { display: 'block', margin: '12px 0 4px', fontSize: '0.85rem' };
+
+  return createPortal(
+    <div className={`admin-scope${isDarkMode ? ' dark-mode' : ''}`}>
+      <div className="file-modal-overlay" onClick={onCancel}>
+        <div className="file-modal" onClick={e => e.stopPropagation()}>
+          <div className="file-modal-header">
+            <h3 className="file-modal-title">Neue Seite</h3>
+            <button className="file-modal-close-btn" onClick={onCancel}>×</button>
+          </div>
+          <div style={{ padding: '0 20px 8px' }}>
+            <label style={labelStyle} htmlFor="np-title">Name</label>
+            <input id="np-title" autoFocus type="text" value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} style={fieldStyle} />
+
+            <label style={labelStyle} htmlFor="np-mode">Position</label>
+            <select id="np-mode" value={mode} onChange={e => setMode(e.target.value)} style={fieldStyle}>
+              <option value="root">Oberste Ebene (Root)</option>
+              <option value="child" disabled={!options.length}>Unterseite von …</option>
+              <option value="after" disabled={!options.length}>Nach Seite …</option>
+            </select>
+            {needsRef && (
+              <select aria-label="Bezugsseite" value={refValue} onChange={e => setRefId(e.target.value)} style={{ ...fieldStyle, marginTop: 6 }}>
+                {options.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            )}
+
+            <label style={labelStyle} htmlFor="np-type">Seitentyp</label>
+            <select id="np-type" value={redirectType} onChange={e => setRedirectType(e.target.value)} style={fieldStyle}>
+              <option value="">Reguläre Seite</option>
+              <option value="permanent">Weiterleitung (permanent, 301)</option>
+              <option value="temporary">Weiterleitung (temporär, 302)</option>
+            </select>
+
+            <label style={labelStyle} htmlFor="np-nav">Navigation</label>
+            <select id="np-nav" value={navigation} onChange={e => setNavigation(e.target.value)} style={fieldStyle}>
+              <option value="">— Keine —</option>
+              {navigations.map(n => <option key={n.id} value={n.id}>{n.name} ({n.type})</option>)}
+            </select>
+
+            <label style={labelStyle} htmlFor="np-footer">Footer</label>
+            <select id="np-footer" value={footer} onChange={e => setFooter(e.target.value)} style={fieldStyle}>
+              <option value="">Standard-Footer</option>
+              {footers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </div>
+          <div className="file-modal-footer">
+            <button className="file-modal-cancel-btn" onClick={onCancel}>Abbrechen</button>
+            <button className="btn-modern" disabled={!canSubmit} onClick={submit}>Seite anlegen</button>
           </div>
         </div>
       </div>
