@@ -5,10 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
-## [0.61.0] - 2026-11-03
+## [0.60.1] - 2026-11-03
 
 ### Added
-- **Weiterleitung: Zwischenseite einstellbar:** Neue Wartungsseite „Weiterleitung“ (HTML/CSS/JS, `{{redirect.url}}` = Ziel) gestaltet die Seite, die bei browserseitigen Weiterleitungen kurz erscheint. Pro Weiterleitungsseite einstellbar (Seiteneditor: „Zwischenseite anzeigen“); aus = direkt weiterleiten ohne Zwischenseite. Standard bleibt an.
+- **Weiterleitung: Zwischenseite einstellbar:** Neue Wartungsseite „Weiterleitung“ (HTML/CSS/JS, `{{redirect.url}}` = Ziel) gestaltet die Seite, die bei browserseitigen Weiterleitungen kurz erscheint. Pro Weiterleitungsseite einstellbar (Seiteneditor, direkt unter „Art der Weiterleitung“: „Weiterleitungsseite (Zwischenseite) anzeigen“); aus = direkt weiterleiten ohne Zwischenseite. Standard bleibt an.
 
 ## [0.60.0] - 2026-10-30
 

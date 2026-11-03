@@ -2945,6 +2945,14 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   <option value="temporary">Temporär (302)</option>
                 </select>
 
+                <label className="page-editor-outline-toggle" style={{ marginTop: '14px' }}>
+                  <input type="checkbox" checked={redirectInterstitial} onChange={e => setRedirectInterstitial(e.target.checked)} />
+                  Weiterleitungsseite (Zwischenseite) anzeigen
+                </label>
+                <p className="redirect-config-hint">
+                  Nur bei „Gleicher Tab“ und nur, wenn der Browser weiterleitet (nicht bei der HTTP-301/302-Weiterleitung des Servers). Gestaltung unter Wartungsseiten → Weiterleitung.
+                </p>
+
                 <label className="field-label-xs" style={{ marginTop: '14px' }}>Ziel-URL</label>
                 <input
                   type="text"
@@ -2969,12 +2977,6 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                   </p>
                 )}
 
-                {redirectTarget === '_self' && (
-                  <label className="page-editor-outline-toggle" style={{ marginTop: '14px' }}>
-                    <input type="checkbox" checked={redirectInterstitial} onChange={e => setRedirectInterstitial(e.target.checked)} />
-                    Zwischenseite anzeigen (nur bei Weiterleitung im Browser, Gestaltung unter Wartungsseiten → Weiterleitung)
-                  </label>
-                )}
 
                 <button
                   type="button"
