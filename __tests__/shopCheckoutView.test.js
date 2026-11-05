@@ -382,3 +382,16 @@ describe('SDK loading', () => {
     expect(root.querySelector('[data-shop-retry]').hidden).toBe(false);
   });
 });
+
+test('english locale shows translated text for a server error code', async () => {
+  document.documentElement.lang = 'en';
+  checkoutResp = () => resp(422, { error: 'Eingabe ungültig', code: 'COUPON_EXPIRED' });
+  const root = setup();
+  await flush();
+  fillAll(root);
+  submit(root);
+  await flush();
+  expect(root.textContent).toContain('This coupon has expired.');
+  expect(root.textContent).not.toContain('Eingabe ungültig');
+  document.documentElement.lang = '';
+});

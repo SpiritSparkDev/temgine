@@ -7,6 +7,7 @@ jest.disableAutomock()
 
 const db = { orders: [], payments: [], refunds: [], items: [], formats: [], movements: [], products: [] }
 const mockPrisma = {}
+let lock = Promise.resolve()
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../lib/shop/config', () => ({ loadShopSettings: jest.fn(async () => ({ shop_x: 'y' })) }))
 jest.mock('../lib/shop/orderMails', () => ({ sendPaidMails: jest.fn(), sendRefundMail: jest.fn(async () => {}) }))
@@ -33,7 +34,26 @@ const match = (row, where) => Object.entries(where).every(([k, v]) => {
 })
 
 Object.assign(mockPrisma, {
-  $transaction: async (fn) => fn(mockPrisma),
+  // $queryRaw (SELECT ... FOR UPDATE) sperrt die Bestellzeile bis zum Ende der Transaktion (Fake: ein globaler Mutex)
+  $transaction: async (fn) => {
+    let held = false
+    const tx = {
+      ...mockPrisma,
+      $queryRaw: async () => {
+        const prev = lock
+        let release
+        lock = new Promise((r) => { release = r })
+        await prev
+        held = true
+        tx.release = release
+      },
+    }
+    try {
+      return await fn(tx)
+    } finally {
+      if (held) tx.release()
+    }
+  },
   shopOrder: {
     findUnique: async ({ where }) => { const o = db.orders.find((x) => x.id === where.id); return o ? { ...o } : null },
     updateMany: async ({ where, data }) => {
@@ -181,17 +201,20 @@ describe('createRefund: Prüfungen', () => {
 })
 
 describe('createRefund: Parallelität', () => {
-  test('zwei gleichzeitige Vollerstattungen: höchstens eine wird verbucht, nie über den Gesamtbetrag', async () => {
+  test('zwei gleichzeitige Vollerstattungen: der Anbieter wird genau einmal gerufen', async () => {
     const results = await Promise.allSettled([refund({ amountCents: 5000 }), refund({ amountCents: 5000 })])
-    expect(order().refundedCents).toBeLessThanOrEqual(5000)
-    expect(order().refundedCents).toBe(5000)
+    expect(order()).toMatchObject({ refundedCents: 5000, status: 'REFUNDED' })
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
-    const rejected = results.find((r) => r.status === 'rejected')
-    expect(['REFUND_NOT_ALLOWED', 'AMOUNT_INVALID']).toContain(rejected.reason.code)
-    // wurde der Anbieter doppelt gerufen, ist die zweite Erstattung sichtbar markiert statt verschwiegen
-    if (mockDriver.refundPayment.mock.calls.length === 2) {
-      expect(db.refunds.some((r) => /Anbieter prüfen/.test(r.error || ''))).toBe(true)
-    }
+    expect(results.find((r) => r.status === 'rejected').reason.code).toBe('AMOUNT_INVALID')
+    expect(mockDriver.refundPayment).toHaveBeenCalledTimes(1)
+    expect(db.refunds).toHaveLength(1)
+  })
+
+  test('zwei parallele Teilerstattungen: zusammen nie über den Gesamtbetrag', async () => {
+    const results = await Promise.allSettled([refund({ amountCents: 3000 }), refund({ amountCents: 3000 })])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    expect(mockDriver.refundPayment).toHaveBeenCalledTimes(1)
+    expect(order().refundedCents).toBe(3000)
   })
 })
 

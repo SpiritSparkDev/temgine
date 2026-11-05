@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { formatDateTime } from './shopOrdersUtils';
 import { RETURN_FILTERS, returnLabel, allowedTransitions, buildReturnsQuery, confirmText } from './shopReturnsUtils';
 
-function ReturnDetail({ id, onBack, showToast }) {
+function ReturnDetail({ id, onBack, showToast, onOpenOrder }) {
   const [item, setItem] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,11 +47,13 @@ function ReturnDetail({ id, onBack, showToast }) {
 
   if (!item) return <div><button className="btn" onClick={onBack}>Zurück zur Liste</button><p>Lade …</p></div>;
   const next = allowedTransitions(item.status);
+  const ref = item.order?.reference;
+  const orderLink = onOpenOrder && ref ? <button className="btn" onClick={() => onOpenOrder(ref)}>{ref}</button> : ref;
 
   return (
     <div>
       <button className="btn" onClick={onBack}>Zurück zur Liste</button>
-      <h3>Rückgabe zu Bestellung {item.order?.reference}</h3>
+      <h3>Rückgabe zu Bestellung {orderLink}</h3>
       <dl>
         <dt>E-Mail</dt><dd>{item.email}</dd>
         <dt>Eingegangen</dt><dd>{formatDateTime(item.createdAt)}</dd>
@@ -84,7 +86,7 @@ function ReturnDetail({ id, onBack, showToast }) {
 }
 
 /** Rückgabe-Anfragen: Liste mit Statusfilter und Paginierung, Klick öffnet die Details. */
-export default function ShopReturnsView({ showToast }) {
+export default function ShopReturnsView({ showToast, onOpenOrder }) {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
@@ -110,7 +112,7 @@ export default function ShopReturnsView({ showToast }) {
   }, [status, page, openId, showToast]);
 
   if (denied) return <p role="alert">Für Rückgaben fehlt dir das Recht „Rückgaben bearbeiten“.</p>;
-  if (openId) return <ReturnDetail id={openId} onBack={() => setOpenId(null)} showToast={showToast} />;
+  if (openId) return <ReturnDetail id={openId} onBack={() => setOpenId(null)} showToast={showToast} onOpenOrder={onOpenOrder} />;
 
   const rows = data?.returns || [];
   return (

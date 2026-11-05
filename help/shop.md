@@ -141,6 +141,7 @@ Die Seite `bestellung` zeigt keine personenbezogenen Daten.
 - **Gutscheine:** Tab *Gutscheine*; Gutscheine werden nicht gelöscht, sondern deaktiviert.
 - **Digitale Produkte:** Dateien am digitalen Format im Produkteditor hochladen (erst das Produkt speichern). Kunden erhalten nach Zahlung Links mit Ablauf und Download-Limit.
 - **Reservierung und Zeitplan:** Ein eingebauter Timer gibt abgelaufene Reservierungen frei, räumt unbezahlte Bestellungen auf und gleicht offene Zahlungen ab. Läuft die Seite serverlos, kann `POST /api/shop/cron` mit dem Header `x-shop-cron` regelmäßig extern aufgerufen werden.
+- **Reservierungsdauer:** Läuft die Reservierung (Standard 30 Minuten) ab, bevor die Zahlung beim Anbieter abgeschlossen ist, kann der Bestand an andere Kunden gehen. Später eingehende Zahlungen buchen den Bestand dann nur bis 0 ab; der Überverkauf steht im Bestellverlauf bzw. im Log. Dauern Zahlungen bei dir länger, erhöhe die Reservierungsdauer in den Einstellungen.
 - **Rückgaben:** Kunden stellen Anfragen unter *rueckgabe*; die Bearbeitung erfolgt im Tab *Rückgaben*, die Erstattung selbst im Bestelldetail.
 
 ## Rechtliches (keine Rechtsberatung)

@@ -1,11 +1,12 @@
 import { rateLimit } from '../../../../lib/rateLimit'
+import { clientIp } from '../../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../../lib/shop/config'
 import { subscribeStockAlert, AlertError } from '../../../../lib/shop/stockAlerts'
 
 const limiter = rateLimit({
   windowMs: 15 * 60_000,
   max: 5,
-  keyFn: (req) => `shop-stock-alert:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-stock-alert:${clientIp(req)}`,
 })
 
 /** Öffentlich: POST /api/shop/public/stock-alerts { sku, email, locale? } - bei gültiger Eingabe immer 202 { ok: true }. */

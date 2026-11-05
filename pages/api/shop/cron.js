@@ -1,5 +1,6 @@
 import { requireAuth, PERMISSIONS } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
+import { clientIp } from '../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../lib/shop/config'
 import { getSetting } from '../../../lib/shop/settingsStore'
 import { safeEqual } from '../../../lib/shop/tokens'
@@ -8,7 +9,7 @@ import { runShopJobs } from '../../../lib/shop/cron'
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 6,
-  keyFn: (req) => `shop-cron:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-cron:${clientIp(req)}`,
 })
 
 async function tokenMatches(given) {

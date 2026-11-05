@@ -17,6 +17,7 @@ export default function ShopSettingsPanel({ showToast }) {
   const [notifyEmail, setNotifyEmail] = useState('');
   const [orderPrefix, setOrderPrefix] = useState('');
   const [vals, setVals] = useState({});
+  const [loaded, setLoaded] = useState({});
   const [errors, setErrors] = useState([]);
   const [newToken, setNewToken] = useState('');
   const [ownToken, setOwnToken] = useState('');
@@ -26,6 +27,7 @@ export default function ShopSettingsPanel({ showToast }) {
     setNotifyEmail(d.notifyEmail || '');
     setOrderPrefix(d.orderPrefix || '');
     setVals(d.settings || {});
+    setLoaded(d.settings || {});
   };
 
   useEffect(() => {
@@ -72,11 +74,14 @@ export default function ShopSettingsPanel({ showToast }) {
     </label>
   );
 
-  // Speichert alle Werte der Abschnitte; Validierungsfehler des Servers (422) erscheinen als Liste.
+  // Speichert nur gegenüber dem geladenen Stand geänderte Werte (Standardwerte werden so nicht festgeschrieben);
+  // Validierungsfehler des Servers (422) erscheinen als Liste.
   const saveMore = async () => {
     setErrors([]);
+    const changed = Object.fromEntries(Object.entries(vals).filter(([k, v]) => v !== (loaded[k] ?? '')));
+    if (!Object.keys(changed).length) { showToast('Keine Änderungen'); return; }
     const res = await fetch('/api/shop/settings', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: vals }),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: changed }),
     });
     const d = await res.json().catch(() => ({}));
     if (res.ok) { apply(d); showToast('Einstellungen gespeichert'); return; }

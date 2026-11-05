@@ -189,6 +189,13 @@ describe('Bündel', () => {
     expect(code(() => price([{ sku: 'SET', qty: 1 }], [bundle([{ sku: 'BOOK', qty: 1 }]), noW])).code).toBe('WEIGHT_UNKNOWN')
     expect(price([{ sku: 'SET', qty: 99 }], [bundle([{ sku: 'BOOK', qty: 1 }]), F({ sku: 'BOOK', stock: null })]).lines[0].qty).toBe(99)
   })
+  test('Bestand gemeinsam: Bündel + Einzelzeile desselben Bestandteils', () => {
+    const f = [bundle([{ sku: 'BOOK', qty: 2 }]), book] // Bestand 10
+    expect(price([{ sku: 'SET', qty: 4 }, { sku: 'BOOK', qty: 2 }], f).lines).toHaveLength(2) // 8 + 2
+    const e = code(() => price([{ sku: 'SET', qty: 4 }, { sku: 'BOOK', qty: 3 }], f)) // 8 + 3 > 10
+    expect(e.code).toBe('STOCK_EXCEEDED')
+    expect(e.details.sku).toBe('BOOK')
+  })
   test('BUNDLE_INVALID: Bestandteil fehlt, verschachtelt, Menge ungültig', () => {
     expect(code(() => price([{ sku: 'SET', qty: 1 }], [bundle([{ sku: 'GONE', qty: 1 }])])).code).toBe('BUNDLE_INVALID')
     const inner = bundle([{ sku: 'BOOK', qty: 1 }], { sku: 'IN' })

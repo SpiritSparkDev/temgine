@@ -89,7 +89,7 @@ test('sync errors do not break the response', async () => {
 test('exposes no PII: only status fields for an unpaid order', async () => {
   mockPrisma.shopOrder.findUnique.mockResolvedValue(row({ status: 'FAILED', email: 'a@b.de', billing: { name: 'Max' }, shipping: {}, items: [{ sku: 'A' }] }))
   const out = (await call()).json.mock.calls[0][0]
-  expect(Object.keys(out).sort()).toEqual(['currency', 'paid', 'reference', 'status', 'totalCents'])
+  expect(Object.keys(out).sort()).toEqual(['currency', 'locale', 'paid', 'reference', 'status', 'totalCents'])
   const select = mockPrisma.shopOrder.findUnique.mock.calls[0][0].select
   for (const k of ['email', 'billing', 'shipping', 'items', 'memberId']) expect(select[k]).toBeUndefined()
 })
@@ -109,6 +109,13 @@ test('download lookup failure does not break a paid response', async () => {
   listDownloadsForOrder.mockRejectedValue(new Error('x'))
   mockPrisma.shopOrder.findUnique.mockResolvedValue(row({ status: 'PAID' }))
   expect((await call()).json.mock.calls[0][0].downloads).toEqual([])
+})
+
+test('response carries the order locale (null when unset)', async () => {
+  mockPrisma.shopOrder.findUnique.mockResolvedValueOnce(row({ status: 'REFUNDED', locale: 'en' }))
+  expect((await call()).json.mock.calls[0][0]).toMatchObject({ locale: 'en' })
+  mockPrisma.shopOrder.findUnique.mockResolvedValueOnce(row({ status: 'REFUNDED' }))
+  expect((await call()).json.mock.calls[0][0]).toMatchObject({ locale: null })
 })
 
 test('429 after 60 requests per minute from one IP', async () => {

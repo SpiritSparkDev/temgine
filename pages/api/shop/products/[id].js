@@ -3,7 +3,7 @@ import { requireAuth, PERMISSIONS } from '../../../../lib/auth'
 import { logAudit } from '../../../../lib/audit'
 import { requireShopEnabled } from '../../../../lib/shop/guard'
 import { notifyRestock } from '../../../../lib/shop/stockAlerts'
-import { validateProductInput, toAdminProduct, loadLookup } from '../../../../lib/shop/catalog'
+import { validateProductInput, toAdminProduct, loadLookup, nestedBundleErrors } from '../../../../lib/shop/catalog'
 
 const include = { formats: { orderBy: { sortOrder: 'asc' } } }
 const iso = (d) => (d instanceof Date ? d.toISOString() : d)
@@ -27,6 +27,7 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
       const { errors, data } = validateProductInput(req.body, await loadLookup(prisma, req.body))
+      errors.push(...(await nestedBundleErrors(prisma, data.formats, id)))
       if (!req.body?.updatedAt) errors.push('updatedAt ist erforderlich')
       if (errors.length) {
         return res.status(422).json({ error: 'Eingabe ungültig', code: 'VALIDATION_ERROR', details: { errors } })

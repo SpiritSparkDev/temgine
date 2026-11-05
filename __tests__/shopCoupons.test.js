@@ -2,11 +2,12 @@
  * __tests__/shopCoupons.test.js
  * lib/shop/coupons.js: Eingabeprüfung, Einlösbarkeit, Lookup, idempotente Einlösung.
  */
-const mockTx = { shopCoupon: { findUnique: jest.fn(), update: jest.fn() }, shopCouponUse: { createMany: jest.fn() } }
-const mockPrisma = { shopCoupon: { findUnique: jest.fn() }, $transaction: jest.fn((fn) => fn(mockTx)) }
+const mockTx = { shopCoupon: { findUnique: jest.fn(), updateMany: jest.fn() }, shopCouponUse: { createMany: jest.fn() } }
+const mockPrisma = { shopCoupon: { findUnique: jest.fn() }, shopOrder: { count: jest.fn() }, $transaction: jest.fn((fn) => fn(mockTx)) }
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
+jest.mock('../lib/shop/settingsStore', () => ({ getNumberSetting: jest.fn().mockResolvedValue(30) }))
 
-const { normalizeCode, validateCouponInput, validateCoupon, findCoupon, lookupCoupon, recordCouponUse, toAdminCoupon } = require('../lib/shop/coupons')
+const { normalizeCode, validateCouponInput, validateCoupon, findCoupon, lookupCoupon, recordCouponUse, assertCouponCapacity, toAdminCoupon } = require('../lib/shop/coupons')
 const { ShopPricingError } = require('../lib/shop/pricing')
 
 beforeEach(() => jest.clearAllMocks())
@@ -120,13 +121,13 @@ describe('recordCouponUse', () => {
     expect(await recordCouponUse('o1', 'sommer')).toBe(true)
     expect(mockTx.shopCoupon.findUnique).toHaveBeenCalledWith({ where: { code: 'SOMMER' } })
     expect(mockTx.shopCouponUse.createMany).toHaveBeenCalledWith({ data: [{ couponId: 'c1', orderId: 'o1' }], skipDuplicates: true })
-    expect(mockTx.shopCoupon.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usedCount: { increment: 1 } } })
+    expect(mockTx.shopCoupon.updateMany).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { usedCount: { increment: 1 } } })
   })
   test('zweiter Aufruf (Duplikat) zählt nicht', async () => {
     mockTx.shopCoupon.findUnique.mockResolvedValue({ id: 'c1' })
     mockTx.shopCouponUse.createMany.mockResolvedValue({ count: 0 })
     expect(await recordCouponUse('o1', 'SOMMER')).toBe(false)
-    expect(mockTx.shopCoupon.update).not.toHaveBeenCalled()
+    expect(mockTx.shopCoupon.updateMany).not.toHaveBeenCalled()
   })
   test('unbekannter/fehlender Code oder Bestellung -> false ohne Schreiben', async () => {
     mockTx.shopCoupon.findUnique.mockResolvedValue(null)
@@ -134,6 +135,29 @@ describe('recordCouponUse', () => {
     expect(await recordCouponUse('o1', null)).toBe(false)
     expect(await recordCouponUse(null, 'SOMMER')).toBe(false)
     expect(mockTx.shopCouponUse.createMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('maxUses', () => {
+  test('recordCouponUse: bedingtes Erhoehen unter maxUses, Nutzung wird trotzdem festgehalten', async () => {
+    mockTx.shopCoupon.findUnique.mockResolvedValue({ id: 'c1', maxUses: 3 })
+    mockTx.shopCouponUse.createMany.mockResolvedValue({ count: 1 })
+    mockTx.shopCoupon.updateMany.mockResolvedValue({ count: 0 })
+    expect(await recordCouponUse('o1', 'SOMMER')).toBe(true)
+    expect(mockTx.shopCouponUse.createMany).toHaveBeenCalled()
+    expect(mockTx.shopCoupon.updateMany).toHaveBeenCalledWith({ where: { id: 'c1', usedCount: { lt: 3 } }, data: { usedCount: { increment: 1 } } })
+  })
+  test('assertCouponCapacity: usedCount + offene Bestellungen >= maxUses -> COUPON_EXHAUSTED', async () => {
+    mockPrisma.shopOrder.count.mockResolvedValue(1)
+    await expect(assertCouponCapacity(mockPrisma, { code: 'A', maxUses: 3, usedCount: 2 })).rejects.toMatchObject({ code: 'COUPON_EXHAUSTED' })
+    expect(mockPrisma.shopOrder.count.mock.calls[0][0].where).toMatchObject({ couponCode: 'A', status: 'PENDING' })
+  })
+  test('assertCouponCapacity: knapp darunter ok; ohne maxUses keine Abfrage', async () => {
+    mockPrisma.shopOrder.count.mockResolvedValue(1)
+    await expect(assertCouponCapacity(mockPrisma, { code: 'A', maxUses: 4, usedCount: 2 })).resolves.toBeUndefined()
+    mockPrisma.shopOrder.count.mockClear()
+    await assertCouponCapacity(mockPrisma, { code: 'A', maxUses: null, usedCount: 99 })
+    expect(mockPrisma.shopOrder.count).not.toHaveBeenCalled()
   })
 })
 

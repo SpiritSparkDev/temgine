@@ -1,5 +1,6 @@
 import { prisma } from '../../../../../../lib/prisma'
 import { rateLimit } from '../../../../../../lib/rateLimit'
+import { clientIp } from '../../../../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../../../../lib/shop/config'
 import { safeEqual } from '../../../../../../lib/shop/tokens'
 import { issueInvoice, buildInvoicePdf, INVOICE_STATUSES } from '../../../../../../lib/shop/invoice'
@@ -7,7 +8,7 @@ import { issueInvoice, buildInvoicePdf, INVOICE_STATUSES } from '../../../../../
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 20,
-  keyFn: (req) => `shop-invoice:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-invoice:${clientIp(req)}`,
 })
 
 const NOT_FOUND = { error: 'Bestellung nicht gefunden', code: 'NOT_FOUND' }

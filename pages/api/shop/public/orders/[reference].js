@@ -1,5 +1,6 @@
 import { prisma } from '../../../../../lib/prisma'
 import { rateLimit } from '../../../../../lib/rateLimit'
+import { clientIp } from '../../../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../../../lib/shop/config'
 import { syncPayment } from '../../../../../lib/shop/payments'
 import { safeEqual } from '../../../../../lib/shop/tokens'
@@ -8,10 +9,10 @@ import { listDownloadsForOrder } from '../../../../../lib/shop/downloads'
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 60,
-  keyFn: (req) => `shop-order:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-order:${clientIp(req)}`,
 })
 
-const SELECT = { id: true, reference: true, status: true, totalCents: true, currency: true, accessToken: true, trackingCarrier: true, trackingNumber: true, trackingUrl: true }
+const SELECT = { id: true, reference: true, status: true, totalCents: true, currency: true, accessToken: true, trackingCarrier: true, trackingNumber: true, trackingUrl: true, locale: true }
 const DUMMY = 'x'.repeat(48)
 const NOT_FOUND = { error: 'Bestellung nicht gefunden', code: 'NOT_FOUND' }
 
@@ -54,7 +55,7 @@ export default async function handler(req, res) {
     }
 
     const paid = order.status === 'PAID' || order.status === 'SHIPPED'
-    const out = { reference: order.reference, status: order.status, totalCents: order.totalCents, currency: order.currency, paid }
+    const out = { reference: order.reference, status: order.status, totalCents: order.totalCents, currency: order.currency, locale: order.locale || null, paid }
     if (paid) {
       let downloads = []
       try {

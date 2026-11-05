@@ -3,7 +3,7 @@ import ShopOrderDetail from './ShopOrderDetail';
 import { STATUS_FILTERS, statusLabel, formatCents, formatDateTime, buildOrdersQuery, buildExportUrl } from './shopOrdersUtils';
 
 /** Bestellliste mit Status-/Datumsfilter, Suche (Debounce), CSV-Export und Seitenwechsel; Klick öffnet die Detailansicht. */
-export default function ShopOrdersView({ showToast, role }) {
+export default function ShopOrdersView({ showToast, role, initialReference }) {
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -14,6 +14,24 @@ export default function ShopOrdersView({ showToast, role }) {
   const [openId, setOpenId] = useState(null);
   const [reconciling, setReconciling] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  // Bestellung per Nummer öffnen (Sprung aus anderen Tabs); ohne exakten Treffer landet die Nummer in der Suche.
+  useEffect(() => {
+    if (!initialReference) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/shop/orders${buildOrdersQuery({ q: initialReference, page: 1 })}`);
+        const d = await res.json().catch(() => ({}));
+        const hit = (d.orders || []).find((o) => o.reference === initialReference);
+        if (cancelled) return;
+        if (hit) setOpenId(hit.id); else { setInput(initialReference); showToast('Bestellung nicht gefunden', 'error'); }
+      } catch {
+        if (!cancelled) showToast('Bestellung konnte nicht geladen werden', 'error');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [initialReference, showToast]);
 
   useEffect(() => {
     const t = setTimeout(() => { setQ(input); setPage(1); }, 300);

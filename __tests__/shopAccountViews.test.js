@@ -145,3 +145,17 @@ test('cart extras: recommendations as cards', async () => {
   expect(el.textContent).toContain('from');
   expect(el.innerHTML).not.toContain('<i>');
 });
+
+test('return: english locale shows english text for error code', async () => {
+  document.documentElement.lang = 'en';
+  global.fetch = route({ 'POST /api/shop/public/returns': () => res(422, { error: 'Die Rückgabefrist ist abgelaufen', code: 'RETURN_PERIOD_OVER' }) });
+  const el = mk();
+  hydrateReturn(el);
+  el.querySelector('#rt-ref').value = 'ORD-7';
+  el.querySelector('#rt-email').value = 'a@b.de';
+  el.querySelector('#rt-reason').value = 'Too small';
+  el.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+  await flush();
+  expect(el.querySelector('[data-return-error]').textContent).toBe(account.en['account.returnErr.RETURN_PERIOD_OVER']);
+  document.documentElement.lang = '';
+});

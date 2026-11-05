@@ -138,3 +138,22 @@ test('poll stops when the container left the document', async () => {
   expect(fetch).toHaveBeenCalledTimes(calls);
   expect(ticks).toHaveLength(1);
 });
+
+test('API locale decides language and currency format; falls back to html lang, then German', async () => {
+  document.documentElement.lang = '';
+  replies = [resp(200, ord('PAID', { locale: 'en' }))];
+  let root = setup();
+  await flush();
+  expect(root.textContent).toContain('Thank you');
+  expect(root.textContent).toContain('€29.90');
+  document.documentElement.lang = 'en';
+  replies = [resp(200, ord('PAID'))];
+  root = setup();
+  await flush();
+  expect(root.textContent).toContain('Thank you');
+  document.documentElement.lang = '';
+  replies = [resp(200, ord('PAID'))];
+  root = setup();
+  await flush();
+  expect(root.textContent).toContain('Vielen Dank');
+});

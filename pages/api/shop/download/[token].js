@@ -1,13 +1,14 @@
 import fs from 'fs'
 import { prisma } from '../../../../lib/prisma'
 import { rateLimit } from '../../../../lib/rateLimit'
+import { clientIp } from '../../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../../lib/shop/config'
 import { resolveStoredPath } from '../../../../lib/shop/downloads'
 
 const limiter = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyFn: (req) => `shop-download:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-download:${clientIp(req)}`,
 })
 
 const err = (res, status, error, code) => res.status(status).json({ error, code })

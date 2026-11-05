@@ -5,7 +5,7 @@
 
 jest.disableAutomock()
 
-const db = { orders: [], payments: [], items: [], formats: [], movements: [], products: [] }
+const db = { orders: [], payments: [], items: [], formats: [], movements: [], products: [], events: [] }
 const mockPrisma = {}
 jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }))
 jest.mock('../lib/shop/config', () => ({ loadShopSettings: jest.fn(async () => ({})) }))
@@ -22,7 +22,7 @@ jest.mock('../lib/shop/providers', () => ({
   isProviderAvailable: (id) => id === 'sumup',
 }))
 
-const { startPayment, syncPayment, markOrderPaid, onOrderPaid, stockUnits, reconcileOpenPayments } = require('../lib/shop/payments')
+const { startPayment, syncPayment, markOrderPaid, onOrderPaid, stockUnits, reconcileOpenPayments, recoverPaidOrders } = require('../lib/shop/payments')
 const { sendPaidMails } = require('../lib/shop/orderMails')
 const { logOrderEvent } = require('../lib/shop/events')
 const { consumeReservations, releaseReservations } = require('../lib/shop/reservations')
@@ -43,7 +43,11 @@ const match = (row, where) => Object.entries(where).every(([k, v]) => {
 
 Object.assign(mockPrisma, {
   $transaction: async (fn) => fn(mockPrisma),
+  shopOrderEvent: {
+    findFirst: async ({ where }) => db.events.find((e) => e.orderId === where.orderId && e.type === where.type) || null,
+  },
   shopOrder: {
+    findMany: jest.fn(async () => []),
     updateMany: async ({ where, data }) => {
       const rows = db.orders.filter((o) => match(o, where))
       rows.forEach((o) => Object.assign(o, data))
@@ -103,6 +107,7 @@ beforeEach(() => {
   db.formats = [{ id: 'f1', stock: 10, productId: 'pr1' }, { id: 'f2', stock: 7, productId: 'pr1' }, { id: 'f3', stock: null, productId: 'pr1' }]
   db.products = [{ id: 'pr1', updatedAt: new Date(0) }]
   db.movements = []
+  db.events = []
   jest.clearAllMocks()
   sendPaidMails.mockReset()
   mockDriver.fetchPayment.mockReset().mockResolvedValue(remote())
@@ -494,5 +499,51 @@ describe('reconcileOpenPayments', () => {
     expect(q.where.createdAt.lt.getTime()).toBe(now.getTime() - 120000)
     expect(q.where.OR[1].order.createdAt.gte.getTime()).toBe(now.getTime() - 48 * 3600_000)
     expect(q.orderBy).toEqual({ createdAt: 'desc' })
+  })
+})
+
+describe('recoverPaidOrders (Wiederaufnahme nach Absturz)', () => {
+  const now = new Date('2026-10-14T12:00:00Z')
+
+  test('Abfrage: PAID/SHIPPED, 5 Minuten bis 7 Tage alt, ohne MAIL/MAIL_ERROR-Ereignis', async () => {
+    mockPrisma.shopOrder.findMany.mockResolvedValueOnce([])
+    expect(await recoverPaidOrders({ limit: 9, now })).toEqual({ checked: 0, recovered: 0 })
+    const q = mockPrisma.shopOrder.findMany.mock.calls[0][0]
+    expect(q.take).toBe(9)
+    expect(q.where.status).toEqual({ in: ['PAID', 'SHIPPED'] })
+    expect(q.where.paidAt.lt.getTime()).toBe(now.getTime() - 5 * 60_000)
+    expect(q.where.paidAt.gte.getTime()).toBe(now.getTime() - 7 * 86_400_000)
+    expect(q.where.events).toEqual({ none: { type: { in: ['MAIL', 'MAIL_ERROR'] } } })
+  })
+
+  test('holt Bestandsabbuchung, Rechnung, Downloads und Mail nach; zweiter Lauf bucht und mailt nichts doppelt', async () => {
+    db.orders[0].status = 'PAID'
+    mockPrisma.shopOrder.findMany.mockResolvedValue([db.orders[0]])
+    sendPaidMails.mockImplementation(async (o) => { db.events.push({ orderId: o.id, type: 'MAIL' }) })
+    expect(await recoverPaidOrders({ now })).toEqual({ checked: 1, recovered: 1 })
+    expect(stock('f1')).toBe(8)
+    expect(issueInvoice).toHaveBeenCalledTimes(1)
+    expect(createDownloadTokens).toHaveBeenCalledTimes(1)
+    expect(sendPaidMails).toHaveBeenCalledTimes(1)
+    await recoverPaidOrders({ now })
+    expect(stock('f1')).toBe(8)
+    expect(db.movements).toHaveLength(1)
+    expect(sendPaidMails).toHaveBeenCalledTimes(1)
+  })
+
+  test('onOrderPaid sendet bei vorhandenem MAIL-Ereignis keine zweite Bestätigung', async () => {
+    db.events.push({ orderId: 'o1', type: 'MAIL' })
+    await onOrderPaid(db.orders[0])
+    expect(sendPaidMails).not.toHaveBeenCalled()
+  })
+
+  test('Fehler bei einer Bestellung stoppt die übrigen nicht', async () => {
+    const second = { ...db.orders[0], id: 'o2', reference: 'ORD-2' }
+    mockPrisma.shopOrder.findMany.mockResolvedValue([db.orders[0], second])
+    consumeReservations.mockRejectedValueOnce(new Error('boom'))
+    mockPrisma.shopOrderItem.findMany = jest.fn().mockRejectedValueOnce(new Error('db')).mockResolvedValue([])
+    const r = await recoverPaidOrders({ now })
+    expect(r.checked).toBe(2)
+    expect(r.recovered).toBe(2)
   })
 })

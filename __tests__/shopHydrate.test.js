@@ -47,3 +47,19 @@ test('error states', async () => {
   expect(t).toContain('Produkt nicht gefunden');
   expect(t).toContain('konnten nicht geladen werden');
 });
+
+test('product list shows stockalert status notice from the query, as text only', async () => {
+  global.fetch = jest.fn(() => ok({ products: [prod], categories: ['RPG'] }));
+  const run = async (search) => {
+    window.history.pushState({}, '', '/shop' + search);
+    document.body.innerHTML = '<div id="r"><div class="shop-block" data-shop="products"></div></div>';
+    hydrateShop(document.getElementById('r'));
+    await flush();
+    return document.getElementById('r').querySelector('[role="status"]');
+  };
+  expect((await run('?stockalert=confirmed')).textContent).toContain('Benachrichtigung ist aktiv');
+  expect((await run('?stockalert=invalid')).textContent).toContain('ungültig');
+  expect(await run('?stockalert=%3Cb%3Ex')).toBeNull();
+  expect(await run('')).toBeNull();
+  window.history.pushState({}, '', '/');
+});

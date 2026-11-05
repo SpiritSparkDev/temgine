@@ -139,6 +139,13 @@ npm run dev
 | `NEXT_PUBLIC_DEV_MODE` | `false` |
 | `ALTCHA_HMAC_KEY` | Neu generierten Zufallswert (z. B. `openssl rand -base64 32`) — ohne eigenen Wert wird ein unsicherer Default für den Kontaktformular-Spamschutz verwendet |
 
+**Für den Online-Shop (Add-on), hinter Reverse Proxy (Plesk/nginx):**
+
+| Variable | Wert |
+|---|---|
+| `TRUST_PROXY` | `true` — ohne diese Variable zählen die Rate-Limits des Shops (Download, Rückgabe, Cron, Bestellstatus, Rechnung) nach der Socket-Adresse, hinter einem Proxy also für alle Besucher gemeinsam. Nur setzen, wenn der Proxy `X-Forwarded-For` selbst anhängt. |
+| `SHOP_CRON_DISABLED` | optional `true`, schaltet den eingebauten Zeitplan ab |
+
 **Für das Kontaktformular / Member-E-Mails:**
 
 | Variable | Produktionswert |

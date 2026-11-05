@@ -902,7 +902,7 @@ export default function AdminPageClient() {
           {view === 'js' && <JSManagerViewModern showToast={showToast} />}
           {view === 'fonts' && <FontManagerView showToast={showToast} />}
           {view === 'blog' && <BlogView showToast={showToast} />}
-          {view === 'shop' && shopEnabled && <ShopAdminView showToast={showToast} />}
+          {view === 'shop' && shopEnabled && <ShopAdminView showToast={showToast} role={session?.user?.role} />}
           {view === 'contact-messages' && <ContactMessagesView showToast={showToast} />}
           {view === 'members' && (
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

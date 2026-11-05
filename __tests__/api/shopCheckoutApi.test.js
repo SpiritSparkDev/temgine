@@ -18,9 +18,9 @@ jest.mock('next-auth/next', () => ({ getServerSession: jest.fn() }));
 jest.mock('../../pages/api/auth/[...nextauth]', () => ({ authOptions: {} }));
 jest.mock('../../lib/shop/config', () => ({ isShopEnabled: jest.fn(), loadShopSettings: jest.fn() }));
 jest.mock('../../lib/shop/providers', () => ({ listAvailableProviders: jest.fn() }));
-jest.mock('../../lib/shop/payments', () => ({ startPayment: jest.fn() }));
+jest.mock('../../lib/shop/payments', () => ({ startPayment: jest.fn(), markOrderPaid: jest.fn(), onOrderPaid: jest.fn() }));
 jest.mock('../../lib/shop/shippingConfig', () => ({ loadShippingConfig: jest.fn() }));
-jest.mock('../../lib/shop/coupons', () => ({ lookupCoupon: jest.fn() }));
+jest.mock('../../lib/shop/coupons', () => ({ lookupCoupon: jest.fn(), assertCouponCapacity: jest.fn() }));
 jest.mock('../../lib/shop/reservations', () => ({ reservedByOthers: jest.fn(), reserveStock: jest.fn(), releaseReservations: jest.fn() }));
 jest.mock('../../lib/shop/events', () => ({ logOrderEvent: jest.fn() }));
 jest.mock('../../lib/shop/pricing', () => {
@@ -33,10 +33,10 @@ jest.mock('../../lib/shop/pricing', () => {
 const { getServerSession } = require('next-auth/next');
 const { isShopEnabled, loadShopSettings } = require('../../lib/shop/config');
 const { listAvailableProviders } = require('../../lib/shop/providers');
-const { startPayment } = require('../../lib/shop/payments');
+const { startPayment, markOrderPaid, onOrderPaid } = require('../../lib/shop/payments');
 const { loadShippingConfig } = require('../../lib/shop/shippingConfig');
 const { priceOrder, ShopPricingError } = require('../../lib/shop/pricing');
-const { lookupCoupon } = require('../../lib/shop/coupons');
+const { lookupCoupon, assertCouponCapacity } = require('../../lib/shop/coupons');
 const { reservedByOthers, reserveStock, releaseReservations } = require('../../lib/shop/reservations');
 const { logOrderEvent } = require('../../lib/shop/events');
 const handler = require('../../pages/api/shop/checkout').default;
@@ -73,6 +73,9 @@ beforeEach(() => {
   mockPrisma.shopFormat.findMany.mockResolvedValue([{ id: 'f1', sku: 'A' }]);
   priceOrder.mockReturnValue(priced);
   lookupCoupon.mockResolvedValue(null);
+  assertCouponCapacity.mockResolvedValue(undefined);
+  markOrderPaid.mockResolvedValue(true);
+  onOrderPaid.mockResolvedValue(undefined);
   reservedByOthers.mockResolvedValue(new Map());
   reserveStock.mockResolvedValue([]);
   releaseReservations.mockResolvedValue(1);
@@ -313,5 +316,62 @@ describe('coupon, locale, reservations', () => {
     await call(body({ locale: 'fr' }));
     expect(mockTx.shopOrder.create.mock.calls[0][0].data).toMatchObject({ locale: 'en', currency: 'CHF' });
     expect(priceOrder.mock.calls[0][0].currency).toBe('CHF');
+  });
+});
+
+describe('stock, coupon capacity, zero-total orders', () => {
+  test('STOCK_EXCEEDED from reserveStock: 422, no payment started', async () => {
+    reserveStock.mockRejectedValue(new ShopPricingError('STOCK_EXCEEDED', 'Nicht genug Bestand.', { formatId: 'f1' }));
+    const res = await call(body());
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Nicht genug Bestand.', code: 'STOCK_EXCEEDED', details: { formatId: 'f1' } });
+    expect(startPayment).not.toHaveBeenCalled();
+    expect(logOrderEvent).not.toHaveBeenCalled();
+  });
+
+  test('exhausted coupon capacity (incl. pending orders): 422 before the transaction', async () => {
+    lookupCoupon.mockResolvedValue({ code: 'X', maxUses: 1, usedCount: 0 });
+    assertCouponCapacity.mockRejectedValue(new ShopPricingError('COUPON_EXHAUSTED', 'zu oft', { code: 'X' }));
+    const res = await call(body({ coupon: 'x' }));
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json.mock.calls[0][0].code).toBe('COUPON_EXHAUSTED');
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('total 0: no provider call, marked paid, side effects once, redirect to status page', async () => {
+    priceOrder.mockReturnValue({ ...priced, totalCents: 0, discountCents: 2400 });
+    mockTx.shopOrder.update.mockImplementation(async ({ data }) => ({ id: 'o1', totalCents: 0, email: 'a@b.de', ...data }));
+    const res = await call(body());
+    expect(startPayment).not.toHaveBeenCalled();
+    expect(markOrderPaid).toHaveBeenCalledWith('o1');
+    expect(onOrderPaid).toHaveBeenCalledTimes(1);
+    expect(onOrderPaid.mock.calls[0][0]).toMatchObject({ id: 'o1', status: 'PAID' });
+    expect(res.status).toHaveBeenCalledWith(201);
+    const out = res.json.mock.calls[0][0];
+    expect(out).toMatchObject({ paid: true, status: 'PAID', totalCents: 0 });
+    expect(out.redirectUrl).toMatch(/\/bestellung\?ref=.+&t=.+/);
+    expect(out.redirectUrl).toContain(out.accessToken);
+  });
+
+  test('total 0 with two providers and no provider field: allowed; total > 0 still needs it', async () => {
+    listAvailableProviders.mockReturnValue([{ id: 'sumup', label: 'SumUp' }, { id: 'stripe', label: 'Stripe' }]);
+    priceOrder.mockReturnValue({ ...priced, totalCents: 0 });
+    mockTx.shopOrder.update.mockImplementation(async ({ data }) => ({ id: 'o1', totalCents: 0, ...data }));
+    const free = await call(body());
+    expect(free.status).toHaveBeenCalledWith(201);
+    expect(startPayment).not.toHaveBeenCalled();
+    priceOrder.mockReturnValue({ ...priced, totalCents: 1000 });
+    const paid = await call(body());
+    expect(paid.status).toHaveBeenCalledWith(422);
+    expect(paid.json.mock.calls[0][0].details.fields.provider).toBeTruthy();
+  });
+
+  test('total 0 but markOrderPaid false: no second onOrderPaid', async () => {
+    priceOrder.mockReturnValue({ ...priced, totalCents: 0 });
+    mockTx.shopOrder.update.mockImplementation(async ({ data }) => ({ id: 'o1', totalCents: 0, ...data }));
+    markOrderPaid.mockResolvedValue(false);
+    const res = await call(body());
+    expect(onOrderPaid).not.toHaveBeenCalled();
+    expect(res.json.mock.calls[0][0].paid).toBe(true);
   });
 });

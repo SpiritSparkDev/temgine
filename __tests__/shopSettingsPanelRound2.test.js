@@ -29,7 +29,9 @@ describe('ShopSettingsPanel round 2', () => {
     fireEvent.change(screen.getByLabelText(/^Rückgabefrist/), { target: { value: '14' } });
     fireEvent.click(screen.getByText('Einstellungen speichern'));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Einstellungen gespeichert'));
-    expect(putBody().settings).toMatchObject({ shop_invoice_prefix: 'INV', shop_currency: 'CHF', shop_return_days: '14', shop_seller_name: 'Verlag' });
+    expect(putBody().settings).toMatchObject({ shop_invoice_prefix: 'INV', shop_currency: 'CHF', shop_return_days: '14' });
+    expect(putBody().settings).not.toHaveProperty('shop_seller_name');
+    expect(putBody().settings).not.toHaveProperty('shop_reservation_minutes');
   });
 
   it('lists the server validation errors on 422', async () => {
@@ -39,6 +41,7 @@ describe('ShopSettingsPanel round 2', () => {
       : ok(status())));
     render(<ShopSettingsPanel showToast={toast} />);
     await screen.findByLabelText('Name / Firma');
+    fireEvent.change(screen.getByLabelText('Telefon'), { target: { value: '1' } });
     fireEvent.click(screen.getByText('Einstellungen speichern'));
     expect(await screen.findByText('Währung: erlaubt sind EUR')).toBeTruthy();
     expect(toast).toHaveBeenCalledWith('Einstellungen ungültig', 'error');

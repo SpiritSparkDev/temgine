@@ -173,6 +173,32 @@ describe('Admin PUT: Wiederauffüllung', () => {
     expect(res.status).toHaveBeenCalledWith(422);
     expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
+
+  test('PUT: Format, das Bestandteil eines Bündels eines anderen Produkts ist, darf kein Bündel werden -> 422', async () => {
+    mockPrisma.shopFormat.findMany.mockResolvedValue([
+      { sku: 'X', productId: 'p9', bundleItems: null },
+      { sku: 'P', productId: 'p9', bundleItems: [{ sku: 'A', qty: 1 }] },
+    ]);
+    const res = makeRes();
+    await one({ method: 'PUT', query: q, body: putBody([fbody({ id: 'f1', sku: 'A', bundleItems: [{ sku: 'X', qty: 1 }] })]) }, res);
+    expect(res.status).toHaveBeenCalledWith(422);
+    const out = res.json.mock.calls[0][0];
+    expect(out.code).toBe('VALIDATION_ERROR');
+    expect(out.details.errors.join(' ')).toContain('Verschachtelung');
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  test('PUT: Bündel, dessen SKU in keinem fremden Bündel steckt (nur im eigenen Produkt) -> 200', async () => {
+    mockPrisma.shopFormat.findMany.mockResolvedValue([
+      { sku: 'X', productId: 'p9', bundleItems: null },
+      { sku: 'A', productId: 'p1', bundleItems: [{ sku: 'X', qty: 1 }] },
+      { sku: 'P', productId: 'p9', bundleItems: [{ sku: 'X', qty: 2 }] },
+    ]);
+    setup(prodRow());
+    const res = makeRes();
+    await one({ method: 'PUT', query: q, body: putBody([fbody({ id: 'f1', sku: 'A', bundleItems: [{ sku: 'X', qty: 1 }] })]) }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
 });
 
 describe('öffentliche Produkt-APIs', () => {

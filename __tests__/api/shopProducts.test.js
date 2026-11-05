@@ -12,6 +12,7 @@ const mockTx = {
 const mockPrisma = {
   setting: { findUnique: jest.fn() },
   shopProduct: { findMany: jest.fn(), findUnique: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
+  shopFormat: { findMany: jest.fn().mockResolvedValue([]) },
   $transaction: jest.fn((fn) => fn(mockTx)),
 };
 jest.mock('../../lib/prisma', () => ({ prisma: mockPrisma }));
@@ -109,6 +110,17 @@ describe('admin list/create', () => {
     expect(out.code).toBe('VALIDATION_ERROR');
     expect(out.details.errors.length).toBeGreaterThan(1);
     expect(mockPrisma.shopProduct.create).not.toHaveBeenCalled();
+  });
+
+  test('POST: Format, das Bestandteil eines anderen Bündels ist, darf kein Bündel werden -> 422', async () => {
+    mockPrisma.shopFormat.findMany.mockResolvedValue([{ sku: 'DS-HC', productId: 'other', bundleItems: [{ sku: 'DS-HC', qty: 1 }] }]);
+    const res = makeRes();
+    await list({ method: 'POST', body: body({ formats: [{ sku: 'DS-HC', label: 'Set', priceCents: 1000, taxRateBp: 700, bundleItems: [{ sku: 'X', qty: 1 }] }] }) }, res);
+    expect(res.status).toHaveBeenCalledWith(422);
+    const out = res.json.mock.calls[0][0];
+    expect(out.code).toBe('VALIDATION_ERROR');
+    expect(out.details.errors.join(' ')).toContain('Verschachtelung');
+    mockPrisma.shopFormat.findMany.mockResolvedValue([]);
   });
 
   test('POST duplicate slug/SKU (P2002) -> 409 DUPLICATE', async () => {

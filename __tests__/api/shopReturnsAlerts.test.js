@@ -2,6 +2,7 @@
  * __tests__/api/shopReturnsAlerts.test.js
  * Rückgaben (öffentlich + Admin) und Benachrichtigung bei Wiederverfügbarkeit.
  */
+process.env.TRUST_PROXY = 'true' // Tests unterscheiden Clients ueber x-forwarded-for
 
 jest.disableAutomock()
 

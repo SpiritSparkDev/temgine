@@ -1,11 +1,12 @@
 import { rateLimit } from '../../../../lib/rateLimit'
+import { clientIp } from '../../../../lib/shop/clientIp'
 import { isShopEnabled } from '../../../../lib/shop/config'
 import { createReturnRequest, ReturnError } from '../../../../lib/shop/returns'
 
 const limiter = rateLimit({
   windowMs: 15 * 60_000,
   max: 5,
-  keyFn: (req) => `shop-return:${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown'}`,
+  keyFn: (req) => `shop-return:${clientIp(req)}`,
 })
 
 /** Öffentlich: POST /api/shop/public/returns { reference, email, items?, reason } */
