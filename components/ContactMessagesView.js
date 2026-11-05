@@ -123,6 +123,11 @@ export default function ContactMessagesView({ showToast }) {
                       </div>
                     )}
                   </div>
+                  {msg.mailError && (
+                    <span title={msg.mailError} style={{ background: '#f59e0b', color: '#fff', borderRadius: '999px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 700, flexShrink: 0 }}>
+                      Mail nicht zugestellt
+                    </span>
+                  )}
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', flexShrink: 0 }}>{formatDate(msg.createdAt)}</div>
                   <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <button
@@ -148,6 +153,11 @@ export default function ContactMessagesView({ showToast }) {
                     <div style={{ background: 'var(--bg-secondary)', borderRadius: '6px', padding: '12px 14px', marginTop: '12px', fontSize: '0.875rem', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {msg.message}
                     </div>
+                    {msg.mailError && (
+                      <div style={{ marginTop: '8px', fontSize: '0.8rem', color: '#b45309' }}>
+                        E-Mail-Versand fehlgeschlagen: {msg.mailError}
+                      </div>
+                    )}
                     <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
                       Von: <a href={`mailto:${msg.email}`} style={{ color: 'var(--accent-color, #3b82f6)' }}>{msg.email}</a>
                     </div>

@@ -5,7 +5,7 @@
  * - Rate-limited (5 requests per minute per IP)
  * - Validates input
  * - Sends email via SMTP (if configured)
- * - Optionally saves message to DB (controlled by Setting contactSaveToDb)
+ * - Saves message to DB by default (Setting contactSaveToDb = 'false' disables)
  */
 
 import crypto from 'crypto';
@@ -234,16 +234,16 @@ export default async function handler(req, res) {
   // Read settings from DB
   let contactMailTo = null;
   let subjectPrefix = '';
-  let saveToDb = false;
+  let saveToDb = true;
   let messageId = null;
   try {
     const rows = await prisma.setting.findMany({
-      where: { key: { in: ['contact_recipient_email', 'contactMailTo', 'contact_subject_prefix', 'contactSaveToDb'] } },
+      where: { key: { in: ['contact_recipient_email', 'contactMailTo', 'contact_subject_prefix', 'contactSaveToDb', 'smtp_user'] } },
     });
     const db = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-    contactMailTo = db.contact_recipient_email || db.contactMailTo || process.env.CONTACT_MAIL_TO || null;
+    contactMailTo = db.contact_recipient_email || db.contactMailTo || process.env.CONTACT_MAIL_TO || db.smtp_user || process.env.SMTP_USER || null; // wie die Test-E-Mail: ohne Empfänger an den SMTP-Benutzer
     subjectPrefix = db.contact_subject_prefix || '';
-    saveToDb = db.contactSaveToDb === 'true';
+    saveToDb = db.contactSaveToDb !== 'false';
   } catch (e) {
     // DB not available — fall back to env var
     contactMailTo = process.env.CONTACT_MAIL_TO || null;
@@ -251,12 +251,26 @@ export default async function handler(req, res) {
 
   const results = { emailSent: false, savedToDb: false };
 
+  // Immer zuerst speichern (außer contactSaveToDb === 'false'): schlägt der Mailversand fehl, bleibt die Nachricht im Admin unter Kontaktnachrichten erhalten.
+  if (saveToDb) {
+    try {
+      const saved = await prisma.contactMessage.create({
+        data: { name, email, subject: subject || null, message },
+      });
+      messageId = saved && saved.id != null ? String(saved.id) : null;
+      results.savedToDb = true;
+    } catch (e) {
+      console.error('[contact] DB-Speicherung fehlgeschlagen:', e.message);
+    }
+  }
+
   // Send email
+  let mailError = null; // Fehlertext für die gespeicherte Nachricht (Admin → Nachrichten)
   let mailCtx = { vars: {}, appendText: '', byPlugin: {} };
   if (contactMailTo) {
-    // Plugins können vor dem Versand Zusatzdaten liefern (z. B. Termin-Link); Fehler/Timeouts = Mail geht ohne.
-    mailCtx = await runContactHooks('mailContext', { ...hookInput, messageId: null, honeypotTripped: false }, clientIp);
     try {
+      // Plugins können vor dem Versand Zusatzdaten liefern (z. B. Termin-Link); Fehler/Timeouts = Mail geht ohne.
+      mailCtx = await runContactHooks('mailContext', { ...hookInput, messageId: null, honeypotTripped: false }, clientIp);
       const genericSubject = subject
         ? `${subjectPrefix ? subjectPrefix + ' ' : ''}${subject}`
         : `${subjectPrefix || 'Neue Kontaktanfrage von'} ${name}`;
@@ -304,20 +318,20 @@ export default async function handler(req, res) {
       results.emailSent = true;
     } catch (e) {
       console.error('[contact] E-Mail-Versand fehlgeschlagen:', e.message);
-      // Don't fail the request — we still save to DB if enabled
+      mailError = String((e && e.message) || e).slice(0, 500);
+      // Don't fail the request — die Nachricht ist bereits in der DB gespeichert
     }
+  } else {
+    mailError = 'Kein Empfänger konfiguriert – es wurde keine E-Mail gesendet.';
   }
 
-  // Save to DB (opt-in)
-  if (saveToDb) {
+  // Mailfehler an der gespeicherten Nachricht festhalten (separat vom create, damit die Nachricht
+  // auch dann gespeichert wird, wenn die Spalte mailError noch nicht migriert ist).
+  if (mailError && messageId) {
     try {
-      const saved = await prisma.contactMessage.create({
-        data: { name, email, subject: subject || null, message },
-      });
-      messageId = saved && saved.id != null ? String(saved.id) : null;
-      results.savedToDb = true;
+      await prisma.contactMessage.update({ where: { id: messageId }, data: { mailError } });
     } catch (e) {
-      console.error('[contact] DB-Speicherung fehlgeschlagen:', e.message);
+      console.error('[contact] Mailfehler konnte nicht gespeichert werden:', e.message);
     }
   }
 

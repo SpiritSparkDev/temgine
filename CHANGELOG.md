@@ -5,6 +5,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.62.0] - 2026-11-05
+
+### Added
+- **Kontaktnachrichten:** Schlägt der Mailversand fehl (oder fehlt ein Empfänger), wird der Fehler an der gespeicherten Nachricht festgehalten und im Admin unter „Nachrichten“ als „Mail nicht zugestellt“ samt Fehlertext angezeigt. **Neue DB-Migration** `20261105120000_contact_message_mail_error` (Spalte `ContactMessage.mailError`) – vor dem Start `npm run migrate` bzw. `npx prisma migrate deploy` ausführen.
+
+### Fixed
+- Fehler in Plugin-Mail-Hooks können den Mailversand und die Antwort nicht mehr abbrechen.
+
+---
+
+## [0.61.2] - 2026-11-05
+
+### Fixed
+- **Kontaktformular:** Ist kein Empfänger hinterlegt, wird – wie bei der Test-E-Mail – an den SMTP-Benutzer gesendet, statt die Mail stillschweigend zu verwerfen.
+
+---
+
+## [0.61.1] - 2026-11-05
+
+### Fixed
+- **Kontaktformular:** Nachrichten werden jetzt standardmäßig immer in der Datenbank gespeichert (vor dem Mailversand). Die Einstellung `contactSaveToDb` ließ sich nie setzen, daher gingen Nachrichten bei fehlgeschlagenem Mailversand verloren. Sie sind nun unter „Kontaktnachrichten“ im Admin abrufbar.
+
+---
+
 ## [0.61.0] - 2026-11-03
 
 ### Changed

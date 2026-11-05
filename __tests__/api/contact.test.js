@@ -11,6 +11,7 @@ const mockPrisma = {
   },
   contactMessage: {
     create: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
   },
 };
 
@@ -275,5 +276,15 @@ describe('POST /api/contact', () => {
     expect(verifySolution).toHaveBeenCalledWith('bad-token', expect.any(String));
     expect(res.status).toHaveBeenCalledWith(400);
     expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  test('Mailfehler: Nachricht bleibt gespeichert, Fehler steht an der Nachricht, Antwort 200', async () => {
+    mockPrisma.setting.findMany.mockResolvedValue([{ key: 'contact_recipient_email', value: 'office@example.com' }]);
+    sendMail.mockRejectedValueOnce(new Error('535 Auth failed'));
+    const res = makeRes();
+    await handler({ method: 'POST', headers: {}, body: { name: 'Andre', email: 'a@example.com', message: 'Ausreichend lange Nachricht.', altcha: 'ok' } }, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockPrisma.contactMessage.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.contactMessage.update).toHaveBeenCalledWith({ where: { id: 'msg-1' }, data: { mailError: '535 Auth failed' } });
   });
 });

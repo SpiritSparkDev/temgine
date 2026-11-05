@@ -203,6 +203,7 @@ model ContactMessage {
   subject   String?
   message   String    @db.Text
   readAt    DateTime?
+  mailError String?   @db.Text // Fehler beim Mailversand (null = zugestellt)
   createdAt DateTime  @default(now())
 
   @@index([createdAt])
