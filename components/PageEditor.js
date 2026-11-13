@@ -2143,21 +2143,31 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 })()}
                 <ChevronDown size={12} />
               </button>
-              {block.id && !inLightbox && (
-                <code
-                  className="block-id-badge"
-                  style={{ fontSize: 10, opacity: .6, cursor: 'copy' }}
-                  title={(placementCounts.get(block.id) || 1) > 1
-                    ? `Geteilter Block – ${placementCounts.get(block.id)} Stellen mit diesem Inhalt. Klick kopiert die Block-ID.`
-                    : 'Block-ID – Klick kopiert. Als Template „Geteilter Block“ eingetragen, erscheint derselbe Block an einer anderen Stelle.'}
-                  onClick={e => { e.stopPropagation(); try { navigator.clipboard.writeText(block.id); showToast('Block-ID kopiert'); } catch (_e) {} }}
-                >{block.id}{(placementCounts.get(block.id) || 1) > 1 ? ` ×${placementCounts.get(block.id)}` : ''}</code>
-              )}
-              {(summaryImage || summaryText) && (
-                <span className="block-summary">
-                  {summaryImage && <img src={summaryImage} alt="" className="block-summary-thumb" />}
-                  {summaryText && <span className="block-summary-text">{summaryText.length > 80 ? `${summaryText.slice(0, 80)}…` : summaryText}</span>}
-                </span>
+              {((block.id && !inLightbox) || summaryImage || summaryText) && (
+                <div className="block-meta-row">
+                  {block.id && !inLightbox && (() => {
+                    const count = placementCounts.get(block.id) || 1;
+                    return (
+                      <button
+                        type="button"
+                        className={`block-id-badge${count > 1 ? ' is-shared' : ''}`}
+                        title={count > 1
+                          ? `Geteilter Block – ${count} Stellen mit diesem Inhalt. Klick kopiert die Block-ID.`
+                          : 'Block-ID – Klick kopiert. Als Template „Geteilter Block“ eingetragen, erscheint derselbe Block an einer anderen Stelle.'}
+                        onClick={e => { e.stopPropagation(); try { navigator.clipboard.writeText(block.id); showToast('Block-ID kopiert'); } catch (_e) {} }}
+                      >
+                        <span>{block.id}</span>
+                        {count > 1 && <span className="block-id-count">×{count}</span>}
+                      </button>
+                    );
+                  })()}
+                  {(summaryImage || summaryText) && (
+                    <span className="block-summary">
+                      {summaryImage && <img src={summaryImage} alt="" className="block-summary-thumb" />}
+                      {summaryText && <span className="block-summary-text">{summaryText.length > 80 ? `${summaryText.slice(0, 80)}…` : summaryText}</span>}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>

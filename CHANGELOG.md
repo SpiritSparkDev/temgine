@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.63.1] - 2026-11-13
+
+### Fixed
+- **Block-Kopf:** Block-ID und Kurzvorschau rutschten in die schmale erste Spalte der Titelzeile und überlagerten sich. Beides steht jetzt in einer eigenen Zeile unter dem Kopf; die ID ist ein Badge (geteilte Blöcke akzentfarbig mit „×N“).
+
+---
+
 ## [0.63.0] - 2026-11-13
 
 ### Added
