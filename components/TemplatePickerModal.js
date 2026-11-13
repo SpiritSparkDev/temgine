@@ -86,8 +86,9 @@ function TemplateSchema({ code }) {
   );
 }
 
-export default function TemplatePickerModal({ open, templateNames, templateCodes, channelOptions = [], navigationOptions = [], current = '', dark = false, onSelect, onClose }) {
+export default function TemplatePickerModal({ open, templateNames, templateCodes, channelOptions = [], navigationOptions = [], sharedBlockOptions = [], current = '', dark = false, onSelect, onClose }) {
   const [query, setQuery] = useState('');
+  const [sharedId, setSharedId] = useState('');
 
   useEffect(() => {
     if (!open) return undefined;
@@ -124,6 +125,25 @@ export default function TemplatePickerModal({ open, templateNames, templateCodes
               <strong>Kein Template</strong>
               <div className="tpm-schema"><div className="tpm-field tpm-t-html"><span className="tpm-field-name">HTML</span><div className="tpm-shape"><i className="tpm-line" /><i className="tpm-line tpm-line-short" /></div></div><div className="tpm-empty">Freies HTML-Feld</div></div>
             </button>
+          )}
+          {!q && (
+            <div className="tpm-card tpm-card-none">
+              <strong>Geteilter Block</strong>
+              <div className="tpm-empty">Block-ID eintragen: Diese Stelle zeigt denselben Block (gleicher Inhalt, gleiches Template) wie die andere.</div>
+              <input
+                type="text"
+                list="tpm-shared-ids"
+                className="input-field-small"
+                value={sharedId}
+                placeholder="Block-ID, z. B. b_k3j2h1x9"
+                onChange={e => setSharedId(e.target.value)}
+                onClick={e => e.stopPropagation()}
+              />
+              <datalist id="tpm-shared-ids">
+                {sharedBlockOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </datalist>
+              <button type="button" className="btn-small" disabled={!sharedId.trim()} onClick={() => onSelect(`__shared__:${sharedId.trim()}`)}>Übernehmen</button>
+            </div>
           )}
           {names.map(name => (
             <button key={name} type="button" className={`tpm-card${current === name ? ' is-current' : ''}`} onClick={() => onSelect(name)}>

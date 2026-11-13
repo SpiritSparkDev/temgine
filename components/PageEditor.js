@@ -15,7 +15,10 @@ import TemplatePickerModal from './TemplatePickerModal';
 import { findFieldForPreviewClick } from '../lib/previewFieldMatch';
 import { blockSearchText } from '../lib/blockDiff';
 import BlockOutlineTree from './BlockOutlineTree';
-import { moveBlock as moveBlockInTree, duplicateBlock as duplicateBlockInTree } from '../lib/blockTree';
+import { moveBlock as moveBlockInTree, duplicateBlock as duplicateBlockInTree, ensureBlockIds, regenerateBlockIds, newBlockId } from '../lib/blockTree';
+import { findSharedChanges, applyShared, countPlacements, findBlockById, listBlocks } from '../lib/sharedBlocks';
+
+const SHARED_TEMPLATE_PREFIX = '__shared__:';
 import { formatFieldLabel as formatLabel, SelectOptions, isCheckedValue, SimpleFieldInput, RepeaterSectionEditor } from './TemplateFieldEditors';
 import FieldGroupTree from './FieldGroupTree';
 import { buildFieldTree } from '../lib/templateStructure';
@@ -186,6 +189,18 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   const selectedByClickRef = useRef(false);
   const fieldNodeRefs = useRef({});
   const initialSnapshotRef = useRef('');
+  // Geteilte Blöcke (gleiche ID): Änderung an einer Stelle dieser Seite sofort in die anderen Stellen übernehmen
+  const prevBlocksRef = useRef(null);
+  useEffect(() => {
+    const prev = prevBlocksRef.current;
+    prevBlocksRef.current = blocks;
+    if (!prev || prev === blocks) return;
+    const changes = findSharedChanges(prev, blocks);
+    if (!changes.size) return;
+    const r = applyShared(blocks, changes);
+    if (r.changed) { prevBlocksRef.current = r.blocks; setBlocks(r.blocks); }
+  }, [blocks]);
+  const placementCounts = useMemo(() => countPlacements(allPages, blocks, page?.id), [allPages, blocks, page?.id]);
   const autosaveTimerRef = useRef(null);
   const autosaveInFlightRef = useRef(false);
   const splitPreviewIframeRef = useRef(null);
@@ -319,7 +334,8 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     if (page) {
       const initialBlocks = Array.isArray(page.blocks) ? page.blocks : [];
       const migration = migrateLegacySlotMapToBlocks(initialBlocks, page.data || {});
-      const migratedBlocks = migration.blocks || [];
+      const migratedBlocks = ensureBlockIds(migration.blocks || []);
+      prevBlocksRef.current = null;
       const initialTitle = page.title || '';
       const initialSlug = page.slug || '';
       const initialRedirect = (page.data && page.data.redirect) || {};
@@ -973,6 +989,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
 
   function handleAddBlock(type) {
     const newBlock = {
+      id: newBlockId(),
       type,
       template: '',
       props: type === 'text'
@@ -1098,6 +1115,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
   // Nested block helpers: operate on nested `blocks` structure by path (e.g. '0', '1.2')
   const addNestedBlock = (path, type = 'content', asChild = false) => {
     const newBlock = {
+      id: newBlockId(),
       type,
       template: '',
       props: type === 'text' ? { title: '', content: '' } : {}
@@ -1170,6 +1188,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     for (let i = 0; i < parts.length; i++) {
       const idx = parts[i];
       if (i === parts.length - 1) {
+        if (String(templateName || '').startsWith(SHARED_TEMPLATE_PREFIX)) {
+          // Geteilter Block: diese Stelle wird zu einer Kopie des Blocks mit der Ziel-ID (gleiche ID = derselbe Block)
+          const src = findBlockById(templateName.slice(SHARED_TEMPLATE_PREFIX.length).trim(), blocks, allPages);
+          if (!src || src.id === cur[idx].id) { showToast('Block mit dieser ID nicht gefunden.', 'error'); return; }
+          const next = JSON.parse(JSON.stringify(src));
+          if (cur[idx].hidden !== undefined) next.hidden = cur[idx].hidden; else delete next.hidden;
+          cur[idx] = next;
+          break;
+        }
+
         if (selectedChannelSlug) {
           cur[idx].type = 'blog-channel';
           cur[idx].template = '';
@@ -1329,7 +1357,9 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
     // (for a move) the source removal in one atomic save — avoiding a second,
     // separate save of this page that could race with the first and revert it
     // with a stale snapshot of whatever this page was still holding.
-    const ok = await onTransferBlockToPage({ block, targetPageId, mode, sourcePageId: page?.id, sourcePath: path });
+    // Kopie bekommt neue IDs (sonst wäre sie ein geteilter Block); beim Verschieben bleiben sie erhalten
+    const transferBlock = mode === 'copy' ? regenerateBlockIds([JSON.parse(JSON.stringify(block))])[0] : block;
+    const ok = await onTransferBlockToPage({ block: transferBlock, targetPageId, mode, sourcePageId: page?.id, sourcePath: path });
     if (ok) {
       if (mode === 'move') {
         // The removal is already persisted server-side (see above); this just
@@ -2113,6 +2143,16 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
                 })()}
                 <ChevronDown size={12} />
               </button>
+              {block.id && !inLightbox && (
+                <code
+                  className="block-id-badge"
+                  style={{ fontSize: 10, opacity: .6, cursor: 'copy' }}
+                  title={(placementCounts.get(block.id) || 1) > 1
+                    ? `Geteilter Block – ${placementCounts.get(block.id)} Stellen mit diesem Inhalt. Klick kopiert die Block-ID.`
+                    : 'Block-ID – Klick kopiert. Als Template „Geteilter Block“ eingetragen, erscheint derselbe Block an einer anderen Stelle.'}
+                  onClick={e => { e.stopPropagation(); try { navigator.clipboard.writeText(block.id); showToast('Block-ID kopiert'); } catch (_e) {} }}
+                >{block.id}{(placementCounts.get(block.id) || 1) > 1 ? ` ×${placementCounts.get(block.id)}` : ''}</code>
+              )}
               {(summaryImage || summaryText) && (
                 <span className="block-summary">
                   {summaryImage && <img src={summaryImage} alt="" className="block-summary-thumb" />}
@@ -3690,6 +3730,7 @@ export default function PageEditor({ page, templates, onSave, onCancel, allPages
       <TemplatePickerModal
         open={templatePickerPath !== null}
         dark={!!adminScopeRef.current?.closest('.dark-mode')}
+        sharedBlockOptions={templatePickerPath !== null ? listBlocks(allPages, blocks, page?.title, page?.id) : []}
         templateNames={blockTemplateNames}
         templateCodes={templateCodes}
         channelOptions={channelTemplateOptions}

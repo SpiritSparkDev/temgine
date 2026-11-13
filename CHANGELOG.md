@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.63.0] - 2026-11-13
+
+### Added
+- **Block-IDs:** Jeder Block hat eine eindeutige ID (Badge im Block-Kopf, Klick kopiert). Fehlende IDs werden beim Öffnen und Speichern ergänzt; Duplizieren und Kopieren auf eine andere Seite vergeben neue IDs.
+- **Geteilter Block:** Im Template-Picker gibt es den immer verfügbaren Eintrag „Geteilter Block“. Trägt man dort die ID eines Blocks ein, entsteht an dieser Stelle derselbe Block (gleiche ID, gleicher Inhalt, gleiches Template, gleiche Unterblöcke) – z. B. ein Werbebanner auf der Startseite und auf einer Unterseite. Beim Speichern einer Seite wird eine Änderung an so einem Block in alle anderen Stellen übernommen (jede betroffene Seite bekommt eine Revision und einen neuen Speicherstempel); innerhalb einer Seite gleicht der Editor sofort ab. Gelöscht, verschoben oder versteckt wird immer nur die einzelne Stelle.
+
+---
+
 ## [0.62.0] - 2026-11-05
 
 ### Added

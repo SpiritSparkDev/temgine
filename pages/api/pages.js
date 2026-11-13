@@ -1,4 +1,7 @@
 import { prisma } from '../../lib/prisma'
+import { ensureBlockIds } from '../../lib/blockTree'
+import { findSharedChanges, applyShared } from '../../lib/sharedBlocks'
+import { propagateSharedBlocks } from '../../lib/sharedBlockSync'
 import { logAudit } from '../../lib/audit'
 import { sanitizeRecursive } from '../../lib/htmlSanitize'
 import { validate, rules } from '../../lib/validate'
@@ -75,7 +78,7 @@ async function saveSinglePage(req, res, auth, sanitizeBlockNode) {
     p.data = sanitizeRecursive(dataWithoutRedirect)
     if (redirect) p.data.redirect = redirect
   }
-  if (Array.isArray(p.blocks)) p.blocks = p.blocks.map(sanitizeBlockNode)
+  if (Array.isArray(p.blocks)) p.blocks = ensureBlockIds(p.blocks.map(sanitizeBlockNode))
 
   const rows = await prisma.page.findMany()
   const hit = indexNodesById(rows).get(String(p.id))
@@ -89,6 +92,11 @@ async function saveSinglePage(req, res, auth, sanitizeBlockNode) {
     const [status, resp] = errorResponse(409, 'Diese Seite wurde inzwischen von jemand anderem gespeichert.', 'PAGE_CONFLICT', { savedAt, savedBy });
     return res.status(status).json(resp);
   }
+
+  // Geteilte Blöcke (gleiche Block-ID): was hier geändert wurde, gilt für alle Stellen – erst in dieser
+  // Seite angleichen, nach dem Speichern in die anderen Seiten schreiben (lib/sharedBlocks.js).
+  const sharedChanges = Array.isArray(p.blocks) ? findSharedChanges(current.blocks, p.blocks) : new Map()
+  if (sharedChanges.size) p.blocks = applyShared(p.blocks, sharedChanges).blocks
 
   const siblings = findSiblings(rows, p.id) || []
   if (siblings.some(sib => sib && String(sib.id) !== String(p.id) && sib.slug === p.slug)) {
@@ -136,6 +144,7 @@ async function saveSinglePage(req, res, auth, sanitizeBlockNode) {
     updatedRow = await prisma.page.update({ where: { id: hit.topLevelId }, data: { children } })
   }
   const saved = indexNodesById([updatedRow]).get(String(p.id)).node
+  try { await propagateSharedBlocks(p.id, sharedChanges, auth.user) } catch (e) { console.error('Geteilte Blöcke konnten nicht abgeglichen werden', e) }
 
   try {
     await prisma.pageRevision.create({ data: {
@@ -407,7 +416,7 @@ export default async function handler(req, res) {
               if (redirect) p.data.redirect = redirect
             }
             if (p && p.blocks && Array.isArray(p.blocks)) {
-              p.blocks = p.blocks.map(sanitizeBlockNode)
+              p.blocks = ensureBlockIds(p.blocks.map(sanitizeBlockNode))
             }
           } catch (e) {
             console.warn('Failed to sanitize incoming page payload', e)
@@ -530,7 +539,7 @@ export default async function handler(req, res) {
           if (redirect) p.data.redirect = redirect
         }
         if (p && p.blocks && Array.isArray(p.blocks)) {
-          p.blocks = p.blocks.map(sanitizeBlockNode)
+          p.blocks = ensureBlockIds(p.blocks.map(sanitizeBlockNode))
         }
       } catch (e) {
         console.warn('Failed to sanitize incoming single page payload', e)
