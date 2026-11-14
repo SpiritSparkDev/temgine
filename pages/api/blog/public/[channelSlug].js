@@ -46,7 +46,9 @@ export default async function handler(req, res) {
   const total = filtered.length;
   const posts = filtered.slice((pg - 1) * lim, pg * lim);
 
-  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+  // max-age=0: Browser fragen bei jedem Aufruf nach (geänderte Sortierung/Beiträge sofort sichtbar);
+  // nur Proxys/CDNs dürfen 60 s (plus 300 s stale) zwischenspeichern.
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
   return res.status(200).json({
     channel: {
       id: channel.id,

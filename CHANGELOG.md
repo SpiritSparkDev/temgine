@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.64.1] - 2026-11-14
+
+### Fixed
+- **Öffentliche Kanal-API:** `Cache-Control` enthält jetzt `max-age=0` – Browser fragen bei jedem Aufruf neu nach, sodass geänderte Sortierung oder Beiträge sofort sichtbar sind (vorher konnte der Browser die Liste zwischenspeichern). Proxys/CDNs dürfen weiter 60 s (`s-maxage`) zwischenspeichern.
+
+---
+
 ## [0.64.0] - 2026-11-14
 
 ### Added
