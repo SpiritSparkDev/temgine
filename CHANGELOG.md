@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.65.0] - 2026-11-14
+
+### Added
+- **Link-Dialog im Editor:** „Als Button darstellen“ (setzt `class="btn"` am Link; Button-Optik im Editor, auf der Website per `.btn`-CSS des Templates) und „Datei wählen…“ (Dateiauswahl aus dem Dateisystem für die Link-Adresse).
+- `htmlSanitize` erlaubt am Link ausschließlich die Klasse `btn`.
+
+### Fixed
+- **Link-Dialog:** Checkboxen sauber ausgerichtet; Labels waren in Safari/macOS nicht sichtbar (feste Checkbox-Größe, explizite Textfarbe, Hinweistexte getrennt).
+
+---
+
 ## [0.64.1] - 2026-11-14
 
 ### Fixed

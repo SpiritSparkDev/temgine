@@ -70,7 +70,8 @@ export default function WysiwygRichTextEditor({
   const [prefs, setPrefs] = useState(loadPrefs);
   const [srcText, setSrcText] = useState('');
   const [pickingImage, setPickingImage] = useState(false);
-  const [link, setLink] = useState(null); // null = Dialog zu, sonst { url, blank, nofollow, title }
+  const [link, setLink] = useState(null); // null = Dialog zu, sonst { url, blank, nofollow, title, button }
+  const [pickingFile, setPickingFile] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [ctx, setCtx] = useState(null);
 
@@ -188,18 +189,18 @@ export default function WysiwygRichTextEditor({
 
   function openLink() {
     const a = inSrc() ? {} : editor.getAttributes('link');
-    setLink({ url: a.href || '', blank: a.target === '_blank', nofollow: /nofollow/.test(a.rel || ''), title: a.title || '' });
+    setLink({ url: a.href || '', blank: a.target === '_blank', nofollow: /nofollow/.test(a.rel || ''), title: a.title || '', button: /(^|\s)btn(\s|$)/.test(a.class || '') });
   }
   const applyLink = () => {
     const url = link.url.trim();
     const title = link.title.trim();
     const rel = [link.blank && 'noopener noreferrer', link.nofollow && 'nofollow'].filter(Boolean).join(' ') || null;
-    const attrs = { href: url, target: link.blank ? '_blank' : null, rel, title: title || null };
+    const attrs = { href: url, target: link.blank ? '_blank' : null, rel, title: title || null, class: link.button ? 'btn' : null };
     setLink(null);
     if (inSrc()) {
       if (!url) return;
-      if (!link.blank && !link.nofollow && !title) { wrap('[', `](${url})`); return; }
-      const extra = [link.blank && ' target="_blank"', rel && ` rel="${rel}"`, title && ` title="${title.replace(/"/g, '&quot;')}"`].filter(Boolean).join('');
+      if (!link.blank && !link.nofollow && !title && !link.button) { wrap('[', `](${url})`); return; }
+      const extra = [link.button && ' class="btn"', link.blank && ' target="_blank"', rel && ` rel="${rel}"`, title && ` title="${title.replace(/"/g, '&quot;')}"`].filter(Boolean).join('');
       wrap(`<a href="${url}"${extra}>`, '</a>');
       return;
     }
@@ -301,7 +302,7 @@ export default function WysiwygRichTextEditor({
         </div>
       )}
 
-      {link && (
+      {link && !pickingFile && (
         <div style={overlayStyle} onMouseDown={(e) => { if (e.target === e.currentTarget) setLink(null); }}>
           <div
             style={dialogStyle}
@@ -309,18 +310,24 @@ export default function WysiwygRichTextEditor({
             aria-label="Link"
             onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type === 'text') applyLink(); if (e.key === 'Escape') { e.stopPropagation(); setLink(null); } }}
           >
-            <label style={{ fontSize: '0.85rem' }}>Adresse des Links – z. B. /seite, https://…, mailto:name@…, /uploads/datei.pdf (leer = Link entfernen)
-              <input autoFocus type="text" value={link.url} onChange={(e) => setLink({ ...link, url: e.target.value })} style={linkInputStyle} />
-            </label>
-            <label style={{ fontSize: '0.85rem', display: 'block', marginTop: '8px' }}>Titel (Tooltip, optional)
-              <input type="text" value={link.title} onChange={(e) => setLink({ ...link, title: e.target.value })} style={linkInputStyle} />
-            </label>
-            <label style={checkStyle}>
-              <input type="checkbox" checked={link.blank} onChange={(e) => setLink({ ...link, blank: e.target.checked })} /> In neuem Tab öffnen (target=&quot;_blank&quot;)
-            </label>
-            <label style={checkStyle}>
-              <input type="checkbox" checked={link.nofollow} onChange={(e) => setLink({ ...link, nofollow: e.target.checked })} /> Suchmaschinen nicht folgen (rel=&quot;nofollow&quot;)
-            </label>
+            <label style={labelStyle} htmlFor="wte-link-url">Adresse des Links</label>
+            <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+              <input id="wte-link-url" autoFocus type="text" value={link.url} placeholder="/seite, https://…, mailto:name@…" onChange={(e) => setLink({ ...link, url: e.target.value })} style={{ ...linkInputStyle, marginTop: 0, flex: 1 }} />
+              <button type="button" style={{ ...btnStyle, whiteSpace: 'nowrap' }} onClick={() => setPickingFile(true)}>Datei wählen…</button>
+            </div>
+            <div style={hintStyle}>Leer lassen, um den Link zu entfernen.</div>
+            <label style={{ ...labelStyle, marginTop: '10px' }} htmlFor="wte-link-title">Titel (Tooltip, optional)</label>
+            <input id="wte-link-title" type="text" value={link.title} onChange={(e) => setLink({ ...link, title: e.target.value })} style={{ ...linkInputStyle, marginTop: '4px' }} />
+            {[
+              ['button', 'Als Button darstellen', 'Der Link erhält die Klasse „btn“.'],
+              ['blank', 'In neuem Tab öffnen', 'target="_blank"'],
+              ['nofollow', 'Suchmaschinen nicht folgen', 'rel="nofollow"'],
+            ].map(([k, text, hint]) => (
+              <label key={k} style={checkStyle}>
+                <input type="checkbox" checked={link[k]} onChange={(e) => setLink({ ...link, [k]: e.target.checked })} style={checkBoxStyle} />
+                <span><span style={checkTextStyle}>{text}</span> <span style={{ opacity: 0.65 }}>({hint})</span></span>
+              </label>
+            ))}
             <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '10px' }}>
               <button type="button" style={btnStyle} onClick={() => setLink(null)}>Abbrechen</button>
               <button type="button" style={{ ...btnStyle, ...btnActiveStyle }} onClick={applyLink}>OK</button>
@@ -330,6 +337,7 @@ export default function WysiwygRichTextEditor({
       )}
 
       <FilePickerModal open={pickingImage} onSelect={pickImage} onClose={() => setPickingImage(false)} />
+      <FilePickerModal open={pickingFile} onSelect={(url) => { setPickingFile(false); setLink((l) => l && { ...l, url }); }} onClose={() => setPickingFile(false)} />
       {customizing && <WysiwygToolbarDialog bar={prefs.bar} onSave={(bar) => { update({ bar }); setCustomizing(false); }} onClose={() => setCustomizing(false)} />}
     </div>
   );
@@ -405,4 +413,9 @@ const ctxItemStyle = { textAlign: 'left', padding: '4px 10px', fontSize: '0.8rem
 const overlayStyle = { position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' };
 const dialogStyle = { background: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '14px', width: 'min(420px, 92vw)' };
 const linkInputStyle = { display: 'block', width: '100%', marginTop: '6px', padding: '5px 8px', boxSizing: 'border-box' };
-const checkStyle = { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', marginTop: '6px' };
+const labelStyle = { display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' };
+const hintStyle = { fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' };
+// Explizite Größen/Farben: globale input/label-Regeln (width:100%) und Safari-Eigenheiten verdrängten sonst Checkbox bzw. Text.
+const checkStyle = { display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', marginTop: '10px', cursor: 'pointer', color: 'var(--text-primary)' };
+const checkBoxStyle = { width: '16px', height: '16px', minWidth: '16px', margin: '2px 0 0', padding: 0, flex: '0 0 16px', WebkitAppearance: 'checkbox', appearance: 'auto', accentColor: 'var(--accent-primary)' };
+const checkTextStyle = { fontWeight: 600, color: 'var(--text-primary)' };
