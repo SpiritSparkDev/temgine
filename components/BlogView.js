@@ -191,6 +191,7 @@ export default function BlogView({ showToast: parentShowToast }) {
                   templates={templates}
                   onBack={() => {}}
                   showToast={showToast}
+                  onSaveSort={(sortField, sortDir) => handleSaveChannel({ ...activeChannel, sortField, sortDir })}
                   embedded
                 />
               </>

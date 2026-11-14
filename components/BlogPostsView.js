@@ -21,14 +21,22 @@ const STATUS_COLORS = {
   SCHEDULED: { bg: 'rgba(139,92,246,.15)',  text: '#8b5cf6', border: 'rgba(139,92,246,.3)' },
 };
 
-export default function BlogPostsView({ channel, onBack, showToast: parentShowToast, templates = [], embedded = false }) {
+export default function BlogPostsView({ channel, onBack, showToast: parentShowToast, templates = [], embedded = false, onSaveSort }) {
   const [posts, setPosts] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  // '' = Standard des Kanals, sonst "<feld>:<asc|desc>" oder 'status'
-  const [sortBy, setSortBy] = useState('');
+  // '' = Standard des Kanals, sonst "<feld>:<asc|desc>" oder 'status'.
+  // Reine Backend-Ansicht, je Kanal im Browser gemerkt – unabhängig von der Frontend-Sortierung.
+  const sortKey = `temgine.blogSort.${channel.id}`;
+  const [sortBy, setSortByState] = useState(() => {
+    try { return window.localStorage.getItem(sortKey) || ''; } catch { return ''; }
+  });
+  const setSortBy = (v) => {
+    setSortByState(v);
+    try { window.localStorage.setItem(sortKey, v); } catch { /* Ansicht gilt dann nur bis zum Neuladen */ }
+  };
   const [archiveFilter, setArchiveFilter] = useState('exclude');
   const [timeFilter, setTimeFilter] = useState('');
   const [fieldNames, setFieldNames] = useState([]);
@@ -196,7 +204,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           onChange={e => setSortBy(e.target.value)}
           title="Sortierung"
         >
-          <option value="">{channel.sortField ? `Standard des Kanals (${channel.sortField})` : 'Neueste zuerst'}</option>
+          <option value="">{channel.sortField ? `Wie im Frontend (${channel.sortField} ${channel.sortDir === 'asc' ? '↑' : '↓'})` : 'Neueste zuerst'}</option>
           {BUILTIN_SORT_FIELDS.map(f => (
             <React.Fragment key={f.value}>
               <option value={`${f.value}:desc`}>{withType(f.label, f.type)} ↓</option>
@@ -215,6 +223,16 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           )}
           <option value="status">Status</option>
         </select>
+        {onSaveSort && sortFieldSel && (sortFieldSel !== channel.sortField || sortDirSel !== (channel.sortDir || 'desc')) && (
+          <button
+            type="button"
+            className="blog-btn blog-btn--primary"
+            title="Speichert diese Sortierung als Standard-Sortierung des Kanals – gilt im Frontend für Kanal-Blöcke ohne eigene Sortierung. Die Ansicht hier bleibt unabhängig davon wählbar."
+            onClick={() => onSaveSort(sortFieldSel, sortDirSel)}
+          >
+            Für Frontend übernehmen
+          </button>
+        )}
         <select
           className="blog-filter-select"
           value={timeFilter}

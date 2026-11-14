@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.66.0] - 2026-11-14
+
+### Added
+- **Beitragsliste: Sortierung fürs Frontend übernehmen:** Wählt man in der Beitragsliste eine Sortierung, erscheint der Knopf „Für Frontend übernehmen“. Er speichert sie als Standard-Sortierung des Kanals – Kanal-Blöcke ohne eigene Sortierung zeigen die Beiträge im Frontend dann in dieser Reihenfolge.
+
+### Changed
+- **Backend- und Frontend-Sortierung getrennt:** Die Sortierung der Beitragsliste ist eine reine Backend-Ansicht und wird je Kanal im Browser gemerkt; sie ändert die Frontend-Sortierung nicht. Der Standard-Eintrag heißt jetzt „Wie im Frontend (Feld ↑/↓)“.
+
+---
+
 ## [0.65.0] - 2026-11-14
 
 ### Added
