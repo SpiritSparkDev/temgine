@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.64.0] - 2026-11-14
+
+### Added
+- **Sortier-Auswahl mit Datentyp:** Hinter jedem Sortierfeld steht der Datentyp in Klammern – z. B. „Titel (Text)“, „Beginn (Datum)“. Bei gemischten Werten stehen alle Typen (häufigster zuerst), so fallen falsch befüllte Felder auf. Gilt im Kanal-Editor, im Kanal-Block des Seiteneditors und in der Beitragsliste. Die Beitrags-API liefert dazu `fieldTypes`.
+- **Zusammengesetzte Felder aufteilen:** Felder mit Werten wie „2026-12-10 14:00“ erscheinen als „Datum + Uhrzeit“ und bieten zusätzlich „Feld → Datum“ und „Feld → Uhrzeit“ zum Sortieren an (intern `Feld@datum` / `Feld@uhrzeit`, auch als `data-sort` nutzbar). „9.05 Uhr“ und „14:00“ werden dabei als Uhrzeit erkannt.
+
+---
+
 ## [0.63.1] - 2026-11-13
 
 ### Fixed

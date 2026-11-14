@@ -3,7 +3,7 @@ import { Plus, Trash2, Search, ChevronLeft, FileText, Rss } from '../lib/muiIcon
 import BlogPostEditor from './BlogPostEditor';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
-import { applyPostQuery, BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
+import { applyPostQuery, BUILTIN_SORT_FIELDS, withType, templateSortOptions } from '../lib/blogPostQuery';
 
 const STATUS_LABELS = {
   DRAFT: 'Entwurf',
@@ -32,6 +32,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
   const [archiveFilter, setArchiveFilter] = useState('exclude');
   const [timeFilter, setTimeFilter] = useState('');
   const [fieldNames, setFieldNames] = useState([]);
+  const [fieldTypes, setFieldTypes] = useState({});
   const [editingPost, setEditingPost] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [toast, setToast] = useState(null);
@@ -51,6 +52,7 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
         setPosts(data.posts || []);
         setTotal(data.total || 0);
         setFieldNames(Array.isArray(data.fieldNames) ? data.fieldNames : []);
+        setFieldTypes(data.fieldTypes || {});
       } else {
         showToast('Fehler beim Laden der Beiträge', 'error');
       }
@@ -197,16 +199,16 @@ export default function BlogPostsView({ channel, onBack, showToast: parentShowTo
           <option value="">{channel.sortField ? `Standard des Kanals (${channel.sortField})` : 'Neueste zuerst'}</option>
           {BUILTIN_SORT_FIELDS.map(f => (
             <React.Fragment key={f.value}>
-              <option value={`${f.value}:desc`}>{f.label} ↓</option>
-              <option value={`${f.value}:asc`}>{f.label} ↑</option>
+              <option value={`${f.value}:desc`}>{withType(f.label, f.type)} ↓</option>
+              <option value={`${f.value}:asc`}>{withType(f.label, f.type)} ↑</option>
             </React.Fragment>
           ))}
           {fieldNames.length > 0 && (
             <optgroup label="Template-Felder">
-              {fieldNames.map(n => (
-                <React.Fragment key={n}>
-                  <option value={`${n}:asc`}>{n} ↑</option>
-                  <option value={`${n}:desc`}>{n} ↓</option>
+              {templateSortOptions(fieldNames, fieldTypes).map(o => (
+                <React.Fragment key={o.value}>
+                  <option value={`${o.value}:asc`}>{o.label} ↑</option>
+                  <option value={`${o.value}:desc`}>{o.label} ↓</option>
                 </React.Fragment>
               ))}
             </optgroup>

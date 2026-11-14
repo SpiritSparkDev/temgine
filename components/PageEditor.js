@@ -31,7 +31,7 @@ import WorkflowPanel from './WorkflowPanel';
 import DOMCanvas from './DOMCanvas';
 import ElementPropertyEditor from './ElementPropertyEditor';
 import { migratePage, pageNeedsMigration } from '../lib/blockToDomMigration';
-import { BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
+import { BUILTIN_SORT_FIELDS, withType, templateSortOptions } from '../lib/blogPostQuery';
 
 export default function PageEditor({ page, templates, onSave, onCancel, allPages, onDirtyChange, userRole, onTransferBlockToPage, onReloadFromServer, onNavigateToPage }) {
   const CHANNEL_TEMPLATE_VALUE_PREFIX = '__channel__:';
@@ -4092,12 +4092,13 @@ function AccessGroupsPanel({
 // zum Sortieren kommen aus den vorhandenen Beiträgen des Kanals.
 function ChannelQueryFields({ channel, props, onChange }) {
   const [fieldNames, setFieldNames] = useState([]);
+  const [fieldTypes, setFieldTypes] = useState({});
   useEffect(() => {
     if (!channel?.id) { setFieldNames([]); return undefined; }
     let cancelled = false;
     fetch(`/api/blog/posts?channelId=${encodeURIComponent(channel.id)}&limit=1`)
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (!cancelled) setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); })
+      .then(d => { if (!cancelled) { setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); setFieldTypes(d?.fieldTypes || {}); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [channel?.id]);
@@ -4117,13 +4118,13 @@ function ChannelQueryFields({ channel, props, onChange }) {
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <select className="block-template-select" value={sortField} onClick={stop} onChange={e => onChange({ sortField: e.target.value })}>
             <option value="">Standard des Kanals ({channelDefault})</option>
-            {BUILTIN_SORT_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+            {BUILTIN_SORT_FIELDS.map(f => <option key={f.value} value={f.value}>{withType(f.label, f.type)}</option>)}
             {fieldNames.length > 0 && (
               <optgroup label="Template-Felder">
-                {fieldNames.map(n => <option key={n} value={n}>{n}</option>)}
+                {templateSortOptions(fieldNames, fieldTypes).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </optgroup>
             )}
-            {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !fieldNames.includes(sortField) && <option value={sortField}>{sortField}</option>}
+            {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !templateSortOptions(fieldNames, fieldTypes).some(o => o.value === sortField) && <option value={sortField}>{sortField}</option>}
           </select>
           {sortField && (
             <select className="block-template-select" value={props.sortDir || 'desc'} onClick={stop} onChange={e => onChange({ sortDir: e.target.value })} style={{ width: 'auto' }}>

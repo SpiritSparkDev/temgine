@@ -1,4 +1,4 @@
-import { applyPostQuery, postQueryFromParams, collectTemplateFieldNames, todayIso, withDateParts } from '../lib/blogPostQuery';
+import { applyPostQuery, postQueryFromParams, collectTemplateFieldNames, collectTemplateFieldTypes, detectValueType, templateSortOptions, todayIso, withDateParts } from '../lib/blogPostQuery';
 
 const ev = (title, Beginn, Ende = '', extra = {}) => ({
   title, publishedAt: new Date(`${Beginn}T00:00:00Z`), templateData: { Beginn, Ende }, ...extra,
@@ -73,5 +73,44 @@ describe('Hilfsfunktionen', () => {
       Beginn: '2026-10-28', Ort: 'Kassel',
       Beginn_tag: '28', Beginn_monat: 'Okt', Beginn_jahr: '2026', Beginn_datum: '28.10.2026',
     });
+  });
+});
+
+describe('Datentypen für die Sortierauswahl', () => {
+  test('detectValueType', () => {
+    expect(detectValueType('2026-10-30')).toBe('Datum');
+    expect(detectValueType('14:00 Uhr')).toBe('Uhrzeit');
+    expect(detectValueType('15.30 Uhr')).toBe('Uhrzeit');
+    expect(detectValueType('42')).toBe('Zahl');
+    expect(detectValueType('30.10.2026')).toBe('Text');
+  });
+  test('collectTemplateFieldTypes nennt bei gemischten Werten alle Typen, häufigsten zuerst', () => {
+    const posts = [
+      { templateData: { Beginn: '2026-01-01', Ort: 'Halle' } },
+      { templateData: { Beginn: '2026-02-01' } },
+      { templateData: { Beginn: '15.30 Uhr', Ende: '' } },
+    ];
+    expect(collectTemplateFieldTypes(posts)).toEqual({ Beginn: 'Datum, Uhrzeit', Ort: 'Text' });
+  });
+});
+
+describe('Teilfelder zusammengesetzter Werte', () => {
+  const posts = [
+    { title: 'a', templateData: { Beginn: '2026-10-30 14:00' } },
+    { title: 'b', templateData: { Beginn: '2026-11-02T09:30' } },
+    { title: 'c', templateData: { Beginn: '2026-10-31 08:15' } },
+  ];
+  test('Typ „Datum + Uhrzeit“ und Auswahlzeilen mit Teilen', () => {
+    expect(detectValueType('2026-10-30 14:00')).toBe('Datum + Uhrzeit');
+    const types = collectTemplateFieldTypes(posts);
+    expect(templateSortOptions(['Beginn'], types).map(o => o.value)).toEqual(['Beginn', 'Beginn@datum', 'Beginn@uhrzeit']);
+  });
+  test('Sortierung nach Datum bzw. Uhrzeit allein', () => {
+    expect(applyPostQuery(posts, { sort: 'Beginn@datum', dir: 'asc' }).map(p => p.title)).toEqual(['a', 'c', 'b']);
+    expect(applyPostQuery(posts, { sort: 'Beginn@uhrzeit', dir: 'asc' }).map(p => p.title)).toEqual(['c', 'b', 'a']);
+  });
+  test('Uhrzeit-Teil normalisiert „9.05 Uhr“ und ignoriert reine Daten', () => {
+    const p = [{ title: 'x', templateData: { T: '9.05 Uhr' } }, { title: 'y', templateData: { T: '2026-01-01' } }];
+    expect(applyPostQuery(p, { sort: 'T@uhrzeit', dir: 'asc' }).map(q => q.title)).toEqual(['x', 'y']);
   });
 });

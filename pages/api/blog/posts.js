@@ -1,6 +1,6 @@
 import { prisma } from '../../../lib/prisma';
 import { requireAuth } from '../../../lib/auth';
-import { applyPostQuery, postQueryFromParams, collectTemplateFieldNames } from '../../../lib/blogPostQuery';
+import { applyPostQuery, postQueryFromParams, collectTemplateFieldNames, collectTemplateFieldTypes } from '../../../lib/blogPostQuery';
 
 export default async function handler(req, res) {
   const auth = await requireAuth(req, res);
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const pg = Math.max(1, parseInt(page, 10) || 1);
     const posts = filtered.slice((pg - 1) * lim, pg * lim);
 
-    return res.status(200).json({ posts, total: filtered.length, page: pg, limit: lim, fieldNames: collectTemplateFieldNames(all) });
+    return res.status(200).json({ posts, total: filtered.length, page: pg, limit: lim, fieldNames: collectTemplateFieldNames(all), fieldTypes: collectTemplateFieldTypes(all) });
   }
 
   if (req.method === 'POST') {

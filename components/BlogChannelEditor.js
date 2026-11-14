@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BUILTIN_SORT_FIELDS } from '../lib/blogPostQuery';
+import { BUILTIN_SORT_FIELDS, withType, templateSortOptions } from '../lib/blogPostQuery';
 import { X, Save, Rss, Layout, AlertCircle } from '../lib/muiIcons';
 
 const slugify = (v) =>
@@ -25,6 +25,7 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
   const [sortField, setSortField] = useState(channel?.sortField ?? '');
   const [sortDir, setSortDir] = useState(channel?.sortDir ?? 'desc');
   const [fieldNames, setFieldNames] = useState([]);
+  const [fieldTypes, setFieldTypes] = useState({});
   const [slugManual, setSlugManual] = useState(!!channel);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
     let cancelled = false;
     fetch(`/api/blog/posts?channelId=${encodeURIComponent(channel.id)}&limit=1`)
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (!cancelled) setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); })
+      .then(d => { if (!cancelled) { setFieldNames(Array.isArray(d?.fieldNames) ? d.fieldNames : []); setFieldTypes(d?.fieldTypes || {}); } })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [channel?.id]);
@@ -178,14 +179,14 @@ export default function BlogChannelEditor({ channel, templates = [], onSave, onC
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <select className="blog-form-select" value={sortField} onChange={e => setSortField(e.target.value)} style={{ flex: '1 1 200px' }}>
-                    <option value="">Veröffentlichungsdatum (Standard)</option>
-                    {BUILTIN_SORT_FIELDS.filter(f => f.value !== 'publishedAt').map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    <option value="">Veröffentlichungsdatum (Datum) – Standard</option>
+                    {BUILTIN_SORT_FIELDS.filter(f => f.value !== 'publishedAt').map(f => <option key={f.value} value={f.value}>{withType(f.label, f.type)}</option>)}
                     {fieldNames.length > 0 && (
                       <optgroup label="Template-Felder">
-                        {fieldNames.map(n => <option key={n} value={n}>{n}</option>)}
+                        {templateSortOptions(fieldNames, fieldTypes).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </optgroup>
                     )}
-                    {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !fieldNames.includes(sortField) && <option value={sortField}>{sortField}</option>}
+                    {sortField && !BUILTIN_SORT_FIELDS.some(f => f.value === sortField) && !templateSortOptions(fieldNames, fieldTypes).some(o => o.value === sortField) && <option value={sortField}>{sortField}</option>}
                   </select>
                   <select className="blog-form-select" value={sortDir} onChange={e => setSortDir(e.target.value)} disabled={!sortField} style={{ flex: '0 1 220px' }}>
                     <option value="asc">aufsteigend (früheste / A zuerst)</option>
