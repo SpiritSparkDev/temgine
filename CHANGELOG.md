@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.67.0] - 2026-11-19
+
+### Added
+- **Plugin „Temgine Designer API“ (`designer-api`):** Schnittstelle für den externen Template-Editor *Temgine Designer* (eigenes Repo `temgine-designer`). Routen unter `/api/plugins/designer-api/v1/…`: Anmeldung mit Temgine-Benutzer und -Passwort (Rollen mit Template- und CSS-Recht, Rate-Limit, zustandsloses Token mit 8 h Laufzeit, signiert mit `NEXTAUTH_SECRET`), Templates lesen/anlegen/ändern/löschen (mit Hash-Sperre gegen paralleles Überschreiben, Blog-Vorschau-Prüfung wie im Template-Manager), CSS-Dateien `designer-*.css` in `public/extern_css/`, Medienliste, Validierung und Vorschau-Rendering. Alle Schreibzugriffe landen im Audit-Log (`designer.*`). Neue Plugins sind standardmäßig aus: unter Einstellungen → Plugins aktivieren.
+- `plugins.config.json`: zusätzliche Plugin-Quelle `E:\Werkbank	emgine-designer\plugins`.
+
+---
+
 ## [0.66.0] - 2026-11-14
 
 ### Added

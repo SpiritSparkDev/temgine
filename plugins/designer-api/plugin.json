@@ -1,0 +1,8 @@
+{
+  "id": "designer-api",
+  "name": "Temgine Designer API",
+  "version": "0.1.0",
+  "temgineApi": 1,
+  "description": "Schnittstelle für den Temgine Designer (grafischer Template-Editor): Anmeldung mit Temgine-Zugangsdaten, Templates und CSS lesen/schreiben, Vorschau rendern.",
+  "help": "help.md"
+}
