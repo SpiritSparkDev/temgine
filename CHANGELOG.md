@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.68.2] - 2026-11-20
+
+### Fixed
+- **Health-Route verriet die `NEXTAUTH_URL`:** `/api/health` ist öffentlich und gab den Wert der Variable aus. Die Meldung lautet jetzt nur noch „Umgebungsvariablen vorhanden“; fehlende Variablen werden weiter namentlich gemeldet.
+
+---
+
 ## [0.68.1] - 2026-11-20
 
 ### Fixed

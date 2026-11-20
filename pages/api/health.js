@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   if (missing.length === 0) {
     result.env.ok = true;
-    result.env.message = `NEXTAUTH_URL: ${process.env.NEXTAUTH_URL}`;
+    result.env.message = 'Umgebungsvariablen vorhanden';
   } else {
     result.env.ok = false;
     result.env.message = `Fehlende Variablen: ${missing.join(', ')}`;
