@@ -3,6 +3,7 @@ import { RICH_TEXT_EDITOR_MODE_KEY } from '../lib/useRichTextEditorMode';
 import MatomoPanel from './MatomoPanel';
 import ExternalSourcesPanel from './ExternalSourcesPanel';
 import PluginsPanel from './PluginsPanel';
+import ApiTokensPanel from './ApiTokensPanel';
 import { Toggle, Card, Row, SaveButton } from './SettingsUi';
 
 const AUTOSAVE_KEY = 'temphelix_autosave_enabled';
@@ -15,6 +16,7 @@ const TABS = [
   { id: 'stats', label: 'Statistik' },
   { id: 'external', label: 'Externe Quellen' },
   { id: 'plugins', label: 'Plugins' },
+  { id: 'api', label: 'API-Zugänge' },
   { id: 'live', label: 'Live & Wartung' },
 ];
 
@@ -392,6 +394,8 @@ export default function SettingsView({ showToast }) {
         {tab === 'external' && <ExternalSourcesPanel showToast={showToast} />}
 
         {tab === 'plugins' && <PluginsPanel showToast={showToast} />}
+
+        {tab === 'api' && <ApiTokensPanel showToast={showToast} />}
 
         {tab === 'live' && (
           <>

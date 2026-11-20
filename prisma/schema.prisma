@@ -319,3 +319,16 @@ model BlogPost {
   @@index([channelId, status])
   @@index([channelId, publishedAt])
 }
+
+// Zugangs-Token für externe Werkzeuge (z. B. Claude). Nur der SHA-256-Hash wird gespeichert.
+model ApiToken {
+  id         String    @id @default(cuid())
+  name       String
+  tokenHash  String    @unique
+  prefix     String
+  createdBy  String?
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}

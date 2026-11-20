@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.68.0] - 2026-11-20
+
+### Added
+- **API-Zugänge (Einstellungen → API-Zugänge):** Zugangs-Token für externe Werkzeuge (z. B. Claude). Ein Token (`Authorization: Bearer tmg_…`) wirkt wie ein Moderator mit Lesen und Schreiben – Benutzer, Einstellungen, Backup/Import und Reparatur bleiben gesperrt. Token werden nur als Hash gespeichert, einmalig angezeigt, laufen ab (7 Tage bis 1 Jahr) und lassen sich widerrufen. Schreibende Aufrufe stehen im Audit-Log (`API_TOKEN_REQUEST`). Neue Tabelle `ApiToken` (Migration `20261120190000_add_api_token`).
+
+---
+
 ## [0.67.2] - 2026-11-20
 
 ### Fixed
