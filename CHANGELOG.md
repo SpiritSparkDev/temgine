@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.68.0] - 2026-11-20
+
+### Changed
+- **Plugin „Temgine Designer API“ (`designer-api`) auf 2.6.1 aktualisiert** (Sync aus dem Designer-Repo): API v1/v2-Aushandlung, Kopplungscode-Anmeldung, Upload in Teilen, Website-CSS/-Schriften, Kontext (Seitenfelder, Globals, Widgets, Navigation), Seitenvorschau, Abschnitts-Schemas, Nutzungsabfrage, Sammelübertragung (`POST /bulk`, alles oder nichts) sowie Audit und Schreibschutz-Schalter.
+
+---
+
 ## [0.67.0] - 2026-11-19
 
 ### Added

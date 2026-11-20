@@ -1,8 +1,14 @@
 {
   "id": "designer-api",
   "name": "Temgine Designer API",
-  "version": "0.1.0",
+  "version": "2.6.1",
   "temgineApi": 1,
-  "description": "Schnittstelle für den Temgine Designer (grafischer Template-Editor): Anmeldung mit Temgine-Zugangsdaten, Templates und CSS lesen/schreiben, Vorschau rendern.",
+  "description": "Schnittstelle für den Temgine Designer (grafischer Template-Editor): Koppeln per Code oder Anmeldung mit Temgine-Zugangsdaten, Templates und CSS lesen/schreiben, Vorschau rendern.",
+  "settings": {
+    "designer-api_registry": { "label": "Kopplungscodes und Token-Register (intern)", "type": "json", "secret": true },
+    "designer-api_password_login_off": { "label": "Passwort-Anmeldung des Designers abschalten (intern, im Panel „Designer verbinden“ einstellbar)", "type": "bool" },
+    "designer-api_disabled": { "label": "Designer-Zugriff aus (intern, im Panel „Designer verbinden“ einstellbar)", "type": "bool" },
+    "designer-api_read_only": { "label": "Designer global nur lesend (intern, im Panel „Designer verbinden“ einstellbar)", "type": "bool" }
+  },
   "help": "help.md"
 }

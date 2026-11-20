@@ -5,9 +5,12 @@ Dieses Plugin ist die Gegenstelle des **Temgine Designers**, einer eigenständig
 ## Einrichten
 
 1. Plugin unter Einstellungen → Plugins aktivieren.
-2. Im Designer „Mit Temgine verbinden“ wählen, die Adresse dieser Instanz und Benutzername/Passwort eintragen.
+2. Im Panel „Temgine Designer API“ (Einstellungen → Plugins) einen **Kopplungscode** erzeugen (8 Ziffern, 5 Minuten gültig, einmalig).
+3. Im Designer „Mit Temgine verbinden“ wählen, die Adresse dieser Instanz und den Code eingeben. Das Passwort wird dem Designer nie anvertraut.
 
-Der Designer meldet sich mit einem normalen Temgine-Benutzer an. Erlaubt sind Rollen, die Templates und CSS bearbeiten dürfen (Administrator, Moderator). Das Passwort wird nur geprüft und nirgends gespeichert. Der Designer bekommt ein Token mit 8 Stunden Laufzeit.
+Alternativ geht die Anmeldung mit Benutzername und Passwort; im Panel lässt sie sich abschalten. Verbindungen können dort einzeln widerrufen werden (sofort wirksam), eine Laufzeit und die Rolle „nur lesen“ sind wählbar.
+
+Bei der Passwort-Anmeldung meldet sich der Designer mit einem normalen Temgine-Benutzer an. Erlaubt sind Rollen, die Templates und CSS bearbeiten dürfen (Administrator, Moderator). Das Passwort wird nur geprüft und nirgends gespeichert. Der Designer bekommt ein Token mit 8 Stunden Laufzeit.
 
 ## Was der Designer darf
 

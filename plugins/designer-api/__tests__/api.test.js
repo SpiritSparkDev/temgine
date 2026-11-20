@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { signToken, verifyToken } from '../lib/tokens';
 import { createRoutes, toKind } from '../lib/api';
+import { memoryState } from '../lib/registry';
 
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -9,6 +10,7 @@ function fakeCore(over = {}) {
   const css = new Map();
   const audits = [];
   const core = {
+    state: memoryState(),
     roles: { view: ['ADMIN', 'MODERATOR'], edit: ['ADMIN', 'MODERATOR'], delete: ['ADMIN'], cssView: ['ADMIN', 'MODERATOR'], cssEdit: ['ADMIN', 'MODERATOR'], cssDelete: ['ADMIN'], filesView: ['ADMIN'] },
     secret: () => 'geheim', now: () => 1_000_000, version: '0.66.0',
     bcrypt: { compare: async (p, h) => h === `$2b$${p}` },
