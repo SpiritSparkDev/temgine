@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.67.0] - 2026-11-20
+
+### Added
+- **Kontaktformulare komfortabel einbinden:** Kontaktformular-Templates erscheinen jetzt in der Template-Auswahl des Seiten-Editors (bleiben aber aus der allgemeinen Template-Verwaltung heraus) und lassen sich wie Navigationen per Platzhalter einbinden: `{{{contact:<name>}}}` (auch `{{contact:<name>}}`) in Block-Templates und im Footer. Slug wie bei `{{{nav:…}}}` aus dem Namen; das Snippet steht im Editor unter „Kontaktformulare“. Gilt in Live-Vorschau, Snapshot und Export; die Zuordnung zur E-Mail-Vorlage bleibt erhalten.
+
+---
+
 ## [0.66.0] - 2026-11-14
 
 ### Added

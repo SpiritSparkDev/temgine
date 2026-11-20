@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic';
 import { Plus, Trash2, Edit2, Check, X, Mail, ChevronRight, Sparkles, BookOpen } from '../lib/muiIcons';
 import { CONTACT_FORM_PRESETS } from '../lib/contactFormPresets';
 import { extractContactFormFields } from '../lib/contactFormFields';
+import { buildWidgetPlaceholderKeys, widgetPlaceholderSlug } from '../lib/templateEngine';
 
 const CodeEditor = dynamic(() => import('./CodeEditor'), { ssr: false });
 
@@ -180,6 +181,14 @@ export default function ContactFormTemplatesView({ showToast }) {
   // name="..."-Attributen im Formular-Tab, damit die E-Mail-Vorlage keine
   // Felder vergisst (und keine erfindet, die es gar nicht gibt).
   const detectedFields = useMemo(() => extractContactFormFields(editCode), [editCode]);
+
+  // Platzhalter zum Einbinden in beliebige Templates — derselbe Slug wie im Renderer (templateEngine.js).
+  const placeholder = useMemo(() => {
+    const name = editName.trim();
+    const others = list.filter(t => t.name !== editing?.name).map(t => ({ id: t.name, name: t.name }));
+    const slug = name ? (buildWidgetPlaceholderKeys([...others, { id: name, name }])[name] || widgetPlaceholderSlug(name)) : '<name>';
+    return `{{{contact:${slug}}}}`;
+  }, [editName, list, editing]);
 
   const loadList = useCallback(() => {
     setIsLoading(true);
@@ -433,7 +442,8 @@ export default function ContactFormTemplatesView({ showToast }) {
 
                 <div className="nav-placeholder-ref">
                   Sendet an <code>/api/contact</code>, per <code>/api/contact/challenge</code> gegen Spam per ALTCHA geschützt ·
-                  wird über den Block-Template-Dropdown im Seiten-Editor auf einer Seite eingesetzt.
+                  wird über die Template-Auswahl im Seiten-Editor als Block eingesetzt oder per <code>{placeholder}</code> in
+                  Block-Templates und im Footer eingebunden (nach dem Speichern).
                 </div>
               </>
             ) : (
