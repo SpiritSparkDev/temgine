@@ -25,6 +25,7 @@ import {
 import Toast from './Toast';
 import { STATUS_LABELS, STATUS_COLORS } from '../lib/workflow';
 import { getPageRedirect } from '../lib/pageRedirect';
+import { regenerateBlockIds } from '../lib/blockTree';
 
 
 export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, onRefreshPages }) {
@@ -269,6 +270,8 @@ export default function PageTreeEditor({ pages, onSelect, onUpdate, userRole, on
       return {
         ...base,
         id: Math.random().toString(36).substr(2, 9),
+        // Eigene Block-IDs: gleiche ID = geteilter Block, der beim Speichern auf allen Seiten überschrieben würde
+        blocks: regenerateBlockIds(base.blocks || []),
         slug,
         title: base.title + ' (Kopie)',
         status: 'DRAFT',

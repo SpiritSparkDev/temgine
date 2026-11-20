@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.67.2] - 2026-11-20
+
+### Fixed
+- **Seite duplizieren teilte Block-IDs mit dem Original:** Gleiche Block-ID bedeutet „geteilter Block", daher überschrieb das Speichern der Kopie (oder des Originals) den Inhalt der jeweils anderen Seite. Die Kopie bekommt jetzt eigene Block-IDs. Zusätzlich vergibt der Server beim Speichern jeder neu angelegten Seite (Duplikat, Import, API) eigene Block-IDs. Bewusst geteilte Blöcke (im Seiten-Editor eingefügt) funktionieren unverändert.
+
+---
+
 ## [0.67.1] - 2026-11-20
 
 ### Added
