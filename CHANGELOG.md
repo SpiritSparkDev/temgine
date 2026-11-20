@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.68.1] - 2026-11-20
+
+### Fixed
+- **Audit-Log war öffentlich lesbar:** `GET /api/audit` hatte keine Zugriffsprüfung und lieferte Benutzer-IDs, Seiten-Slugs und Token-Namen an jeden. Die Route verlangt jetzt eine Admin-Anmeldung; API-Token (Rolle Moderator) kommen nicht hinein.
+
+---
+
 ## [0.68.0] - 2026-11-20
 
 ### Added
