@@ -395,6 +395,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
   for (const tpl of templates) {
     if (tpl?.name) templateMap[String(tpl.name)] = String(tpl.code || '')
   }
+  const contactForms = templates.filter((t) => t?.category === 'contact').map((t) => ({ name: t.name, code: t.code }))
 
   const allNavigationsById = {}
   for (const nav of navigations) allNavigationsById[nav.id] = nav
@@ -602,7 +603,7 @@ async function buildStaticExportZip({ pages, templates, navigations, cssFiles, u
       for (const folderPath of collectSectionKeys(entry.page.blocks, blockTemplates).folder || []) {
         folder[folderPath] = listFolderItemsRecursive(folderPath)
       }
-      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, sectionData: { folder }, globalPages })
+      let html = renderPage(entry.page, blockTemplates, { isChild: entry.segments.length > 1, navigations: navigationsForPage, footer, globalVars, sectionData: { folder }, globalPages, contactForms })
       html = rewriteCssLinksToRoot(html)
       html = injectCssLinks(html, cssFiles, extraCssFiles)
       html = rewriteInternalLinksToFlatHtml(html, routeToFileMap)

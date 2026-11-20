@@ -32,6 +32,7 @@ export default function AdminPageClient() {
   const devTitle = (text) => (showDevHints ? text : undefined);
   const { data: session } = useSession();
   const [templateList, setTemplateList] = useState([]);
+  const [contactTemplateList, setContactTemplateList] = useState([]); // Kontaktformulare: im Seiteneditor wählbar, aber nicht in der Template-Verwaltung
   const [templateName, setTemplateName] = useState('');
   const [templateCode, setTemplateCode] = useState('<section class="my-section">\n  <div class="container">\n    <h1>{{title}}</h1>\n    <p>{{text}}</p>\n  </div>\n</section>');
   const [pages, setPages] = useState([]);
@@ -313,6 +314,12 @@ export default function AdminPageClient() {
       throw e;
     }
   }
+
+  // Beim Öffnen der Seiten neu laden: Formulare können im Bereich „Kontaktformulare" neu entstanden sein.
+  useEffect(() => {
+    if (view !== 'pages') return;
+    fetch('/api/templates?scope=contact&type=BLOCK').then(r => r.json()).then(t => { if (Array.isArray(t)) setContactTemplateList(t); }).catch(() => {});
+  }, [view]);
 
   useEffect(() => {
     let isMounted = true;
@@ -888,7 +895,7 @@ export default function AdminPageClient() {
           {view === 'pages' && (
             <PagesView
               pages={pages}
-              templateList={templateList}
+              templateList={[...templateList, ...contactTemplateList]}
               editingPage={editingPage}
               setEditingPage={setEditingPage}
               handleUpdatePages={handleUpdatePages}
