@@ -8,12 +8,14 @@ import {
   getNodeAtPath,
   updateNodeAtPath,
   pathsEqual,
+  reassignBlockId,
 } from '../../../lib/pageTreeRepair'
 
 // POST /api/repair/fix — behebt EIN einzelnes gefundenes Problem gezielt,
 // indem nur die betroffene Top-Level-Seite geschrieben wird (nicht der
 // gesamte Baum wie beim normalen Array-Save). Body:
 //   { type: 'slug', topLevelId, path: number[], newValue: string }
+//   { type: 'blockId', topLevelId, path, blockId }  (Block mit dieser id auf DIESER Seite bekommt eine neue id)
 //   { type: 'id',   topLevelId, path: number[] }  (neue id wird serverseitig erzeugt)
 // `path: []` bezieht sich auf die Top-Level-Seite selbst.
 export default async function handler(req, res) {
@@ -25,12 +27,12 @@ export default async function handler(req, res) {
   const auth = await requireAuth(req, res, PERMISSIONS.SETTINGS_EDIT)
   if (!auth.authorized) return res.status(auth.status || 401).json({ error: auth.error })
 
-  const { type, topLevelId, path, newValue } = req.body || {}
+  const { type, topLevelId, path, newValue, blockId } = req.body || {}
   if (!topLevelId || !Array.isArray(path)) {
     return res.status(400).json({ error: 'topLevelId und path sind erforderlich' })
   }
-  if (type !== 'slug' && type !== 'id') {
-    return res.status(400).json({ error: 'type muss "slug" oder "id" sein' })
+  if (type !== 'slug' && type !== 'id' && type !== 'blockId') {
+    return res.status(400).json({ error: 'type muss "slug", "id" oder "blockId" sein' })
   }
 
   const topLevelPage = await prisma.page.findUnique({ where: { id: String(topLevelId) } })
@@ -39,6 +41,26 @@ export default async function handler(req, res) {
   const targetNode = getNodeAtPath(topLevelPage, path)
   if (!targetNode) {
     return res.status(404).json({ error: 'Knoten im Seitenbaum nicht gefunden — der Baum hat sich evtl. seit dem letzten Scan geändert. Bitte erneut scannen.' })
+  }
+
+  if (type === 'blockId') {
+    if (!blockId) return res.status(400).json({ error: 'blockId ist erforderlich' })
+    const makeId = () => `b_${crypto.randomBytes(5).toString('hex')}`
+    const newBlocks = reassignBlockId(targetNode.blocks, String(blockId), makeId)
+    if (path.length === 0) {
+      await prisma.page.update({ where: { id: String(topLevelId) }, data: { blocks: newBlocks } })
+    } else {
+      const newChildren = updateNodeAtPath(topLevelPage, path, { blocks: newBlocks })
+      await prisma.page.update({ where: { id: String(topLevelId) }, data: { children: newChildren } })
+    }
+    await logAudit({
+      action: 'REPAIR_FIX_BLOCK_ID',
+      resource: 'Page',
+      resourceId: String(topLevelId),
+      userId: auth.user?.id,
+      details: { path, oldValue: String(blockId), title: targetNode.title },
+    })
+    return res.status(200).json({ success: true })
   }
 
   if (type === 'id') {

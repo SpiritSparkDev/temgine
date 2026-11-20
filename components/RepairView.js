@@ -65,7 +65,7 @@ export default function RepairView() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Reparatur fehlgeschlagen');
-      showToast(`Gespeichert: ${payload.type === 'slug' ? `neuer Slug "${data.newValue}"` : 'neue ID vergeben'}`, 'success');
+      showToast(`Gespeichert: ${payload.type === 'slug' ? `neuer Slug "${data.newValue}"` : payload.type === 'blockId' ? 'neue Block-ID vergeben' : 'neue ID vergeben'}`, 'success');
       await runScan();
     } catch (e) {
       showToast(e.message || 'Reparatur fehlgeschlagen', 'error');
@@ -92,7 +92,8 @@ export default function RepairView() {
   const hasProblems = scanResult && (
     scanResult.duplicateSlugs.length > 0 ||
     scanResult.duplicateIds.length > 0 ||
-    scanResult.missingIds.length > 0
+    scanResult.missingIds.length > 0 ||
+    (scanResult.duplicateBlockIds || []).length > 0
   );
 
   return (
@@ -194,6 +195,38 @@ export default function RepairView() {
                           onClick={() => fixSlug(occ, group)}
                         >
                           {busyKey === key ? 'Speichert…' : 'Umbenennen'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </>
+          )}
+
+          {(scanResult.duplicateBlockIds || []).length > 0 && (
+            <>
+              <h3>Geteilte Block-IDs ({scanResult.duplicateBlockIds.length})</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                Blöcke mit derselben id gelten als derselbe Block: Speichern einer Seite überschreibt ihn auf allen anderen Seiten. Das ist nur bei bewusst geteilten Blöcken gewollt — sonst jeder Seite eine eigene Block-ID geben.
+              </p>
+              {scanResult.duplicateBlockIds.map((group) => (
+                <div key={group.id} style={cardStyle}>
+                  <strong>Block-id „{group.id}" — auf {group.occurrences.length} Seiten</strong>
+                  {group.occurrences.map((occ) => {
+                    const key = `${group.id}::${occKey(occ)}`;
+                    return (
+                      <div key={key} style={occurrenceRowStyle}>
+                        <span style={{ flex: '1 1 320px', fontSize: '0.85rem' }}>
+                          {occ.title || '(ohne Titel)'} (/{occ.slug}) — <span style={{ color: 'var(--text-secondary)' }}>{occ.breadcrumb}</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-modern-small"
+                          disabled={busyKey === key}
+                          onClick={() => applyFix({ type: 'blockId', topLevelId: occ.topLevelId, path: occ.path, blockId: group.id }, key)}
+                        >
+                          {busyKey === key ? 'Speichert…' : 'Eigene Block-ID vergeben'}
                         </button>
                       </div>
                     );

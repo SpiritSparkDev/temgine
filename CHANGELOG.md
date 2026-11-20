@@ -5,6 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), version
 
 ---
 
+## [0.67.1] - 2026-11-20
+
+### Added
+- **Reparatur-Tool: geteilte Block-IDs erkennen und trennen:** `/repair` meldet jetzt Block-IDs, die auf mehreren Seiten vorkommen (z. B. importierte Seiten mit identischer ID `gf-project`). Da gleiche ID = geteilter Block, überschrieb das Speichern einer Seite deren Inhalt auf allen anderen. Pro Seite lässt sich nun eine eigene Block-ID vergeben.
+
+---
+
 ## [0.67.0] - 2026-11-20
 
 ### Added

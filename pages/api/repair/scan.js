@@ -1,6 +1,6 @@
 import { prisma } from '../../../lib/prisma'
 import { requireAuth, PERMISSIONS } from '../../../lib/auth'
-import { findSiblingSlugCollisions, findDuplicateIds, findMissingIds } from '../../../lib/pageTreeRepair'
+import { findSiblingSlugCollisions, findDuplicateIds, findMissingIds, findDuplicateBlockIds } from '../../../lib/pageTreeRepair'
 
 // GET /api/repair/scan — prüft den kompletten Seitenbaum auf Datenintegritätsprobleme
 // (Slug-Kollisionen zwischen echten Geschwister-Seiten, doppelte ids, fehlende
@@ -20,6 +20,7 @@ export default async function handler(req, res) {
   const duplicateSlugs = findSiblingSlugCollisions(pages)
   const duplicateIds = findDuplicateIds(pages)
   const missingIds = findMissingIds(pages)
+  const duplicateBlockIds = findDuplicateBlockIds(pages)
 
   return res.status(200).json({
     scannedAt: new Date().toISOString(),
@@ -27,5 +28,6 @@ export default async function handler(req, res) {
     duplicateSlugs,
     duplicateIds,
     missingIds,
+    duplicateBlockIds,
   })
 }
